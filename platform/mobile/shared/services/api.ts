@@ -271,14 +271,12 @@ class ApiService {
   }
 
   async register(data: { email: string; password: string; full_name: string }) {
+    // Email/password registration always requires email confirmation; Supabase
+    // never returns an active session here (see supabaseAuthAdapter.register).
     const authData = await supabaseAuthAdapter.register(data.email, data.password, data.full_name);
-    const { access_token, refresh_token, user } = authData;
-
-    await Promise.all([
-      access_token ? secureStorage.setAccessToken(access_token) : Promise.resolve(),
-      refresh_token ? secureStorage.setRefreshToken(refresh_token) : Promise.resolve(),
-      user ? secureStorage.setUser(user) : Promise.resolve(),
-    ]);
+    if (authData.user) {
+      await secureStorage.setUser(authData.user);
+    }
 
     return authData;
   }

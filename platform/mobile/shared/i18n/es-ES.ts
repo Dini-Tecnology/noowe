@@ -2597,7 +2597,7 @@ export const esES = {
   },
 
   // Financial Brain
-  financial: {
+  financialBrain: {
     payment: {
       processing: 'Procesando pago...',
       success: 'Pago realizado',

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ApiService from '@okinawa/shared/services/api';
 import { getSupabaseClient } from '@okinawa/shared/services/supabase';
+import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import type { KdsOrder, KdsStatus, OrderStatus, TabOrder } from './v2Types';
 
@@ -304,6 +305,92 @@ export function useRestaurantTables(): AsyncState<V2Table[]> {
 
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('tables', restaurantId, refresh);
+
+  return { data, loading, error, refresh };
+}
+
+export type WaitlistEntry = {
+  id: string;
+  customerName: string;
+  partySize: number;
+  status: string;
+  estimatedWaitMinutes: number | null;
+};
+
+function mapWaitlistEntry(raw: any): WaitlistEntry {
+  return {
+    id: raw.id,
+    customerName: raw.customer_name || raw.customer?.full_name || 'Cliente',
+    partySize: toNumber(raw.party_size, 1),
+    status: raw.status || 'waiting',
+    estimatedWaitMinutes: raw.estimated_wait_minutes ?? null,
+  };
+}
+
+export function useWaitlist(): AsyncState<WaitlistEntry[]> {
+  const [data, setData] = useState<WaitlistEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { restaurantId } = useRestaurantRole();
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getWaitlist();
+      setData((Array.isArray(raw) ? raw : []).map(mapWaitlistEntry));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar fila de espera');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  useRealtimeRefresh('waitlist_entries', restaurantId, refresh);
+
+  return { data, loading, error, refresh };
+}
+
+export type TableBill = {
+  orderId: string;
+  tableNumber: string;
+  totalAmount: number;
+  paymentMethod: string | null;
+  isPaid: boolean;
+  status: string;
+};
+
+function mapTableBill(raw: any): TableBill {
+  return {
+    orderId: raw.order_id,
+    tableNumber: String(raw.table_number ?? '?'),
+    totalAmount: toNumber(raw.total_amount, 0),
+    paymentMethod: raw.payment_method ?? null,
+    isPaid: Boolean(raw.is_paid),
+    status: raw.status || 'pending',
+  };
+}
+
+export function useTableBills(): AsyncState<TableBill[]> {
+  const [data, setData] = useState<TableBill[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { restaurantId } = useRestaurantRole();
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getTableBills();
+      setData((Array.isArray(raw) ? raw : []).map(mapTableBill));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar pagamentos');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  useRealtimeRefresh('orders', restaurantId, refresh);
 
   return { data, loading, error, refresh };
 }

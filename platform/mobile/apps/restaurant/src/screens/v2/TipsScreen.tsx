@@ -1,12 +1,44 @@
+import { useEffect, useState } from 'react';
 import { CreditCard, PieChart, Users } from 'lucide-react-native';
-import { V2ListScreen } from './shared/V2ListScreen';
+import { formatCurrency } from '@okinawa/shared/utils/formatters';
+import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import { V2ListScreen, type V2ListItem } from './shared/V2ListScreen';
+import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 
 export default function TipsScreen() {
-  return (
-    <V2ListScreen title="Gorjetas" subtitle="Distribuição e histórico" showBack items={[
-      { icon: CreditCard, label: 'Pool do turno', subtitle: 'R$ 840,00 acumulado' },
-      { icon: PieChart, label: 'Distribuição por cargo', subtitle: 'Igual · Por role · Por horas' },
-      { icon: Users, label: 'Equipe no turno', subtitle: '6 colaboradores' },
-    ]} />
-  );
+  const { restaurantId } = useRestaurantRole();
+  const [totalTips, setTotalTips] = useState<number | null>(null);
+  const [shiftStaffCount, setShiftStaffCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!restaurantId) return;
+    Promise.all([
+      supabaseApiAdapter.getTipsSummary(restaurantId),
+      supabaseApiAdapter.getActiveShiftCount(restaurantId),
+    ])
+      .then(([summary, shiftCount]) => {
+        if (cancelled) return;
+        setTotalTips(Number(summary?.total_tips ?? 0));
+        setShiftStaffCount(Number(shiftCount ?? 0));
+      })
+      .catch(() => { if (!cancelled) { setTotalTips(0); setShiftStaffCount(0); } });
+    return () => { cancelled = true; };
+  }, [restaurantId]);
+
+  const items: V2ListItem[] = [
+    {
+      icon: CreditCard,
+      label: 'Pool do turno',
+      subtitle: totalTips != null ? `${formatCurrency(totalTips)} acumulado` : 'Carregando…',
+    },
+    { icon: PieChart, label: 'Distribuição por cargo', subtitle: 'Igual · Por role · Por horas' },
+    {
+      icon: Users,
+      label: 'Equipe no turno',
+      subtitle: shiftStaffCount != null ? `${shiftStaffCount} colaborador${shiftStaffCount === 1 ? '' : 'es'}` : 'Carregando…',
+    },
+  ];
+
+  return <V2ListScreen title="Gorjetas" subtitle="Distribuição e histórico" showBack items={items} />;
 }

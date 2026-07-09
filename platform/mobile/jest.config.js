@@ -8,6 +8,7 @@ module.exports = {
     'node_modules/(?!(react-native|@react-native|@react-navigation|expo|@expo|react-native-paper|react-native-vector-icons|@shopify/flash-list|@react-native-firebase|@sentry/react-native|expo-.*|@tanstack/react-query)/)',
   ],
   moduleNameMapper: {
+    '^vitest$': '<rootDir>/shared/testing/vitest-shim.js',
     '^@/(.*)$': '<rootDir>/shared/$1',
     '\\.(jpg|jpeg|png|gif|svg)$': '<rootDir>/__mocks__/fileMock.js',
   },

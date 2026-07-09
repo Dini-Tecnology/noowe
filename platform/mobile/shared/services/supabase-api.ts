@@ -73,6 +73,8 @@ export interface SupabaseApiAdapter {
   getRestaurantReservations(restaurantId: string, date?: string, status?: string[]): Promise<any>;
   updateRestaurantReservationStatus(reservationId: string, status: string, tableId?: string, notes?: string): Promise<any>;
   getWaitlist(restaurantId?: string): Promise<any>;
+  getTableBills(restaurantId?: string): Promise<any>;
+  getMyRestaurants(): Promise<any>;
   // ── Service Calls ─────────────────────────────────────────────────────────────
   getServiceCalls(restaurantId?: string, status?: string[]): Promise<any>;
   acknowledgeServiceCall(callId: string): Promise<any>;
@@ -115,6 +117,15 @@ export interface SupabaseApiAdapter {
   createStockItem(restaurantId: string, data: Record<string, unknown>): Promise<any>;
   // ── Loyalty ────────────────────────────────────────────────────────────────────
   getLoyaltyConfig(restaurantId?: string): Promise<any>;
+  getLoyaltyStats(restaurantId?: string): Promise<any>;
+  getServiceConfigs(restaurantId?: string): Promise<any>;
+  getActiveShiftCount(restaurantId?: string): Promise<any>;
+  getTableQRCodes(restaurantId?: string): Promise<any>;
+  generateTableQR(tableId: string): Promise<any>;
+  getPromotions(restaurantId?: string, status?: string): Promise<any>;
+  closePromotion(promotionId: string): Promise<any>;
+  getReviews(restaurantId?: string, limit?: number): Promise<any>;
+  respondReview(reviewId: string, response: string): Promise<any>;
   getMyLoyalty(restaurantId: string): Promise<any>;
   // ── Payment ────────────────────────────────────────────────────────────────────
   recordPayment(orderId: string, paymentMethod: string, amount: number, tipAmount?: number, notes?: string): Promise<any>;
@@ -396,6 +407,21 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     const { data, error } = await getSupabaseClient().rpc('restaurant_get_waitlist', {
       p_restaurant_id: resolvedId,
     });
+    if (error) throw error;
+    return data;
+  },
+
+  async getTableBills(restaurantId?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_table_bills', {
+      p_restaurant_id: resolvedId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getMyRestaurants() {
+    const { data, error } = await getSupabaseClient().rpc('get_my_restaurants');
     if (error) throw error;
     return data;
   },
@@ -855,6 +881,87 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   async getMyLoyalty(restaurantId: string) {
     const { data, error } = await getSupabaseClient().rpc('get_my_loyalty', {
       p_restaurant_id: restaurantId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getLoyaltyStats(restaurantId?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_loyalty_stats', {
+      p_restaurant_id: resolvedId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getServiceConfigs(restaurantId?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_service_configs', {
+      p_restaurant_id: resolvedId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getActiveShiftCount(restaurantId?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_active_shift_count', {
+      p_restaurant_id: resolvedId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getTableQRCodes(restaurantId?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_table_qr_codes', {
+      p_restaurant_id: resolvedId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async generateTableQR(tableId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_generate_table_qr', {
+      p_table_id: tableId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getPromotions(restaurantId?: string, status?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_promotions', {
+      p_restaurant_id: resolvedId,
+      p_status: status ?? null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async closePromotion(promotionId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_close_promotion', {
+      p_promotion_id: promotionId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getReviews(restaurantId?: string, limit?: number) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_reviews', {
+      p_restaurant_id: resolvedId,
+      p_limit: limit ?? 50,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async respondReview(reviewId: string, response: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_respond_review', {
+      p_review_id: reviewId,
+      p_response: response,
     });
     if (error) throw error;
     return data;

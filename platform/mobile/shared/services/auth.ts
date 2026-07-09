@@ -53,11 +53,9 @@ export const authService = {
    * User registration with email/password
    */
   async register(email: string, password: string, full_name: string) {
+    // Email/password registration always requires email confirmation; Supabase
+    // never returns an active session here (see supabaseAuthAdapter.register).
     const data = await supabaseAuthAdapter.register(email, password, full_name);
-    if (data.access_token) {
-      await this.storeAuthData(data);
-    }
-    this.notifyAuthStateChange(Boolean(data.access_token));
     return data;
   },
 

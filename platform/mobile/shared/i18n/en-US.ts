@@ -2597,7 +2597,7 @@ export const enUS = {
   },
 
   // Financial Brain
-  financial: {
+  financialBrain: {
     payment: {
       processing: 'Processing payment...',
       success: 'Payment successful',

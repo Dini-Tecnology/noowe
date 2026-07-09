@@ -1,6 +1,17 @@
-import React, { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@okinawa/shared/services/supabase';
 import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
+import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import logger from '@okinawa/shared/utils/logger';
+
+export interface RestaurantOption {
+  id: string;
+  name: string;
+  city: string;
+  state: string;
+  serviceType: string;
+  logoUrl: string | null;
+}
 
 export type RestaurantRole =
   | 'owner'
@@ -67,6 +78,11 @@ interface RestaurantRoleContextValue {
   roleLoading: boolean;
   /** Owners/managers can switch to another role view for supervision purposes. */
   setRole: (role: RestaurantRole) => void;
+  /** All restaurants the signed-in user has an active role in. */
+  restaurants: RestaurantOption[];
+  restaurantsLoading: boolean;
+  /** Switch the active restaurant (multi-unit staff/owners). */
+  switchRestaurant: (restaurantId: string) => Promise<void>;
   managerView: ManagerRoleView;
   setManagerView: (view: ManagerRoleView) => void;
   maitreView: MaitreRoleView;
@@ -90,12 +106,49 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState(true);
   const [role, setRoleState] = useState<RestaurantRole>('owner');
+  const [restaurants, setRestaurants] = useState<RestaurantOption[]>([]);
+  const [restaurantsLoading, setRestaurantsLoading] = useState(true);
   const [managerView, setManagerView] = useState<ManagerRoleView>('manager-ops');
   const [maitreView, setMaitreView] = useState<MaitreRoleView>('maitre-reservations');
   const [chefView, setChefView] = useState<ChefRoleView>('chef-kds');
   const [barmanView, setBarmanView] = useState<BarmanRoleView>('barman-station');
   const [cookView, setCookView] = useState<CookRoleView>('cook-station');
   const [waiterView, setWaiterView] = useState<WaiterRoleView>('waiter');
+
+  const loadRoleForRestaurant = useCallback(async (userId: string, targetRestaurantId?: string) => {
+    let query = getSupabaseClient()
+      .from('user_roles')
+      .select('role, restaurant_id')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .limit(1);
+
+    query = targetRestaurantId ? query.eq('restaurant_id', targetRestaurantId) : query;
+
+    const { data, error } = await query.maybeSingle();
+    if (error) {
+      logger.warn('[RestaurantRoleContext] Failed to load role:', error.message);
+      return;
+    }
+    if (data) {
+      const loaded = data.role as RestaurantRole;
+      setServerRole(loaded);
+      setRoleState(loaded);
+      setRestaurantId(data.restaurant_id as string);
+    }
+  }, []);
+
+  const switchRestaurant = useCallback(async (targetRestaurantId: string) => {
+    const { user } = await getOptionalSupabaseSessionUser();
+    if (!user) return;
+    setRoleLoading(true);
+    try {
+      await loadRoleForRestaurant(user.id, targetRestaurantId);
+    } finally {
+      setRoleLoading(false);
+    }
+  }, [loadRoleForRestaurant]);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,30 +158,28 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
         const { user } = await getOptionalSupabaseSessionUser();
         if (!user) return;
 
-        const { data, error } = await getSupabaseClient()
-          .from('user_roles')
-          .select('role, restaurant_id')
-          .eq('user_id', user.id)
-          .eq('is_active', true)
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        await loadRoleForRestaurant(user.id);
 
-        if (cancelled) return;
-        if (error) {
-          console.warn('[RestaurantRoleContext] Failed to load role:', error.message);
-          return;
-        }
-
-        if (data) {
-          const loaded = data.role as RestaurantRole;
-          setServerRole(loaded);
-          setRoleState(loaded);
-          setRestaurantId(data.restaurant_id as string);
+        try {
+          const rawRestaurants = await supabaseApiAdapter.getMyRestaurants();
+          if (!cancelled && Array.isArray(rawRestaurants)) {
+            setRestaurants(rawRestaurants.map((r: any) => ({
+              id: r.id,
+              name: r.name,
+              city: r.city,
+              state: r.state,
+              serviceType: r.service_type,
+              logoUrl: r.logo_url ?? null,
+            })));
+          }
+        } catch (err) {
+          if (!cancelled) logger.warn('[RestaurantRoleContext] Failed to load restaurants list:', err);
+        } finally {
+          if (!cancelled) setRestaurantsLoading(false);
         }
       } catch (err) {
         if (!cancelled) {
-          console.warn('[RestaurantRoleContext] Unexpected error:', err);
+          logger.warn('[RestaurantRoleContext] Unexpected error:', err);
         }
       } finally {
         if (!cancelled) setRoleLoading(false);
@@ -152,6 +203,9 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       restaurantId,
       roleLoading,
       setRole,
+      restaurants,
+      restaurantsLoading,
+      switchRestaurant,
       managerView,
       setManagerView,
       maitreView,
@@ -166,7 +220,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       setWaiterView,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [role, serverRole, restaurantId, roleLoading, managerView, maitreView, chefView, barmanView, cookView, waiterView],
+    [role, serverRole, restaurantId, roleLoading, restaurants, restaurantsLoading, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView],
   );
 
   return (

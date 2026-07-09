@@ -2601,7 +2601,7 @@ export const ptBR = {
   },
 
   // Financial Brain
-  financial: {
+  financialBrain: {
     payment: {
       processing: 'Processando pagamento...',
       success: 'Pagamento realizado',

@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.noowe.client",
+      "usesAppleSignIn": true,
       "minimumOsVersion": "15.1",
       "associatedDomains": ["applinks:noowebr.com", "applinks:*.noowebr.com"],
       "privacyManifests": {
@@ -84,6 +85,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "expo-apple-authentication",
       "expo-router",
       [
         "expo-camera",

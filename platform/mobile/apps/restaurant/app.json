@@ -18,6 +18,7 @@
       "supportsTablet": true,
       "deploymentTarget": "15.1",
       "bundleIdentifier": "com.noowe.restaurant",
+      "usesAppleSignIn": true,
       "associatedDomains": ["applinks:noowebr.com", "applinks:*.noowebr.com"],
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -80,6 +81,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "expo-apple-authentication",
       "expo-router",
       [
         "expo-camera",

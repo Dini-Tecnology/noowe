@@ -1,12 +1,40 @@
+import { useEffect, useState } from 'react';
 import { QrCode, Users, Bell } from 'lucide-react-native';
-import { V2ListScreen } from './shared/V2ListScreen';
+import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import { V2ListScreen, type V2ListItem } from './shared/V2ListScreen';
+import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
+import { useRestaurantTables } from './shared/useRestaurantOperations';
+
+interface CasualDiningConfig {
+  call_waiter_button?: boolean;
+  partial_order_enabled?: boolean;
+}
 
 export default function CasualDiningScreen() {
-  return (
-    <V2ListScreen title="Casual Dining" subtitle="Configuração do modo" showBack items={[
-      { icon: QrCode, label: 'QR Code na mesa', subtitle: 'Ativo em 18 mesas' },
-      { icon: Bell, label: 'Chamar garçom', subtitle: 'Push + KDS garçom' },
-      { icon: Users, label: 'Pedido compartilhado', subtitle: 'Split por item' },
-    ]} />
-  );
+  const { restaurantId } = useRestaurantRole();
+  const { data: tables } = useRestaurantTables();
+  const [config, setConfig] = useState<CasualDiningConfig | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!restaurantId) return;
+    supabaseApiAdapter.getServiceConfigs(restaurantId)
+      .then((rows) => {
+        if (cancelled) return;
+        const casual = Array.isArray(rows) ? rows.find((r: any) => r.service_type === 'casual_dining') : null;
+        setConfig(casual ?? {});
+      })
+      .catch(() => { if (!cancelled) setConfig({}); });
+    return () => { cancelled = true; };
+  }, [restaurantId]);
+
+  const tablesWithQR = tables.filter((t) => t.hasQR).length;
+
+  const items: V2ListItem[] = [
+    { icon: QrCode, label: 'QR Code na mesa', subtitle: `Ativo em ${tablesWithQR} mesa${tablesWithQR === 1 ? '' : 's'}` },
+    { icon: Bell, label: 'Chamar garçom', subtitle: config?.call_waiter_button ? 'Push + KDS garçom' : 'Desativado' },
+    { icon: Users, label: 'Pedido compartilhado', subtitle: config?.partial_order_enabled ? 'Split por item' : 'Desativado' },
+  ];
+
+  return <V2ListScreen title="Casual Dining" subtitle="Configuração do modo" showBack items={items} />;
 }
