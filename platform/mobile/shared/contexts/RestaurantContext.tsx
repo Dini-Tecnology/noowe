@@ -21,6 +21,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { secureStorage } from '../services/secure-storage';
+import { authService } from '../services/auth';
 import {
   fetchMyRestaurantRolesGrouped,
   fetchRestaurantFromSupabase,
@@ -202,6 +203,20 @@ export const RestaurantProvider: React.FC<RestaurantProviderProps> = ({ children
     setError(null);
     secureStorage.removeItem(STORAGE_KEY_RESTAURANT_ID);
   }, []);
+
+  /**
+   * Clear restaurant/staff state whenever the user logs out, so it doesn't
+   * survive into the next session on a shared device (e.g. a counter tablet
+   * switching operators).
+   */
+  useEffect(() => {
+    const unsubscribe = authService.onAuthStateChange((authenticated) => {
+      if (!authenticated) {
+        clearRestaurant();
+      }
+    });
+    return unsubscribe;
+  }, [clearRestaurant]);
 
   /**
    * Fetch all restaurants for the current user

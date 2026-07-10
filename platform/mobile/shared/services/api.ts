@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { secureStorage } from './secure-storage';
+import { authService } from './auth';
 import { getOptionalSupabaseSessionUser, supabaseAuthAdapter } from './supabase-auth';
 import {
   supabaseApiAdapter,
@@ -91,7 +92,14 @@ class ApiService {
     // Request interceptor - attach token
     this.api.interceptors.request.use(
       async (config) => {
-        const token = await secureStorage.getAccessToken();
+        // Read the token from the Supabase client's own session so the axios
+        // client always uses the same, auto-refreshed token as supabase-js —
+        // the old secureStorage copy was only updated on explicit login and
+        // went stale after every silent token refresh.
+        const {
+          data: { session },
+        } = await getSupabaseClient().auth.getSession();
+        const token = session?.access_token;
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -174,7 +182,9 @@ class ApiService {
 
             if (this.refreshRetryCount > MAX_REFRESH_RETRIES) {
               logger.warn('Max token refresh retries exceeded, forcing logout');
-              await secureStorage.clearAll();
+              await getSupabaseClient().auth.signOut().catch(() => undefined);
+              await authService.clearAuthData();
+              authService.notifyAuthStateChange(false);
               this.processQueue(new Error('Session expired'));
               this.refreshing = false;
               throw new Error('Session expired - too many refresh attempts');
@@ -208,7 +218,9 @@ class ApiService {
             this.processQueue(refreshError instanceof Error ? refreshError : new Error(String(refreshError)));
             this.refreshing = false;
 
-            await secureStorage.clearAll();
+            await getSupabaseClient().auth.signOut().catch(() => undefined);
+            await authService.clearAuthData();
+            authService.notifyAuthStateChange(false);
 
             throw refreshError;
           }

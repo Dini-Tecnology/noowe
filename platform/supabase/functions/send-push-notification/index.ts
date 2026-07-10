@@ -25,13 +25,57 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Only service_role or authenticated staff can call this
+    // Only service_role or staff with an owner/manager role may call this.
+    // Previously this only checked that *some* Authorization header was
+    // present, so any authenticated user (including customers) could send
+    // arbitrary push notifications to any user_id.
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
+    const isServiceRoleCall = bearerToken === serviceRoleKey;
+
+    if (!isServiceRoleCall) {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser(bearerToken);
+
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: userRoles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .in("role", ["owner", "manager"]);
+
+      const { data: profileRoles } = await supabase
+        .from("profile_roles")
+        .select("role_key")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .in("role_key", ["owner", "manager"]);
+
+      const hasStaffRole = (userRoles?.length ?? 0) > 0 || (profileRoles?.length ?? 0) > 0;
+
+      if (!hasStaffRole) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const payload: PushPayload = await req.json();
@@ -73,14 +117,16 @@ serve(async (req) => {
     let fcmResults = null;
 
     if (fcmKey) {
-      // Get FCM tokens for the users
+      // Get FCM tokens for the users. profiles.fcm_token is a direct column,
+      // not a key inside a `metadata` jsonb blob (that column doesn't even
+      // exist on `profiles`) — this used to silently return zero tokens.
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, metadata")
+        .select("id, fcm_token")
         .in("id", payload.user_ids);
 
       const tokens = profiles
-        ?.map((p: any) => p.metadata?.fcm_token)
+        ?.map((p: any) => p.fcm_token)
         .filter(Boolean) as string[];
 
       if (tokens.length > 0) {

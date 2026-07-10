@@ -106,7 +106,7 @@ function toNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
-function elapsedLabel(value?: string | null): string {
+export function elapsedLabel(value?: string | null): string {
   if (!value) return '';
   const then = new Date(value).getTime();
   if (!Number.isFinite(then)) return '';
@@ -430,6 +430,406 @@ export function useDashboardSnapshot(): AsyncState<DashboardSnapshot | null> {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  return { data, loading, error, refresh };
+}
+
+export type StaffMember = {
+  id: string;
+  userId: string;
+  fullName: string;
+  email?: string;
+  role: string;
+  isActive: boolean;
+};
+
+function mapStaffMember(raw: {
+  id: string;
+  user_id: string;
+  full_name?: string | null;
+  email?: string | null;
+  role: string;
+  is_active: boolean;
+}): StaffMember {
+  return {
+    id: raw.id,
+    userId: raw.user_id,
+    fullName: raw.full_name || raw.email || 'Sem nome',
+    email: raw.email ?? undefined,
+    role: raw.role,
+    isActive: Boolean(raw.is_active),
+  };
+}
+
+export function useStaff(): AsyncState<StaffMember[]> {
+  const [data, setData] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getStaff();
+      setData((Array.isArray(raw) ? raw : []).map(mapStaffMember));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar equipe');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  return { data, loading, error, refresh };
+}
+
+export type CashRegisterSession = {
+  sessionId: string | null;
+  isOpen: boolean;
+  openingBalance: number;
+  cashSales: number;
+  cardSales: number;
+  pixSales: number;
+  expectedBalance: number;
+};
+
+function mapCashRegister(raw: any): CashRegisterSession {
+  return {
+    sessionId: raw?.session_id ?? raw?.id ?? null,
+    isOpen: Boolean(raw?.is_open ?? raw?.status === 'open'),
+    openingBalance: toNumber(raw?.opening_balance),
+    cashSales: toNumber(raw?.cash_sales),
+    cardSales: toNumber(raw?.card_sales),
+    pixSales: toNumber(raw?.pix_sales),
+    expectedBalance: toNumber(raw?.expected_balance, toNumber(raw?.opening_balance)),
+  };
+}
+
+export function useCashRegister(): AsyncState<CashRegisterSession | null> {
+  const [data, setData] = useState<CashRegisterSession | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getCashRegister();
+      setData(raw ? mapCashRegister(raw) : null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar caixa');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  return { data, loading, error, refresh };
+}
+
+export type CashMovement = {
+  id: string;
+  label: string;
+  amount: number;
+  isCredit: boolean;
+  time: string;
+};
+
+function mapCashMovement(raw: any, index: number): CashMovement {
+  const type: string = raw?.type || raw?.movement_type || '';
+  const amount = toNumber(raw?.amount);
+  // Withdrawals ("sangria") are the one movement type that reduces the
+  // drawer; everything else (sales, reinforcements) increases it.
+  const isCredit = !/sangria|withdraw/i.test(type) && amount >= 0;
+  const label =
+    raw?.description ||
+    { sangria: 'Sangria', withdrawal: 'Sangria', reinforcement: 'Reforço', reforco: 'Reforço' }[type] ||
+    (raw?.is_cash === false ? 'Venda' : type || 'Movimentação');
+  return {
+    id: raw?.id || `${index}`,
+    label,
+    amount: Math.abs(amount),
+    isCredit,
+    time: clockLabel(raw?.created_at),
+  };
+}
+
+export function useCashMovements(): AsyncState<CashMovement[]> {
+  const [data, setData] = useState<CashMovement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getCashRegisterHistory();
+      setData((Array.isArray(raw) ? raw : []).map(mapCashMovement));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar movimentações');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  return { data, loading, error, refresh };
+}
+
+export type Reservation = {
+  id: string;
+  customerName: string;
+  time: string;
+  clock: string;
+  partySize: number;
+  status: string;
+  tableNumber: string | number | null;
+  specialRequests?: string;
+};
+
+function mapReservation(raw: {
+  id: string;
+  customer_name?: string | null;
+  reservation_time: string;
+  party_size: number;
+  status: string;
+  table_number?: string | number | null;
+  special_requests?: string | null;
+}): Reservation {
+  return {
+    id: raw.id,
+    customerName: raw.customer_name || 'Cliente',
+    time: raw.reservation_time,
+    clock: clockLabel(raw.reservation_time),
+    partySize: toNumber(raw.party_size, 1),
+    status: raw.status,
+    tableNumber: raw.table_number ?? null,
+    specialRequests: raw.special_requests ?? undefined,
+  };
+}
+
+export function useReservations(dateISO?: string): AsyncState<Reservation[]> {
+  const [data, setData] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { restaurantId } = useRestaurantRole();
+  const date = dateISO || new Date().toISOString().split('T')[0];
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getReservations({ date });
+      setData((Array.isArray(raw) ? raw : []).map(mapReservation));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar reservas');
+    } finally {
+      setLoading(false);
+    }
+  }, [date]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  useRealtimeRefresh('reservations', restaurantId, refresh);
+
+  return { data, loading, error, refresh };
+}
+
+export type StockItem = {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  currentLevel: number;
+  minLevel: number;
+  isLow: boolean;
+};
+
+function mapStockItem(raw: {
+  id: string;
+  name: string;
+  category?: string | null;
+  unit?: string | null;
+  current_level?: number | string | null;
+  min_level?: number | string | null;
+}): StockItem {
+  const currentLevel = toNumber(raw.current_level);
+  const minLevel = toNumber(raw.min_level);
+  return {
+    id: raw.id,
+    name: raw.name,
+    category: raw.category || 'Geral',
+    unit: raw.unit || 'un',
+    currentLevel,
+    minLevel,
+    isLow: minLevel > 0 && currentLevel <= minLevel,
+  };
+}
+
+export function useStock(): AsyncState<StockItem[]> {
+  const [data, setData] = useState<StockItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getStock();
+      setData((Array.isArray(raw) ? raw : []).map(mapStockItem));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar estoque');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  return { data, loading, error, refresh };
+}
+
+export type Promotion = {
+  id: string;
+  title: string;
+  type: string;
+  discountValue: number | null;
+  validFrom: string;
+  validUntil: string;
+};
+
+function mapPromotion(raw: {
+  id: string;
+  title: string;
+  type?: string | null;
+  discount_value?: number | string | null;
+  valid_from: string;
+  valid_until: string;
+}): Promotion {
+  return {
+    id: raw.id,
+    title: raw.title,
+    type: raw.type || 'discount',
+    discountValue: raw.discount_value != null ? toNumber(raw.discount_value) : null,
+    validFrom: raw.valid_from,
+    validUntil: raw.valid_until,
+  };
+}
+
+export function usePromotions(): AsyncState<Promotion[]> {
+  const [data, setData] = useState<Promotion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { restaurantId } = useRestaurantRole();
+
+  const refresh = useCallback(async () => {
+    if (!restaurantId) return;
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getPromotions(restaurantId, 'active');
+      setData((Array.isArray(raw) ? raw : []).map(mapPromotion));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar promoções');
+    } finally {
+      setLoading(false);
+    }
+  }, [restaurantId]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  return { data, loading, error, refresh };
+}
+
+export type MenuItemSummary = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  imageUrl?: string;
+  isAvailable: boolean;
+};
+
+function mapMenuItemSummary(raw: {
+  id: string;
+  name: string;
+  description?: string | null;
+  price?: number | string | null;
+  image_url?: string | null;
+  is_available?: boolean;
+}): MenuItemSummary {
+  return {
+    id: raw.id,
+    name: raw.name,
+    description: raw.description || '',
+    price: toNumber(raw.price),
+    imageUrl: raw.image_url ?? undefined,
+    isAvailable: raw.is_available !== false,
+  };
+}
+
+export function useMenuItems(): AsyncState<MenuItemSummary[]> {
+  const [data, setData] = useState<MenuItemSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getMenu();
+      setData((Array.isArray(raw) ? raw : []).map(mapMenuItemSummary));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar cardápio');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  return { data, loading, error, refresh };
+}
+
+export type ServiceCall = {
+  id: string;
+  tableNumber: string | number | null;
+  callType: string;
+  status: string;
+  createdAt?: string;
+};
+
+function mapServiceCall(raw: {
+  id: string;
+  table_number?: string | number | null;
+  call_type: string;
+  status: string;
+  created_at?: string;
+}): ServiceCall {
+  return {
+    id: raw.id,
+    tableNumber: raw.table_number ?? null,
+    callType: raw.call_type,
+    status: raw.status,
+    createdAt: raw.created_at,
+  };
+}
+
+export function useServiceCalls(): AsyncState<ServiceCall[]> {
+  const [data, setData] = useState<ServiceCall[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { restaurantId } = useRestaurantRole();
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getServiceCalls(undefined, ['open', 'acknowledged']);
+      setData((Array.isArray(raw) ? raw : []).map(mapServiceCall));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar chamados');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  useRealtimeRefresh('service_calls', restaurantId, refresh);
 
   return { data, loading, error, refresh };
 }

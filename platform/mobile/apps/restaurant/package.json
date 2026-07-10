@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-android.ps1",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "jest"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -63,6 +64,7 @@
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@types/react": "~19.1.10",
+    "jest-expo": "^54.0.17",
     "typescript": "^5.8.3"
   }
 }

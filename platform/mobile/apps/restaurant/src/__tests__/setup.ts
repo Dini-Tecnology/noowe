@@ -12,28 +12,13 @@ import { vi, beforeAll, afterAll, beforeEach } from 'vitest';
 // ============================================================
 // REACT NATIVE MOCKS
 // ============================================================
-
-vi.mock('react-native', () => ({
-  Platform: { OS: 'ios', select: vi.fn() },
-  StyleSheet: { create: (styles: any) => styles },
-  Dimensions: { get: () => ({ width: 768, height: 1024 }) },
-  View: 'View',
-  Text: 'Text',
-  TouchableOpacity: 'TouchableOpacity',
-  ScrollView: 'ScrollView',
-  Image: 'Image',
-  TextInput: 'TextInput',
-  ActivityIndicator: 'ActivityIndicator',
-  FlatList: 'FlatList',
-  Switch: 'Switch',
-  Share: { share: vi.fn() },
-  Alert: { alert: vi.fn() },
-  AppState: {
-    addEventListener: vi.fn(() => ({ remove: vi.fn() })),
-    currentState: 'active',
-  },
-  Vibration: { vibrate: vi.fn() },
-}));
+//
+// Intentionally NOT mocking 'react-native' itself: @testing-library/react-native
+// needs the real module (via the 'react-native' Jest preset's own native-module
+// shims) to detect host component names when rendering a real screen. None of
+// the fixture-only test files in this directory import 'react-native' directly,
+// so removing this blanket mock doesn't affect them — it only unblocks the one
+// suite (LoginScreen.test.tsx) that actually renders a component tree.
 
 // ============================================================
 // EXPO MODULE MOCKS
@@ -46,15 +31,33 @@ vi.mock('expo-camera', () => ({
   useCameraPermissions: vi.fn(() => [{ status: 'granted' }, vi.fn()]),
 }));
 
-vi.mock('@expo/vector-icons', () => ({
-  Ionicons: 'Ionicons',
-  MaterialCommunityIcons: 'MaterialCommunityIcons',
-}));
+// '@expo/vector-icons' (barrel import and any subpath, e.g.
+// '@expo/vector-icons/MaterialCommunityIcons') is redirected via
+// moduleNameMapper in jest.config.js — see src/__mocks__/vectorIconMock.js.
 
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaView: 'SafeAreaView',
   SafeAreaProvider: 'SafeAreaProvider',
   useSafeAreaInsets: () => ({ top: 44, bottom: 34, left: 0, right: 0 }),
+}));
+
+// react-native-paper pulls in @expo/vector-icons -> expo-font ->
+// expo-modules-core, which requires real native modules that don't exist
+// under the plain 'react-native' Jest preset (no jest-expo). Mock it with
+// plain host-component strings instead of loading the real library.
+vi.mock('react-native-paper', () => ({
+  Text: 'Text',
+  HelperText: 'HelperText',
+  Button: 'Button',
+  TextInput: 'TextInput',
+  Provider: 'Provider',
+  PaperProvider: 'PaperProvider',
+  ActivityIndicator: 'ActivityIndicator',
+  Card: 'Card',
+  Chip: 'Chip',
+  Switch: 'Switch',
+  Divider: 'Divider',
+  IconButton: 'IconButton',
 }));
 
 // ============================================================
@@ -72,6 +75,25 @@ vi.mock('expo-secure-store', () => ({
   setItemAsync: vi.fn(),
   getItemAsync: vi.fn(),
   deleteItemAsync: vi.fn(),
+}));
+
+// Side-effect-only polyfill import (URL/URLSearchParams); not needed under
+// the Jest/node test environment and ships as untranspiled ESM.
+vi.mock('react-native-url-polyfill/auto', () => ({}));
+
+vi.mock('expo-linking', () => ({
+  createURL: vi.fn((path: string) => `okinawa-restaurant://${path}`),
+  parse: vi.fn(() => ({ path: null, queryParams: {} })),
+  addEventListener: vi.fn(() => ({ remove: vi.fn() })),
+  getInitialURL: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('expo-local-authentication', () => ({
+  authenticateAsync: vi.fn(),
+  hasHardwareAsync: vi.fn().mockResolvedValue(true),
+  isEnrolledAsync: vi.fn().mockResolvedValue(true),
+  getEnrolledLevelAsync: vi.fn().mockResolvedValue(1),
+  supportedAuthenticationTypesAsync: vi.fn().mockResolvedValue([1]),
 }));
 
 // ============================================================

@@ -80,7 +80,7 @@ vi.mock('@okinawa/shared/contexts/ThemeContext', () => ({
   }),
 }));
 
-const mockValidateForm = vi.fn(() => ({ success: true, errors: {} }));
+const mockValidateForm = vi.fn((...args: any[]) => ({ success: true, errors: {} }));
 vi.mock('@/shared/validation/schemas', () => ({
   loginSchema: {},
   validateForm: (...args: any[]) => mockValidateForm(...args),

@@ -1,4 +1,4 @@
-import React, { ComponentType } from 'react';
+import React, { ComponentType, useState } from 'react';
 import {
   Alert,
   View,
@@ -6,23 +6,21 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  TextInput,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import {
   AlertCircle,
   ArrowRight,
   ArrowDown,
-  ArrowUp,
   Clock,
   CheckCircle,
   CreditCard as CreditCardIcon,
-  DollarSign,
   Phone,
   Package,
   QrCode,
   Settings,
   Zap,
-  XCircle,
   UtensilsCrossed,
   Users,
   BarChart,
@@ -36,8 +34,26 @@ import { authService } from '@/shared/services/auth';
 import { V2_TONE, V2Tone } from './shared/v2Theme';
 import { V2StatusBadge } from './shared/V2StatusBadge';
 import { orderStatusLabel, orderStatusTone } from './shared/v2Types';
-import { shortOrderId, useDashboardSnapshot, useKdsOrders, useRestaurantOrders } from './shared/useRestaurantOperations';
+import {
+  elapsedLabel,
+  shortOrderId,
+  useCashMovements,
+  useCashRegister,
+  useDashboardSnapshot,
+  useKdsOrders,
+  useMenuItems,
+  usePromotions,
+  useReservations,
+  useRestaurantOrders,
+  useRestaurantTables,
+  useServiceCalls,
+  useStaff,
+  useStock,
+  useTableBills,
+  type V2Table,
+} from './shared/useRestaurantOperations';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import ApiService from '@okinawa/shared/services/api';
 import type { TabOrder } from './shared/v2Types';
 import {
   ChefRoleView,
@@ -60,6 +76,40 @@ const OWNER_ROLES = [
 ] as const;
 
 type RoleId = (typeof OWNER_ROLES)[number]['id'];
+
+const TABLE_STATUS_LABEL: Record<V2Table['status'], string> = {
+  available: 'Livre',
+  occupied: 'Ocupada',
+  reserved: 'Reserva',
+  cleaning: 'Limpeza',
+  payment: 'Conta',
+  blocked: 'Bloqueada',
+};
+
+const TABLE_STATUS_TONE: Record<V2Table['status'], V2Tone> = {
+  available: 'success',
+  occupied: 'danger',
+  reserved: 'warning',
+  cleaning: 'warning',
+  payment: 'info',
+  blocked: 'danger',
+};
+
+const RESERVATION_STATUS_LABEL: Record<string, string> = {
+  pending: 'Pendente',
+  confirmed: 'Confirmada',
+  seated: 'Sentada',
+  completed: 'Concluída',
+  cancelled: 'Cancelada',
+};
+
+const RESERVATION_STATUS_TONE: Record<string, V2Tone> = {
+  pending: 'warning',
+  confirmed: 'info',
+  seated: 'success',
+  completed: 'success',
+  cancelled: 'danger',
+};
 
 export default function OwnerHubScreen() {
   const colors = useColors();
@@ -289,92 +339,7 @@ function waiterViewTitle(view: WaiterRoleView) {
   return titles[view];
 }
 
-const MANAGER_STAFF = [
-  {
-    name: 'Ricardo Alves',
-    role: 'Dono · Integral',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100',
-  },
-  {
-    name: 'Marina Costa',
-    role: 'Gerente · 14h–23h',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
-  },
-  {
-    name: 'Felipe Santos',
-    role: 'Chef · 15h–23h',
-    avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=100',
-  },
-  {
-    name: 'Ana Rodrigues',
-    role: 'Sommelier · 18h–00h',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-  },
-  {
-    name: 'Bruno Oliveira',
-    role: 'Garçom · 18h–00h',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100',
-  },
-];
 
-const MANAGER_APPROVALS = [
-  { title: 'Filé ao Molho de Vinho', amount: 'R$ 118', meta: 'Mesa 5 · Bruno Oliveira', reason: 'Cliente mudou de ideia' },
-  { title: 'Sobremesa (Petit Gâteau)', amount: 'R$ 42', meta: 'Mesa 8 · Carla Lima', reason: 'Aniversariante na mesa' },
-];
-
-const MANAGER_CASH_MOVES = [
-  { label: 'Venda Cartão', time: '19:45', value: '+R$ 4.200', tone: 'success' as const, icon: CreditCardIcon },
-  { label: 'Venda PIX', time: '19:30', value: '+R$ 2.800', tone: 'success' as const, icon: QrCode },
-  { label: 'Venda Dinheiro', time: '18:50', value: '+R$ 1.420', tone: 'success' as const, icon: DollarSign },
-  { label: 'Sangria', time: '18:00', value: 'R$ 1.500', tone: 'danger' as const, icon: ArrowDown },
-  { label: 'Reforço', time: '14:05', value: '+R$ 500', tone: 'success' as const, icon: ArrowUp },
-];
-
-const MANAGER_TABLES = [
-  { number: 1, status: 'Ocupada', seats: '2 lugares', guest: 'Maria S.', tone: 'danger' as const },
-  { number: 2, status: 'Livre', seats: '2 lugares', guest: '', tone: 'success' as const },
-  { number: 3, status: 'Ocupada', seats: '4 lugares', guest: 'João & Ana', tone: 'danger' as const },
-  { number: 4, status: 'Reserva', seats: '4 lugares', guest: '', tone: 'warning' as const },
-  { number: 5, status: 'Ocupada', seats: '6 lugares', guest: 'Grupo Pedro', tone: 'danger' as const },
-  { number: 6, status: 'Conta', seats: '2 lugares', guest: 'Lucia F.', tone: 'info' as const },
-  { number: 7, status: 'Livre', seats: '4 lugares', guest: '', tone: 'success' as const },
-  { number: 8, status: 'Ocupada', seats: '8 lugares', guest: 'Aniversário', tone: 'danger' as const },
-  { number: 9, status: 'Livre', seats: '2 lugares', guest: '', tone: 'success' as const },
-  { number: 10, status: 'Ocupada', seats: '4 lugares', guest: 'Carlos M.', tone: 'danger' as const },
-  { number: 11, status: 'Reserva', seats: '6 lugares', guest: '', tone: 'warning' as const },
-  { number: 12, status: 'Livre', seats: '2 lugares', guest: '', tone: 'success' as const },
-];
-
-const MAITRE_RESERVATIONS = [
-  { name: 'Fernanda Machado', time: '19:30 · 2 pessoas', note: 'Aniversário de casamento', status: 'Confirmada', tone: 'warning' as const },
-  { name: 'Roberto Dias', time: '20:00 · 4 pessoas', note: '', status: 'Confirmada', tone: 'warning' as const },
-  { name: 'Patricia Lemos', time: '20:30 · 6 pessoas', note: 'Jantar de negócios', status: 'Aguardando', tone: 'warning' as const },
-  { name: 'André Martins', time: '21:00 · 2 pessoas', note: '', status: 'Confirmada', tone: 'warning' as const },
-  { name: 'Juliana Costa', time: '21:30 · 8 pessoas', note: 'Mesa no terraço', status: 'Confirmada', tone: 'warning' as const },
-];
-
-const MAITRE_MANAGEMENT = [
-  { name: 'Ricardo Silva', time: '19:00', table: 'Mesa 5', people: '4 pessoas', phone: '(11) 9xxxx-1234', status: 'Confirmada', tone: 'success' as const },
-  { name: 'Grupo Corporativo', time: '20:00', table: 'Mesas 8+9', people: '10 pessoas', phone: '(11) 9xxxx-5678', status: 'Pendente', tone: 'warning' as const },
-  { name: 'Aniversário Julia', time: '20:30', table: 'Mesa 11', people: '8 pessoas', phone: '(11) 9xxxx-9012', status: 'Confirmada', tone: 'success' as const },
-];
-
-const MANAGER_STOCK = [
-  ['Gin Tanqueray', 'Destilados', '3 garrafas', 'warning'],
-  ['Tônica Fever Tree', 'Mixers', '12 unidades', 'success'],
-  ['Limão Tahiti', 'Frutas', '8 unidades', 'danger'],
-  ['Campari', 'Licores', '4 garrafas', 'success'],
-  ['Filé Mignon', 'Carnes', '6 kg', 'warning'],
-  ['Salmão Norueguês', 'Peixes', '4 kg', 'warning'],
-  ['Arroz Arbóreo', 'Grãos', '15 kg', 'success'],
-  ['Azeite Trufado', 'Condimentos', '2 garrafas', 'warning'],
-] as const;
-
-const MANAGER_CAMPAIGNS = [
-  ['Happy Hour — 17h às 19h', 'Desconto: 30% em drinks', '142 usos este mês'],
-  ['Almoço Executivo', 'Combo: Entrada + Prato + Bebida R$ 49,90', '89 usos este mês'],
-  ['Aniversariante', 'Cortesia: Sobremesa grátis', '23 usos este mês'],
-] as const;
 
 const MANAGER_CONFIG = [
   ['Perfil do Restaurante', 'Nome, logo, fotos, contato', UtensilsCrossed, 'danger'],
@@ -387,42 +352,6 @@ const MANAGER_CONFIG = [
   ['Pagamentos', 'Taxa, gorjeta, split, métodos', CreditCardIcon, 'danger'],
 ] as const;
 
-
-const CHEF_APPROVALS = [
-  ['Carlos & Maria', "Chef's Table", '05/04 — 20h', '2 convidados', 'Sem glúten', 'Aniversário de casamento'],
-  ['Grupo Eventos Corp', 'Menu Degustação', '07/04 — 19h30', '8 convidados', '1 vegetariano', 'Evento corporativo'],
-  ['Ana Beatriz', "Chef's Table", '06/04 — 21h', '4 convidados', 'Nenhuma', 'Harmonização de vinhos'],
-] as const;
-
-const CHEF_STATIONS = [
-  ['Grill', '14min', '91%', '45 tickets', 'warning'],
-  ['Frios', '8min', '98%', '38 tickets', 'success'],
-  ['Massas', '11min', '95%', '32 tickets', 'success'],
-  ['Bar', '4min', '99%', '27 tickets', 'success'],
-] as const;
-
-const CHEF_MARGINS = [
-  ['Risoto de Cogumelos', 'Custo: R$ 18.50 → Venda: R$ 68', '72.8%', 'success'],
-  ['Filé Mignon ao Molho', 'Custo: R$ 42.00 → Venda: R$ 118', '64.4%', 'warning'],
-  ['Salmão Grelhado', 'Custo: R$ 38.00 → Venda: R$ 95', '60%', 'warning'],
-  ['Camarão Flamejado', 'Custo: R$ 52.00 → Venda: R$ 125', '58.4%', 'warning'],
-  ['Picanha na Brasa', 'Custo: R$ 48.00 → Venda: R$ 98', '51%', 'danger'],
-] as const;
-
-const CHEF_MENU_ITEMS = [
-  ['Tartare de Atum', 'Atum fresco com abacate, gergelim negro e ponzu cítrico', 'R$ 58', 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=160'],
-  ['Burrata Artesanal', 'Burrata com tomate confit, pesto de manjericão e redução de balsâmico', 'R$ 52', 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=160'],
-  ['Ceviche Peruano', 'Peixe branco com leite de tigre, cebola roxa e milho crocante', 'R$ 48', 'https://images.unsplash.com/photo-1535399831218-d5bd36d1a6b3?w=160'],
-  ['Carpaccio de Wagyu', 'Wagyu A5 fatiado fino com rúcula, parmesão e azeite trufado', 'R$ 72', 'https://images.unsplash.com/photo-1544025162-d76694265947?w=160'],
-] as const;
-
-const BARMAN_RECIPES = [
-  ['Gin Tônica Aurora', 'Taça Balloon · 3min', 'R$ 38', 'https://images.unsplash.com/photo-1551538827-9c037cb4f32a?w=160'],
-  ['Negroni Clássico', 'Copo Old Fashioned · 3min', 'R$ 42', 'https://images.unsplash.com/photo-1551751299-1b51cab2694c?w=160'],
-  ['Espresso Martini', 'Taça Martini · 4min', 'R$ 40', 'https://images.unsplash.com/photo-1605270012917-bf157c5a9541?w=160'],
-  ['Caipirinha Premium', 'Copo Old Fashioned · 2min', 'R$ 32', 'https://images.unsplash.com/photo-1608270586620-248524c67de9?w=160'],
-  ['Moscow Mule', 'Caneca de cobre · 2min', 'R$ 36', 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=160'],
-] as const;
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
@@ -512,7 +441,7 @@ function ManagerContent({
   if (view === 'manager-report') return <ManagerReportView colors={colors} />;
   if (view === 'manager-stock') return <ManagerStockView colors={colors} />;
   if (view === 'manager-promotions') return <ManagerPromotionsView colors={colors} />;
-  if (view === 'manager-qr') return <ManagerQrView colors={colors} />;
+  if (view === 'manager-qr') return <ManagerQrView colors={colors} onNavigate={onNavigate} />;
   if (view === 'manager-settings') return <ManagerSettingsView colors={colors} setView={setView} />;
   return <ManagerDashboardTab setView={setView} onNavigate={onNavigate} colors={colors} />;
 }
@@ -707,18 +636,12 @@ function BarmanQueueView({
 }
 
 function BarmanRecipesView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  // No recipe/preparation-steps table exists in the schema — showing the
+  // full menu here would be misleading (not filtered to drinks, no prep
+  // instructions). Honest placeholder until that data model exists.
   return (
     <View style={styles.section}>
-      {BARMAN_RECIPES.map(([name, meta, price, image]) => (
-        <View key={name} style={[styles.menuEditorCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <Image source={{ uri: image }} style={styles.menuEditorImage} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{name}</Text>
-            <Text numberOfLines={1} style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{meta}</Text>
-          </View>
-          <Text style={styles.menuEditorPrice}>{price}</Text>
-        </View>
-      ))}
+      <InlineNotice message="Fichas técnicas de drinks ainda não disponíveis nesta versão do app." colors={colors} />
       <ProfileActive colors={colors} roleName="Barman" />
     </View>
   );
@@ -782,123 +705,74 @@ function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
 }
 
 function ChefApprovalsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  // No backend concept of "Chef's Table booking approvals" exists yet.
   return (
     <View style={styles.section}>
-      <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
-        <Zap size={16} color="#FF8A7A" />
-        <Text style={[styles.tipBannerText, { color: '#FF8A7A' }]}>Reservas do Chef's Table e menus especiais aguardando aprovação</Text>
-      </View>
-      <View style={styles.metricGrid}>
-        <Metric value="3" label="Pendentes" tone="warning" />
-        <Metric value="5" label="Aprovados Hoje" tone="success" />
-      </View>
-      {CHEF_APPROVALS.map(([name, tag, date, guests, restriction, note]) => (
-        <View key={name} style={[styles.approvalCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View style={styles.managerOrderHeader}>
-            <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{name}</Text>
-            <StatusChip label={tag} tone="warning" />
-          </View>
-          <View style={styles.chefApprovalGrid}>
-            <Text style={[styles.metaLineText, { color: colors.foregroundSecondary }]}>🗓️ {date}</Text>
-            <Text style={[styles.metaLineText, { color: colors.foregroundSecondary }]}>👥 {guests}</Text>
-            <Text style={[styles.metaLineText, { color: colors.foregroundSecondary }]}>🍽️ {restriction}</Text>
-            <Text style={[styles.metaLineText, { color: colors.foregroundSecondary }]}>📝 {note}</Text>
-          </View>
-          <View style={styles.approvalActions}>
-            <TouchableOpacity style={[styles.approvalButton, { backgroundColor: '#DCFCE7', borderColor: '#BBF7D0', borderWidth: 1 }]}>
-              <Text style={[styles.approvalButtonText, { color: '#22C55E' }]}>✓ Aprovar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.approvalButton, { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 1 }]}>
-              <Text style={[styles.approvalButtonText, { color: '#EF4444' }]}>X Recusar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ))}
+      <InlineNotice message="Aprovações de Chef's Table ainda não disponíveis nesta versão do app." colors={colors} />
+      <ProfileActive colors={colors} roleName="Chef" />
     </View>
   );
 }
 
 function ChefAnalyticsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: snapshot, loading } = useDashboardSnapshot();
+
   return (
     <View style={styles.section}>
       <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
         <Zap size={16} color="#FF8A7A" />
-        <Text style={[styles.tipBannerText, { color: '#FF8A7A' }]}>Métricas de performance da cozinha — tempos, eficiência e SLA</Text>
+        <Text style={[styles.tipBannerText, { color: '#FF8A7A' }]}>Métricas de performance da cozinha</Text>
       </View>
       <View style={styles.metricGrid}>
-        <Metric value="12min" label="Tempo Médio" tone="danger" />
-        <Metric value="94%" label="SLA (<15min)" tone="success" />
-        <Metric value="142" label="Tickets Hoje" tone="danger" />
-        <Metric value="3" label="Itens Atrasados" tone="warning" />
+        <Metric value={loading ? '—' : String(snapshot?.kds_queue ?? 0)} label="Na fila do KDS" tone="danger" />
       </View>
-      <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <Text style={[styles.panelTitle, { color: colors.foreground }]}>Por Estação</Text>
-        {CHEF_STATIONS.map(([station, time, sla, tickets, tone]) => (
-          <View key={station} style={styles.chefStationRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-              <ChefHat size={15} color={colors.foregroundSecondary} />
-              <Text style={[styles.staffName, { color: colors.foreground }]}>{station}</Text>
-            </View>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{time}</Text>
-            <Text style={[styles.staffName, { color: V2_TONE[tone as V2Tone].text }]}>{sla}</Text>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{tickets}</Text>
-          </View>
-        ))}
-      </View>
+      <InlineNotice message="Tempo médio, SLA e detalhamento por estação ainda não estão disponíveis — dependem de um relatório de cozinha que este app ainda não consome." colors={colors} />
       <ProfileActive colors={colors} roleName="Chef" />
     </View>
   );
 }
 
 function ChefCostView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  // menu_items has no cost/CMV column in the current schema — nothing real to show yet.
   return (
     <View style={styles.section}>
       <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
         <Zap size={16} color="#FF8A7A" />
         <Text style={[styles.tipBannerText, { color: '#FF8A7A' }]}>CMV por prato, fichas técnicas e margem de contribuição</Text>
       </View>
-      <View style={styles.threeMetricGrid}>
-        <CompactMetric value="32%" label="CMV Médio" tone="danger" />
-        <CompactMetric value="68%" label="Margem Média" tone="success" />
-        <CompactMetric value="3" label="CMV Alto" tone="warning" />
-      </View>
-      <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <Text style={[styles.panelTitle, { color: colors.foreground }]}>Top Pratos por Margem</Text>
-        {CHEF_MARGINS.map(([name, desc, margin, tone]) => (
-          <View key={name} style={styles.marginRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.staffName, { color: colors.foreground }]}>{name}</Text>
-              <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{desc}</Text>
-            </View>
-            <Text style={[styles.compactMetricValue, { color: V2_TONE[tone as V2Tone].text }]}>{margin}</Text>
-          </View>
-        ))}
-      </View>
+      <InlineNotice message="Cálculo de CMV/margem ainda não disponível — o cardápio hoje não registra o custo de cada prato." colors={colors} />
       <ProfileActive colors={colors} roleName="Chef" />
     </View>
   );
 }
 
 function ChefMenuView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: items, loading, error, refresh } = useMenuItems();
+
   return (
     <View style={styles.section}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-        {['Entradas', 'Pratos Principais', 'Sobremesas', 'Bebidas'].map((item, index) => (
-          <View key={item} style={[styles.filterChip, { backgroundColor: index === 0 ? '#FF5A3D' : '#F3F4F6' }]}>
-            <Text style={[styles.filterText, { color: index === 0 ? '#FFF' : '#64748B' }]}>{item}</Text>
+      {loading ? (
+        <InlineNotice message="Carregando cardápio..." colors={colors} />
+      ) : error ? (
+        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+      ) : items.length === 0 ? (
+        <InlineNotice message="Nenhum item cadastrado no cardápio." colors={colors} />
+      ) : (
+        items.map((item) => (
+          <View key={item.id} style={[styles.menuEditorCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            {item.imageUrl ? (
+              <Image source={{ uri: item.imageUrl }} style={styles.menuEditorImage} />
+            ) : (
+              <View style={[styles.menuEditorImage, { backgroundColor: colors.backgroundSecondary }]} />
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{item.name}</Text>
+              <Text numberOfLines={2} style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{item.description}</Text>
+            </View>
+            <Text style={styles.menuEditorPrice}>{formatCurrency(item.price)}</Text>
           </View>
-        ))}
-      </ScrollView>
-      {CHEF_MENU_ITEMS.map(([name, desc, price, image]) => (
-        <View key={name} style={[styles.menuEditorCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <Image source={{ uri: image }} style={styles.menuEditorImage} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{name}</Text>
-            <Text numberOfLines={2} style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{desc}</Text>
-          </View>
-          <Text style={styles.menuEditorPrice}>{price}</Text>
-        </View>
-      ))}
+        ))
+      )}
       <ProfileActive colors={colors} roleName="Chef" />
     </View>
   );
@@ -908,47 +782,109 @@ function ChefStockView({ colors }: { colors: ReturnType<typeof useColors> }) {
   return <ManagerStockView colors={colors} roleName="Chef" />;
 }
 
+function useFreeTableCount(): number {
+  const { data: tables } = useRestaurantTables();
+  return tables.filter((t) => t.status === 'available').length;
+}
+
 function MaitreReservationsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: reservations, loading, error, refresh } = useReservations();
+  const freeTables = useFreeTableCount();
+  const [acting, setActing] = useState<string | null>(null);
+
+  const updateStatus = async (id: string, status: string) => {
+    setActing(id);
+    try {
+      await supabaseApiAdapter.updateReservationStatus(id, status);
+      await refresh();
+    } catch (err) {
+      Alert.alert('Falha ao atualizar reserva', err instanceof Error ? err.message : 'Tente novamente.');
+    } finally {
+      setActing(null);
+    }
+  };
+
   return (
     <View style={styles.section}>
       <View style={styles.metricGrid}>
-        <Metric value="5" label="Reservas Hoje" tone="danger" />
-        <Metric value="4" label="Mesas Livres" tone="success" />
+        <Metric value={loading ? '—' : String(reservations.length)} label="Reservas Hoje" tone="danger" />
+        <Metric value={String(freeTables)} label="Mesas Livres" tone="success" />
       </View>
-      <SectionTitle title="Reservas confirmadas" colors={colors} />
-      {MAITRE_RESERVATIONS.map((reservation) => (
-        <View key={reservation.name} style={[styles.reservationCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View style={styles.managerOrderHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{reservation.name}</Text>
-              <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{reservation.time}</Text>
+      <SectionTitle title="Reservas de hoje" colors={colors} />
+      {loading ? (
+        <InlineNotice message="Carregando reservas..." colors={colors} />
+      ) : error ? (
+        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+      ) : reservations.length === 0 ? (
+        <InlineNotice message="Nenhuma reserva para hoje." colors={colors} />
+      ) : (
+        reservations.map((reservation) => (
+          <View key={reservation.id} style={[styles.reservationCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <View style={styles.managerOrderHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{reservation.customerName}</Text>
+                <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
+                  {reservation.clock} · {reservation.partySize} {reservation.partySize === 1 ? 'pessoa' : 'pessoas'}
+                </Text>
+              </View>
+              <StatusChip label={RESERVATION_STATUS_LABEL[reservation.status] || reservation.status} tone={RESERVATION_STATUS_TONE[reservation.status] || 'info'} />
             </View>
-            <StatusChip label={reservation.status} tone={reservation.tone} />
+            {!!reservation.specialRequests && <Text style={[styles.reservationNote, { color: colors.foregroundSecondary }]}>{reservation.specialRequests}</Text>}
+            {reservation.status === 'pending' && (
+              <View style={styles.approvalActions}>
+                <TouchableOpacity
+                  disabled={acting === reservation.id}
+                  onPress={() => void updateStatus(reservation.id, 'confirmed')}
+                  style={[styles.approvalButton, { backgroundColor: '#35B36F' }]}
+                >
+                  <CheckCircle size={16} color="#FFF" />
+                  <Text style={styles.approvalButtonText}>Confirmar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  disabled={acting === reservation.id}
+                  onPress={() => void updateStatus(reservation.id, 'cancelled')}
+                  style={[styles.approvalButton, { backgroundColor: '#FDEAEA' }]}
+                >
+                  <Text style={[styles.approvalButtonText, { color: '#EF4444' }]}>Recusar</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
-          {!!reservation.note && <Text style={[styles.reservationNote, { color: colors.foregroundSecondary }]}>{reservation.note}</Text>}
-        </View>
-      ))}
+        ))
+      )}
       <ProfileActive colors={colors} roleName="Maître" />
     </View>
   );
 }
 
 function MaitreFlowView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: reservations, loading, error, refresh } = useReservations();
+  const freeTables = useFreeTableCount();
+  const upcoming = reservations.filter((r) => r.status === 'pending' || r.status === 'confirmed').slice(0, 4);
+
   return (
     <View style={styles.section}>
       <View style={styles.metricGrid}>
-        <Metric value="25min" label="Fila estimada" tone="warning" />
-        <Metric value="4" label="Mesas livres" tone="success" />
+        <Metric value={String(freeTables)} label="Mesas livres" tone="success" />
+        <Metric value={loading ? '—' : String(upcoming.length)} label="Próximas reservas" tone="warning" />
       </View>
       <SectionTitle title="Fluxo atual" colors={colors} />
-      {MAITRE_RESERVATIONS.slice(0, 4).map((reservation) => (
-        <View key={reservation.name} style={[styles.flowCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{reservation.name}</Text>
-          <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
-            {reservation.time} · {reservation.status}
-          </Text>
-        </View>
-      ))}
+      {loading ? (
+        <InlineNotice message="Carregando..." colors={colors} />
+      ) : error ? (
+        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+      ) : upcoming.length === 0 ? (
+        <InlineNotice message="Nenhuma reserva pendente ou confirmada." colors={colors} />
+      ) : (
+        upcoming.map((reservation) => (
+          <View key={reservation.id} style={[styles.flowCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{reservation.customerName}</Text>
+            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
+              {reservation.clock} · {RESERVATION_STATUS_LABEL[reservation.status] || reservation.status}
+            </Text>
+          </View>
+        ))
+      )}
       <ProfileActive colors={colors} roleName="Maître" />
     </View>
   );
@@ -960,39 +896,16 @@ function MaitreTablesView({ colors }: { colors: ReturnType<typeof useColors> }) 
       <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
         <Text style={styles.tipBannerText}>No mobile, o mapa vira uma grade operacional rápida para seleção e ação.</Text>
       </View>
-      <View style={styles.tableGrid}>
-        {MANAGER_TABLES.map((table) => (
-          <View key={table.number} style={[styles.tableCard, table.number === 1 && { borderColor: '#FF5A3D' }]}>
-            <View style={styles.managerOrderHeader}>
-              <Text style={[styles.tableTitle, { color: colors.foreground }]}>{table.number}</Text>
-              <StatusChip label={table.status} tone={table.tone} />
-            </View>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{table.seats}</Text>
-            {!!table.guest && <Text style={[styles.staffName, { color: colors.foreground }]}>{table.guest}</Text>}
-          </View>
-        ))}
-      </View>
-      <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <View style={styles.managerOrderHeader}>
-          <View>
-            <Text style={[styles.panelTitle, { color: colors.foreground }]}>Mesa 1</Text>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>Maria S.</Text>
-          </View>
-          <StatusChip label="Ocupada" tone="danger" />
-        </View>
-        <View style={styles.metricGrid}>
-          <Metric value="2" label="Lugares" tone="info" />
-          <Metric value="R$ 186" label="Conta" tone="danger" />
-        </View>
-        <TouchableOpacity style={[styles.wideAction, { backgroundColor: '#38BDF8' }]}>
-          <Text style={[styles.wideActionText, { color: '#FFF' }]}>Fechar conta</Text>
-        </TouchableOpacity>
-      </View>
+      <TablesGrid colors={colors} />
     </View>
   );
 }
 
 function MaitreManagementView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: reservations, loading, error, refresh } = useReservations();
+  const confirmed = reservations.filter((r) => r.status === 'confirmed' || r.status === 'seated').length;
+  const pending = reservations.filter((r) => r.status === 'pending').length;
+
   return (
     <View style={styles.section}>
       <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
@@ -1000,24 +913,33 @@ function MaitreManagementView({ colors }: { colors: ReturnType<typeof useColors>
         <Text style={styles.tipBannerText}>Gestão completa de reservas — confirmação, grupos e no-show</Text>
       </View>
       <View style={styles.threeMetricGrid}>
-        <CompactMetric value="12" label="Hoje" tone="info" />
-        <CompactMetric value="9" label="Confirmadas" tone="success" />
-        <CompactMetric value="3" label="Pendentes" tone="warning" />
+        <CompactMetric value={loading ? '—' : String(reservations.length)} label="Hoje" tone="info" />
+        <CompactMetric value={loading ? '—' : String(confirmed)} label="Confirmadas" tone="success" />
+        <CompactMetric value={loading ? '—' : String(pending)} label="Pendentes" tone="warning" />
       </View>
-      {MAITRE_MANAGEMENT.map((reservation) => (
-        <View key={reservation.name} style={[styles.managementCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View style={styles.managerOrderHeader}>
-            <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{reservation.name}</Text>
-            <StatusChip label={reservation.status} tone={reservation.tone} />
+      {loading ? (
+        <InlineNotice message="Carregando reservas..." colors={colors} />
+      ) : error ? (
+        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+      ) : reservations.length === 0 ? (
+        <InlineNotice message="Nenhuma reserva para hoje." colors={colors} />
+      ) : (
+        reservations.map((reservation) => (
+          <View key={reservation.id} style={[styles.managementCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <View style={styles.managerOrderHeader}>
+              <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{reservation.customerName}</Text>
+              <StatusChip label={RESERVATION_STATUS_LABEL[reservation.status] || reservation.status} tone={RESERVATION_STATUS_TONE[reservation.status] || 'info'} />
+            </View>
+            <View style={styles.managementMetaGrid}>
+              <MetaLine icon={Clock} label={reservation.clock} color={colors.foregroundSecondary} />
+              <MetaLine icon={Users} label={`${reservation.partySize} pessoas`} color={colors.foregroundSecondary} />
+              {reservation.tableNumber != null && (
+                <MetaLine icon={UtensilsCrossed} label={`Mesa ${reservation.tableNumber}`} color={colors.foregroundSecondary} />
+              )}
+            </View>
           </View>
-          <View style={styles.managementMetaGrid}>
-            <MetaLine icon={Clock} label={reservation.time} color={colors.foregroundSecondary} />
-            <MetaLine icon={Users} label={reservation.people} color={colors.foregroundSecondary} />
-            <MetaLine icon={UtensilsCrossed} label={reservation.table} color={colors.foregroundSecondary} />
-            <MetaLine icon={Phone} label={reservation.phone} color={colors.foregroundSecondary} />
-          </View>
-        </View>
-      ))}
+        ))
+      )}
       <ProfileActive colors={colors} roleName="Maître" />
     </View>
   );
@@ -1031,74 +953,61 @@ function ManagerDashboardTab({
   onNavigate: (s: string) => void;
   colors: ReturnType<typeof useColors>;
 }) {
+  const { data: snapshot, loading: snapshotLoading } = useDashboardSnapshot();
+  const { data: staff, loading: staffLoading, error: staffError, refresh: refreshStaff } = useStaff();
+  const { data: orders, loading: ordersLoading } = useRestaurantOrders();
+
+  const activeStaffCount = staff.filter((member) => member.isActive).length;
+  // "Delayed" is a judgment call with no dedicated backend flag yet: an order
+  // still in new/preparing status after 20 minutes is treated as running late.
+  const delayedOrders = orders.filter((order) => {
+    if (order.status === 'ready') return false;
+    if (!order.createdAt) return false;
+    const ageMinutes = (Date.now() - new Date(order.createdAt).getTime()) / 60000;
+    return ageMinutes > 20;
+  });
+
   return (
     <View style={styles.section}>
       <View style={styles.metricGrid}>
-        <Metric value="8" label="Pedidos ativos" tone="danger" />
-        <Metric value="4" label="Aprovações" tone="warning" />
-        <Metric value="9" label="Equipe ativa" tone="info" />
-        <Metric value="R$ 13.742" label="Receita" tone="success" />
+        <Metric value={snapshotLoading ? '—' : String(snapshot?.active_orders ?? 0)} label="Pedidos ativos" tone="danger" />
+        <Metric value={snapshotLoading ? '—' : String(snapshot?.open_calls ?? 0)} label="Chamados abertos" tone="warning" />
+        <Metric value={staffLoading ? '—' : String(activeStaffCount)} label="Equipe ativa" tone="info" />
+        <Metric value={snapshotLoading ? '—' : formatCurrency(snapshot?.revenue_today ?? 0)} label="Receita" tone="success" />
       </View>
 
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => setView('manager-orders')}
-        style={[styles.delayAlert, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}
-      >
-        <AlertCircle size={16} color={V2_TONE.danger.text} />
-        <Text style={[styles.delayAlertText, { color: V2_TONE.danger.text }]}>3 pedidos com atraso</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => setView('manager-approvals')}
-        style={[styles.managerShortcut, { borderColor: colors.border, backgroundColor: colors.card }]}
-      >
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.managerShortcutTitle, { color: colors.foreground }]}>Central de aprovações</Text>
-          <Text style={[styles.managerShortcutSubtitle, { color: colors.foregroundSecondary }]}>
-            Cancelamentos, cortesias e estornos
+      {delayedOrders.length > 0 && (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => setView('manager-orders')}
+          style={[styles.delayAlert, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}
+        >
+          <AlertCircle size={16} color={V2_TONE.danger.text} />
+          <Text style={[styles.delayAlertText, { color: V2_TONE.danger.text }]}>
+            {delayedOrders.length} {delayedOrders.length === 1 ? 'pedido com atraso' : 'pedidos com atraso'}
           </Text>
-        </View>
-        <ArrowRight size={20} color={colors.foregroundSecondary} />
-      </TouchableOpacity>
-
-      <View style={styles.managerApprovalList}>
-        {MANAGER_APPROVALS.map((approval) => (
-          <View key={approval.title} style={[styles.approvalCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-            <View style={styles.approvalTop}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{approval.title}</Text>
-                <Text style={[styles.approvalMeta, { color: colors.foregroundSecondary }]}>{approval.meta}</Text>
-                <Text style={[styles.approvalReason, { color: colors.foregroundSecondary }]}>{approval.reason}</Text>
-              </View>
-              <Text style={styles.approvalAmount}>{approval.amount}</Text>
-            </View>
-            <View style={styles.approvalActions}>
-              <TouchableOpacity style={[styles.approvalButton, { backgroundColor: '#35B36F' }]}>
-                <CheckCircle size={16} color="#FFF" />
-                <Text style={styles.approvalButtonText}>Aprovar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.approvalButton, { backgroundColor: '#FDEAEA' }]}>
-                <XCircle size={16} color="#EF4444" />
-                <Text style={[styles.approvalButtonText, { color: '#EF4444' }]}>Recusar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
-      </View>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.managerStaffList}>
-        {MANAGER_STAFF.map((member) => (
-          <View key={member.name} style={[styles.staffCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-            <Image source={{ uri: member.avatar }} style={styles.avatar} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.staffName, { color: colors.foreground }]}>{member.name}</Text>
-              <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{member.role}</Text>
+        {staffLoading ? (
+          <InlineNotice message="Carregando equipe..." colors={colors} />
+        ) : staffError ? (
+          <InlineNotice message={staffError} actionLabel="Recarregar" onPress={() => void refreshStaff()} colors={colors} />
+        ) : (
+          staff.slice(0, 6).map((member) => (
+            <View key={member.id} style={[styles.staffCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <View style={[styles.avatar, { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundSecondary }]}>
+                <Text style={{ fontWeight: '700', color: colors.foreground }}>{member.fullName[0]?.toUpperCase() ?? '?'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.staffName, { color: colors.foreground }]}>{member.fullName}</Text>
+                <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{STAFF_ROLE_LABEL[member.role] || member.role}</Text>
+              </View>
+              <Text style={[styles.staffStatus, !member.isActive && { color: colors.foregroundSecondary }]}>{member.isActive ? 'Ativo' : 'Inativo'}</Text>
             </View>
-            <Text style={styles.staffStatus}>Ativo</Text>
-          </View>
-        ))}
+          ))
+        )}
       </View>
     </View>
   );
@@ -1106,6 +1015,19 @@ function ManagerDashboardTab({
 
 function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) {
   const { data: orders, loading, error, refresh } = useRestaurantOrders();
+  const [advancing, setAdvancing] = useState<string | null>(null);
+
+  const advanceOrder = async (orderId: string, nextStatus: string) => {
+    setAdvancing(orderId);
+    try {
+      await ApiService.updateOrderStatus(orderId, nextStatus);
+      await refresh();
+    } catch (err) {
+      Alert.alert('Falha ao atualizar pedido', err instanceof Error ? err.message : 'Tente novamente.');
+    } finally {
+      setAdvancing(null);
+    }
+  };
 
   return (
     <View style={styles.section}>
@@ -1141,7 +1063,11 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
               </View>
             </View>
           </View>
-          <TouchableOpacity style={[styles.wideAction, { backgroundColor: order.status === 'preparing' ? '#35B36F' : '#F6A21A' }]}>
+          <TouchableOpacity
+            disabled={advancing === order.id}
+            onPress={() => void advanceOrder(order.id, order.status === 'preparing' ? 'ready' : 'preparing')}
+            style={[styles.wideAction, { backgroundColor: order.status === 'preparing' ? '#35B36F' : '#F6A21A' }]}
+          >
             <Text style={[styles.wideActionText, { color: order.status === 'preparing' ? '#FFF' : '#111827' }]}>{order.status === 'preparing' ? 'Marcar pronto' : 'Preparar'}</Text>
           </TouchableOpacity>
         </View>
@@ -1151,74 +1077,174 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
 }
 
 function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  // No backend concept of "pending cancellation/discount approvals" exists yet
+  // (confirmed: no RPC returns this). Showing an honest empty state instead of
+  // fabricated approve/reject cards until that workflow is actually built.
   return (
     <View style={styles.section}>
-      {[...MANAGER_APPROVALS, { title: 'Ceviche Peruano', amount: 'R$ 48', meta: 'Mesa 1 · Bruno Oliveira', reason: 'Prato devolvido — não atendeu expectativa' }, { title: 'Conta Mesa 3', amount: 'R$ 31', meta: 'Mesa 3 · Marina Costa', reason: '10% desconto fidelidade' }].map((approval) => (
-        <View key={approval.title} style={[styles.approvalCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View style={styles.approvalTop}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{approval.title}</Text>
-              <Text style={[styles.approvalMeta, { color: colors.foregroundSecondary }]}>{approval.meta}</Text>
-              <Text style={[styles.approvalReason, { color: colors.foregroundSecondary }]}>{approval.reason}</Text>
-            </View>
-            <Text style={styles.approvalAmount}>{approval.amount}</Text>
-          </View>
-          <View style={styles.approvalActions}>
-            <TouchableOpacity style={[styles.approvalButton, { backgroundColor: '#35B36F' }]}>
-              <Text style={styles.approvalButtonText}>Aprovar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.approvalButton, { backgroundColor: '#FDEAEA' }]}>
-              <Text style={[styles.approvalButtonText, { color: '#EF4444' }]}>Recusar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ))}
+      <InlineNotice message="Central de aprovações ainda não disponível nesta versão do app." colors={colors} />
       <ProfileActive colors={colors} />
     </View>
   );
 }
 
 function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { restaurantId } = useRestaurantRole();
+  const { data: session, loading: sessionLoading, error: sessionError, refresh: refreshSession } = useCashRegister();
+  const { data: movements, loading: movementsLoading, refresh: refreshMovements } = useCashMovements();
+  const [amountDraft, setAmountDraft] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const parseAmount = (): number | null => {
+    const value = Number(amountDraft.replace(',', '.'));
+    if (!Number.isFinite(value) || value <= 0) {
+      Alert.alert('Valor inválido', 'Informe um valor maior que zero.');
+      return null;
+    }
+    return value;
+  };
+
+  const runAction = async (label: string, action: () => Promise<unknown>) => {
+    setSubmitting(true);
+    try {
+      await action();
+      setAmountDraft('');
+      await Promise.all([refreshSession(), refreshMovements()]);
+    } catch (err) {
+      Alert.alert(`Falha em ${label}`, err instanceof Error ? err.message : 'Tente novamente.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleOpenCashRegister = () => {
+    if (!restaurantId) return;
+    const amount = parseAmount();
+    if (amount === null) return;
+    void runAction('abrir caixa', () => supabaseApiAdapter.openCashRegister(restaurantId, amount));
+  };
+
+  const handleSangria = () => {
+    if (!session?.sessionId) return;
+    const amount = parseAmount();
+    if (amount === null) return;
+    void runAction('sangria', () => supabaseApiAdapter.addCashMovement(session.sessionId!, 'withdrawal', amount, 'Sangria'));
+  };
+
+  const handleReforco = () => {
+    if (!session?.sessionId) return;
+    const amount = parseAmount();
+    if (amount === null) return;
+    void runAction('reforço', () => supabaseApiAdapter.addCashMovement(session.sessionId!, 'reinforcement', amount, 'Reforço', false));
+  };
+
+  const handleCloseCashRegister = () => {
+    if (!session?.sessionId) return;
+    const amount = parseAmount();
+    if (amount === null) return;
+    Alert.alert('Fechar caixa', `Confirmar fechamento com saldo contado de R$ ${amount.toFixed(2)}?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Fechar',
+        style: 'destructive',
+        onPress: () => void runAction('fechar caixa', () => supabaseApiAdapter.closeCashRegister(session.sessionId!, amount)),
+      },
+    ]);
+  };
+
+  if (sessionLoading) return <InlineNotice message="Carregando caixa..." colors={colors} />;
+  if (sessionError) return <InlineNotice message={sessionError} actionLabel="Recarregar" onPress={() => void refreshSession()} colors={colors} />;
+
   return (
     <View style={styles.section}>
       <View style={[styles.tipBanner, { backgroundColor: '#FFF1ED', borderColor: '#FED7CC' }]}>
         <Zap size={16} color="#FF5A3D" />
         <Text style={styles.tipBannerText}>Controle completo do caixa — abertura, sangria, reforço e fechamento</Text>
       </View>
-      <View style={[styles.cashSummary, { borderColor: '#A7F3D0', backgroundColor: '#F0FDF4' }]}>
+      <View style={[styles.cashSummary, { borderColor: session?.isOpen ? '#A7F3D0' : colors.border, backgroundColor: session?.isOpen ? '#F0FDF4' : colors.card }]}>
         <View style={styles.cashStatusRow}>
           <View style={styles.statusDot} />
-          <Text style={[styles.approvalTitle, { color: colors.foreground }]}>Caixa Aberto</Text>
-          <Text style={[styles.cashBy, { color: colors.foregroundSecondary }]}>Aberto por Marina Costa às 14:00</Text>
+          <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{session?.isOpen ? 'Caixa Aberto' : 'Caixa Fechado'}</Text>
         </View>
-        <View style={styles.cashMetricRow}>
-          <CashMetric label="Abertura" value="R$ 500" />
-          <CashMetric label="Entradas" value="R$ 8.420" success />
-          <CashMetric label="Saldo" value="R$ 3.180" />
-        </View>
+        {session?.isOpen && (
+          <View style={styles.cashMetricRow}>
+            <CashMetric label="Abertura" value={formatCurrency(session.openingBalance)} />
+            <CashMetric label="Entradas" value={formatCurrency(session.cashSales + session.cardSales + session.pixSales)} success />
+            <CashMetric label="Saldo" value={formatCurrency(session.expectedBalance)} />
+          </View>
+        )}
       </View>
       <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <Text style={[styles.panelTitle, { color: colors.foreground }]}>Movimentações</Text>
-        {MANAGER_CASH_MOVES.map((move) => {
-          const Icon = move.icon;
-          return (
-            <View key={move.label} style={[styles.cashMoveRow, { borderBottomColor: colors.border }]}>
-              <Icon size={18} color={colors.foregroundSecondary} />
+        {movementsLoading ? (
+          <InlineNotice message="Carregando movimentações..." colors={colors} />
+        ) : movements.length === 0 ? (
+          <InlineNotice message="Nenhuma movimentação registrada." colors={colors} />
+        ) : (
+          movements.map((move) => (
+            <View key={move.id} style={[styles.cashMoveRow, { borderBottomColor: colors.border }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.staffName, { color: colors.foreground }]}>{move.label}</Text>
                 <Text style={[styles.approvalMeta, { color: colors.foregroundSecondary }]}>{move.time}</Text>
               </View>
-              <Text style={[styles.cashValue, { color: move.tone === 'success' ? '#22C55E' : '#EF4444' }]}>{move.value}</Text>
+              <Text style={[styles.cashValue, { color: move.isCredit ? '#22C55E' : '#EF4444' }]}>
+                {move.isCredit ? '+' : '-'}{formatCurrency(move.amount)}
+              </Text>
             </View>
-          );
-        })}
+          ))
+        )}
       </View>
-      <View style={styles.cashActions}>
-        <TouchableOpacity style={[styles.cashAction, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}><Text style={[styles.cashActionText, { color: '#F59E0B' }]}>Sangria</Text></TouchableOpacity>
-        <TouchableOpacity style={[styles.cashAction, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}><Text style={[styles.cashActionText, { color: '#3B82F6' }]}>Reforço</Text></TouchableOpacity>
-        <TouchableOpacity style={[styles.cashAction, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}><Text style={[styles.cashActionText, { color: '#EF4444' }]}>Fechar Caixa</Text></TouchableOpacity>
-      </View>
+      <TextInput
+        value={amountDraft}
+        onChangeText={setAmountDraft}
+        placeholder="Valor (R$)"
+        keyboardType="decimal-pad"
+        editable={!submitting}
+        style={[styles.cashAmountInput, { borderColor: colors.border, color: colors.foreground }]}
+      />
+      {session?.isOpen ? (
+        <View style={styles.cashActions}>
+          <TouchableOpacity disabled={submitting} onPress={handleSangria} style={[styles.cashAction, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
+            <Text style={[styles.cashActionText, { color: '#F59E0B' }]}>Sangria</Text>
+          </TouchableOpacity>
+          <TouchableOpacity disabled={submitting} onPress={handleReforco} style={[styles.cashAction, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+            <Text style={[styles.cashActionText, { color: '#3B82F6' }]}>Reforço</Text>
+          </TouchableOpacity>
+          <TouchableOpacity disabled={submitting} onPress={handleCloseCashRegister} style={[styles.cashAction, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+            <Text style={[styles.cashActionText, { color: '#EF4444' }]}>Fechar Caixa</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity disabled={submitting} onPress={handleOpenCashRegister} style={[styles.wideAction, { backgroundColor: '#35B36F' }]}>
+          <Text style={[styles.wideActionText, { color: '#FFF' }]}>Abrir Caixa</Text>
+        </TouchableOpacity>
+      )}
       <ProfileActive colors={colors} />
+    </View>
+  );
+}
+
+function TablesGrid({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: tables, loading, error, refresh } = useRestaurantTables();
+
+  if (loading) return <InlineNotice message="Carregando mesas..." colors={colors} />;
+  if (error) return <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />;
+  if (tables.length === 0) return <InlineNotice message="Nenhuma mesa cadastrada." colors={colors} />;
+
+  return (
+    <View style={styles.tableGrid}>
+      {tables.map((table) => (
+        <View key={table.id} style={styles.tableCard}>
+          <View style={styles.managerOrderHeader}>
+            <Text style={[styles.tableTitle, { color: colors.foreground }]}>{table.label}</Text>
+            <StatusChip label={TABLE_STATUS_LABEL[table.status]} tone={TABLE_STATUS_TONE[table.status]} />
+          </View>
+          <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
+            {table.guests > 0 ? `${table.guests} pessoas` : table.section}
+          </Text>
+          {!!table.time && <Text style={[styles.staffName, { color: colors.foreground }]}>{table.time}</Text>}
+        </View>
+      ))}
     </View>
   );
 }
@@ -1229,43 +1255,40 @@ function ManagerTablesView({ colors }: { colors: ReturnType<typeof useColors> })
       <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
         <Text style={styles.tipBannerText}>No mobile, o mapa vira uma grade operacional rápida para seleção e ação.</Text>
       </View>
-      <View style={styles.tableGrid}>
-        {MANAGER_TABLES.map((table) => (
-          <View key={table.number} style={[styles.tableCard, table.number === 1 && { borderColor: '#FF5A3D' }]}>
-            <View style={styles.managerOrderHeader}>
-              <Text style={[styles.tableTitle, { color: colors.foreground }]}>{table.number}</Text>
-              <StatusChip label={table.status} tone={table.tone} />
-            </View>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{table.seats}</Text>
-            {!!table.guest && <Text style={[styles.staffName, { color: colors.foreground }]}>{table.guest}</Text>}
-          </View>
-        ))}
-      </View>
-      <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <View style={styles.managerOrderHeader}>
-          <View><Text style={[styles.panelTitle, { color: colors.foreground }]}>Mesa 1</Text><Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>Maria S.</Text></View>
-          <StatusChip label="Ocupada" tone="danger" />
-        </View>
-        <View style={styles.metricGrid}>
-          <Metric value="2" label="Lugares" tone="info" />
-          <Metric value="R$ 186" label="Conta" tone="danger" />
-        </View>
-      </View>
+      <TablesGrid colors={colors} />
     </View>
   );
 }
 
+const STAFF_ROLE_LABEL: Record<string, string> = {
+  owner: 'Dono',
+  manager: 'Gerente',
+  maitre: 'Maître',
+  chef: 'Chef',
+  barman: 'Barman',
+  cook: 'Cozinheiro',
+  waiter: 'Garçom',
+};
+
 function ManagerStaffView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: staff, loading, error, refresh } = useStaff();
+
+  if (loading) return <InlineNotice message="Carregando equipe..." colors={colors} />;
+  if (error) return <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />;
+  if (staff.length === 0) return <InlineNotice message="Nenhum membro de equipe cadastrado." colors={colors} />;
+
   return (
     <View style={styles.managerStaffList}>
-      {[...MANAGER_STAFF, { name: 'Carla Lima', role: 'Garçom · 12h–18h', avatar: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=100' }, { name: 'Diego Martins', role: 'Barman · Folga', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100' }, { name: 'Juliana Ferraz', role: 'Hostess · 18h–00h', avatar: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100' }].map((member) => (
-        <View key={member.name} style={[styles.staffCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <Image source={{ uri: member.avatar }} style={styles.avatar} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.staffName, { color: colors.foreground }]}>{member.name}</Text>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{member.role}</Text>
+      {staff.map((member) => (
+        <View key={member.id} style={[styles.staffCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          <View style={[styles.avatar, { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundSecondary }]}>
+            <Text style={{ fontWeight: '700', color: colors.foreground }}>{member.fullName[0]?.toUpperCase() ?? '?'}</Text>
           </View>
-          <Text style={[styles.staffStatus, member.role.includes('Folga') && { color: colors.foregroundSecondary }]}>{member.role.includes('Folga') ? 'Folga' : 'Ativo'}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.staffName, { color: colors.foreground }]}>{member.fullName}</Text>
+            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{STAFF_ROLE_LABEL[member.role] || member.role}</Text>
+          </View>
+          <Text style={[styles.staffStatus, !member.isActive && { color: colors.foregroundSecondary }]}>{member.isActive ? 'Ativo' : 'Inativo'}</Text>
         </View>
       ))}
     </View>
@@ -1273,20 +1296,23 @@ function ManagerStaffView({ colors }: { colors: ReturnType<typeof useColors> }) 
 }
 
 function ManagerReportView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: snapshot, loading } = useDashboardSnapshot();
+  const { data: session } = useCashRegister();
+
   return (
     <View style={styles.section}>
       <View style={styles.metricGrid}>
-        <Metric value="R$ 13.182" label="Receita dia" tone="success" />
-        <Metric value="50" label="Pedidos" tone="danger" />
+        <Metric value={loading ? '—' : formatCurrency(snapshot?.revenue_today ?? 0)} label="Receita dia" tone="success" />
+        <Metric value={loading ? '—' : String(snapshot?.orders_today ?? 0)} label="Pedidos" tone="danger" />
       </View>
       <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <Text style={[styles.panelTitle, { color: colors.foreground }]}>Fechamento operacional</Text>
-        {['Caixa conciliado', 'Equipe encerrada', 'Estoque revisado', 'Pendências zeradas'].map((item) => (
-          <View key={item} style={styles.checkRow}>
-            <CheckCircle size={15} color="#22C55E" />
-            <Text style={[styles.staffName, { color: colors.foreground }]}>{item}</Text>
-          </View>
-        ))}
+        <View style={styles.checkRow}>
+          {session && !session.isOpen ? <CheckCircle size={15} color="#22C55E" /> : <AlertCircle size={15} color="#F59E0B" />}
+          <Text style={[styles.staffName, { color: colors.foreground }]}>
+            {session && !session.isOpen ? 'Caixa fechado' : 'Caixa ainda aberto'}
+          </Text>
+        </View>
       </View>
       <ProfileActive colors={colors} />
     </View>
@@ -1294,45 +1320,77 @@ function ManagerReportView({ colors }: { colors: ReturnType<typeof useColors> })
 }
 
 function ManagerStockView({ colors, roleName = 'Gerente' }: { colors: ReturnType<typeof useColors>; roleName?: string }) {
+  const { data: stock, loading, error, refresh } = useStock();
+
   return (
     <View style={styles.managerStaffList}>
-      {MANAGER_STOCK.map(([name, group, qty, tone]) => (
-        <View key={name} style={[styles.stockRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View>
-            <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{name}</Text>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{group}</Text>
+      {loading ? (
+        <InlineNotice message="Carregando estoque..." colors={colors} />
+      ) : error ? (
+        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+      ) : stock.length === 0 ? (
+        <InlineNotice message="Nenhum item de estoque cadastrado." colors={colors} />
+      ) : (
+        stock.map((item) => (
+          <View key={item.id} style={[styles.stockRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <View>
+              <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{item.name}</Text>
+              <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{item.category}</Text>
+            </View>
+            <StatusChip label={`${item.currentLevel} ${item.unit}`} tone={item.isLow ? 'danger' : 'success'} />
           </View>
-          <StatusChip label={qty} tone={tone} />
-        </View>
-      ))}
+        ))
+      )}
       <ProfileActive colors={colors} roleName={roleName} />
     </View>
   );
 }
 
+function formatPromotionWindow(from: string, until: string): string {
+  const opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
+  return `${new Date(from).toLocaleDateString('pt-BR', opts)} a ${new Date(until).toLocaleDateString('pt-BR', opts)}`;
+}
+
 function ManagerPromotionsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: promotions, loading, error, refresh } = usePromotions();
+
   return (
     <View style={styles.section}>
       <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
         <Zap size={16} color="#FF5A3D" />
         <Text style={styles.tipBannerText}>Campanhas ativas, cupons e happy hour</Text>
       </View>
-      {MANAGER_CAMPAIGNS.map(([title, desc, usage]) => (
-        <View key={title} style={[styles.campaignCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View style={styles.managerOrderHeader}>
-            <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{title}</Text>
-            <StatusChip label="Ativa" tone="success" />
+      {loading ? (
+        <InlineNotice message="Carregando promoções..." colors={colors} />
+      ) : error ? (
+        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+      ) : promotions.length === 0 ? (
+        <InlineNotice message="Nenhuma campanha ativa." colors={colors} />
+      ) : (
+        promotions.map((promo) => (
+          <View key={promo.id} style={[styles.campaignCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <View style={styles.managerOrderHeader}>
+              <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{promo.title}</Text>
+              <StatusChip label="Ativa" tone="success" />
+            </View>
+            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
+              {promo.discountValue ? `${promo.discountValue}% off` : promo.type}
+            </Text>
+            <Text style={[styles.approvalMeta, { color: colors.foregroundSecondary }]}>
+              {formatPromotionWindow(promo.validFrom, promo.validUntil)}
+            </Text>
           </View>
-          <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{desc}</Text>
-          <Text style={[styles.approvalMeta, { color: colors.foregroundSecondary }]}>{usage}</Text>
-        </View>
-      ))}
+        ))
+      )}
       <ProfileActive colors={colors} />
     </View>
   );
 }
 
-function ManagerQrView({ colors }: { colors: ReturnType<typeof useColors> }) {
+function ManagerQrView({ colors, onNavigate }: { colors: ReturnType<typeof useColors>; onNavigate: (s: string) => void }) {
+  const { data: tables, loading, error, refresh } = useRestaurantTables();
+  const withQR = tables.filter((t) => t.hasQR);
+
   return (
     <View style={styles.section}>
       <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
@@ -1340,19 +1398,27 @@ function ManagerQrView({ colors }: { colors: ReturnType<typeof useColors> }) {
         <Text style={styles.tipBannerText}>Gere QR codes para mesas — individual ou em lote</Text>
       </View>
       <View style={styles.metricGrid}>
-        <QuickAction title="QR Individual" detail="Gerar por mesa" icon={QrCode} onPress={() => {}} colors={colors} />
-        <QuickAction title="QR em Lote" detail="Todas as mesas" icon={ArrowDown} onPress={() => {}} colors={colors} />
+        <QuickAction title="QR Individual" detail="Gerar por mesa" icon={QrCode} onPress={() => onNavigate('QRGenerator')} colors={colors} />
+        <QuickAction title="QR em Lote" detail="Todas as mesas" icon={ArrowDown} onPress={() => onNavigate('QRBatch')} colors={colors} />
       </View>
       <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <Text style={[styles.panelTitle, { color: colors.foreground }]}>QR Codes Gerados</Text>
-        <View style={styles.qrGrid}>
-          {Array.from({ length: 12 }, (_, index) => (
-            <View key={index} style={styles.qrItem}>
-              <View style={styles.qrBox}><QrCode size={30} color="#9CA3AF" /></View>
-              <Text style={styles.qrLabel}>Mesa {index + 1}</Text>
-            </View>
-          ))}
-        </View>
+        <Text style={[styles.panelTitle, { color: colors.foreground }]}>Mesas com QR code</Text>
+        {loading ? (
+          <InlineNotice message="Carregando mesas..." colors={colors} />
+        ) : error ? (
+          <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+        ) : withQR.length === 0 ? (
+          <InlineNotice message="Nenhuma mesa com QR code gerado ainda." colors={colors} />
+        ) : (
+          <View style={styles.qrGrid}>
+            {withQR.map((table) => (
+              <View key={table.id} style={styles.qrItem}>
+                <View style={styles.qrBox}><QrCode size={30} color="#9CA3AF" /></View>
+                <Text style={styles.qrLabel}>{table.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
       <ProfileActive colors={colors} />
     </View>
@@ -1366,6 +1432,8 @@ function ManagerSettingsView({
   colors: ReturnType<typeof useColors>;
   setView: (view: ManagerRoleView) => void;
 }) {
+  const { restaurantId, restaurants } = useRestaurantRole();
+  const currentRestaurant = restaurants.find((r) => r.id === restaurantId);
   const routeByTitle: Record<string, ManagerRoleView> = {
     'Mapa do Salão': 'manager-tables',
     'Equipe & Permissões': 'manager-staff',
@@ -1378,15 +1446,10 @@ function ManagerSettingsView({
         <View style={styles.configIcon}><Settings size={24} color="#FF5A3D" /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.configTitle}>Central de Configuração</Text>
-          <Text style={styles.configSub}>Omakase Sushi · Fine Dining</Text>
-          <View style={styles.progressTrack}><View style={styles.progressFill} /></View>
+          <Text style={styles.configSub}>
+            {currentRestaurant ? `${currentRestaurant.name} · ${currentRestaurant.serviceType}` : 'Carregando...'}
+          </Text>
         </View>
-        <Text style={styles.configPercent}>72%</Text>
-      </View>
-      <View style={styles.configStats}>
-        <Metric value="1" label="Completos" tone="success" />
-        <Metric value="5" label="Configurados" tone="danger" />
-        <Metric value="3" label="Pendentes" tone="warning" />
       </View>
       {MANAGER_CONFIG.map(([title, subtitle, Icon, tone]) => (
         <TouchableOpacity
@@ -1401,7 +1464,6 @@ function ManagerSettingsView({
           <View style={{ flex: 1 }}>
             <Text style={[styles.staffName, { color: colors.foreground }]}>{title}</Text>
             <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{subtitle}</Text>
-            <View style={styles.configMiniTrack}><View style={[styles.configMiniFill, { backgroundColor: V2_TONE[tone as V2Tone].text }]} /></View>
           </View>
           <ArrowRight size={18} color={colors.foregroundSecondary} />
         </TouchableOpacity>
@@ -1427,6 +1489,25 @@ function WaiterContent({
   return <WaiterCommandView activeSegment={view === 'waiter-table-actions' ? 'Mesas' : 'Ao Vivo'} colors={colors} />;
 }
 
+const CALL_TYPE_LABEL: Record<string, string> = {
+  waiter: 'Chamar garçom',
+  payment: 'Solicitar conta',
+  assistance: 'Precisa de ajuda',
+  water: 'Água',
+  napkin: 'Guardanapo',
+};
+
+type CommandEvent = {
+  key: string;
+  tone: V2Tone;
+  table: string;
+  time: string;
+  title: string;
+  detail: string;
+  action: string;
+  onPress: () => Promise<void>;
+};
+
 function WaiterCommandView({
   activeSegment,
   colors,
@@ -1434,115 +1515,136 @@ function WaiterCommandView({
   activeSegment: string;
   colors: ReturnType<typeof useColors>;
 }) {
-  const events = [
-    ['danger', 'M5', 'agora', 'AGORA', 'Prato pronto para retirar', '2x Filé ao Molho de Vinho — Chef Felipe', 'Retirar'],
-    ['danger', 'M10', '1min', 'AGORA', 'Sobremesa pronta', '1x Petit Gâteau — Cozinheiro Thiago', 'Retirar'],
-    ['warning', 'M3', '2min', '', 'Cliente chamou o garçom', 'Convidado 3 sem app quer fazer pedido', 'Atender'],
-    ['success', 'M8', '3min', '', 'Pagamento recebido pelo app', 'Rafael C. pagou R$ 85 via Apple Pay', ''],
-    ['danger', 'M1', '5min', '', 'Conta solicitada', '1 convidado sem app precisa de cobrança', 'Cobrar'],
-    ['info', 'M10', '8min', '', 'Cortesia solicitada', 'Aniversário — solicitar Petit Gâteau ao gerente', 'Solicitar'],
-  ] as const;
+  const { data: kdsOrders, refresh: refreshKds } = useKdsOrders();
+  const { data: calls, refresh: refreshCalls } = useServiceCalls();
+  const [acting, setActing] = useState<string | null>(null);
+
+  const readyOrders = kdsOrders.filter((o) => o.status === 'ready');
+
+  const runAction = async (key: string, action: () => Promise<unknown>) => {
+    setActing(key);
+    try {
+      await action();
+      await Promise.all([refreshKds(), refreshCalls()]);
+    } catch (err) {
+      Alert.alert('Falha na ação', err instanceof Error ? err.message : 'Tente novamente.');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const events: CommandEvent[] = [
+    ...readyOrders.map((order) => ({
+      key: `order-${order.id}`,
+      tone: 'danger' as V2Tone,
+      table: order.table,
+      time: order.time || '',
+      title: 'Prato pronto para retirar',
+      detail: order.items.map(([label]) => label).join(', '),
+      action: 'Retirar',
+      onPress: () => runAction(`order-${order.id}`, () => ApiService.updateOrderStatus(order.id, 'delivered')),
+    })),
+    ...calls
+      .filter((c) => c.status === 'open')
+      .map((call) => ({
+        key: `call-${call.id}`,
+        tone: 'warning' as V2Tone,
+        table: call.tableNumber ? `Mesa ${call.tableNumber}` : 'Mesa',
+        time: elapsedLabel(call.createdAt),
+        title: CALL_TYPE_LABEL[call.callType] || call.callType,
+        detail: '',
+        action: 'Atender',
+        onPress: () => runAction(`call-${call.id}`, () => supabaseApiAdapter.acknowledgeServiceCall(call.id)),
+      })),
+  ];
 
   return (
     <View style={styles.section}>
       <WaiterStats />
       <WaiterSegments active={activeSegment} />
-      <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
-        <ChefHat size={16} color="#FF5A3D" />
-        <Text style={styles.tipBannerText}>2 prato(s) esperando retirada! A cozinha está aguardando</Text>
-        <StatusChip label="Ver" tone="danger" />
-      </View>
-      {events.map(([tone, badge, time, tag, title, detail, action]) => (
-        <View
-          key={`${badge}-${title}`}
-          style={[
-            styles.managerOrderCard,
-            {
-              borderColor:
-                tone === 'danger'
-                  ? '#FECACA'
-                  : tone === 'warning'
-                    ? '#FED7AA'
-                    : tone === 'success'
-                      ? '#BBF7D0'
-                      : '#BAE6FD',
-              backgroundColor: colors.card,
-            },
-          ]}
-        >
-          <View style={styles.managerOrderHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-              <View style={[styles.configRowIcon, { width: 36, height: 36, borderRadius: 18, backgroundColor: V2_TONE[tone].bg }]}>
-                {tone === 'success' ? <CheckCircle size={17} color={V2_TONE[tone].text} /> : tone === 'warning' ? <AlertCircle size={17} color={V2_TONE[tone].text} /> : <ChefHat size={17} color={V2_TONE[tone].text} />}
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <StatusChip label={badge} tone="danger" />
-                  <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{time}</Text>
-                  {tag ? <StatusChip label={tag} tone="danger" /> : null}
+      {readyOrders.length > 0 && (
+        <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
+          <ChefHat size={16} color="#FF5A3D" />
+          <Text style={styles.tipBannerText}>
+            {readyOrders.length} prato(s) esperando retirada! A cozinha está aguardando
+          </Text>
+        </View>
+      )}
+      {events.length === 0 ? (
+        <InlineNotice message="Nenhum pedido pronto ou chamado aberto no momento." colors={colors} />
+      ) : (
+        events.map((event) => (
+          <View
+            key={event.key}
+            style={[
+              styles.managerOrderCard,
+              { borderColor: V2_TONE[event.tone].bg, backgroundColor: colors.card },
+            ]}
+          >
+            <View style={styles.managerOrderHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <View style={[styles.configRowIcon, { width: 36, height: 36, borderRadius: 18, backgroundColor: V2_TONE[event.tone].bg }]}>
+                  {event.tone === 'warning' ? <AlertCircle size={17} color={V2_TONE[event.tone].text} /> : <ChefHat size={17} color={V2_TONE[event.tone].text} />}
                 </View>
-                <Text style={[styles.staffName, { color: colors.foreground, marginTop: 4 }]}>{title}</Text>
-                <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{detail}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <StatusChip label={event.table} tone="danger" />
+                    <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{event.time}</Text>
+                  </View>
+                  <Text style={[styles.staffName, { color: colors.foreground, marginTop: 4 }]}>{event.title}</Text>
+                  {!!event.detail && <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{event.detail}</Text>}
+                </View>
               </View>
             </View>
-          </View>
-          {action ? (
-            <TouchableOpacity style={[styles.wideAction, { backgroundColor: V2_TONE[tone].bg }]}>
-              <Text style={[styles.wideActionText, { color: V2_TONE[tone].text }]}>{action} →</Text>
+            <TouchableOpacity
+              disabled={acting === event.key}
+              onPress={() => void event.onPress()}
+              style={[styles.wideAction, { backgroundColor: V2_TONE[event.tone].bg }]}
+            >
+              <Text style={[styles.wideActionText, { color: V2_TONE[event.tone].text }]}>{event.action} →</Text>
             </TouchableOpacity>
-          ) : null}
-        </View>
-      ))}
+          </View>
+        ))
+      )}
       <ProfileActive colors={colors} roleName="Garçom" />
     </View>
   );
 }
 
 function WaiterAssistanceView({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const tables = [
-    ['1', 'Maria S.', '2 pessoas'],
-    ['3', 'João & Ana', '4 pessoas'],
-    ['5', 'Grupo Pedro', '6 pessoas'],
-    ['6', 'Lucia F.', '2 pessoas'],
-  ];
+  const { data: tables, loading, error, refresh } = useRestaurantTables();
+  const occupied = tables.filter((t) => t.status === 'occupied' && t.hasQR);
 
   return (
     <View style={styles.section}>
-      <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
-        <Zap size={16} color="#FF5A3D" />
-        <Text style={styles.tipBannerText}>Hub de assistência — tudo que o garçom precisa para ser gestor da experiência do cliente</Text>
-      </View>
-      <View style={styles.filterRow}>
-        {['QR / Onboarding (5)', 'Alérgenos (4)'].map((label, index) => (
-          <View key={label} style={[styles.filterChip, { backgroundColor: index === 0 ? '#FF5A3D' : '#F3F4F6' }]}>
-            <Text style={[styles.filterText, { color: index === 0 ? '#FFF' : '#6B7280' }]}>{label}</Text>
-          </View>
-        ))}
-      </View>
       <View style={[styles.tipBanner, { backgroundColor: '#EFF6FF', borderColor: '#BAE6FD' }]}>
         <QrCode size={18} color="#0EA5E9" />
         <Text style={[styles.tipBannerText, { color: '#0284C7' }]}>Onboarding de Clientes — mostre o QR code da mesa</Text>
       </View>
-      {tables.map(([table, name, people]) => (
-        <View key={table} style={[styles.staffCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View style={styles.tableNumberBubble}><Text style={styles.tableNumberText}>{table}</Text></View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{name}</Text>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{people}</Text>
+      {loading ? (
+        <InlineNotice message="Carregando mesas..." colors={colors} />
+      ) : error ? (
+        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+      ) : occupied.length === 0 ? (
+        <InlineNotice message="Nenhuma mesa ocupada com QR code disponível." colors={colors} />
+      ) : (
+        occupied.map((table) => (
+          <View key={table.id} style={[styles.staffCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <View style={styles.tableNumberBubble}><Text style={styles.tableNumberText}>{table.label}</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{table.section}</Text>
+              <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{table.guests} pessoas</Text>
+            </View>
           </View>
-          <StatusChip label="Mostrar QR" tone="danger" />
-        </View>
-      ))}
+        ))
+      )}
     </View>
   );
 }
 
 function WaiterChargeView({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const tables = [
-    ['1', 'Maria S.', '0 pago · 1 no app · 1 sem app', '0/2'],
-    ['3', 'João & Ana', '1 pago · 1 no app · 1 sem app', '1/3'],
-    ['5', 'Grupo Pedro', '1 pago · 1 no app · 1 sem app', '1/3'],
-  ];
+  const { data: bills, loading, error, refresh } = useTableBills();
+  const open = bills.filter((b) => !b.isPaid);
 
   return (
     <View style={styles.section}>
@@ -1550,44 +1652,41 @@ function WaiterChargeView({ colors }: { colors: ReturnType<typeof useColors> }) 
       <WaiterSegments active="Cobrar" />
       <View style={[styles.tipBanner, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
         <CreditCardIcon size={16} color="#F97316" />
-        <Text style={[styles.tipBannerText, { color: '#EA580C' }]}>Cobrança inteligente — cobre apenas quem precisa.</Text>
+        <Text style={[styles.tipBannerText, { color: '#EA580C' }]}>Contas em aberto</Text>
       </View>
-      {tables.map(([table, name, summary, progress]) => (
-        <View key={table} style={[styles.managerOrderCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View style={styles.managerOrderHeader}>
-            <View style={styles.tableNumberBubble}><Text style={styles.tableNumberText}>{table}</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.staffName, { color: colors.foreground }]}>{name}</Text>
-              <Text style={[styles.approvalMeta, { color: '#F97316' }]}>{summary}</Text>
+      {loading ? (
+        <InlineNotice message="Carregando contas..." colors={colors} />
+      ) : error ? (
+        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+      ) : open.length === 0 ? (
+        <InlineNotice message="Nenhuma conta em aberto." colors={colors} />
+      ) : (
+        open.map((bill) => (
+          <View key={bill.orderId} style={[styles.managerOrderCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <View style={styles.managerOrderHeader}>
+              <View style={styles.tableNumberBubble}><Text style={styles.tableNumberText}>{bill.tableNumber}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.staffName, { color: colors.foreground }]}>{formatCurrency(bill.totalAmount)}</Text>
+                <Text style={[styles.approvalMeta, { color: '#F97316' }]}>{bill.paymentMethod || 'Aguardando pagamento'}</Text>
+              </View>
+              <StatusChip label="Cobrar" tone="danger" />
             </View>
-            <StatusChip label={progress} tone="success" />
           </View>
-          <View style={styles.checkRow}>
-            <StatusChip label="Sem app" tone="warning" />
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary, flex: 1 }]}>Cobrança manual pendente</Text>
-            <StatusChip label="Cobrar" tone="danger" />
-          </View>
-        </View>
-      ))}
+        ))
+      )}
     </View>
   );
 }
 
 function WaiterTapToPayView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  // No card-reader SDK (e.g. Stripe Terminal) is integrated in this app yet —
+  // showing a fake "ready to charge" screen would be actively misleading.
   return (
     <View style={styles.section}>
-      <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
-        <Zap size={16} color="#FF5A3D" />
-        <Text style={styles.tipBannerText}>Transforme o celular em maquininha NFC — Stripe Terminal</Text>
-      </View>
-      <View style={[styles.listPanel, { borderColor: '#FED7AA', backgroundColor: colors.card, alignItems: 'center' }]}>
-        <Phone size={54} color="#FF5A3D" />
-        <Text style={[styles.panelTitle, { color: colors.foreground, marginTop: 14 }]}>TAP to Pay</Text>
-        <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>Pronto para receber pagamento</Text>
-        <Text style={[styles.reservationTitle, { color: colors.foreground, marginTop: 20, fontSize: 24 }]}>R$ 342,50</Text>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FF5A3D', alignSelf: 'stretch' }]}>
-          <Text style={{ color: '#FFF', fontWeight: '800', textAlign: 'center' }}>Iniciar Cobrança</Text>
-        </TouchableOpacity>
+      <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center' }]}>
+        <Phone size={54} color={colors.foregroundSecondary} />
+        <Text style={[styles.panelTitle, { color: colors.foreground, marginTop: 14 }]}>Tap to Pay</Text>
+        <InlineNotice message="Pagamento por aproximação (NFC) ainda não está disponível nesta versão do app." colors={colors} />
       </View>
       <ProfileActive colors={colors} roleName="Garçom" />
     </View>
@@ -1595,38 +1694,35 @@ function WaiterTapToPayView({ colors }: { colors: ReturnType<typeof useColors> }
 }
 
 function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { data: orders, loading, error, refresh } = useRestaurantOrders();
+
   return (
     <View style={styles.section}>
-      <View style={styles.filterRow}>
-        {['Todos', 'Pendente', 'Confirmado', 'Preparando'].map((label, index) => (
-          <View key={label} style={[styles.filterChip, { backgroundColor: index === 0 ? '#FF5A3D' : '#F3F4F6' }]}>
-            <Text style={[styles.filterText, { color: index === 0 ? '#FFF' : '#6B7280' }]}>{label}</Text>
-          </View>
-        ))}
-      </View>
-      {[
-        ['7', 'Maria Silva', '2 itens · R$ 162 · 10min atrás'],
-        ['9', 'Camila Rodrigues', '3 itens · R$ 174 · 11min atrás'],
-        ['12', 'Felipe Almeida', '3 itens · R$ 194 · 14min atrás'],
-      ].map(([table, name, meta]) => (
-        <View key={`${table}-${name}`} style={[styles.managerOrderCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View style={styles.managerOrderHeader}>
-            <View style={styles.tableNumberBubble}><Text style={styles.tableNumberText}>{table}</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.staffName, { color: colors.foreground }]}>{name}</Text>
-              <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{meta}</Text>
-              <View style={styles.orderItemChips}>
-                <Text style={styles.orderItemChip}>1x Gin Tônica Aurora</Text>
-                <Text style={styles.orderItemChip}>1x Ravioli de Lagosta</Text>
+      {loading ? (
+        <InlineNotice message="Carregando pedidos..." colors={colors} />
+      ) : error ? (
+        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
+      ) : orders.length === 0 ? (
+        <InlineNotice message="Nenhum pedido ativo." colors={colors} />
+      ) : (
+        orders.map((order) => (
+          <View key={order.id} style={[styles.managerOrderCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <View style={styles.managerOrderHeader}>
+              <View style={styles.tableNumberBubble}><Text style={styles.tableNumberText}>{order.table.replace('Mesa ', '')}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.staffName, { color: colors.foreground }]}>{order.customerName || shortOrderId(order.id)}</Text>
+                <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{order.items.length} itens · {formatCurrency(order.total)} · {order.time}</Text>
+                <View style={styles.orderItemChips}>
+                  {order.items.slice(0, 2).map((item) => (
+                    <Text key={item} style={styles.orderItemChip}>{item}</Text>
+                  ))}
+                </View>
               </View>
+              <StatusChip label={orderStatusLabel(order.status)} tone={orderStatusTone(order.status)} />
             </View>
-            <StatusChip label="Confirmado" tone="info" />
           </View>
-          <TouchableOpacity style={[styles.wideAction, { backgroundColor: '#F59E0B' }]}>
-            <Text style={[styles.wideActionText, { color: '#111827' }]}>Preparar</Text>
-          </TouchableOpacity>
-        </View>
-      ))}
+        ))
+      )}
     </View>
   );
 }
@@ -1637,60 +1733,34 @@ function WaiterTableMapView({ colors }: { colors: ReturnType<typeof useColors> }
       <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
         <Text style={styles.tipBannerText}>No mobile, o mapa vira uma grade operacional rápida para seleção e ação.</Text>
       </View>
-      <View style={styles.tableGrid}>
-        {MANAGER_TABLES.map((table) => (
-          <View key={table.number} style={[styles.tableCard, table.number === 1 && { borderColor: '#FF5A3D' }]}>
-            <View style={styles.managerOrderHeader}>
-              <Text style={styles.tableTitle}>{table.number}</Text>
-              <StatusChip label={table.status} tone={table.tone} />
-            </View>
-            <Text style={styles.metricLabel}>{table.seats}</Text>
-            {table.guest ? <Text numberOfLines={1} style={[styles.staffName, { color: colors.foreground }]}>{table.guest}</Text> : null}
-          </View>
-        ))}
-      </View>
-      <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <View style={styles.managerOrderHeader}>
-          <View>
-            <Text style={[styles.panelTitle, { color: colors.foreground, marginBottom: 2 }]}>Mesa 1</Text>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>Maria S.</Text>
-          </View>
-          <StatusChip label="Ocupada" tone="danger" />
-        </View>
-        <View style={[styles.threeMetricGrid, { marginTop: 14 }]}>
-          <Metric value="2" label="Lugares" tone="info" />
-          <Metric value="R$ 186" label="Conta" tone="danger" />
-        </View>
-      </View>
+      <TablesGrid colors={colors} />
     </View>
   );
 }
 
 function WaiterTipsView({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const rows = [
-    ['8', 'Grupo Aniversário', '15% da conta', '+R$ 120'],
-    ['5', 'Grupo Pedro', '12% da conta', '+R$ 85'],
-    ['10', 'Carlos M.', '10% da conta', '+R$ 98'],
-    ['3', 'João & Ana', '10% da conta', '+R$ 62'],
-    ['1', 'Maria S.', '15% da conta', '+R$ 45'],
-  ];
+  const { restaurantId } = useRestaurantRole();
+  const [totalTips, setTotalTips] = useState<number | null>(null);
+  const [tipsError, setTipsError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!restaurantId) return;
+    supabaseApiAdapter
+      .getTipsSummary(restaurantId)
+      .then((summary: any) => { if (!cancelled) setTotalTips(Number(summary?.total_tips ?? 0)); })
+      .catch((err: unknown) => { if (!cancelled) setTipsError(err instanceof Error ? err.message : 'Erro ao carregar gorjetas'); });
+    return () => { cancelled = true; };
+  }, [restaurantId]);
 
   return (
     <View style={styles.section}>
       <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <StatusChip label="R$ 410" tone="success" />
-        <Text style={[styles.staffRole, { color: colors.foregroundSecondary, marginTop: 12 }]}>Gorjetas do dia</Text>
+        <StatusChip label={totalTips != null ? formatCurrency(totalTips) : '—'} tone="success" />
+        <Text style={[styles.staffRole, { color: colors.foregroundSecondary, marginTop: 12 }]}>Gorjetas do turno (pool)</Text>
       </View>
-      {rows.map(([table, name, percent, amount]) => (
-        <View key={table} style={[styles.staffCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <View style={[styles.tableNumberBubble, { backgroundColor: '#ECFDF5' }]}><Text style={[styles.tableNumberText, { color: '#22C55E' }]}>{table}</Text></View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.staffName, { color: colors.foreground }]}>{name}</Text>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{percent}</Text>
-          </View>
-          <Text style={{ color: '#22C55E', fontWeight: '800' }}>{amount}</Text>
-        </View>
-      ))}
+      {tipsError && <InlineNotice message={tipsError} colors={colors} />}
+      <InlineNotice message="Distribuição por mesa/garçom ainda não é rastreada individualmente — apenas o total do pool do turno." colors={colors} />
       <ProfileActive colors={colors} roleName="Garçom" />
     </View>
   );
@@ -2031,6 +2101,7 @@ const styles = StyleSheet.create({
   cashActions: { flexDirection: 'row', gap: 8 },
   cashAction: { flex: 1, minHeight: 38, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   cashActionText: { fontSize: 12, fontWeight: '800' },
+  cashAmountInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10, fontSize: 15 },
   tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tableCard: { width: '31.5%', minHeight: 94, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', padding: 10, backgroundColor: '#FFF' },
   tableTitle: { fontSize: 20, fontWeight: '800' },

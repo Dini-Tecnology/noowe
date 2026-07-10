@@ -53,6 +53,7 @@ declare module 'expo-web-browser' {
 declare module 'expo-crypto' {
   export function getRandomBytesAsync(byteCount: number): Promise<Uint8Array>;
   export function digestStringAsync(algorithm: string, data: string): Promise<string>;
+  export function randomUUID(): string;
   const content: any;
   export default content;
 }

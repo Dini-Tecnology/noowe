@@ -99,7 +99,7 @@ describe('Reservations API', () => {
       ]);
 
       const result = await getReservations(mockRestaurant.id, { status: 'pending' });
-      expect(result.every(r => r.status === 'pending')).toBe(true);
+      expect(result.every((r: { status: string }) => r.status === 'pending')).toBe(true);
     });
   });
 

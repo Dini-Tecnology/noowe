@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import { getSupabaseClient } from './supabase';
 import { getOptionalSupabaseSessionUser } from './supabase-auth';
 
@@ -129,6 +130,8 @@ export interface SupabaseApiAdapter {
   getMyLoyalty(restaurantId: string): Promise<any>;
   // ── Payment ────────────────────────────────────────────────────────────────────
   recordPayment(orderId: string, paymentMethod: string, amount: number, tipAmount?: number, notes?: string): Promise<any>;
+  exportUserData(): Promise<any>;
+  requestAccountDeletion(): Promise<any>;
   getBills(restaurantId?: string, status?: string): Promise<any>;
   getGatewayConfig(restaurantId?: string): Promise<any>;
   calculateSplit(orderId: string, splitMode: string, parts?: number, percentages?: number[]): Promise<any>;
@@ -163,31 +166,20 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     const { user } = await getOptionalSupabaseSessionUser();
     if (!user) throw new Error('Not authenticated');
 
-    const { data: order, error } = await supabase
-      .from('orders')
-      .insert({
-        restaurant_id: data.restaurant_id,
-        customer_id: user.id,
-        order_type: data.order_type,
-        table_id: data.table_id,
-        delivery_address: data.delivery_address,
-        status: 'pending',
-      })
-      .select()
-      .single();
+    // Price is computed server-side in place_order from menu_items.price —
+    // the client never sends (and can no longer write) unit_price/total_price.
+    const { data: order, error } = await supabase.rpc('place_order', {
+      p_restaurant_id: data.restaurant_id,
+      p_order_type: data.order_type,
+      p_items: data.items.map((item) => ({
+        menu_item_id: item.menu_item_id,
+        quantity: item.quantity,
+        special_instructions: item.special_instructions,
+      })),
+      p_table_id: data.table_id || null,
+      p_delivery_address: data.delivery_address || null,
+    });
     if (error) throw error;
-
-    if (data.items.length > 0) {
-      const { error: itemsError } = await supabase.from('order_items').insert(
-        data.items.map((item) => ({
-          order_id: order.id,
-          menu_item_id: item.menu_item_id,
-          quantity: item.quantity,
-          special_instructions: item.special_instructions,
-        }))
-      );
-      if (itemsError) throw itemsError;
-    }
 
     return order;
   },
@@ -969,13 +961,34 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
   // ── Payment ────────────────────────────────────────────────────────────────
   async recordPayment(orderId: string, paymentMethod: string, amount: number, tipAmount = 0, notes?: string) {
+    // The server now dedupes on (order_id, idempotency_key) instead of
+    // always minting a fresh key itself — but that protection only kicks in
+    // if a caller retries with the SAME key. This adapter generates a new
+    // key per call, so it protects a caller that already owns retry logic
+    // (pass the same key on each attempt); it does not by itself make a
+    // second, independent tap of "Pay" idempotent — that still needs a
+    // disabled-while-submitting guard in the UI, same as the cash register
+    // actions in OwnerHubScreen.
     const { data, error } = await getSupabaseClient().rpc('restaurant_record_payment', {
       p_order_id: orderId,
       p_payment_method: paymentMethod,
       p_amount: amount,
       p_tip_amount: tipAmount,
       p_notes: notes || null,
+      p_idempotency_key: Crypto.randomUUID(),
     });
+    if (error) throw error;
+    return data;
+  },
+
+  async exportUserData() {
+    const { data, error } = await getSupabaseClient().rpc('export_user_data');
+    if (error) throw error;
+    return data;
+  },
+
+  async requestAccountDeletion() {
+    const { data, error } = await getSupabaseClient().rpc('request_account_deletion');
     if (error) throw error;
     return data;
   },

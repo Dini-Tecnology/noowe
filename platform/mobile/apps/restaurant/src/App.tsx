@@ -26,6 +26,12 @@ import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import { RestaurantProvider } from '@/shared/contexts/RestaurantContext';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { initDeepLinking } from '@/shared/utils/deep-linking';
+import { initSentry } from '@/shared/config/sentry';
+
+// Capture crashes/errors in production as early as possible, before the
+// provider tree mounts. No-ops with a console warning if EXPO_PUBLIC_SENTRY_DSN
+// isn't set (see shared/config/sentry.ts).
+initSentry();
 
 // Configure React Query with sensible defaults for restaurant operations
 const queryClient = new QueryClient({
