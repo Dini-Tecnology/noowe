@@ -43,7 +43,17 @@ import { onConsentRequired } from '@/shared/services/api';
 import ApiService from '@okinawa/shared/services/api';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
+import PostSignupRoleScreen from '../screens/auth/PostSignupRoleScreen';
+import WaitingAccessScreen from '../screens/auth/WaitingAccessScreen';
+import CreateRestaurantScreen from '../screens/auth/CreateRestaurantScreen';
 import { RESTAURANT_BRANDING } from '../constants/branding';
+import {
+  clearRoleIntent,
+  getRoleIntent,
+  setRoleIntent,
+  type RoleIntent,
+} from '../services/role-intent';
+import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 
 // V2 production screens
 import OwnerHubScreen from '../screens/v2/OwnerHubScreen';
@@ -76,6 +86,15 @@ import RestaurantProfileScreen from '../screens/v2/RestaurantProfileScreen';
 import BusinessHoursScreen from '../screens/v2/BusinessHoursScreen';
 import NotificationSettingsScreen from '../screens/v2/NotificationSettingsScreen';
 import PaymentSettingsScreen from '../screens/v2/PaymentSettingsScreen';
+import CustomersScreen from '../screens/v2/CustomersScreen';
+import ShiftsScreen from '../screens/v2/ShiftsScreen';
+import IntegrationsScreen from '../screens/v2/IntegrationsScreen';
+import ConfigExperienceScreen from '../screens/v2/config/ConfigExperienceScreen';
+import ConfigFloorScreen from '../screens/v2/config/ConfigFloorScreen';
+import ConfigKitchenScreen from '../screens/v2/config/ConfigKitchenScreen';
+import ConfigPaymentsScreen from '../screens/v2/config/ConfigPaymentsScreen';
+import ConfigMarketplaceScreen from '../screens/v2/config/ConfigMarketplaceScreen';
+import UserAccountScreen from '../screens/v2/UserAccountScreen';
 import { RestaurantRoleProvider, useRestaurantRole, RestaurantRole } from '../contexts/RestaurantRoleContext';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -86,7 +105,7 @@ const Tab = createBottomTabNavigator();
 function BootFallback() {
   return (
     <View style={bootStyles.container}>
-      <ActivityIndicator size="large" color="#A855F7" />
+      <ActivityIndicator size="large" color="#FF6B35" />
       <Text style={bootStyles.label}>Carregando Noowe Restaurant...</Text>
     </View>
   );
@@ -123,7 +142,7 @@ function withRoleGuard<P extends object>(
     if (roleLoading) {
       return (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color="#A855F7" />
+          <ActivityIndicator size="large" color="#FF6B35" />
         </View>
       );
     }
@@ -151,11 +170,26 @@ const GuardedReports = withRoleGuard(ReportsScreen, ['owner', 'manager']);
 const GuardedStaff = withRoleGuard(StaffScreen, ['owner', 'manager']);
 const GuardedRestaurantProfile = withRoleGuard(RestaurantProfileScreen, ['owner', 'manager']);
 const GuardedBusinessHours = withRoleGuard(BusinessHoursScreen, ['owner', 'manager']);
+const GuardedServiceConfig = withRoleGuard(ServiceConfigScreen, ['owner', 'manager']);
 const GuardedNotificationSettings = withRoleGuard(NotificationSettingsScreen, ['owner', 'manager']);
 const GuardedPaymentSettings = withRoleGuard(PaymentSettingsScreen, ['owner', 'manager']);
+const GuardedConfigExperience = withRoleGuard(ConfigExperienceScreen, ['owner', 'manager']);
+const GuardedConfigFloor = withRoleGuard(ConfigFloorScreen, ['owner', 'manager']);
+const GuardedConfigKitchen = withRoleGuard(ConfigKitchenScreen, ['owner', 'manager']);
+const GuardedConfigPayments = withRoleGuard(ConfigPaymentsScreen, ['owner', 'manager']);
+const GuardedConfigMarketplace = withRoleGuard(ConfigMarketplaceScreen, ['owner', 'manager']);
 const GuardedWaiter = withRoleGuard(WaiterScreen, ['owner', 'manager', 'waiter', 'maitre']);
 const GuardedBarKDS = withRoleGuard(BarKDSScreen, ['owner', 'manager', 'barman', 'chef']);
 const GuardedMaitre = withRoleGuard(MaitreScreen, ['owner', 'manager', 'maitre']);
+const GuardedKitchen = withRoleGuard(KitchenDisplayScreen, ['owner', 'manager', 'chef', 'cook']);
+const GuardedMenu = withRoleGuard(MenuScreen, ['owner', 'manager', 'chef']);
+const GuardedTips = withRoleGuard(TipsScreen, ['owner', 'manager', 'waiter']);
+const GuardedReservations = withRoleGuard(ReservationsScreen, ['owner', 'manager', 'maitre']);
+const GuardedCalls = withRoleGuard(CallsScreen, ['owner', 'manager', 'waiter', 'maitre']);
+const GuardedTables = withRoleGuard(TablesScreen, ['owner', 'manager', 'maitre', 'waiter']);
+const GuardedCustomers = withRoleGuard(CustomersScreen, ['owner', 'manager']);
+const GuardedShifts = withRoleGuard(ShiftsScreen, ['owner', 'manager']);
+const GuardedIntegrations = withRoleGuard(IntegrationsScreen, ['owner', 'manager']);
 
 interface AuthStackBodyProps {
   googleLoginAvailable: boolean;
@@ -374,8 +408,8 @@ function MainTabs() {
     >
       <Tab.Screen name="Hub" component={OwnerHubScreen} options={{ title: 'Início' }} />
       <Tab.Screen name="Orders" component={OrdersScreen} options={{ title: 'Pedidos' }} />
-      <Tab.Screen name="Kitchen" component={KitchenDisplayScreen} options={{ title: 'Cozinha' }} />
-      <Tab.Screen name="Tables" component={TablesScreen} options={{ title: 'Mesas' }} />
+      <Tab.Screen name="Kitchen" component={GuardedKitchen} options={{ title: 'Cozinha' }} />
+      <Tab.Screen name="Tables" component={GuardedTables} options={{ title: 'Mesas' }} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Config' }} />
     </Tab.Navigator>
   );
@@ -383,44 +417,139 @@ function MainTabs() {
 
 function MainStack() {
   return (
-    <RestaurantRoleProvider>
-      <Stack.Navigator
-        id="restaurant-main-stack"
-        initialRouteName="Tabs"
-        screenOptions={{
-          ...defaultScreenOptions,
-          headerShown: false,
-          cardStyle: { backgroundColor: '#FFFFFF' },
+    <Stack.Navigator
+      id="restaurant-main-stack"
+      initialRouteName="Tabs"
+      screenOptions={{
+        ...defaultScreenOptions,
+        headerShown: false,
+        cardStyle: { backgroundColor: '#FFFFFF' },
+      }}
+    >
+      <Stack.Screen name="Tabs" component={MainTabs} />
+      <Stack.Screen name="Menu" component={GuardedMenu} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Reservations" component={GuardedReservations} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Staff" component={GuardedStaff} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Tips" component={GuardedTips} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Financial" component={GuardedFinancial} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Reports" component={GuardedReports} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Reviews" component={ReviewsScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Promotions" component={PromotionsScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Loyalty" component={LoyaltyScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="RoleDashboard" component={RoleDashboardScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Waiter" component={GuardedWaiter} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Maitre" component={GuardedMaitre} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="BarKDS" component={GuardedBarKDS} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="QRGenerator" component={QRGeneratorScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="QRBatch" component={QRBatchScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="OrderPayment" component={OrderPaymentScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="ServiceConfig" component={GuardedServiceConfig} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Waitlist" component={WaitlistScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Calls" component={GuardedCalls} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="CasualDining" component={CasualDiningScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="RestaurantProfile" component={GuardedRestaurantProfile} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="UserAccount" component={UserAccountScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="BusinessHours" component={GuardedBusinessHours} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="NotificationSettings" component={GuardedNotificationSettings} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="PaymentSettings" component={GuardedPaymentSettings} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Customers" component={GuardedCustomers} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Shifts" component={GuardedShifts} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Integrations" component={GuardedIntegrations} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="ConfigExperience" component={GuardedConfigExperience} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="ConfigFloor" component={GuardedConfigFloor} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="ConfigKitchen" component={GuardedConfigKitchen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="ConfigPayments" component={GuardedConfigPayments} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="ConfigMarketplace" component={GuardedConfigMarketplace} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={scaleFadeScreenOptions} />
+    </Stack.Navigator>
+  );
+}
+
+function AuthenticatedGate() {
+  const { serverRole, roleLoading, reloadRole } = useRestaurantRole();
+  const [roleIntent, setRoleIntentState] = useState<RoleIntent | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadIntent() {
+      try {
+        const { user } = await getOptionalSupabaseSessionUser();
+        if (!user) {
+          if (!cancelled) setRoleIntentState(null);
+          return;
+        }
+        const intent = await getRoleIntent(user.id);
+        if (!cancelled) setRoleIntentState(intent);
+      } catch (error) {
+        logger.warn('Failed to load role intent:', error);
+        if (!cancelled) setRoleIntentState(null);
+      }
+    }
+
+    void loadIntent();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSelectIntent = useCallback(async (intent: RoleIntent) => {
+    const { user } = await getOptionalSupabaseSessionUser();
+    if (!user) return;
+    await setRoleIntent(user.id, intent);
+    setRoleIntentState(intent);
+  }, []);
+
+  const handleChangeRole = useCallback(async () => {
+    const { user } = await getOptionalSupabaseSessionUser();
+    if (!user) return;
+    await clearRoleIntent(user.id);
+    setRoleIntentState(null);
+  }, []);
+
+  const handleRefreshAccess = useCallback(async () => {
+    return reloadRole();
+  }, [reloadRole]);
+
+  if (roleLoading || roleIntent === undefined) {
+    return <BootFallback />;
+  }
+
+  // Already linked to a restaurant — full app access
+  if (serverRole) {
+    return <MainStack key="restaurant-main" />;
+  }
+
+  // Owner intent without a restaurant yet — create establishment + owner role
+  if (roleIntent === 'owner') {
+    return (
+      <CreateRestaurantScreen
+        onCreated={async () => {
+          await reloadRole();
         }}
-      >
-        <Stack.Screen name="Tabs" component={MainTabs} />
-        <Stack.Screen name="Menu" component={MenuScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Reservations" component={ReservationsScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Staff" component={GuardedStaff} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Tips" component={TipsScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Financial" component={GuardedFinancial} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Reports" component={GuardedReports} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Reviews" component={ReviewsScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Promotions" component={PromotionsScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Loyalty" component={LoyaltyScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="RoleDashboard" component={RoleDashboardScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Waiter" component={GuardedWaiter} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Maitre" component={GuardedMaitre} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="BarKDS" component={GuardedBarKDS} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="QRGenerator" component={QRGeneratorScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="QRBatch" component={QRBatchScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="OrderPayment" component={OrderPaymentScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="ServiceConfig" component={ServiceConfigScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Waitlist" component={WaitlistScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="Calls" component={CallsScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="CasualDining" component={CasualDiningScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="RestaurantProfile" component={GuardedRestaurantProfile} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="BusinessHours" component={GuardedBusinessHours} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="NotificationSettings" component={GuardedNotificationSettings} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="PaymentSettings" component={GuardedPaymentSettings} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={scaleFadeScreenOptions} />
-        <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={scaleFadeScreenOptions} />
-      </Stack.Navigator>
+      />
+    );
+  }
+
+  // Staff intent without a linked role — wait for owner to grant access
+  if (roleIntent === 'staff') {
+    return (
+      <WaitingAccessScreen
+        onRefresh={handleRefreshAccess}
+        onChangeRole={handleChangeRole}
+      />
+    );
+  }
+
+  // First authenticated session without a choice yet
+  return <PostSignupRoleScreen onSelect={handleSelectIntent} />;
+}
+
+function AuthenticatedRoot() {
+  return (
+    <RestaurantRoleProvider>
+      <AuthenticatedGate />
     </RestaurantRoleProvider>
   );
 }
@@ -494,7 +623,7 @@ export default function Navigation() {
   return (
     <View style={styles.appSurface}>
       <ErrorBoundary onError={handleNavigationError}>
-        {isAuthenticated ? <MainStack key="restaurant-main" /> : <AuthStack key="restaurant-auth" />}
+        {isAuthenticated ? <AuthenticatedRoot key="restaurant-main" /> : <AuthStack key="restaurant-auth" />}
       </ErrorBoundary>
     </View>
   );

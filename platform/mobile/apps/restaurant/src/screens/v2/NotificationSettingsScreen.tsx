@@ -76,7 +76,7 @@ export default function NotificationSettingsScreen() {
   };
 
   return (
-    <V2Shell title="Notificações" subtitle="Alertas e avisos" showBack>
+    <V2Shell title="Notificações" subtitle="Alertas e avisos" showBack onRefresh={load}>
       {loading ? (
         <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : (

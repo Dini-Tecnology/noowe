@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CreditCard, PieChart, Users } from 'lucide-react-native';
 import { formatCurrency } from '@okinawa/shared/utils/formatters';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
@@ -10,21 +10,22 @@ export default function TipsScreen() {
   const [totalTips, setTotalTips] = useState<number | null>(null);
   const [shiftStaffCount, setShiftStaffCount] = useState<number | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
     if (!restaurantId) return;
-    Promise.all([
-      supabaseApiAdapter.getTipsSummary(restaurantId),
-      supabaseApiAdapter.getActiveShiftCount(restaurantId),
-    ])
-      .then(([summary, shiftCount]) => {
-        if (cancelled) return;
-        setTotalTips(Number(summary?.total_tips ?? 0));
-        setShiftStaffCount(Number(shiftCount ?? 0));
-      })
-      .catch(() => { if (!cancelled) { setTotalTips(0); setShiftStaffCount(0); } });
-    return () => { cancelled = true; };
+    try {
+      const [summary, shiftCount] = await Promise.all([
+        supabaseApiAdapter.getTipsSummary(restaurantId),
+        supabaseApiAdapter.getActiveShiftCount(restaurantId),
+      ]);
+      setTotalTips(Number(summary?.total_tips ?? 0));
+      setShiftStaffCount(Number(shiftCount ?? 0));
+    } catch {
+      setTotalTips(0);
+      setShiftStaffCount(0);
+    }
   }, [restaurantId]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const items: V2ListItem[] = [
     {
@@ -40,5 +41,5 @@ export default function TipsScreen() {
     },
   ];
 
-  return <V2ListScreen title="Gorjetas" subtitle="Distribuição e histórico" showBack items={items} />;
+  return <V2ListScreen title="Gorjetas" subtitle="Distribuição e histórico" showBack items={items} onRefresh={load} />;
 }

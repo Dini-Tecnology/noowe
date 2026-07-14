@@ -1,4 +1,4 @@
-import React, { ComponentType, useState } from 'react';
+import React, { ComponentType, useEffect, useState } from 'react';
 import {
   Alert,
   View,
@@ -7,11 +7,13 @@ import {
   StyleSheet,
   Image,
   TextInput,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Text } from 'react-native-paper';
 import {
   AlertCircle,
-  ArrowRight,
   ArrowDown,
   Clock,
   CheckCircle,
@@ -19,13 +21,18 @@ import {
   Phone,
   Package,
   QrCode,
-  Settings,
   Zap,
   UtensilsCrossed,
   Users,
   BarChart,
   ChefHat,
   LogOut,
+  Camera,
+  MapPin,
+  Wine,
+  Contact,
+  CalendarClock,
+  Plug,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -33,7 +40,10 @@ import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { authService } from '@/shared/services/auth';
 import { V2_TONE, V2Tone } from './shared/v2Theme';
 import { V2StatusBadge } from './shared/V2StatusBadge';
+import { CurrencyInput } from './shared/CurrencyInput';
 import { orderStatusLabel, orderStatusTone } from './shared/v2Types';
+import { ConfigHubContent } from './config/ConfigHubContent';
+import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import {
   elapsedLabel,
   shortOrderId,
@@ -71,8 +81,8 @@ const OWNER_ROLES = [
   { id: 'maitre', label: 'Maître', title: 'Sala e Reservas', hint: 'Fila, reservas e mesas' },
   { id: 'chef', label: 'Chef', title: 'Chef Executivo', hint: 'KDS, tempos e qualidade' },
   { id: 'barman', label: 'Barman', title: 'Bar KDS', hint: 'Drinks e bebidas' },
-  { id: 'cook', label: 'Cozinheiro', title: 'Estação de Preparo', hint: 'Fila da sua praça' },
-  { id: 'waiter', label: 'Garçom', title: 'Atendimento', hint: 'Mesas e chamados' },
+  { id: 'cook', label: 'Cozinheiro', title: 'Minha Estação', hint: 'Fila da sua praça' },
+  { id: 'waiter', label: 'Garçom', title: 'Minhas Mesas', hint: 'Mesas e chamados' },
 ] as const;
 
 type RoleId = (typeof OWNER_ROLES)[number]['id'];
@@ -116,7 +126,8 @@ export default function OwnerHubScreen() {
   const navigation = useNavigation<any>();
   const {
     role,
-    setRole,
+    restaurantId,
+    restaurants,
     managerView,
     setManagerView,
     maitreView,
@@ -126,27 +137,80 @@ export default function OwnerHubScreen() {
     cookView,
     waiterView,
   } = useRestaurantRole();
+  const [restaurantProfile, setRestaurantProfile] = useState<{
+    name?: string;
+    city?: string;
+    state?: string;
+    logo_url?: string | null;
+  } | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const selectedRole = React.useMemo(
     () => OWNER_ROLES.find((r) => r.id === role) ?? OWNER_ROLES[0],
     [role],
   );
-  const headerTitle =
-    role === 'manager'
-      ? managerViewTitle(managerView)
-      : role === 'maitre'
-        ? maitreViewTitle(maitreView)
-        : role === 'chef'
-          ? chefViewTitle(chefView)
-          : role === 'barman'
-            ? barmanViewTitle(barmanView)
-            : role === 'cook'
-              ? cookViewTitle(cookView)
-              : role === 'waiter'
-                ? waiterViewTitle(waiterView)
-          : selectedRole.title;
-
   const isOwner = role === 'owner';
+  const restaurantFromList = restaurants.find((restaurant) => restaurant.id === restaurantId);
+  const restaurantName = restaurantProfile?.name ?? restaurantFromList?.name ?? 'Seu restaurante';
+  const restaurantCity = restaurantProfile?.city ?? restaurantFromList?.city;
+  const restaurantState = restaurantProfile?.state ?? restaurantFromList?.state;
+  const restaurantLocation = [restaurantCity, restaurantState].filter(Boolean).join(' · ');
+  const restaurantLogo = restaurantProfile?.logo_url ?? restaurantFromList?.logoUrl ?? null;
+
+  const loadRestaurantProfile = React.useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      const profile = await supabaseApiAdapter.getRestaurantProfile(restaurantId);
+      setRestaurantProfile(profile ?? null);
+    } catch {
+      // The operational cards still refresh independently if profile loading fails.
+    }
+  }, [restaurantId]);
+
+  useEffect(() => { void loadRestaurantProfile(); }, [loadRestaurantProfile]);
+
+  const handleRefresh = React.useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([loadRestaurantProfile(), refreshMountedRemoteData()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadRestaurantProfile, refreshing]);
+
+  const handlePickRestaurantLogo = async () => {
+    if (!restaurantId || logoUploading) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permissão necessária', 'Autorize o acesso às fotos para escolher a imagem do restaurante.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.82,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    setLogoUploading(true);
+    try {
+      const asset = result.assets[0];
+      const logoUrl = await supabaseApiAdapter.uploadRestaurantLogo(
+        restaurantId,
+        asset.uri,
+        asset.mimeType ?? 'image/jpeg',
+      );
+      setRestaurantProfile((current) => ({ ...current, logo_url: logoUrl }));
+    } catch (error) {
+      Alert.alert('Não foi possível atualizar a foto', error instanceof Error ? error.message : 'Tente novamente.');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   const openScreen = (screen: string) => {
     navigation.navigate(screen);
@@ -167,13 +231,49 @@ export default function OwnerHubScreen() {
 
   return (
     <ScreenContainer edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        alwaysBounceVertical
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { void handleRefresh(); }}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        )}
+      >
         <View style={[styles.headerCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          <View pointerEvents="none" style={[styles.headerGlow, { backgroundColor: `${colors.secondary}12` }]} />
           <View style={styles.headerTop}>
-            <View style={styles.headerText}>
-              <Text style={[styles.eyebrow, { color: colors.foregroundSecondary }]}>MODO MOBILE</Text>
-              <Text style={[styles.headerTitle, { color: colors.foreground }]}>{headerTitle}</Text>
-              <Text style={[styles.headerHint, { color: colors.foregroundSecondary }]}>{selectedRole.hint}</Text>
+            <View style={styles.headerIdentity}>
+              <TouchableOpacity
+                onPress={() => void handlePickRestaurantLogo()}
+                disabled={logoUploading}
+                style={[styles.restaurantPhotoButton, { backgroundColor: `${colors.secondary}16`, borderColor: `${colors.secondary}45` }]}
+                accessibilityRole="button"
+                accessibilityLabel={restaurantLogo ? 'Alterar foto do restaurante' : 'Adicionar foto do restaurante'}
+              >
+                {restaurantLogo ? (
+                  <Image source={{ uri: restaurantLogo }} style={styles.restaurantPhoto} />
+                ) : (
+                  <Text style={[styles.restaurantInitial, { color: colors.secondary }]}>{restaurantName.trim().charAt(0).toUpperCase() || 'N'}</Text>
+                )}
+                <View style={[styles.cameraBadge, { backgroundColor: colors.secondary, borderColor: colors.card }]}>
+                  {logoUploading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Camera size={12} color="#FFFFFF" strokeWidth={2.7} />}
+                </View>
+              </TouchableOpacity>
+              <View style={styles.headerText}>
+                <Text style={[styles.eyebrow, { color: colors.secondary }]}>PAINEL DO RESTAURANTE</Text>
+                <Text numberOfLines={1} style={[styles.headerTitle, { color: colors.foreground }]}>{restaurantName}</Text>
+                <View style={styles.restaurantMetaRow}>
+                  {restaurantLocation ? <><MapPin size={12} color={colors.foregroundSecondary} /><Text numberOfLines={1} style={[styles.headerHint, { color: colors.foregroundSecondary }]}>{restaurantLocation}</Text></> : null}
+                  <View style={[styles.roleBadge, { backgroundColor: `${colors.secondary}16` }]}>
+                    <Text style={[styles.roleBadgeText, { color: colors.secondary }]}>{selectedRole.label}</Text>
+                  </View>
+                </View>
+              </View>
             </View>
             <TouchableOpacity
               onPress={handleSignOut}
@@ -184,34 +284,6 @@ export default function OwnerHubScreen() {
               <LogOut size={16} color={colors.error} strokeWidth={2.4} />
               <Text style={[styles.signOutText, { color: colors.error }]}>Sair</Text>
             </TouchableOpacity>
-          </View>
-          <View style={[styles.rolePicker, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }]}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roleScrollContent}>
-              {OWNER_ROLES.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  onPress={() => setRole(item.id)}
-                  style={[
-                    styles.roleChip,
-                    role === item.id && { backgroundColor: colors.primary },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.roleChipText,
-                      { color: role === item.id ? '#FFF' : colors.foreground },
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <View pointerEvents="none" style={styles.roleScrollHint}>
-              <View style={[styles.roleScrollHintIcon, { backgroundColor: `${colors.primary}22` }]}>
-                <ArrowRight size={13} color={colors.primary} strokeWidth={2.6} />
-              </View>
-            </View>
           </View>
         </View>
 
@@ -286,7 +358,7 @@ function managerViewTitle(view: ManagerRoleView) {
 
 function maitreViewTitle(view: MaitreRoleView) {
   const titles: Record<MaitreRoleView, string> = {
-    'maitre-reservations': 'Painel do Maître',
+    'maitre-reservations': 'Reservas',
     'maitre-flow': 'Fluxo do Salão',
     'maitre-tables': 'Mapa de Mesas',
     'maitre-management': 'Gestão de Reservas',
@@ -296,7 +368,7 @@ function maitreViewTitle(view: MaitreRoleView) {
 
 function chefViewTitle(view: ChefRoleView) {
   const titles: Record<ChefRoleView, string> = {
-    'chef-kds': 'KDS — Cozinha',
+    'chef-kds': 'KDS Cozinha',
     'chef-approvals': 'Aprovações do Chef',
     'chef-analytics': 'KDS Analytics',
     'chef-cost': 'Custo & Margem',
@@ -309,7 +381,7 @@ function chefViewTitle(view: ChefRoleView) {
 function barmanViewTitle(view: BarmanRoleView) {
   const titles: Record<BarmanRoleView, string> = {
     'barman-station': 'Estação do Barman',
-    'bar-kds': 'KDS — Bar',
+    'bar-kds': 'KDS Bar',
     'bar-recipes': 'Receitas de Drinks',
     'bar-stock': 'Controle de Estoque',
   };
@@ -318,7 +390,7 @@ function barmanViewTitle(view: BarmanRoleView) {
 
 function cookViewTitle(view: CookRoleView) {
   const titles: Record<CookRoleView, string> = {
-    'cook-station': 'Estação de Preparo',
+    'cook-station': 'Minha Estação',
     'cook-kds': 'KDS Cozinha',
   };
   return titles[view];
@@ -326,31 +398,21 @@ function cookViewTitle(view: CookRoleView) {
 
 function waiterViewTitle(view: WaiterRoleView) {
   const titles: Record<WaiterRoleView, string> = {
-    waiter: 'Visão do Garçom',
-    'waiter-calls': 'Chamados de Clientes',
+    waiter: 'Minhas Mesas',
+    'waiter-calls': 'Chamados',
     'waiter-table-actions': 'Ações na Mesa',
     'waiter-assistance': 'Assistência ao Cliente',
     'waiter-table-charge': 'Cobrar na Mesa',
-    'waiter-tap-to-pay': 'TAP to Pay',
+    'waiter-tap-to-pay': 'Tap to Pay',
     'waiter-order-management': 'Gestão de Pedidos',
     'waiter-table-map': 'Mapa de Mesas',
-    'waiter-tips': 'Minhas Gorjetas',
+    'waiter-tips': 'Gorjetas',
   };
   return titles[view];
 }
 
 
 
-const MANAGER_CONFIG = [
-  ['Perfil do Restaurante', 'Nome, logo, fotos, contato', UtensilsCrossed, 'danger'],
-  ['Tipos de Serviço', '11 modelos de operação', UtensilsCrossed, 'success'],
-  ['Experiência do Cliente', 'Reservas, fila, QR, pedidos', Zap, 'danger'],
-  ['Mapa do Salão', 'Mesas, zonas, áreas VIP', Users, 'warning'],
-  ['Cardápio', 'Categorias, itens, preços', Package, 'danger'],
-  ['Equipe & Permissões', 'Cargos, escalas, acesso', Users, 'danger'],
-  ['Cozinha & Bar', 'Estações, KDS, receitas', UtensilsCrossed, 'warning'],
-  ['Pagamentos', 'Taxa, gorjeta, split, métodos', CreditCardIcon, 'danger'],
-] as const;
 
 
 function formatCurrency(value: number): string {
@@ -364,11 +426,17 @@ function formatCurrency(value: number): string {
 function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void; colors: ReturnType<typeof useColors> }) {
   const { data: snapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useDashboardSnapshot();
   const { data: recentOrders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useRestaurantOrders();
-  const quickActions: { title: string; detail: string; screen: string; icon: IconComponent }[] = [
-    { title: 'Cardápio', detail: 'Gerenciar itens', screen: 'Menu', icon: UtensilsCrossed },
+  const primaryActions: { title: string; detail: string; screen: string; icon: IconComponent }[] = [
+    { title: 'Cardápio', detail: 'Itens e preços', screen: 'Menu', icon: UtensilsCrossed },
     { title: 'Equipe', detail: 'Staff e turnos', screen: 'Staff', icon: Users },
     { title: 'Financeiro', detail: 'Receita e custos', screen: 'Financial', icon: CreditCardIcon },
-    { title: 'Relatórios', detail: 'Métricas', screen: 'Reports', icon: BarChart },
+    { title: 'Integrações', detail: 'Delivery', screen: 'Integrations', icon: Plug },
+  ];
+  const secondaryActions: { title: string; screen: string; icon: IconComponent }[] = [
+    { title: 'Relatórios', screen: 'Reports', icon: BarChart },
+    { title: 'Bar KDS', screen: 'BarKDS', icon: Wine },
+    { title: 'Clientes', screen: 'Customers', icon: Contact },
+    { title: 'Escalas', screen: 'Shifts', icon: CalendarClock },
   ];
   const occupancy = snapshot?.tables.total
     ? Math.round((snapshot.tables.occupied / snapshot.tables.total) * 100)
@@ -379,11 +447,6 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
 
   return (
     <View style={styles.section}>
-      <View style={[styles.banner, { backgroundColor: V2_TONE.danger.bg }]}>
-        <Text style={{ color: V2_TONE.danger.text, fontSize: 11 }}>
-          Resumo executivo otimizado para leitura rápida no celular.
-        </Text>
-      </View>
       <View style={styles.metricGrid}>
         <Metric value={snapshotLoading ? '...' : formatCurrency(snapshot?.revenue_today ?? 0)} label="Receita Hoje" tone="success" />
         <Metric value={snapshotLoading ? '...' : String(snapshot?.active_orders ?? 0)} label="Pedidos Ativos" tone="danger" />
@@ -393,9 +456,9 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
       {snapshotError ? (
         <InlineNotice message={snapshotError} actionLabel="Recarregar" onPress={() => void refreshSnapshot()} colors={colors} />
       ) : null}
-      <SectionTitle title="Ações rápidas" subtitle="Atalhos para o que importa agora" colors={colors} />
+      <SectionTitle title="Ações rápidas" subtitle="Os 4 atalhos principais do dia" colors={colors} />
       <View style={styles.metricGrid}>
-        {quickActions.map((action) => (
+        {primaryActions.map((action) => (
           <QuickAction
             key={action.title}
             title={action.title}
@@ -406,6 +469,30 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
           />
         ))}
       </View>
+      <Text style={[styles.moreShortcutsLabel, { color: colors.foregroundSecondary }]}>Mais atalhos</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.moreShortcutsRow}
+      >
+        {secondaryActions.map((action) => {
+          const Icon = action.icon;
+          return (
+            <TouchableOpacity
+              key={action.title}
+              onPress={() => onNavigate(action.screen)}
+              style={[styles.moreShortcutChip, { borderColor: colors.border, backgroundColor: colors.card }]}
+              accessibilityRole="button"
+              accessibilityLabel={action.title}
+            >
+              <View style={[styles.moreShortcutIcon, { backgroundColor: `${colors.primary}14` }]}>
+                <Icon size={15} color={colors.primary} />
+              </View>
+              <Text style={[styles.moreShortcutText, { color: colors.foreground }]}>{action.title}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
       <SectionTitle title="Pedidos recentes" colors={colors} />
       {ordersLoading ? (
         <InlineNotice message="Carregando pedidos recentes..." colors={colors} />
@@ -442,7 +529,7 @@ function ManagerContent({
   if (view === 'manager-stock') return <ManagerStockView colors={colors} />;
   if (view === 'manager-promotions') return <ManagerPromotionsView colors={colors} />;
   if (view === 'manager-qr') return <ManagerQrView colors={colors} onNavigate={onNavigate} />;
-  if (view === 'manager-settings') return <ManagerSettingsView colors={colors} setView={setView} />;
+  if (view === 'manager-settings') return <ManagerSettingsView />;
   return <ManagerDashboardTab setView={setView} onNavigate={onNavigate} colors={colors} />;
 }
 
@@ -551,7 +638,6 @@ function CookQueueView({
           </View>
         );
       })}
-      <ProfileActive colors={colors} roleName="Cozinheiro" />
     </View>
   );
 }
@@ -630,7 +716,6 @@ function BarmanQueueView({
           </View>
         );
       })}
-      <ProfileActive colors={colors} roleName="Barman" />
     </View>
   );
 }
@@ -642,7 +727,6 @@ function BarmanRecipesView({ colors }: { colors: ReturnType<typeof useColors> })
   return (
     <View style={styles.section}>
       <InlineNotice message="Fichas técnicas de drinks ainda não disponíveis nesta versão do app." colors={colors} />
-      <ProfileActive colors={colors} roleName="Barman" />
     </View>
   );
 }
@@ -709,7 +793,6 @@ function ChefApprovalsView({ colors }: { colors: ReturnType<typeof useColors> })
   return (
     <View style={styles.section}>
       <InlineNotice message="Aprovações de Chef's Table ainda não disponíveis nesta versão do app." colors={colors} />
-      <ProfileActive colors={colors} roleName="Chef" />
     </View>
   );
 }
@@ -727,7 +810,6 @@ function ChefAnalyticsView({ colors }: { colors: ReturnType<typeof useColors> })
         <Metric value={loading ? '—' : String(snapshot?.kds_queue ?? 0)} label="Na fila do KDS" tone="danger" />
       </View>
       <InlineNotice message="Tempo médio, SLA e detalhamento por estação ainda não estão disponíveis — dependem de um relatório de cozinha que este app ainda não consome." colors={colors} />
-      <ProfileActive colors={colors} roleName="Chef" />
     </View>
   );
 }
@@ -741,7 +823,6 @@ function ChefCostView({ colors }: { colors: ReturnType<typeof useColors> }) {
         <Text style={[styles.tipBannerText, { color: '#FF8A7A' }]}>CMV por prato, fichas técnicas e margem de contribuição</Text>
       </View>
       <InlineNotice message="Cálculo de CMV/margem ainda não disponível — o cardápio hoje não registra o custo de cada prato." colors={colors} />
-      <ProfileActive colors={colors} roleName="Chef" />
     </View>
   );
 }
@@ -773,7 +854,6 @@ function ChefMenuView({ colors }: { colors: ReturnType<typeof useColors> }) {
           </View>
         ))
       )}
-      <ProfileActive colors={colors} roleName="Chef" />
     </View>
   );
 }
@@ -852,7 +932,6 @@ function MaitreReservationsView({ colors }: { colors: ReturnType<typeof useColor
           </View>
         ))
       )}
-      <ProfileActive colors={colors} roleName="Maître" />
     </View>
   );
 }
@@ -885,7 +964,6 @@ function MaitreFlowView({ colors }: { colors: ReturnType<typeof useColors> }) {
           </View>
         ))
       )}
-      <ProfileActive colors={colors} roleName="Maître" />
     </View>
   );
 }
@@ -940,7 +1018,6 @@ function MaitreManagementView({ colors }: { colors: ReturnType<typeof useColors>
           </View>
         ))
       )}
-      <ProfileActive colors={colors} roleName="Maître" />
     </View>
   );
 }
@@ -1083,7 +1160,6 @@ function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors>
   return (
     <View style={styles.section}>
       <InlineNotice message="Central de aprovações ainda não disponível nesta versão do app." colors={colors} />
-      <ProfileActive colors={colors} />
     </View>
   );
 }
@@ -1092,23 +1168,22 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
   const { restaurantId } = useRestaurantRole();
   const { data: session, loading: sessionLoading, error: sessionError, refresh: refreshSession } = useCashRegister();
   const { data: movements, loading: movementsLoading, refresh: refreshMovements } = useCashMovements();
-  const [amountDraft, setAmountDraft] = useState('');
+  const [amount, setAmount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
   const parseAmount = (): number | null => {
-    const value = Number(amountDraft.replace(',', '.'));
-    if (!Number.isFinite(value) || value <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       Alert.alert('Valor inválido', 'Informe um valor maior que zero.');
       return null;
     }
-    return value;
+    return amount;
   };
 
   const runAction = async (label: string, action: () => Promise<unknown>) => {
     setSubmitting(true);
     try {
       await action();
-      setAmountDraft('');
+      setAmount(0);
       await Promise.all([refreshSession(), refreshMovements()]);
     } catch (err) {
       Alert.alert(`Falha em ${label}`, err instanceof Error ? err.message : 'Tente novamente.');
@@ -1194,14 +1269,9 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
           ))
         )}
       </View>
-      <TextInput
-        value={amountDraft}
-        onChangeText={setAmountDraft}
-        placeholder="Valor (R$)"
-        keyboardType="decimal-pad"
-        editable={!submitting}
-        style={[styles.cashAmountInput, { borderColor: colors.border, color: colors.foreground }]}
-      />
+      <View style={styles.cashAmountInput}>
+        <CurrencyInput value={amount} onChangeValue={setAmount} />
+      </View>
       {session?.isOpen ? (
         <View style={styles.cashActions}>
           <TouchableOpacity disabled={submitting} onPress={handleSangria} style={[styles.cashAction, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
@@ -1219,7 +1289,6 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
           <Text style={[styles.wideActionText, { color: '#FFF' }]}>Abrir Caixa</Text>
         </TouchableOpacity>
       )}
-      <ProfileActive colors={colors} />
     </View>
   );
 }
@@ -1314,7 +1383,6 @@ function ManagerReportView({ colors }: { colors: ReturnType<typeof useColors> })
           </Text>
         </View>
       </View>
-      <ProfileActive colors={colors} />
     </View>
   );
 }
@@ -1341,7 +1409,6 @@ function ManagerStockView({ colors, roleName = 'Gerente' }: { colors: ReturnType
           </View>
         ))
       )}
-      <ProfileActive colors={colors} roleName={roleName} />
     </View>
   );
 }
@@ -1382,7 +1449,6 @@ function ManagerPromotionsView({ colors }: { colors: ReturnType<typeof useColors
           </View>
         ))
       )}
-      <ProfileActive colors={colors} />
     </View>
   );
 }
@@ -1420,55 +1486,14 @@ function ManagerQrView({ colors, onNavigate }: { colors: ReturnType<typeof useCo
           </View>
         )}
       </View>
-      <ProfileActive colors={colors} />
     </View>
   );
 }
 
-function ManagerSettingsView({
-  colors,
-  setView,
-}: {
-  colors: ReturnType<typeof useColors>;
-  setView: (view: ManagerRoleView) => void;
-}) {
-  const { restaurantId, restaurants } = useRestaurantRole();
-  const currentRestaurant = restaurants.find((r) => r.id === restaurantId);
-  const routeByTitle: Record<string, ManagerRoleView> = {
-    'Mapa do Salão': 'manager-tables',
-    'Equipe & Permissões': 'manager-staff',
-    Cardápio: 'manager-stock',
-    Pagamentos: 'manager-cash',
-  };
+function ManagerSettingsView() {
   return (
     <View style={styles.section}>
-      <View style={styles.configHero}>
-        <View style={styles.configIcon}><Settings size={24} color="#FF5A3D" /></View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.configTitle}>Central de Configuração</Text>
-          <Text style={styles.configSub}>
-            {currentRestaurant ? `${currentRestaurant.name} · ${currentRestaurant.serviceType}` : 'Carregando...'}
-          </Text>
-        </View>
-      </View>
-      {MANAGER_CONFIG.map(([title, subtitle, Icon, tone]) => (
-        <TouchableOpacity
-          key={title}
-          onPress={() => {
-            const view = routeByTitle[title];
-            if (view) setView(view);
-          }}
-          style={[styles.configRow, { borderColor: colors.border, backgroundColor: colors.card }]}
-        >
-          <View style={styles.configRowIcon}><Icon size={20} color={V2_TONE[tone as V2Tone].text} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.staffName, { color: colors.foreground }]}>{title}</Text>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{subtitle}</Text>
-          </View>
-          <ArrowRight size={18} color={colors.foregroundSecondary} />
-        </TouchableOpacity>
-      ))}
-      <ProfileActive colors={colors} />
+      <ConfigHubContent compact />
     </View>
   );
 }
@@ -1606,7 +1631,6 @@ function WaiterCommandView({
           </View>
         ))
       )}
-      <ProfileActive colors={colors} roleName="Garçom" />
     </View>
   );
 }
@@ -1688,7 +1712,6 @@ function WaiterTapToPayView({ colors }: { colors: ReturnType<typeof useColors> }
         <Text style={[styles.panelTitle, { color: colors.foreground, marginTop: 14 }]}>Tap to Pay</Text>
         <InlineNotice message="Pagamento por aproximação (NFC) ainda não está disponível nesta versão do app." colors={colors} />
       </View>
-      <ProfileActive colors={colors} roleName="Garçom" />
     </View>
   );
 }
@@ -1761,7 +1784,6 @@ function WaiterTipsView({ colors }: { colors: ReturnType<typeof useColors> }) {
       </View>
       {tipsError && <InlineNotice message={tipsError} colors={colors} />}
       <InlineNotice message="Distribuição por mesa/garçom ainda não é rastreada individualmente — apenas o total do pool do turno." colors={colors} />
-      <ProfileActive colors={colors} roleName="Garçom" />
     </View>
   );
 }
@@ -1956,20 +1978,18 @@ function MetaLine({
   );
 }
 
-function ProfileActive({ colors, roleName = 'Gerente' }: { colors: ReturnType<typeof useColors>; roleName?: string }) {
-  return (
-    <View style={[styles.profileActive, { borderColor: colors.border, backgroundColor: colors.card }]}>
-      <Text style={[styles.eyebrow, { color: colors.foregroundSecondary }]}>PERFIL ATIVO</Text>
-      <Text style={[styles.staffName, { color: colors.foreground, marginTop: 6 }]}>{roleName}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   scroll: { padding: 16, paddingBottom: 88 },
-  headerCard: { borderRadius: 16, borderWidth: 1, padding: 12, marginBottom: 16 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  headerCard: { borderRadius: 22, borderWidth: 1, padding: 16, marginBottom: 16, overflow: 'hidden' },
+  headerGlow: { position: 'absolute', width: 140, height: 140, borderRadius: 70, right: -52, top: -72 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
+  headerIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  restaurantPhotoButton: { width: 58, height: 58, borderRadius: 18, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  restaurantPhoto: { width: '100%', height: '100%', borderRadius: 16.5 },
+  restaurantInitial: { fontSize: 23, fontWeight: '900' },
+  cameraBadge: { position: 'absolute', right: -5, bottom: -5, width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   headerText: { flex: 1 },
+  restaurantMetaRow: { minHeight: 20, flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   signOutButton: {
     minHeight: 36,
     flexDirection: 'row',
@@ -1981,29 +2001,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   signOutText: { fontSize: 12, fontWeight: '700' },
-  eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 2 },
-  headerTitle: { fontSize: 15, fontWeight: '700', marginTop: 4 },
-  headerHint: { fontSize: 11, marginTop: 4 },
-  rolePicker: { marginTop: 12, borderRadius: 12, borderWidth: 1, padding: 8, position: 'relative' },
-  roleScrollContent: { paddingRight: 34 },
-  roleScrollHint: {
-    position: 'absolute',
-    right: 6,
-    top: 0,
-    bottom: 0,
-    width: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  roleScrollHintIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  roleChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, marginRight: 8 },
-  roleChipText: { fontSize: 12, fontWeight: '600' },
+  eyebrow: { fontSize: 9, fontWeight: '800', letterSpacing: 1.45 },
+  roleBadge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, marginLeft: 4 },
+  roleBadgeText: { fontSize: 10, fontWeight: '800' },
+  headerTitle: { fontSize: 17, fontWeight: '800', marginTop: 4, letterSpacing: -0.2 },
+  headerHint: { flexShrink: 1, fontSize: 11, lineHeight: 16 },
   section: { gap: 12 },
   banner: { borderRadius: 16, padding: 12 },
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
@@ -2013,6 +2015,32 @@ const styles = StyleSheet.create({
   compactMetricCard: { flex: 1, minHeight: 70, borderRadius: 16, borderWidth: 1, padding: 12, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center' },
   compactMetricValue: { fontSize: 18, fontWeight: '800' },
   quickAction: { width: '47%', minHeight: 82, borderRadius: 16, borderWidth: 1, padding: 12 },
+  moreShortcutsLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  moreShortcutsRow: { gap: 8, paddingRight: 4, paddingBottom: 4 },
+  moreShortcutChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  moreShortcutIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreShortcutText: { fontSize: 12, fontWeight: '700' },
   inlineNotice: { borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   inlineNoticeBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
   orderCard: { borderRadius: 16, borderWidth: 1, padding: 12, marginBottom: 8 },
@@ -2101,7 +2129,7 @@ const styles = StyleSheet.create({
   cashActions: { flexDirection: 'row', gap: 8 },
   cashAction: { flex: 1, minHeight: 38, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   cashActionText: { fontSize: 12, fontWeight: '800' },
-  cashAmountInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10, fontSize: 15 },
+  cashAmountInput: { marginBottom: 10 },
   tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tableCard: { width: '31.5%', minHeight: 94, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', padding: 10, backgroundColor: '#FFF' },
   tableTitle: { fontSize: 20, fontWeight: '800' },
@@ -2124,7 +2152,6 @@ const styles = StyleSheet.create({
   configRowIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
   configMiniTrack: { height: 4, borderRadius: 999, backgroundColor: '#E5E7EB', marginTop: 8, overflow: 'hidden' },
   configMiniFill: { width: '72%', height: '100%' },
-  profileActive: { borderRadius: 16, borderWidth: 1, padding: 14 },
   roleHint: {
     marginTop: 16,
     padding: 16,

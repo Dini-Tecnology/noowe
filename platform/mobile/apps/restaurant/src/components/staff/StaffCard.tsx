@@ -21,6 +21,9 @@ const ROLE_COLORS: Record<string, string> = {
   manager: '#0091EA',
   waiter: '#00C853',
   chef: '#FF6F00',
+  cook: '#059669',
+  barman: '#BE185D',
+  maitre: '#0891B2',
   cashier: '#42A5F5',
   delivery: '#29B6F6',
 };
@@ -30,6 +33,9 @@ const ROLE_LABELS: Record<string, string> = {
   manager: 'Gerente',
   waiter: 'Garçom',
   chef: 'Chef',
+  cook: 'Cozinheiro',
+  barman: 'Barman',
+  maitre: 'Maître',
   cashier: 'Caixa',
   delivery: 'Entregador',
 };

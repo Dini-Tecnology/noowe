@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Gift, Users, Award } from 'lucide-react-native';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2ListScreen, type V2ListItem } from './shared/V2ListScreen';
@@ -19,23 +19,25 @@ export default function LoyaltyScreen() {
   const [config, setConfig] = useState<LoyaltyConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
     if (!restaurantId) return;
-    Promise.all([
+    setLoading(true);
+    try {
+      const [statsResult, configResult] = await Promise.all([
       supabaseApiAdapter.getLoyaltyStats(restaurantId),
       supabaseApiAdapter.getLoyaltyConfig(restaurantId),
-    ])
-      .then(([statsResult, configResult]) => {
-        if (!cancelled) {
-          setStats(statsResult ?? {});
-          setConfig(configResult ?? {});
-        }
-      })
-      .catch(() => { if (!cancelled) { setStats({}); setConfig({}); } })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      ]);
+      setStats(statsResult ?? {});
+      setConfig(configResult ?? {});
+    } catch {
+      setStats({});
+      setConfig({});
+    } finally {
+      setLoading(false);
+    }
   }, [restaurantId]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const items: V2ListItem[] = loading
     ? [{ icon: Gift, label: 'Carregando programa de fidelidade…' }]
@@ -49,5 +51,5 @@ export default function LoyaltyScreen() {
         { icon: Award, label: 'Resgates do mês', subtitle: `${stats?.redemptions_this_month ?? 0} recompensas` },
       ];
 
-  return <V2ListScreen title="Fidelidade" subtitle="Programa de recompensas" showBack items={items} />;
+  return <V2ListScreen title="Fidelidade" subtitle="Programa de recompensas" showBack items={items} onRefresh={load} />;
 }

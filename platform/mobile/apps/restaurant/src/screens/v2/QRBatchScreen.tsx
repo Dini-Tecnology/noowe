@@ -52,5 +52,5 @@ export default function QRBatchScreen() {
         },
       ];
 
-  return <V2ListScreen title="QR Codes em Lote" subtitle="Gerar para várias mesas" showBack items={items} />;
+  return <V2ListScreen title="QR Codes em Lote" subtitle="Gerar para várias mesas" showBack items={items} onRefresh={refresh} />;
 }

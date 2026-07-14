@@ -14,7 +14,7 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
 };
 
 export default function OrderPaymentScreen() {
-  const { data: bills, loading, error } = useTableBills();
+  const { data: bills, loading, error, refresh } = useTableBills();
 
   const items: V2ListItem[] = loading
     ? [{ icon: Clock, label: 'Carregando pagamentos…' }]
@@ -32,5 +32,5 @@ export default function OrderPaymentScreen() {
                 : 'Aguardando fechamento',
           }));
 
-  return <V2ListScreen title="Pagamentos" subtitle="Rastreio de cobranças" showBack items={items} />;
+  return <V2ListScreen title="Pagamentos" subtitle="Rastreio de cobranças" showBack items={items} onRefresh={refresh} />;
 }

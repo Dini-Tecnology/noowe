@@ -59,7 +59,7 @@ export default function KitchenDisplayScreen() {
   const pendingOrder = pendingAction ? orders.find((o) => o.id === pendingAction.orderId) : null;
 
   return (
-    <V2Shell title="KDS Cozinha" subtitle="Kitchen Display System">
+    <V2Shell title="KDS Cozinha" subtitle="Kitchen Display System" showBack onRefresh={refresh}>
       <View style={styles.stats}>
         {FILTER_TABS.map((tab) => {
           const tone = tab.key === 'queue' ? 'warning' : tab.key === 'preparing' ? 'info' : 'success';

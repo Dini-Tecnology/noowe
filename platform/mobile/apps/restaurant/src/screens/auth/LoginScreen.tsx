@@ -19,10 +19,15 @@ import logger from '@okinawa/shared/utils/logger';
 import { loginSchema, validateForm } from '@/shared/validation/schemas';
 import Haptic from '@/shared/utils/haptics';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { NooweDialog } from '@okinawa/shared/components/NooweDialog';
 import { AuthScreenHeader } from '../../components/auth/AuthScreenHeader';
 import { AuthTextField } from '../../components/auth/AuthTextField';
 import { SocialAuthChips } from '../../components/auth/SocialAuthChips';
 import { AUTH_BRAND } from '../../components/auth/authScreenTheme';
+import {
+  getLocalizedAuthErrorMessage,
+  isEmailNotConfirmedError,
+} from '@/shared/utils/auth-errors';
 
 interface LoginScreenProps {
   navigation: any;
@@ -56,6 +61,8 @@ export default function LoginScreen({
   const [infoMessage, setInfoMessage] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [biometricQuickLoginAvailable, setBiometricQuickLoginAvailable] = useState(false);
+  const [emailDialog, setEmailDialog] = useState<'confirmation' | 'success' | 'error' | null>(null);
+  const [emailDialogMessage, setEmailDialogMessage] = useState('');
 
   const { isAvailable, isEnrolled, biometricType } = useBiometricAuth();
   const biometricIcon =
@@ -100,6 +107,31 @@ export default function LoginScreen({
     return true;
   }, [email, password]);
 
+  const handleResendConfirmation = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      await authService.resendSignupConfirmation(email.trim().toLowerCase());
+      setEmailDialogMessage(t('auth.resendConfirmationSent'));
+      setEmailDialog('success');
+      Haptic.successNotification();
+    } catch (err) {
+      const message = getLocalizedAuthErrorMessage(err, 'auth.resendConfirmationFailed');
+      setError(message);
+      setEmailDialogMessage(message);
+      setEmailDialog('error');
+      Haptic.errorNotification();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showEmailConfirmationDialog = () => {
+    setEmailDialogMessage(t('auth.confirmEmailRequired'));
+    setEmailDialog('confirmation');
+  };
+
   const handleLogin = async () => {
     setLoading(true);
     setError('');
@@ -119,7 +151,12 @@ export default function LoginScreen({
 
       Haptic.successNotification();
     } catch (err: any) {
-      setError(err.response?.data?.message || t('auth.loginFailed'));
+      if (isEmailNotConfirmedError(err)) {
+        setError('');
+        showEmailConfirmationDialog();
+      } else {
+        setError(getLocalizedAuthErrorMessage(err, 'auth.loginFailed'));
+      }
       Haptic.errorNotification();
     } finally {
       setLoading(false);
@@ -142,7 +179,7 @@ export default function LoginScreen({
       setInfoMessage(t('auth.passwordResetSent') || 'Enviamos um link de redefinição para seu e-mail.');
       Haptic.successNotification();
     } catch (err: any) {
-      setError(err.message || t('auth.resetPasswordFailed') || 'Não foi possível enviar o link de redefinição.');
+      setError(getLocalizedAuthErrorMessage(err, 'auth.resetPasswordFailed'));
       Haptic.errorNotification();
     } finally {
       setLoading(false);
@@ -179,8 +216,8 @@ export default function LoginScreen({
             }}
             placeholder={t('auth.emailPlaceholder')}
             error={fieldErrors.email}
-            accessibilityLabel="Email address"
-            accessibilityHint="Enter your staff email to log in"
+            accessibilityLabel={t('auth.a11y.email')}
+            accessibilityHint={t('auth.a11y.emailLoginHint')}
             inputProps={{
               keyboardType: 'email-address',
               autoCapitalize: 'none',
@@ -204,8 +241,8 @@ export default function LoginScreen({
             showPasswordToggle
             showPassword={showPassword}
             onTogglePassword={() => setShowPassword((v) => !v)}
-            accessibilityLabel="Password"
-            accessibilityHint="Enter your password to log in"
+            accessibilityLabel={t('auth.a11y.password')}
+            accessibilityHint={t('auth.a11y.passwordLoginHint')}
           />
 
           {error ? <HelperText type="error" style={styles.errorText}>{error}</HelperText> : null}
@@ -214,7 +251,7 @@ export default function LoginScreen({
           <TouchableOpacity
             onPress={handleForgotPassword}
             disabled={isBusy}
-            accessibilityLabel="Reset password"
+            accessibilityLabel={t('auth.a11y.resetPassword')}
             accessibilityRole="button"
             style={styles.forgotPasswordButton}
           >
@@ -225,7 +262,7 @@ export default function LoginScreen({
             style={[styles.primaryButton, isBusy && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={isBusy}
-            accessibilityLabel="Log in"
+            accessibilityLabel={t('auth.a11y.login')}
             accessibilityRole="button"
           >
             {loading ? (
@@ -262,7 +299,7 @@ export default function LoginScreen({
             <Text style={styles.footerText}>{t('auth.noAccountQuestion')} </Text>
             <TouchableOpacity
               onPress={() => navigation.navigate('Register')}
-              accessibilityLabel="Go to registration"
+              accessibilityLabel={t('auth.a11y.goToRegister')}
               accessibilityRole="link"
             >
               <Text style={styles.footerLink}>{t('auth.signUp')}</Text>
@@ -270,6 +307,35 @@ export default function LoginScreen({
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <NooweDialog
+        visible={emailDialog !== null}
+        title={emailDialog === 'error' ? t('common.error') : t('auth.confirmEmailTitle')}
+        message={emailDialogMessage}
+        icon={emailDialog === 'success' ? 'email-check-outline' : emailDialog === 'error' ? 'alert-circle-outline' : 'email-fast-outline'}
+        tone={emailDialog === 'success' ? 'success' : emailDialog === 'error' ? 'error' : 'brand'}
+        onDismiss={() => setEmailDialog(null)}
+        actions={emailDialog === 'confirmation'
+          ? [
+              {
+                label: t('auth.resendConfirmation'),
+                onPress: () => void handleResendConfirmation(),
+                variant: 'primary',
+                loading,
+              },
+              {
+                label: t('common.cancel'),
+                onPress: () => setEmailDialog(null),
+                variant: 'ghost',
+              },
+            ]
+          : [
+              {
+                label: t('common.ok'),
+                onPress: () => setEmailDialog(null),
+                variant: 'primary',
+              },
+            ]}
+      />
     </ScreenContainer>
   );
 }

@@ -78,9 +78,13 @@ interface RestaurantRoleContextValue {
   roleLoading: boolean;
   /** Owners/managers can switch to another role view for supervision purposes. */
   setRole: (role: RestaurantRole) => void;
+  /** Re-fetch the signed-in user's restaurant role. Returns true when a role exists. */
+  reloadRole: () => Promise<boolean>;
   /** All restaurants the signed-in user has an active role in. */
   restaurants: RestaurantOption[];
   restaurantsLoading: boolean;
+  /** Re-fetch all restaurants available to the signed-in user. */
+  reloadRestaurants: () => Promise<void>;
   /** Switch the active restaurant (multi-unit staff/owners). */
   switchRestaurant: (restaurantId: string) => Promise<void>;
   managerView: ManagerRoleView;
@@ -129,15 +133,56 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
     const { data, error } = await query.maybeSingle();
     if (error) {
       logger.warn('[RestaurantRoleContext] Failed to load role:', error.message);
-      return;
+      return false;
     }
     if (data) {
       const loaded = data.role as RestaurantRole;
       setServerRole(loaded);
       setRoleState(loaded);
       setRestaurantId(data.restaurant_id as string);
+      return true;
     }
+
+    // Fallback: restaurant ownership via restaurants.owner_id
+    let ownedQuery = getSupabaseClient()
+      .from('restaurants')
+      .select('id')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: true })
+      .limit(1);
+
+    ownedQuery = targetRestaurantId ? ownedQuery.eq('id', targetRestaurantId) : ownedQuery;
+
+    const { data: owned, error: ownedError } = await ownedQuery.maybeSingle();
+    if (ownedError) {
+      logger.warn('[RestaurantRoleContext] Failed to load owned restaurant:', ownedError.message);
+      setServerRole(null);
+      setRestaurantId(null);
+      return false;
+    }
+
+    if (owned?.id) {
+      setServerRole('owner');
+      setRoleState('owner');
+      setRestaurantId(owned.id as string);
+      return true;
+    }
+
+    setServerRole(null);
+    setRestaurantId(null);
+    return false;
   }, []);
+
+  const reloadRole = useCallback(async () => {
+    const { user } = await getOptionalSupabaseSessionUser();
+    if (!user) return false;
+    setRoleLoading(true);
+    try {
+      return await loadRoleForRestaurant(user.id);
+    } finally {
+      setRoleLoading(false);
+    }
+  }, [loadRoleForRestaurant]);
 
   const switchRestaurant = useCallback(async (targetRestaurantId: string) => {
     const { user } = await getOptionalSupabaseSessionUser();
@@ -150,6 +195,25 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
     }
   }, [loadRoleForRestaurant]);
 
+  const reloadRestaurants = useCallback(async () => {
+    setRestaurantsLoading(true);
+    try {
+      const rawRestaurants = await supabaseApiAdapter.getMyRestaurants();
+      setRestaurants(Array.isArray(rawRestaurants) ? rawRestaurants.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        city: r.city,
+        state: r.state,
+        serviceType: r.service_type,
+        logoUrl: r.logo_url ?? null,
+      })) : []);
+    } catch (err) {
+      logger.warn('[RestaurantRoleContext] Failed to load restaurants list:', err);
+    } finally {
+      setRestaurantsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -160,23 +224,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
 
         await loadRoleForRestaurant(user.id);
 
-        try {
-          const rawRestaurants = await supabaseApiAdapter.getMyRestaurants();
-          if (!cancelled && Array.isArray(rawRestaurants)) {
-            setRestaurants(rawRestaurants.map((r: any) => ({
-              id: r.id,
-              name: r.name,
-              city: r.city,
-              state: r.state,
-              serviceType: r.service_type,
-              logoUrl: r.logo_url ?? null,
-            })));
-          }
-        } catch (err) {
-          if (!cancelled) logger.warn('[RestaurantRoleContext] Failed to load restaurants list:', err);
-        } finally {
-          if (!cancelled) setRestaurantsLoading(false);
-        }
+        if (!cancelled) await reloadRestaurants();
       } catch (err) {
         if (!cancelled) {
           logger.warn('[RestaurantRoleContext] Unexpected error:', err);
@@ -188,7 +236,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
 
     void loadRole();
     return () => { cancelled = true; };
-  }, []);
+  }, [loadRoleForRestaurant, reloadRestaurants]);
 
   const setRole = (newRole: RestaurantRole) => {
     // Only supervisory roles can impersonate another role view.
@@ -203,8 +251,10 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       restaurantId,
       roleLoading,
       setRole,
+      reloadRole,
       restaurants,
       restaurantsLoading,
+      reloadRestaurants,
       switchRestaurant,
       managerView,
       setManagerView,
@@ -220,7 +270,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       setWaiterView,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [role, serverRole, restaurantId, roleLoading, restaurants, restaurantsLoading, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView],
+    [role, serverRole, restaurantId, roleLoading, reloadRole, restaurants, restaurantsLoading, reloadRestaurants, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView],
   );
 
   return (

@@ -2,7 +2,6 @@ import { Platform, StyleSheet } from 'react-native';
 
 /** Shared NOOWE restaurant auth screen visual tokens */
 export const AUTH_BRAND = {
-  logoBg: '#FFF3EE',
   googleBg: '#FFEBEE',
   googleText: '#E53935',
   appleBg: '#F3F4F6',

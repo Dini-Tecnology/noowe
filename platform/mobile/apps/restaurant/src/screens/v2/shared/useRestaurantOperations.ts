@@ -4,6 +4,7 @@ import { getSupabaseClient } from '@okinawa/shared/services/supabase';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import type { KdsOrder, KdsStatus, OrderStatus, TabOrder } from './v2Types';
+import { useRegisterRemoteRefresh } from './remoteRefreshRegistry';
 
 type AsyncState<T> = {
   data: T;
@@ -63,6 +64,7 @@ type RawTable = {
   seats?: number | string | null;
   status?: string | null;
   section?: string | null;
+  shape?: string | null;
   qr_code?: string | null;
   active_session?: {
     guest_count?: number | string | null;
@@ -73,10 +75,12 @@ type RawTable = {
 export type V2Table = {
   id: string;
   label: string;
+  seats: number;
   status: 'available' | 'occupied' | 'reserved' | 'cleaning' | 'payment' | 'blocked';
   guests: number;
   time: string;
   section: string;
+  shape: string;
   hasQR: boolean;
 };
 
@@ -200,15 +204,18 @@ export function mapTable(raw: RawTable): V2Table {
   return {
     id: raw.id,
     label: String(raw.table_number || raw.id.slice(0, 4)),
+    seats: toNumber(raw.seats, 1),
     status,
     guests: toNumber(raw.active_session?.guest_count, 0),
     time: elapsedLabel(raw.active_session?.started_at),
     section: raw.section || 'Salao',
+    shape: raw.shape || 'rectangle',
     hasQR: Boolean(raw.qr_code),
   };
 }
 
 function useRealtimeRefresh(table: string, restaurantId: string | null, refresh: () => void) {
+  useRegisterRemoteRefresh(refresh);
   const refreshRef = useRef(refresh);
   useEffect(() => { refreshRef.current = refresh; }, [refresh]);
 
@@ -294,14 +301,18 @@ export function useRestaurantTables(): AsyncState<V2Table[]> {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const raw = await ApiService.getTables();
+      if (!restaurantId) {
+        setData([]);
+        return;
+      }
+      const raw = await supabaseApiAdapter.getRestaurantTables(restaurantId);
       setData((Array.isArray(raw) ? raw : []).map(mapTable));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar mesas');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [restaurantId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('tables', restaurantId, refresh);
@@ -427,6 +438,7 @@ export function useDashboardSnapshot(): AsyncState<DashboardSnapshot | null> {
     }
   }, []);
 
+  useRegisterRemoteRefresh(refresh);
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -478,6 +490,7 @@ export function useStaff(): AsyncState<StaffMember[]> {
     }
   }, []);
 
+  useRegisterRemoteRefresh(refresh);
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -522,6 +535,7 @@ export function useCashRegister(): AsyncState<CashRegisterSession | null> {
     }
   }, []);
 
+  useRegisterRemoteRefresh(refresh);
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -571,6 +585,7 @@ export function useCashMovements(): AsyncState<CashMovement[]> {
     }
   }, []);
 
+  useRegisterRemoteRefresh(refresh);
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -681,6 +696,7 @@ export function useStock(): AsyncState<StockItem[]> {
     }
   }, []);
 
+  useRegisterRemoteRefresh(refresh);
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -732,6 +748,7 @@ export function usePromotions(): AsyncState<Promotion[]> {
     }
   }, [restaurantId]);
 
+  useRegisterRemoteRefresh(refresh);
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -781,6 +798,7 @@ export function useMenuItems(): AsyncState<MenuItemSummary[]> {
     }
   }, []);
 
+  useRegisterRemoteRefresh(refresh);
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };

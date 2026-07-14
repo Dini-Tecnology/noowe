@@ -26,6 +26,7 @@ interface AuthTextFieldProps {
   inputProps?: Omit<TextInputProps, 'value' | 'onChangeText' | 'placeholder' | 'secureTextEntry'>;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  rightAction?: React.ReactNode;
 }
 
 export function AuthTextField({
@@ -42,6 +43,7 @@ export function AuthTextField({
   inputProps,
   accessibilityLabel,
   accessibilityHint,
+  rightAction,
 }: AuthTextFieldProps) {
   const colors = useColors();
 
@@ -67,6 +69,7 @@ export function AuthTextField({
           accessibilityHint={accessibilityHint}
           {...inputProps}
         />
+        {rightAction}
         {showPasswordToggle && onTogglePassword ? (
           <TouchableOpacity
             onPress={onTogglePassword}

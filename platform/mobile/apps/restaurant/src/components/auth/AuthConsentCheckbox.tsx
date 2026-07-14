@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text, HelperText } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -46,7 +46,7 @@ export function AuthConsentCheckbox({
         <View
           style={[
             styles.checkbox,
-            { borderColor: hasError ? colors.error : colors.border },
+            { borderColor: hasError ? colors.error : colors.border }, 
             checked && {
               backgroundColor: colors.primary,
               borderColor: colors.primary,
@@ -81,17 +81,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     gap: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
   },
   checkbox: {
     width: 26,

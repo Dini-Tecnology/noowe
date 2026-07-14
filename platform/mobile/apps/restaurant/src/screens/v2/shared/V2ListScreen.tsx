@@ -19,13 +19,14 @@ interface V2ListScreenProps {
   showBack?: boolean;
   hero?: ReactNode;
   items: V2ListItem[];
+  onRefresh?: () => void | Promise<void>;
 }
 
-export function V2ListScreen({ title, subtitle, showBack, hero, items }: V2ListScreenProps) {
+export function V2ListScreen({ title, subtitle, showBack, hero, items, onRefresh }: V2ListScreenProps) {
   const colors = useColors();
 
   return (
-    <V2Shell title={title} subtitle={subtitle} showBack={showBack}>
+    <V2Shell title={title} subtitle={subtitle} showBack={showBack} onRefresh={onRefresh}>
       {hero}
       <View style={[styles.list, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {items.map((item, index) => {

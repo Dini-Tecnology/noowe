@@ -67,8 +67,64 @@ export interface PaymentMethods {
   creditCard: boolean;
   debitCard: boolean;
   cash: boolean;
+  applePay: boolean;
+  googlePay: boolean;
+  tapToPay: boolean;
   pixKey: string;
   feePercent: number;
+  serviceFeeEnabled: boolean;
+  tipsEnabled: boolean;
+  tipOptions: number[];
+  tipAllowCustom: boolean;
+  splitIndividual: boolean;
+  splitEqual: boolean;
+  splitByItem: boolean;
+  splitFixed: boolean;
+}
+
+export interface KitchenBarKdsPrefs {
+  kdsScreens: number;
+  defaultPrepMinutes: number;
+  autoRouting: boolean;
+  priorityAlerts: boolean;
+  fireOrderEnabled: boolean;
+  batchCooking: boolean;
+}
+
+export interface MarketplaceFeatures {
+  loyalty: boolean;
+  events: boolean;
+  happyHour: boolean;
+  aiRecommendations: boolean;
+  vip: boolean;
+  experiencePackages: boolean;
+  smartReviews: boolean;
+  advancedAnalytics: boolean;
+}
+
+export interface CustomerExperiencePrefs {
+  onlineReservations: boolean;
+  waitlist: boolean;
+  eventReservations: boolean;
+  tableService: boolean;
+  qrOrdering: boolean;
+  counterService: boolean;
+  selfService: boolean;
+  smartAllocation: boolean;
+  postVisitFeedback: boolean;
+  maxAdvanceDays: number;
+  toleranceMinutes: number;
+  requireDeposit: boolean;
+  journeyDiscovery: boolean;
+  journeyReservation: boolean;
+  journeyArrival: boolean;
+  journeyMenu: boolean;
+  journeyOrder: boolean;
+  journeyTracking: boolean;
+  journeyConsumption: boolean;
+  journeyBill: boolean;
+  journeyPayment: boolean;
+  journeyPostVisit: boolean;
 }
 
 export function hubStatusTone(status: string): V2Tone {

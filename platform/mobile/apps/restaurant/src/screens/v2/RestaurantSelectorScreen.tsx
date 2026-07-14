@@ -3,7 +3,7 @@ import { V2ListScreen, type V2ListItem } from './shared/V2ListScreen';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 
 export default function RestaurantSelectorScreen() {
-  const { restaurants, restaurantsLoading, restaurantId, switchRestaurant } = useRestaurantRole();
+  const { restaurants, restaurantsLoading, restaurantId, switchRestaurant, reloadRestaurants } = useRestaurantRole();
 
   const items: V2ListItem[] = restaurantsLoading
     ? [{ icon: Store, label: 'Carregando unidades…' }]
@@ -18,5 +18,5 @@ export default function RestaurantSelectorScreen() {
           onPress: restaurant.id === restaurantId ? undefined : () => { void switchRestaurant(restaurant.id); },
         }));
 
-  return <V2ListScreen title="Selecionar Restaurante" subtitle="Multi-unidade" showBack items={items} />;
+  return <V2ListScreen title="Selecionar Restaurante" subtitle="Multi-unidade" showBack items={items} onRefresh={reloadRestaurants} />;
 }

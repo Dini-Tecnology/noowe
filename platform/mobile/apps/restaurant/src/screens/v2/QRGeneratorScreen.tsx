@@ -33,5 +33,5 @@ export default function QRGeneratorScreen() {
           onPress: () => { void generate(table.id); },
         }));
 
-  return <V2ListScreen title="Gerar QR Code" subtitle="Mesa ou estação" showBack items={items} />;
+  return <V2ListScreen title="Gerar QR Code" subtitle="Mesa ou estação" showBack items={items} onRefresh={refresh} />;
 }

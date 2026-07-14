@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Calendar, ClipboardList, Map, Users } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
@@ -9,19 +9,22 @@ import { useRestaurantTables, useWaitlist } from './shared/useRestaurantOperatio
 export default function MaitreScreen() {
   const navigation = useNavigation<any>();
   const { setRole, setMaitreView, restaurantId } = useRestaurantRole();
-  const { data: tables } = useRestaurantTables();
-  const { data: waitlist } = useWaitlist();
+  const { data: tables, refresh: refreshTables } = useRestaurantTables();
+  const { data: waitlist, refresh: refreshWaitlist } = useWaitlist();
   const [reservationsToday, setReservationsToday] = useState<number | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadReservations = useCallback(async () => {
     if (!restaurantId) return;
     const today = new Date().toISOString().slice(0, 10);
-    supabaseApiAdapter.getRestaurantReservations(restaurantId, today)
-      .then((rows) => { if (!cancelled) setReservationsToday(Array.isArray(rows) ? rows.length : 0); })
-      .catch(() => { if (!cancelled) setReservationsToday(null); });
-    return () => { cancelled = true; };
+    try {
+      const rows = await supabaseApiAdapter.getRestaurantReservations(restaurantId, today);
+      setReservationsToday(Array.isArray(rows) ? rows.length : 0);
+    } catch {
+      setReservationsToday(null);
+    }
   }, [restaurantId]);
+
+  useEffect(() => { void loadReservations(); }, [loadReservations]);
 
   const availableTables = tables.filter((table) => table.status === 'available').length;
   const avgWaitMinutes = waitlist.length > 0
@@ -35,7 +38,7 @@ export default function MaitreScreen() {
   };
 
   return (
-    <V2ListScreen title="Maître" subtitle="Sala, fluxo e reservas" showBack items={[
+    <V2ListScreen title="Maître" subtitle="Sala, fluxo e reservas" showBack onRefresh={() => Promise.all([refreshTables(), refreshWaitlist(), loadReservations()]).then(() => undefined)} items={[
       {
         icon: Calendar,
         label: 'Reservas',

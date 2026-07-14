@@ -73,7 +73,7 @@ export default function OrdersScreen() {
   const dialogConfig = pendingAction ? ACTION_MESSAGES[pendingAction.action] : null;
 
   return (
-    <V2Shell title="Pedidos" subtitle="Gestão em tempo real">
+    <V2Shell title="Pedidos" subtitle="Gestão em tempo real" showBack onRefresh={refresh}>
       <View style={styles.filters}>
         {FILTER_TABS.map((tab) => (
           <TouchableOpacity

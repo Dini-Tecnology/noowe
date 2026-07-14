@@ -15,11 +15,11 @@ export function AuthScreenHeader({ title, subtitle }: AuthScreenHeaderProps) {
 
   return (
     <View style={styles.header}>
-      <View style={styles.logoBox}>
+      <View style={styles.logoWrapper}>
         <Image
           source={RESTAURANT_BRANDING.icon}
           style={styles.logoIcon}
-          resizeMode="contain"
+          resizeMode="cover"
           accessibilityLabel="NOOWE Restaurant"
         />
       </View>
@@ -36,18 +36,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 28,
   },
-  logoBox: {
+  logoWrapper: {
     width: 72,
     height: 72,
     borderRadius: AUTH_BRAND.borderRadius,
-    backgroundColor: AUTH_BRAND.logoBg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
     marginBottom: 20,
   },
   logoIcon: {
-    width: 44,
-    height: 44,
+    width: 72,
+    height: 72,
   },
   title: {
     fontSize: 26,

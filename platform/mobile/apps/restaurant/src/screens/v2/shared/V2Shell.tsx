@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { RefreshControl, View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { ChevronLeft } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -10,23 +10,49 @@ interface V2ShellProps {
   title: string;
   subtitle?: string;
   showBack?: boolean;
+  onBack?: () => void;
   headerRight?: ReactNode;
   children: ReactNode;
   scroll?: boolean;
   bottomPadding?: number;
+  onRefresh?: () => void | Promise<void>;
+  refreshing?: boolean;
 }
 
 export function V2Shell({
   title,
   subtitle,
   showBack = false,
+  onBack,
   headerRight,
   children,
   scroll = true,
   bottomPadding = 100,
+  onRefresh,
+  refreshing: controlledRefreshing,
 }: V2ShellProps) {
   const colors = useColors();
   const navigation = useNavigation();
+  const [internalRefreshing, setInternalRefreshing] = React.useState(false);
+  const refreshing = controlledRefreshing ?? internalRefreshing;
+
+  const handleRefresh = React.useCallback(async () => {
+    if (!onRefresh || refreshing) return;
+    if (controlledRefreshing === undefined) setInternalRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      if (controlledRefreshing === undefined) setInternalRefreshing(false);
+    }
+  }, [controlledRefreshing, onRefresh, refreshing]);
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    navigation.goBack();
+  };
 
   const header = (
     <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -34,7 +60,7 @@ export function V2Shell({
         <View style={styles.headerLeft}>
           {showBack && (
             <TouchableOpacity
-              onPress={() => navigation.goBack()}
+              onPress={handleBack}
               style={styles.backBtn}
               accessibilityLabel="Voltar"
             >
@@ -68,6 +94,15 @@ export function V2Shell({
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: bottomPadding }]}
         showsVerticalScrollIndicator={false}
+        alwaysBounceVertical={Boolean(onRefresh)}
+        refreshControl={onRefresh ? (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { void handleRefresh(); }}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        ) : undefined}
       >
         {children}
       </ScrollView>

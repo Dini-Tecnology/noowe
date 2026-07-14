@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Tag, Percent } from 'lucide-react-native';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2ListScreen, type V2ListItem } from './shared/V2ListScreen';
@@ -25,15 +25,20 @@ export default function PromotionsScreen() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
     if (!restaurantId) return;
-    supabaseApiAdapter.getPromotions(restaurantId, 'active')
-      .then((rows) => { if (!cancelled) setPromotions(Array.isArray(rows) ? rows : []); })
-      .catch(() => { if (!cancelled) setPromotions([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    setLoading(true);
+    try {
+      const rows = await supabaseApiAdapter.getPromotions(restaurantId, 'active');
+      setPromotions(Array.isArray(rows) ? rows : []);
+    } catch {
+      setPromotions([]);
+    } finally {
+      setLoading(false);
+    }
   }, [restaurantId]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const items: V2ListItem[] = loading
     ? [{ icon: Tag, label: 'Carregando campanhas…' }]
@@ -45,5 +50,5 @@ export default function PromotionsScreen() {
           subtitle: `${formatWindow(promo.valid_from, promo.valid_until)}${promo.discount_value ? ` · ${promo.discount_value}% off` : ''}`,
         }));
 
-  return <V2ListScreen title="Promoções" subtitle="Campanhas ativas" showBack items={items} />;
+  return <V2ListScreen title="Promoções" subtitle="Campanhas ativas" showBack items={items} onRefresh={load} />;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { QrCode, Users, Bell } from 'lucide-react-native';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2ListScreen, type V2ListItem } from './shared/V2ListScreen';
@@ -12,21 +12,21 @@ interface CasualDiningConfig {
 
 export default function CasualDiningScreen() {
   const { restaurantId } = useRestaurantRole();
-  const { data: tables } = useRestaurantTables();
+  const { data: tables, refresh: refreshTables } = useRestaurantTables();
   const [config, setConfig] = useState<CasualDiningConfig | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadConfig = useCallback(async () => {
     if (!restaurantId) return;
-    supabaseApiAdapter.getServiceConfigs(restaurantId)
-      .then((rows) => {
-        if (cancelled) return;
-        const casual = Array.isArray(rows) ? rows.find((r: any) => r.service_type === 'casual_dining') : null;
-        setConfig(casual ?? {});
-      })
-      .catch(() => { if (!cancelled) setConfig({}); });
-    return () => { cancelled = true; };
+    try {
+      const rows = await supabaseApiAdapter.getServiceConfigs(restaurantId);
+      const casual = Array.isArray(rows) ? rows.find((r: any) => r.service_type === 'casual_dining') : null;
+      setConfig(casual ?? {});
+    } catch {
+      setConfig({});
+    }
   }, [restaurantId]);
+
+  useEffect(() => { void loadConfig(); }, [loadConfig]);
 
   const tablesWithQR = tables.filter((t) => t.hasQR).length;
 
@@ -36,5 +36,5 @@ export default function CasualDiningScreen() {
     { icon: Users, label: 'Pedido compartilhado', subtitle: config?.partial_order_enabled ? 'Split por item' : 'Desativado' },
   ];
 
-  return <V2ListScreen title="Casual Dining" subtitle="Configuração do modo" showBack items={items} />;
+  return <V2ListScreen title="Casual Dining" subtitle="Configuração do modo" showBack items={items} onRefresh={() => Promise.all([refreshTables(), loadConfig()]).then(() => undefined)} />;
 }

@@ -3,7 +3,7 @@ import { V2ListScreen, type V2ListItem } from './shared/V2ListScreen';
 import { useWaitlist } from './shared/useRestaurantOperations';
 
 export default function WaitlistScreen() {
-  const { data: waitlist, loading, error } = useWaitlist();
+  const { data: waitlist, loading, error, refresh } = useWaitlist();
 
   const items: V2ListItem[] = loading
     ? [{ icon: Clock, label: 'Carregando fila de espera…' }]
@@ -17,5 +17,5 @@ export default function WaitlistScreen() {
             subtitle: entry.estimatedWaitMinutes != null ? `Est. ${entry.estimatedWaitMinutes} min` : entry.status,
           }));
 
-  return <V2ListScreen title="Fila de Espera" subtitle="Gestão de waitlist" showBack items={items} />;
+  return <V2ListScreen title="Fila de Espera" subtitle="Gestão de waitlist" showBack items={items} onRefresh={refresh} />;
 }
