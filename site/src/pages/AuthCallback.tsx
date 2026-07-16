@@ -5,16 +5,68 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabaseAuthService } from '@/lib/supabase-auth';
 
+function readHashParams() {
+  const hash = window.location.hash.replace(/^#/, '');
+  if (!hash) return new URLSearchParams();
+  return new URLSearchParams(hash);
+}
+
+function resolveMobileScheme(appParam: string | null) {
+  if (appParam === 'restaurant') return 'okinawa-restaurant';
+  if (appParam === 'client') return 'okinawa-client';
+  return null;
+}
+
+function mapAuthError(code: string | null, description: string | null) {
+  if (code === 'otp_expired') {
+    return 'Este link de confirmação expirou. Faça um novo cadastro ou solicite outro e-mail.';
+  }
+  if (description) return description;
+  if (code) return `Não foi possível confirmar: ${code}`;
+  return 'Link inválido ou expirado.';
+}
+
+function buildMobileDeepLink(scheme: string) {
+  return `${scheme}://auth/callback${window.location.search}${window.location.hash}`;
+}
+
 export default function AuthCallback() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Confirmando sua sessão...');
 
   useEffect(() => {
     const confirmSession = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = readHashParams();
+      const mobileScheme = resolveMobileScheme(searchParams.get('app'));
+      const authError = hashParams.get('error') ?? hashParams.get('error_code');
+      const errorDescription = hashParams.get('error_description');
+
+      if (authError) {
+        if (mobileScheme) {
+          window.location.replace(buildMobileDeepLink(mobileScheme));
+          return;
+        }
+        setStatus('error');
+        setMessage(mapAuthError(authError, errorDescription));
+        return;
+      }
+
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const code = searchParams.get('code');
+
+      if (mobileScheme && (accessToken || refreshToken || code)) {
+        setMessage('Abrindo o app NOOWE...');
+        window.location.replace(buildMobileDeepLink(mobileScheme));
+        return;
+      }
+
       try {
-        const code = new URLSearchParams(window.location.search).get('code');
         if (code) {
           await supabaseAuthService.exchangeCodeForSession(code);
+        } else if (accessToken && refreshToken) {
+          await supabaseAuthService.setSessionFromTokens(accessToken, refreshToken);
         } else {
           await supabaseAuthService.getCurrentUser();
         }

@@ -16,6 +16,7 @@ import {
   Alert,
   Animated,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import {
   Text,
@@ -122,7 +123,7 @@ export default function ClubQueueScreen({ route }: ClubQueueScreenProps) {
   }, [queueEntry?.status, pulseAnim]);
 
   // Fetch current position
-  const { isLoading } = useQuery({
+  const { isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['club-queue-position', restaurantId],
     queryFn: async () => {
       const response = await ApiService.get(
@@ -326,6 +327,7 @@ export default function ClubQueueScreen({ route }: ClubQueueScreenProps) {
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { void refetch(); }} tintColor={colors.primary} colors={[colors.primary]} />}
     >
       {/* Event Name */}
       <Text

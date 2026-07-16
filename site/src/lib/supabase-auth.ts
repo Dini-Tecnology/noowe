@@ -6,6 +6,7 @@ export type AppRole =
   | 'waiter'
   | 'barman'
   | 'chef'
+  | 'cook'
   | 'maitre'
   | 'manager'
   | 'owner'
@@ -65,7 +66,7 @@ function getBrowserUrl(path: string) {
 
 function normalizeRole(role: string | null | undefined): AppRole | null {
   const value = role?.toLowerCase();
-  const allowed: AppRole[] = ['customer', 'waiter', 'barman', 'chef', 'maitre', 'manager', 'owner', 'admin'];
+  const allowed: AppRole[] = ['customer', 'waiter', 'barman', 'chef', 'cook', 'maitre', 'manager', 'owner', 'admin'];
   return allowed.includes(value as AppRole) ? (value as AppRole) : null;
 }
 
@@ -259,6 +260,15 @@ export const supabaseAuthService = {
 
   async exchangeCodeForSession(code: string) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw mapAuthError(error);
+    return data.session;
+  },
+
+  async setSessionFromTokens(accessToken: string, refreshToken: string) {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
     if (error) throw mapAuthError(error);
     return data.session;
   },

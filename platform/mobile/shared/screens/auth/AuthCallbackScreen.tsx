@@ -16,12 +16,19 @@ interface AuthCallbackScreenProps {
     params?: {
       code?: string;
       url?: string;
+      token_hash?: string;
+      type?: string;
     };
   };
   onComplete?: () => void;
 }
 
 async function resolveAuthSession(route?: AuthCallbackScreenProps['route']) {
+  const tokenHash = route?.params?.token_hash;
+  if (tokenHash) {
+    return authService.verifyEmailTokenHash(tokenHash);
+  }
+
   const code = route?.params?.code;
   if (code) {
     return authService.exchangeCodeForSession(code);
@@ -54,16 +61,23 @@ function firstParam(value: string | string[] | undefined) {
 }
 
 export function AuthCallbackScreen({ navigation, route, onComplete }: AuthCallbackScreenProps) {
-  const localParams = useLocalSearchParams<{ code?: string | string[]; url?: string | string[] }>();
+  const localParams = useLocalSearchParams<{
+    code?: string | string[];
+    url?: string | string[];
+    token_hash?: string | string[];
+    type?: string | string[];
+  }>();
   const resolvedRoute = useMemo(
     () =>
       route ?? {
         params: {
           code: firstParam(localParams.code),
           url: firstParam(localParams.url),
+          token_hash: firstParam(localParams.token_hash),
+          type: firstParam(localParams.type),
         },
       },
-    [localParams.code, localParams.url, route]
+    [localParams.code, localParams.token_hash, localParams.type, localParams.url, route]
   );
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Confirmando seu acesso...');

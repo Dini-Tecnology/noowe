@@ -1,5 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
+import { getAuthRedirectUrl } from '../utils/auth-redirect';
 import { getSupabaseClient } from './supabase';
 
 type SocialProvider = 'apple' | 'google';
@@ -15,8 +16,24 @@ export interface NormalizedAuthUser {
   restaurant_ids: string[];
 }
 
-function getRedirectUrl(path: string) {
-  return Linking.createURL(path);
+function getRedirectUrl(path: 'auth/callback' | 'auth/reset-password') {
+  return getAuthRedirectUrl(path);
+}
+
+function mapAuthCallbackError(params: Record<string, string>) {
+  const code = params.error_code ?? params.error;
+  const description = params.error_description ?? params.error;
+
+  if (code === 'otp_expired') {
+    return 'Este link de confirmação expirou. Faça um novo cadastro ou solicite outro e-mail de confirmação.';
+  }
+  if (code === 'access_denied' && description) {
+    return description;
+  }
+  if (description) {
+    return description;
+  }
+  return 'Não foi possível confirmar este link.';
 }
 
 function readAuthParamsFromUrl(url: string) {
@@ -280,6 +297,17 @@ export const supabaseAuthAdapter = {
     return normalizeSession(data.session, data.user);
   },
 
+  async resendSignupConfirmation(email: string) {
+    const { error } = await getSupabaseClient().functions.invoke('register-with-resend', {
+      body: {
+        action: 'resend',
+        email,
+        emailRedirectTo: getRedirectUrl('auth/callback'),
+      },
+    });
+    if (error) await throwFunctionError(error);
+  },
+
   async register(email: string, password: string, fullName: string) {
     const { data, error } = await getSupabaseClient().functions.invoke('register-with-resend', {
       body: {
@@ -427,6 +455,18 @@ export const supabaseAuthAdapter = {
     return normalizeSession(data.session, data.user ?? null);
   },
 
+  async verifyEmailTokenHash(tokenHash: string) {
+    const { data, error } = await getSupabaseClient().auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'email',
+    });
+    if (error) throw error;
+    if (data.user) {
+      await upsertProfile(data.user);
+    }
+    return normalizeSession(data.session, data.user ?? null);
+  },
+
   async sendPasswordReset(email: string) {
     const { error } = await getSupabaseClient().auth.resetPasswordForEmail(email, {
       redirectTo: getRedirectUrl('auth/reset-password'),
@@ -446,14 +486,18 @@ export const supabaseAuthAdapter = {
 
   async recoverSessionFromUrl(url: string) {
     const params = readAuthParamsFromUrl(url);
-    const errorDescription = params.error_description ?? params.error;
+    const authError = params.error ?? params.error_code ?? params.error_description;
 
-    if (errorDescription) {
-      throw new Error(errorDescription);
+    if (authError) {
+      throw new Error(mapAuthCallbackError(params));
     }
 
     if (params.code) {
       return supabaseAuthAdapter.exchangeCodeForSession(params.code);
+    }
+
+    if (params.token_hash) {
+      return supabaseAuthAdapter.verifyEmailTokenHash(params.token_hash);
     }
 
     if (params.access_token && params.refresh_token) {

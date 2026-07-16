@@ -3,7 +3,9 @@ import * as Linking from 'expo-linking';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { authService } from '../../services/auth';
-import { resetPasswordSchema } from '../../validation/schemas';
+import { resetPasswordSchema, validateForm } from '../../validation/schemas';
+import { localizeValidationMessage } from '../../validation/messages';
+import { useI18n } from '../../hooks/useI18n';
 import logger from '../../utils/logger';
 
 type NavigationLike = {
@@ -39,6 +41,7 @@ function firstParam(value: string | string[] | undefined) {
 }
 
 export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPasswordScreenProps) {
+  const { t } = useI18n();
   const localParams = useLocalSearchParams<{ url?: string | string[] }>();
   const resolvedRoute = useMemo(
     () =>
@@ -54,7 +57,7 @@ export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPass
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('Validando link de recuperacao...');
+  const [message, setMessage] = useState(t('auth.validatingResetLink'));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,16 +69,20 @@ export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPass
         if (url) {
           await authService.recoverSessionFromUrl(url);
         } else if (!(await authService.isAuthenticated())) {
-          throw new Error('Link de recuperacao ausente ou expirado.');
+          throw new Error(t('auth.resetLinkMissing'));
         }
 
         if (!active) return;
         setReady(true);
-        setMessage('Digite sua nova senha.');
+        setMessage(t('auth.enterNewPassword'));
       } catch (prepareError) {
         if (!active) return;
         logger.warn('[Auth] Password recovery session failed:', prepareError);
-        setError(prepareError instanceof Error ? prepareError.message : 'Nao foi possivel validar este link.');
+        setError(
+          prepareError instanceof Error
+            ? localizeValidationMessage(prepareError.message)
+            : t('auth.resetLinkInvalid'),
+        );
       } finally {
         if (active) {
           setLoading(false);
@@ -91,9 +98,10 @@ export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPass
   }, [resolvedRoute]);
 
   const handleSubmit = async () => {
-    const parsed = resetPasswordSchema.safeParse({ password, confirmPassword });
+    const parsed = validateForm(resetPasswordSchema, { password, confirmPassword });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Confira a nova senha.');
+      const firstError = Object.values(parsed.errors)[0];
+      setError(firstError ?? t('auth.checkNewPassword'));
       return;
     }
 
@@ -102,11 +110,11 @@ export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPass
     try {
       await authService.updatePassword(password);
       await authService.logout();
-      setMessage('Senha atualizada. Entre novamente com a nova senha.');
+      setMessage(t('auth.passwordUpdatedLoginAgain'));
       setTimeout(() => leaveReset(navigation, onComplete), 900);
     } catch (saveError) {
       logger.warn('[Auth] Password update failed:', saveError);
-      setError(saveError instanceof Error ? saveError.message : 'Nao foi possivel atualizar sua senha.');
+      setError(saveError instanceof Error ? saveError.message : t('auth.updatePasswordFailed'));
     } finally {
       setSaving(false);
     }
@@ -114,7 +122,7 @@ export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPass
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Redefinir senha</Text>
+      <Text style={styles.title}>{t('auth.resetPassword')}</Text>
       <Text style={styles.message}>{error ?? message}</Text>
 
       {loading && <ActivityIndicator style={styles.loader} size="large" color="#FF6B35" />}
@@ -124,7 +132,7 @@ export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPass
           <TextInput
             value={password}
             onChangeText={setPassword}
-            placeholder="Nova senha"
+            placeholder={t('auth.password')}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
@@ -134,7 +142,7 @@ export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPass
           <TextInput
             value={confirmPassword}
             onChangeText={setConfirmPassword}
-            placeholder="Confirmar nova senha"
+            placeholder={t('auth.confirmPassword')}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
@@ -142,14 +150,14 @@ export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPass
             textContentType="newPassword"
           />
           <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSubmit} disabled={saving}>
-            <Text style={styles.buttonText}>{saving ? 'Salvando...' : 'Atualizar senha'}</Text>
+            <Text style={styles.buttonText}>{saving ? t('common.loading') : t('auth.resetPassword')}</Text>
           </Pressable>
         </View>
       )}
 
       {!loading && !ready && (
         <Pressable style={styles.secondaryButton} onPress={() => leaveReset(navigation, onComplete)}>
-          <Text style={styles.secondaryButtonText}>Voltar para login</Text>
+          <Text style={styles.secondaryButtonText}>{t('auth.signIn')}</Text>
         </Pressable>
       )}
     </View>

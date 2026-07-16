@@ -25,6 +25,7 @@ export type StaffRole =
   | 'owner'
   | 'manager'
   | 'chef'
+  | 'cook'
   | 'waiter'
   | 'barman'
   | 'maitre'

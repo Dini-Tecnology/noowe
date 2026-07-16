@@ -22,6 +22,7 @@ import { useI18n } from '@/shared/hooks/useI18n';
 import { LegalConsentSection } from '@okinawa/shared/components/LegalConsentSection';
 import { otpAuthService } from '@/shared/services/otp-auth';
 import { validateForm, phoneRegisterSchema } from '@/shared/validation/schemas';
+import { getLocalizedAuthErrorMessage } from '@/shared/utils/auth-errors';
 import Haptic from '@/shared/utils/haptics';
 import { useScreenTracking } from '@/shared/hooks/useAnalytics';
 
@@ -122,9 +123,9 @@ export const PhoneRegisterScreen: React.FC<PhoneRegisterScreenProps> = ({
 
     // Birth date is required (LGPD)
     if (!birthDate) {
-      errors.birthDate = t('auth.birthDateRequired') || 'Birth date is required';
+      errors.birthDate = t('auth.birthDateRequired');
     } else if (!isAtLeast18(birthDate)) {
-      errors.birthDate = t('auth.mustBe18') || 'You must be at least 18 years old';
+      errors.birthDate = t('auth.mustBe18');
     }
 
     if (Object.keys(errors).length > 0) {
@@ -134,13 +135,13 @@ export const PhoneRegisterScreen: React.FC<PhoneRegisterScreenProps> = ({
     }
 
     if (!acceptTerms) {
-      setError(t('auth.acceptTermsRequired') || 'Please accept the Terms of Service');
+      setError(t('auth.acceptTermsRequired'));
       Haptic.errorNotification();
       return false;
     }
 
     if (!acceptPrivacy) {
-      setError(t('auth.acceptPrivacyRequired') || 'Please accept the Privacy Policy');
+      setError(t('auth.acceptPrivacyRequired'));
       Haptic.errorNotification();
       return false;
     }
@@ -153,7 +154,7 @@ export const PhoneRegisterScreen: React.FC<PhoneRegisterScreenProps> = ({
   const handleRegister = async () => {
     if (!validateFields()) return;
     if (!tempToken) {
-      setError('Registration session expired. Please start again.');
+      setError(t('auth.sessionExpired'));
       return;
     }
 
@@ -181,11 +182,11 @@ export const PhoneRegisterScreen: React.FC<PhoneRegisterScreenProps> = ({
           onSuccess(result);
         }
       } else {
-        setError(result.message || t('auth.registerFailed'));
+        setError(getLocalizedAuthErrorMessage(result.message, 'auth.registerFailed'));
         Haptic.errorNotification();
       }
     } catch (err: any) {
-      setError(err.message || t('auth.registerFailed'));
+      setError(getLocalizedAuthErrorMessage(err, 'auth.registerFailed'));
       Haptic.errorNotification();
     } finally {
       setLoading(false);

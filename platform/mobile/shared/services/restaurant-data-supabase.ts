@@ -12,6 +12,7 @@ const ROLE_PRIORITY: StaffRole[] = [
   'manager',
   'maitre',
   'chef',
+  'cook',
   'waiter',
   'barman',
   'cashier',

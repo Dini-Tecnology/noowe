@@ -68,6 +68,8 @@ export type { OrderCardProps, OrderCardOrder, OrderCardItem } from './orders/Ord
 // LEGAL / COMPLIANCE COMPONENTS
 // ============================================
 export { AIDisclaimerModal } from './AIDisclaimerModal';
+export { NooweDialog } from './NooweDialog';
+export type { NooweDialogAction } from './NooweDialog';
 export { BetaBadge } from './BetaBadge';
 export { LegalConsentSection } from './LegalConsentSection';
 export type { LegalConsentProps } from './LegalConsentSection';

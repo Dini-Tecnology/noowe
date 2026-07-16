@@ -1,5 +1,7 @@
 import Toast from 'react-native-toast-message';
 import { AxiosError } from 'axios';
+import { getLocalizedAuthErrorMessage, localizeAuthError } from './auth-errors';
+import { t } from '../i18n';
 
 interface ErrorResponse {
   message?: string;
@@ -11,7 +13,7 @@ interface ErrorResponse {
  * Get user-friendly error message based on HTTP status code
  */
 export const getErrorMessage = (error: any): string => {
-  if (!error) return 'Erro desconhecido';
+  if (!error) return t('common.genericError');
 
   // Check if it's an Axios error
   if (error.isAxiosError || error.response) {
@@ -19,48 +21,46 @@ export const getErrorMessage = (error: any): string => {
     const status = axiosError.response?.status;
     const serverMessage = axiosError.response?.data?.message;
 
-    // Return server message if available
-    if (serverMessage) return serverMessage;
+    if (serverMessage) {
+      const localized = localizeAuthError(serverMessage);
+      if (localized) return localized;
+    }
 
-    // Otherwise, return status-based message
     switch (status) {
       case 400:
-        return 'Dados inválidos. Verifique as informações e tente novamente.';
+        return t('errors.validation');
       case 401:
-        return 'Sessão expirada. Por favor, faça login novamente.';
+        return t('errors.unauthorized');
       case 403:
-        return 'Você não tem permissão para realizar esta ação.';
+        return t('errors.forbidden');
       case 404:
-        return 'Recurso não encontrado.';
+        return t('errors.notFound');
       case 409:
-        return 'Conflito de dados. Este item pode já existir.';
+        return t('auth.emailAlreadyExists');
       case 422:
-        return 'Dados inválidos. Verifique os campos e tente novamente.';
+        return t('errors.validation');
       case 429:
-        return 'Muitas requisições. Aguarde um momento e tente novamente.';
+        return t('auth.rateLimitExceeded');
       case 500:
-        return 'Erro no servidor. Tente novamente mais tarde.';
+        return t('errors.serverError');
       case 502:
       case 503:
       case 504:
-        return 'Servidor temporariamente indisponível. Tente novamente em alguns instantes.';
+        return t('errors.serverError');
       default:
-        return 'Erro de conexão. Verifique sua internet e tente novamente.';
+        return t('errors.network');
     }
   }
 
-  // Network errors
   if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
-    return 'Sem conexão com a internet. Verifique sua conexão.';
+    return t('errors.network');
   }
 
-  // Timeout errors
   if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-    return 'A requisição demorou muito. Verifique sua conexão e tente novamente.';
+    return t('errors.timeout');
   }
 
-  // Generic error message fallback
-  return error.message || 'Erro desconhecido. Tente novamente.';
+  return getLocalizedAuthErrorMessage(error, 'common.genericError');
 };
 
 /**

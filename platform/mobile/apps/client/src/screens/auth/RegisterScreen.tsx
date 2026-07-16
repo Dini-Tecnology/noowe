@@ -19,12 +19,16 @@ import { registerSchema, validateForm } from '@/shared/validation/schemas';
 import { LegalConsentSection } from '@okinawa/shared/components/LegalConsentSection';
 import Haptic from '@/shared/utils/haptics';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { NooweDialog } from '@okinawa/shared/components/NooweDialog';
 import { AuthScreenHeader } from '../../components/auth/AuthScreenHeader';
 import { AuthTextField } from '../../components/auth/AuthTextField';
 import { SocialAuthChips } from '../../components/auth/SocialAuthChips';
 import { AUTH_BRAND } from '../../components/auth/authScreenTheme';
 import { AuthConsentCheckbox } from '../../components/auth/AuthConsentCheckbox';
-import { showSuccessToast } from '@/shared/utils/error-handler';
+import {
+  getLocalizedAuthErrorMessage,
+  isEmailAlreadyRegisteredError,
+} from '@/shared/utils/auth-errors';
 
 interface RegisterScreenProps {
   navigation: any;
@@ -62,10 +66,11 @@ export default function RegisterScreen({
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [infoMessage, setInfoMessage] = useState('');
   const [showConsentError, setShowConsentError] = useState(false);
   const [showAgeError, setShowAgeError] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [emailDialog, setEmailDialog] = useState<'sent' | 'existing' | 'success' | 'error' | null>(null);
+  const [emailDialogMessage, setEmailDialogMessage] = useState('');
 
   const analytics = useAnalytics();
   const { setUser } = useAnalyticsContext();
@@ -100,10 +105,39 @@ export default function RegisterScreen({
     return true;
   }, [fullName, email, password, confirmPassword]);
 
+  const showConfirmEmailDialog = useCallback((message: string) => {
+    setEmailDialogMessage(message);
+    setEmailDialog('sent');
+  }, []);
+
+  const handleResendConfirmation = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      await authService.resendSignupConfirmation(email.trim().toLowerCase());
+      setEmailDialogMessage(t('auth.resendConfirmationSent'));
+      setEmailDialog('success');
+      Haptic.successNotification();
+    } catch (err) {
+      const message = getLocalizedAuthErrorMessage(err, 'auth.resendConfirmationFailed');
+      setError(message);
+      setEmailDialogMessage(message);
+      setEmailDialog('error');
+      Haptic.errorNotification();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showExistingEmailDialog = () => {
+    setEmailDialogMessage(t('auth.existingEmailConfirmation'));
+    setEmailDialog('existing');
+  };
+
   const handleRegister = async () => {
     setLoading(true);
     setError('');
-    setInfoMessage('');
     setShowConsentError(false);
 
     try {
@@ -125,9 +159,8 @@ export default function RegisterScreen({
 
       if (result?.needsEmailConfirmation) {
         const message = t('auth.confirmEmailSent') || 'Enviamos um e-mail de confirmação para ativar sua conta.';
-        setInfoMessage(message);
-        showSuccessToast(message);
         Haptic.successNotification();
+        showConfirmEmailDialog(message);
         return;
       }
 
@@ -141,7 +174,12 @@ export default function RegisterScreen({
 
       Haptic.successNotification();
     } catch (err: any) {
-      setError(err.response?.data?.message || t('auth.registerFailed'));
+      if (isEmailAlreadyRegisteredError(err)) {
+        setError('');
+        showExistingEmailDialog();
+      } else {
+        setError(getLocalizedAuthErrorMessage(err, 'auth.registerFailed'));
+      }
       Haptic.errorNotification();
       await analytics.logError('Registration failed', err.code || 'REGISTER_ERROR', false);
     } finally {
@@ -187,8 +225,8 @@ export default function RegisterScreen({
             }}
             placeholder={t('auth.fullNamePlaceholder')}
             error={fieldErrors.fullName}
-            accessibilityLabel="Full name"
-            accessibilityHint="Enter your full name"
+            accessibilityLabel={t('auth.a11y.fullName')}
+            accessibilityHint={t('auth.a11y.fullNameHint')}
             inputProps={{ autoCapitalize: 'words' }}
           />
 
@@ -202,8 +240,8 @@ export default function RegisterScreen({
             }}
             placeholder={t('auth.emailPlaceholder')}
             error={fieldErrors.email}
-            accessibilityLabel="Email address"
-            accessibilityHint="Enter your email address"
+            accessibilityLabel={t('auth.a11y.email')}
+            accessibilityHint={t('auth.a11y.emailHint')}
             inputProps={{
               keyboardType: 'email-address',
               autoCapitalize: 'none',
@@ -225,8 +263,8 @@ export default function RegisterScreen({
             showPasswordToggle
             showPassword={showPassword}
             onTogglePassword={() => setShowPassword((v) => !v)}
-            accessibilityLabel="Password"
-            accessibilityHint="Create a password for your account"
+            accessibilityLabel={t('auth.a11y.password')}
+            accessibilityHint={t('auth.a11y.passwordRegisterHint')}
           />
 
           <AuthTextField
@@ -243,8 +281,8 @@ export default function RegisterScreen({
             showPasswordToggle
             showPassword={showConfirmPassword}
             onTogglePassword={() => setShowConfirmPassword((v) => !v)}
-            accessibilityLabel="Confirm password"
-            accessibilityHint="Re-enter your password to confirm"
+            accessibilityLabel={t('auth.a11y.confirmPassword')}
+            accessibilityHint={t('auth.a11y.confirmPasswordHint')}
           />
 
           <AuthConsentCheckbox
@@ -275,13 +313,12 @@ export default function RegisterScreen({
           />
 
           {error ? <HelperText type="error">{error}</HelperText> : null}
-          {infoMessage ? <HelperText type="info">{infoMessage}</HelperText> : null}
 
           <TouchableOpacity
             style={[styles.primaryButton, isBusy && styles.buttonDisabled]}
             onPress={handleRegister}
             disabled={isBusy}
-            accessibilityLabel="Create account"
+            accessibilityLabel={t('auth.a11y.createAccount')}
             accessibilityRole="button"
           >
             {loading ? (
@@ -317,7 +354,7 @@ export default function RegisterScreen({
             <Text style={styles.footerText}>{t('auth.hasAccountQuestion')} </Text>
             <TouchableOpacity
               onPress={() => navigation.navigate('Login')}
-              accessibilityLabel="Go to login"
+              accessibilityLabel={t('auth.a11y.goToLogin')}
               accessibilityRole="link"
             >
               <Text style={styles.footerLink}>{t('auth.signIn')}</Text>
@@ -325,6 +362,49 @@ export default function RegisterScreen({
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <NooweDialog
+        visible={emailDialog !== null}
+        title={emailDialog === 'error' ? t('common.error') : t('auth.confirmEmailTitle')}
+        message={emailDialogMessage}
+        icon={emailDialog === 'success' ? 'email-check-outline' : emailDialog === 'error' ? 'alert-circle-outline' : 'email-fast-outline'}
+        tone={emailDialog === 'success' ? 'success' : emailDialog === 'error' ? 'error' : 'brand'}
+        dismissible={emailDialog !== 'sent'}
+        onDismiss={() => setEmailDialog(null)}
+        actions={emailDialog === 'existing'
+          ? [
+              {
+                label: t('auth.resendConfirmation'),
+                onPress: () => void handleResendConfirmation(),
+                variant: 'primary',
+                loading,
+              },
+              {
+                label: t('auth.a11y.goToLogin'),
+                onPress: () => navigation.navigate('Login'),
+                variant: 'secondary',
+              },
+              {
+                label: t('common.cancel'),
+                onPress: () => setEmailDialog(null),
+                variant: 'ghost',
+              },
+            ]
+          : emailDialog === 'sent'
+            ? [
+                {
+                  label: t('auth.a11y.goToLogin'),
+                  onPress: () => navigation.navigate('Login'),
+                  variant: 'primary',
+                },
+              ]
+            : [
+                {
+                  label: t('common.ok'),
+                  onPress: () => setEmailDialog(null),
+                  variant: 'primary',
+                },
+              ]}
+      />
     </ScreenContainer>
   );
 }

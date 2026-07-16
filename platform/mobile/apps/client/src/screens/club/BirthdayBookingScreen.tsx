@@ -16,6 +16,7 @@ import {
   Alert,
   Platform,
   TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import {
   Text,
@@ -309,6 +310,8 @@ export default function BirthdayBookingScreen({ route }: BirthdayBookingScreenPr
   const {
     data: packages,
     isLoading,
+    isRefetching,
+    refetch,
   } = useQuery<BirthdayPackage[]>({
     queryKey: ['birthday-packages', restaurantId, partySize, selectedDate],
     queryFn: async () => {
@@ -439,6 +442,7 @@ export default function BirthdayBookingScreen({ route }: BirthdayBookingScreenPr
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { void refetch(); }} tintColor={colors.primary} colors={[colors.primary]} />}
     >
       {/* Header */}
       <View style={styles.header}>

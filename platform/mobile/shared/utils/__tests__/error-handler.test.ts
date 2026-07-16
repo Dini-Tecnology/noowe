@@ -28,6 +28,12 @@ import {
   isValidationError,
 } from '../error-handler';
 import Toast from 'react-native-toast-message';
+import { t } from '../../i18n';
+import {
+  isEmailAlreadyRegisteredError,
+  isEmailNotConfirmedError,
+  localizeAuthError,
+} from '../auth-errors';
 
 // ============================================================
 // GET ERROR MESSAGE TESTS
@@ -40,11 +46,36 @@ describe('getErrorMessage', () => {
 
   describe('null/undefined errors', () => {
     it('should return unknown error for null', () => {
-      expect(getErrorMessage(null)).toBe('Erro desconhecido');
+      expect(getErrorMessage(null)).toBe(t('common.genericError'));
     });
 
     it('should return unknown error for undefined', () => {
-      expect(getErrorMessage(undefined)).toBe('Erro desconhecido');
+      expect(getErrorMessage(undefined)).toBe(t('common.genericError'));
+    });
+  });
+
+  describe('Auth errors', () => {
+    it('should localize Supabase duplicate email error', () => {
+      const error = {
+        message: 'A user with this email address has already been registered',
+      };
+      expect(getErrorMessage(error)).toBe(t('auth.emailAlreadyExists'));
+      expect(localizeAuthError(error.message)).toBe(t('auth.emailAlreadyExists'));
+    });
+
+    it('detects an unconfirmed Supabase email by code or message', () => {
+      expect(isEmailNotConfirmedError({ code: 'email_not_confirmed' })).toBe(true);
+      expect(isEmailNotConfirmedError(new Error('Email not confirmed'))).toBe(true);
+      expect(isEmailNotConfirmedError(new Error('Invalid login credentials'))).toBe(false);
+    });
+
+    it('detects an already registered email from the signup function', () => {
+      expect(
+        isEmailAlreadyRegisteredError(
+          new Error('A user with this email address has already been registered'),
+        ),
+      ).toBe(true);
+      expect(isEmailAlreadyRegisteredError(new Error('Network error'))).toBe(false);
     });
   });
 
@@ -65,7 +96,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 400, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('inválidos');
+      expect(getErrorMessage(error)).toBe(t('errors.validation'));
     });
 
     it('should return 401 message', () => {
@@ -73,7 +104,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 401, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('Sessão expirada');
+      expect(getErrorMessage(error)).toBe(t('errors.unauthorized'));
     });
 
     it('should return 403 message', () => {
@@ -81,7 +112,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 403, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('permissão');
+      expect(getErrorMessage(error)).toBe(t('errors.forbidden'));
     });
 
     it('should return 404 message', () => {
@@ -89,7 +120,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 404, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('não encontrado');
+      expect(getErrorMessage(error)).toBe(t('errors.notFound'));
     });
 
     it('should return 409 message', () => {
@@ -97,7 +128,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 409, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('Conflito');
+      expect(getErrorMessage(error)).toBe(t('auth.emailAlreadyExists'));
     });
 
     it('should return 422 message', () => {
@@ -105,7 +136,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 422, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('inválidos');
+      expect(getErrorMessage(error)).toBe(t('errors.validation'));
     });
 
     it('should return 429 message', () => {
@@ -113,7 +144,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 429, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('Muitas requisições');
+      expect(getErrorMessage(error)).toBe(t('auth.rateLimitExceeded'));
     });
 
     it('should return 500 message', () => {
@@ -121,7 +152,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 500, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('servidor');
+      expect(getErrorMessage(error)).toBe(t('errors.serverError'));
     });
 
     it('should return 502 message', () => {
@@ -129,7 +160,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 502, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('indisponível');
+      expect(getErrorMessage(error)).toBe(t('errors.serverError'));
     });
 
     it('should return 503 message', () => {
@@ -137,7 +168,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 503, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('indisponível');
+      expect(getErrorMessage(error)).toBe(t('errors.serverError'));
     });
 
     it('should return 504 message', () => {
@@ -145,7 +176,7 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 504, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('indisponível');
+      expect(getErrorMessage(error)).toBe(t('errors.serverError'));
     });
 
     it('should return default connection error for unknown status', () => {
@@ -153,31 +184,31 @@ describe('getErrorMessage', () => {
         isAxiosError: true,
         response: { status: 418, data: {} },
       };
-      expect(getErrorMessage(error)).toContain('conexão');
+      expect(getErrorMessage(error)).toBe(t('errors.network'));
     });
   });
 
   describe('Network errors', () => {
     it('should handle Network Error message', () => {
       const error = { message: 'Network Error' };
-      expect(getErrorMessage(error)).toContain('internet');
+      expect(getErrorMessage(error)).toBe(t('errors.network'));
     });
 
     it('should handle ERR_NETWORK code', () => {
       const error = { code: 'ERR_NETWORK' };
-      expect(getErrorMessage(error)).toContain('internet');
+      expect(getErrorMessage(error)).toBe(t('errors.network'));
     });
   });
 
   describe('Timeout errors', () => {
     it('should handle ECONNABORTED code', () => {
       const error = { code: 'ECONNABORTED' };
-      expect(getErrorMessage(error)).toContain('demorou');
+      expect(getErrorMessage(error)).toBe(t('errors.timeout'));
     });
 
     it('should handle timeout in message', () => {
       const error = { message: 'Request timeout' };
-      expect(getErrorMessage(error)).toContain('demorou');
+      expect(getErrorMessage(error)).toBe(t('errors.timeout'));
     });
   });
 
@@ -189,7 +220,7 @@ describe('getErrorMessage', () => {
 
     it('should return fallback for empty message', () => {
       const error = { message: '' };
-      expect(getErrorMessage(error)).toContain('desconhecido');
+      expect(getErrorMessage(error)).toBe(t('common.genericError'));
     });
   });
 });

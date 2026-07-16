@@ -49,6 +49,9 @@ export interface SupabaseApiAdapter {
   // ── Tables ───────────────────────────────────────────────────────────────────
   getRestaurantTables(restaurantId?: string): Promise<any>;
   getRestaurantTable(tableId: string): Promise<any>;
+  createRestaurantTable(restaurantId: string, data: Record<string, unknown>): Promise<any>;
+  updateRestaurantTable(tableId: string, data: Record<string, unknown>): Promise<any>;
+  deleteRestaurantTable(tableId: string): Promise<any>;
   updateTableStatus(tableId: string, status: string, notes?: string): Promise<any>;
   updateTableNotes(tableId: string, notes: string): Promise<any>;
   getMyTables(restaurantId?: string): Promise<any>;
@@ -60,6 +63,9 @@ export interface SupabaseApiAdapter {
   updateOrderItemStatus(itemId: string, status: string): Promise<any>;
   fireCourse(orderId: string, course: string): Promise<any>;
   getCookStations(restaurantId?: string): Promise<any>;
+  createCookStation(restaurantId: string, data: Record<string, unknown>): Promise<any>;
+  updateCookStation(stationId: string, data: Record<string, unknown>): Promise<any>;
+  deleteCookStation(stationId: string): Promise<any>;
   getKdsConfig(restaurantId?: string): Promise<any>;
   updateKdsConfig(restaurantId: string, config: Record<string, unknown>): Promise<any>;
   // ── Dashboard ────────────────────────────────────────────────────────────────
@@ -93,19 +99,37 @@ export interface SupabaseApiAdapter {
   getTransactions(restaurantId?: string, from?: string, to?: string, limit?: number): Promise<any>;
   getTipsSummary(restaurantId?: string, from?: string, to?: string): Promise<any>;
   getReports(restaurantId?: string, from?: string, to?: string): Promise<any>;
+  getFinancialDashboard(restaurantId?: string, from?: string, to?: string): Promise<any>;
+  getSatisfactionRecurrence(restaurantId?: string, from?: string, to?: string): Promise<any>;
+  createBill(restaurantId: string, supplierName: string, amount: number, dueDate: string, category?: string): Promise<any>;
+  updateBillStatus(billId: string, status: string): Promise<any>;
+  deleteBill(billId: string): Promise<any>;
+  getCustomers(restaurantId?: string, limit?: number): Promise<any>;
+  getShifts(restaurantId?: string, from?: string, to?: string): Promise<any>;
+  createShift(restaurantId: string, staffId: string, date: string, startTime: string, endTime: string, role?: string, notes?: string): Promise<any>;
+  updateShift(shiftId: string, patch: Record<string, unknown>): Promise<any>;
+  deleteShift(shiftId: string): Promise<any>;
+  getIntegrations(restaurantId: string): Promise<any>;
+  setIntegrationConnection(restaurantId: string, provider: string, isConnected: boolean, externalStoreId?: string): Promise<any>;
   // ── Menu ───────────────────────────────────────────────────────────────────────
   getMenu(restaurantId?: string, includeUnavailable?: boolean): Promise<any>;
   createMenuItem(restaurantId: string, data: Record<string, unknown>): Promise<any>;
   updateMenuItem(itemId: string, data: Record<string, unknown>): Promise<any>;
   toggleMenuItem(itemId: string, isAvailable: boolean): Promise<any>;
   deleteMenuItem(itemId: string): Promise<any>;
+  uploadMenuItemImage(restaurantId: string, uri: string, contentType?: string): Promise<string>;
+  deleteMenuCategory(categoryId: string): Promise<any>;
   createMenuCategory(restaurantId: string, name: string, description?: string, imageUrl?: string, sortOrder?: number): Promise<any>;
   updateMenuCategory(categoryId: string, data: Record<string, unknown>): Promise<any>;
   // ── Staff ──────────────────────────────────────────────────────────────────────
   getStaff(restaurantId?: string): Promise<any>;
   upsertStaffRole(restaurantId: string, userId: string, role: string): Promise<any>;
   deactivateStaff(roleId: string): Promise<any>;
-  findUserByEmail(email: string): Promise<any>;
+  reactivateStaff(roleId: string): Promise<any>;
+  updateStaffRole(roleId: string, role: string): Promise<any>;
+  removeStaffRole(roleId: string): Promise<any>;
+  findUserByEmail(restaurantId: string, email: string): Promise<any>;
+  createStaffUser(restaurantId: string, email: string, password: string, fullName: string, role: string): Promise<any>;
   // ── Notifications ──────────────────────────────────────────────────────────────
   getMyNotifications(unreadOnly?: boolean, limit?: number): Promise<any>;
   markNotificationRead(notificationId: string): Promise<any>;
@@ -120,6 +144,15 @@ export interface SupabaseApiAdapter {
   getLoyaltyConfig(restaurantId?: string): Promise<any>;
   getLoyaltyStats(restaurantId?: string): Promise<any>;
   getServiceConfigs(restaurantId?: string): Promise<any>;
+  upsertServiceConfigs(
+    restaurantId: string,
+    configs: Array<{
+      service_type: string;
+      is_active: boolean;
+      config_metadata?: Record<string, unknown>;
+    }>,
+    primaryServiceType?: string,
+  ): Promise<any>;
   getActiveShiftCount(restaurantId?: string): Promise<any>;
   getTableQRCodes(restaurantId?: string): Promise<any>;
   generateTableQR(tableId: string): Promise<any>;
@@ -138,6 +171,21 @@ export interface SupabaseApiAdapter {
   // ── Profile ────────────────────────────────────────────────────────────────────
   getRestaurantProfile(restaurantId?: string): Promise<any>;
   updateRestaurantProfile(restaurantId: string, patch: Record<string, unknown>): Promise<any>;
+  uploadRestaurantLogo(restaurantId: string, uri: string, contentType?: string): Promise<string>;
+  uploadRestaurantBanner(restaurantId: string, uri: string, contentType?: string): Promise<string>;
+  createMyRestaurant(input: {
+    name: string;
+    phone: string;
+    email: string;
+    city?: string;
+    state?: string;
+    address?: string;
+    addressNumber?: string;
+    addressComplement?: string;
+    neighborhood?: string;
+    zipCode?: string;
+    serviceType?: string;
+  }): Promise<any>;
 }
 
 async function resolveRestaurantId(restaurantId?: string): Promise<string> {
@@ -156,8 +204,19 @@ async function resolveRestaurantId(restaurantId?: string): Promise<string> {
     .maybeSingle();
 
   if (error) throw error;
-  if (!data?.restaurant_id) throw new Error('No restaurant available for current user');
-  return data.restaurant_id as string;
+  if (data?.restaurant_id) return data.restaurant_id as string;
+
+  const { data: owned, error: ownedError } = await supabase
+    .from('restaurants')
+    .select('id')
+    .eq('owner_id', user.id)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (ownedError) throw ownedError;
+  if (!owned?.id) throw new Error('No restaurant available for current user');
+  return owned.id as string;
 }
 
 export const supabaseApiAdapter: SupabaseApiAdapter = {
@@ -258,6 +317,49 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  async createRestaurantTable(restaurantId: string, table: Record<string, unknown>) {
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabaseClient()
+      .from('tables')
+      .insert({
+        restaurant_id: restaurantId,
+        table_number: table.table_number,
+        seats: table.seats,
+        section: table.section || null,
+        notes: table.notes || null,
+        status: 'available',
+        shape: table.shape || 'rectangle',
+        width: table.width || 1,
+        height: table.height || 1,
+        created_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateRestaurantTable(tableId: string, table: Record<string, unknown>) {
+    const { data, error } = await getSupabaseClient()
+      .from('tables')
+      .update({ ...table, updated_at: new Date().toISOString() })
+      .eq('id', tableId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteRestaurantTable(tableId: string) {
+    const { error } = await getSupabaseClient()
+      .from('tables')
+      .delete()
+      .eq('id', tableId);
+    if (error) throw error;
+    return { id: tableId, deleted: true };
   },
 
   async updateTableStatus(tableId: string, status: string, notes?: string) {
@@ -483,6 +585,32 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
+  async createCookStation(restaurantId: string, data: Record<string, unknown>) {
+    const { data: result, error } = await getSupabaseClient().rpc('restaurant_create_cook_station', {
+      p_restaurant_id: restaurantId,
+      p_payload: data,
+    });
+    if (error) throw error;
+    return result;
+  },
+
+  async updateCookStation(stationId: string, data: Record<string, unknown>) {
+    const { data: result, error } = await getSupabaseClient().rpc('restaurant_update_cook_station', {
+      p_station_id: stationId,
+      p_payload: data,
+    });
+    if (error) throw error;
+    return result;
+  },
+
+  async deleteCookStation(stationId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_delete_cook_station', {
+      p_station_id: stationId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
   async getKdsConfig(restaurantId?: string) {
     const resolvedId = await resolveRestaurantId(restaurantId);
     const { data, error } = await getSupabaseClient().rpc('restaurant_get_kds_config', {
@@ -646,6 +774,133 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
+  async getFinancialDashboard(restaurantId?: string, from?: string, to?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_financial_dashboard', {
+      p_restaurant_id: resolvedId,
+      p_from: from || null,
+      p_to: to || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getSatisfactionRecurrence(restaurantId?: string, from?: string, to?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_satisfaction_recurrence', {
+      p_restaurant_id: resolvedId,
+      p_from: from || null,
+      p_to: to || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getCustomers(restaurantId?: string, limit = 50) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_customers', {
+      p_restaurant_id: resolvedId,
+      p_limit: limit,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getShifts(restaurantId?: string, from?: string, to?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_shifts', {
+      p_restaurant_id: resolvedId,
+      p_from: from || null,
+      p_to: to || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async createShift(restaurantId: string, staffId: string, date: string, startTime: string, endTime: string, role?: string, notes?: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_create_shift', {
+      p_restaurant_id: restaurantId,
+      p_staff_id: staffId,
+      p_date: date,
+      p_start_time: startTime,
+      p_end_time: endTime,
+      p_role: role || null,
+      p_notes: notes || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async updateShift(shiftId: string, patch: Record<string, unknown>) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_update_shift', {
+      p_shift_id: shiftId,
+      p_date: patch.date || null,
+      p_start_time: patch.start_time || null,
+      p_end_time: patch.end_time || null,
+      p_role: patch.role || null,
+      p_status: patch.status || null,
+      p_notes: patch.notes || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteShift(shiftId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_delete_shift', {
+      p_shift_id: shiftId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getIntegrations(restaurantId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_integrations', {
+      p_restaurant_id: restaurantId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async setIntegrationConnection(restaurantId: string, provider: string, isConnected: boolean, externalStoreId?: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_set_integration_connection', {
+      p_restaurant_id: restaurantId,
+      p_provider: provider,
+      p_is_connected: isConnected,
+      p_external_store_id: externalStoreId || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async createBill(restaurantId: string, supplierName: string, amount: number, dueDate: string, category?: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_create_bill', {
+      p_restaurant_id: restaurantId,
+      p_supplier_name: supplierName,
+      p_amount: amount,
+      p_due_date: dueDate,
+      p_category: category || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async updateBillStatus(billId: string, status: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_update_bill_status', {
+      p_bill_id: billId,
+      p_status: status,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteBill(billId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_delete_bill', {
+      p_bill_id: billId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
   // ── Menu ───────────────────────────────────────────────────────────────────
   async getMenu(restaurantId?: string, includeUnavailable = false) {
     const resolvedId = await resolveRestaurantId(restaurantId);
@@ -675,7 +930,9 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_station_id: item.station_id || null,
       p_sort_order: item.sort_order || 0,
       p_calories: item.calories || null,
-      p_metadata: item.metadata || null,
+      // The RPC inserts p_metadata explicitly into a NOT NULL jsonb column.
+      // Passing null bypasses the column default and makes every item creation fail.
+      p_metadata: item.metadata || {},
     });
     if (error) throw error;
     return data;
@@ -722,6 +979,21 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
+  async uploadMenuItemImage(restaurantId: string, uri: string, contentType = 'image/jpeg') {
+    const response = await fetch(uri);
+    if (!response.ok) throw new Error('Não foi possível preparar a imagem selecionada.');
+    const file = await response.arrayBuffer();
+    const supabase = getSupabaseClient();
+    const path = `${restaurantId}/${Date.now()}`;
+    const { error: uploadError } = await supabase.storage
+      .from('menu-item-images')
+      .upload(path, file, { contentType, upsert: true, cacheControl: '3600' });
+    if (uploadError) throw uploadError;
+
+    const { data: publicData } = supabase.storage.from('menu-item-images').getPublicUrl(path);
+    return publicData.publicUrl;
+  },
+
   async createMenuCategory(restaurantId: string, name: string, description?: string, imageUrl?: string, sortOrder = 0) {
     const { data, error } = await getSupabaseClient().rpc('restaurant_create_menu_category', {
       p_restaurant_id: restaurantId,
@@ -742,6 +1014,14 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_image_url: patch.image_url || null,
       p_sort_order: patch.sort_order !== undefined ? patch.sort_order : null,
       p_is_active: patch.is_active !== undefined ? patch.is_active : null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteMenuCategory(categoryId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_delete_menu_category', {
+      p_category_id: categoryId,
     });
     if (error) throw error;
     return data;
@@ -775,11 +1055,61 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
-  async findUserByEmail(email: string) {
+  async reactivateStaff(roleId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_reactivate_staff', {
+      p_role_id: roleId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async updateStaffRole(roleId: string, role: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_update_staff_role', {
+      p_role_id: roleId,
+      p_role: role,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async removeStaffRole(roleId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_remove_staff_role', {
+      p_role_id: roleId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async findUserByEmail(restaurantId: string, email: string) {
     const { data, error } = await getSupabaseClient().rpc('restaurant_find_user_by_email', {
+      p_restaurant_id: restaurantId,
       p_email: email,
     });
     if (error) throw error;
+    return data;
+  },
+
+  async createStaffUser(restaurantId: string, email: string, password: string, fullName: string, role: string) {
+    const { data, error } = await getSupabaseClient().functions.invoke('create-staff-user', {
+      body: { restaurantId, email, password, fullName, role },
+    });
+    if (error) {
+      const context = (error as { context?: unknown }).context;
+      // React Native's fetch polyfill may create the response in another JS
+      // realm, where `context instanceof Response` is false. Use duck typing
+      // so the API's actual message is shown instead of the SDK's generic
+      // "Edge Function returned a non-2xx status code" error.
+      if (context && typeof context === 'object' && 'json' in context) {
+        const json = (context as { json?: () => Promise<unknown> }).json;
+        if (typeof json === 'function') {
+          const body = await json.call(context).catch(() => null) as { error?: unknown; message?: unknown } | null;
+          const message = body?.error ?? body?.message;
+          if (message) throw new Error(String(message));
+        }
+      }
+      throw error;
+    }
+    if (data?.error) throw new Error(data.error);
     return data;
   },
 
@@ -894,6 +1224,70 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     });
     if (error) throw error;
     return data;
+  },
+
+  async upsertServiceConfigs(
+    restaurantId: string,
+    configs: Array<{
+      service_type: string;
+      is_active: boolean;
+      config_metadata?: Record<string, unknown>;
+    }>,
+    primaryServiceType?: string,
+  ) {
+    const supabase = getSupabaseClient();
+    const { data: existing, error: existingError } = await supabase
+      .from('restaurant_service_configs')
+      .select('id, service_type')
+      .eq('restaurant_id', restaurantId);
+    if (existingError) throw existingError;
+
+    const byType = new Map<string, string>(
+      (existing ?? []).map((row: { id: string; service_type: string }) => [row.service_type, row.id]),
+    );
+    const now = new Date().toISOString();
+
+    for (const config of configs) {
+      const existingId = byType.get(config.service_type);
+      if (existingId) {
+        const { error } = await supabase
+          .from('restaurant_service_configs')
+          .update({
+            is_active: config.is_active,
+            config_metadata: config.config_metadata ?? {},
+            updated_at: now,
+          })
+          .eq('id', existingId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('restaurant_service_configs').insert({
+          restaurant_id: restaurantId,
+          service_type: config.service_type,
+          is_active: config.is_active,
+          config_metadata: config.config_metadata ?? {},
+          created_at: now,
+          updated_at: now,
+        });
+        if (error) throw error;
+      }
+    }
+
+    if (primaryServiceType) {
+      const { error: primaryError } = await supabase
+        .from('restaurants')
+        .update({ service_type: primaryServiceType, updated_at: now })
+        .eq('id', restaurantId);
+      if (primaryError) throw primaryError;
+
+      await supabaseApiAdapter.updateRestaurantProfile(restaurantId, {
+        service_config: {
+          primary_type: primaryServiceType,
+          active_types: configs.filter((c) => c.is_active).map((c) => c.service_type),
+        },
+      });
+    }
+
+    return supabaseApiAdapter.getServiceConfigs(restaurantId);
   },
 
   async getActiveShiftCount(restaurantId?: string) {
@@ -1039,6 +1433,89 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_patch: patch,
     });
     if (error) throw error;
+    return data;
+  },
+
+  async uploadRestaurantLogo(restaurantId: string, uri: string, contentType = 'image/jpeg') {
+    const response = await fetch(uri);
+    if (!response.ok) throw new Error('Não foi possível preparar a imagem selecionada.');
+    const file = await response.arrayBuffer();
+    const supabase = getSupabaseClient();
+    const path = `${restaurantId}/logo`;
+    const { error: uploadError } = await supabase.storage
+      .from('restaurant-logos')
+      .upload(path, file, { contentType, upsert: true, cacheControl: '3600' });
+    if (uploadError) throw uploadError;
+
+    const { data: publicData } = supabase.storage.from('restaurant-logos').getPublicUrl(path);
+    const logoUrl = `${publicData.publicUrl}?v=${Date.now()}`;
+    await supabaseApiAdapter.updateRestaurantProfile(restaurantId, { logo_url: logoUrl });
+    return logoUrl;
+  },
+
+  async uploadRestaurantBanner(restaurantId: string, uri: string, contentType = 'image/jpeg') {
+    const response = await fetch(uri);
+    if (!response.ok) throw new Error('Não foi possível preparar a imagem selecionada.');
+    const file = await response.arrayBuffer();
+    const supabase = getSupabaseClient();
+    const path = `${restaurantId}/banner`;
+    const { error: uploadError } = await supabase.storage
+      .from('restaurant-logos')
+      .upload(path, file, { contentType, upsert: true, cacheControl: '3600' });
+    if (uploadError) throw uploadError;
+
+    const { data: publicData } = supabase.storage.from('restaurant-logos').getPublicUrl(path);
+    const bannerUrl = `${publicData.publicUrl}?v=${Date.now()}`;
+    await supabaseApiAdapter.updateRestaurantProfile(restaurantId, {
+      banner_url: bannerUrl,
+      cover_image_url: bannerUrl,
+    });
+    return bannerUrl;
+  },
+
+  async createMyRestaurant(input: {
+    name: string;
+    phone: string;
+    email: string;
+    city?: string;
+    state?: string;
+    address?: string;
+    addressNumber?: string;
+    addressComplement?: string;
+    neighborhood?: string;
+    zipCode?: string;
+    serviceType?: string;
+  }) {
+    const { data, error } = await getSupabaseClient().rpc('create_my_restaurant', {
+      p_name: input.name,
+      p_phone: input.phone,
+      p_email: input.email,
+      p_city: input.city ?? 'São Paulo',
+      p_state: input.state ?? 'SP',
+      p_address: input.address ?? 'Endereço a definir',
+      p_zip_code: input.zipCode ?? '00000-000',
+      p_service_type: input.serviceType ?? 'casual_dining',
+    });
+    if (error) throw error;
+
+    const restaurantId = data && typeof data === 'object' && 'id' in data ? String(data.id) : '';
+    if (restaurantId) {
+      const { data: updated, error: updateError } = await getSupabaseClient().rpc('restaurant_update_profile', {
+        p_restaurant_id: restaurantId,
+        p_patch: {
+          address: input.address ?? 'Endereço a definir',
+          address_number: input.addressNumber ?? '',
+          address_complement: input.addressComplement ?? '',
+          neighborhood: input.neighborhood ?? '',
+          zip_code: input.zipCode ?? '00000-000',
+          city: input.city ?? 'São Paulo',
+          state: input.state ?? 'SP',
+        },
+      });
+      if (updateError) throw updateError;
+      return updated;
+    }
+
     return data;
   },
 };

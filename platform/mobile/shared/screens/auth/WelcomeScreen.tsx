@@ -120,13 +120,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       {/* Logo and Branding */}
       <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          {logoIconSource ? (
-            <Image source={logoIconSource} style={styles.logoImage} resizeMode="contain" />
-          ) : (
-            <Text style={styles.logoText}>🍽️</Text>
-          )}
-        </View>
+        {logoIconSource ? (
+          <View style={styles.logoWrapper}>
+            <Image source={logoIconSource} style={styles.logoImage} resizeMode="cover" />
+          </View>
+        ) : (
+          <Text style={styles.logoText}>🍽️</Text>
+        )}
         {logoFullSource ? (
           <Image
             source={logoFullSource}
@@ -138,7 +138,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <Text style={styles.title}>{brandTitle}</Text>
         )}
         <Text style={styles.subtitle}>
-          {t('auth.welcomeMessage') || 'Your dining experience, reimagined'}
+          {t('auth.welcomeMessage')}
         </Text>
       </View>
 
@@ -158,7 +158,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </Button>
           
           <Divider style={styles.divider} />
-          <Text style={styles.orText}>{t('auth.orContinueWith') || 'or continue with'}</Text>
+          <Text style={styles.orText}>{t('auth.orContinueWith')}</Text>
         </View>
       )}
 
@@ -216,7 +216,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         style={styles.phoneButton}
         icon="cellphone"
       >
-        {t('auth.continueWithPhone') || 'Continue with Phone'}
+        {t('auth.continueWithPhone')}
       </Button>
 
       {/* Email/Password Fallback (subtle) */}
@@ -227,16 +227,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         style={styles.emailButton}
         textColor={colors.mutedForeground}
       >
-        {t('auth.useEmailPassword') || 'Use email and password'}
+        {t('auth.useEmailPassword')}
       </Button>
 
       {/* Terms and Privacy */}
       <View style={styles.footer}>
         <Text style={styles.termsText}>
-          {t('auth.termsPrefix') || 'By continuing, you agree to our'}{' '}
-          <Text style={styles.termsLink}>{t('auth.termsOfService') || 'Terms of Service'}</Text>
-          {' '}{t('auth.and') || 'and'}{' '}
-          <Text style={styles.termsLink}>{t('auth.privacyPolicy') || 'Privacy Policy'}</Text>
+          {t('auth.termsPrefix')}{' '}
+          <Text style={styles.termsLink}>{t('auth.termsOfService')}</Text>
+          {' '}{t('auth.and')}{' '}
+          <Text style={styles.termsLink}>{t('auth.privacyPolicy')}</Text>
         </Text>
       </View>
     </Animated.View>
@@ -261,21 +261,20 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     marginTop: 60,
   },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: colors.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
   logoText: {
     fontSize: 40,
+    marginBottom: 16,
+  },
+  logoWrapper: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
   },
   logoImage: {
-    width: 48,
-    height: 48,
+    width: 72,
+    height: 72,
   },
   logoFull: {
     width: 180,

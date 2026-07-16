@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text, HelperText } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -81,17 +81,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     gap: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
   },
   checkbox: {
     width: 26,

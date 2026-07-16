@@ -2,7 +2,7 @@
  * Okinawa Design System — Liquid Glass bottom navigation (shared base)
  */
 
-import React, { useRef, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Animated,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,14 +55,21 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
   const { theme, isDark } = useOkinawaTheme();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const scaleValues = useRef(items.map(() => new Animated.Value(1))).current;
+  const scaleValues = useRef<Animated.Value[]>([]);
+  const scrollable = items.length > 5;
+
+  useEffect(() => {
+    scaleValues.current = items.map((_, index) => scaleValues.current[index] ?? new Animated.Value(1));
+  }, [items]);
 
   const shellBackground = colors.card;
   const shellBorder = isDark ? colors.border : colors.border;
   const inactiveIconColor = colors.foregroundMuted;
 
   const handlePressIn = (index: number) => {
-    Animated.spring(scaleValues[index], {
+    const value = scaleValues.current[index];
+    if (!value) return;
+    Animated.spring(value, {
       toValue: 0.9,
       useNativeDriver: true,
       damping: 15,
@@ -70,7 +78,9 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
   };
 
   const handlePressOut = (index: number) => {
-    Animated.spring(scaleValues[index], {
+    const value = scaleValues.current[index];
+    if (!value) return;
+    Animated.spring(value, {
       toValue: 1,
       useNativeDriver: true,
       damping: 15,
@@ -89,7 +99,7 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
         navShell: {
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'space-around',
+          justifyContent: scrollable ? 'flex-start' : 'space-around',
           borderRadius: 22,
           borderWidth: StyleSheet.hairlineWidth,
           paddingVertical: 6,
@@ -108,7 +118,8 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
           alignItems: 'center',
           justifyContent: 'center',
           paddingVertical: 2,
-          paddingHorizontal: 6,
+          paddingHorizontal: scrollable ? 10 : 6,
+          minWidth: scrollable ? 64 : undefined,
         },
         iconContainer: {
           width: 32,
@@ -128,10 +139,54 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
           fontSize: 8,
           fontWeight: '500',
           letterSpacing: 0.3,
+          textAlign: 'center',
         },
       }),
-    [colors],
+    [colors, scrollable],
   );
+
+  const renderItems = () =>
+    items.map((item, index) => {
+      const Icon = item.icon;
+      const isActive = activeTab === item.id;
+      const scale = scaleValues.current[index] ?? new Animated.Value(1);
+
+      return (
+        <TouchableOpacity
+          key={item.id}
+          onPress={() => onNavigate(item.id)}
+          onPressIn={() => handlePressIn(index)}
+          onPressOut={() => handlePressOut(index)}
+          activeOpacity={0.75}
+          style={styles.navItem}
+        >
+          <Animated.View style={[styles.iconContainer, { transform: [{ scale }] }]}>
+            {isActive && (
+              <LinearGradient
+                colors={theme.gradients.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.activeGradient}
+              />
+            )}
+            <Icon
+              size={17}
+              color={isActive ? colors.primaryForeground : inactiveIconColor}
+              strokeWidth={isActive ? 2 : 1.5}
+            />
+          </Animated.View>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.navLabel,
+              { color: isActive ? colors.primary : inactiveIconColor },
+            ]}
+          >
+            {item.label}
+          </Text>
+        </TouchableOpacity>
+      );
+    });
 
   return (
     <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 6) }]}>
@@ -141,47 +196,17 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
           { backgroundColor: shellBackground, borderColor: shellBorder },
         ]}
       >
-        {items.map((item, index) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-
-          return (
-            <TouchableOpacity
-              key={item.id}
-              onPress={() => onNavigate(item.id)}
-              onPressIn={() => handlePressIn(index)}
-              onPressOut={() => handlePressOut(index)}
-              activeOpacity={0.75}
-              style={styles.navItem}
-            >
-              <Animated.View
-                style={[styles.iconContainer, { transform: [{ scale: scaleValues[index] }] }]}
-              >
-                {isActive && (
-                  <LinearGradient
-                    colors={theme.gradients.primary}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.activeGradient}
-                  />
-                )}
-                <Icon
-                  size={17}
-                  color={isActive ? colors.primaryForeground : inactiveIconColor}
-                  strokeWidth={isActive ? 2 : 1.5}
-                />
-              </Animated.View>
-              <Text
-                style={[
-                  styles.navLabel,
-                  { color: isActive ? colors.primary : inactiveIconColor },
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+        {scrollable ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 4 }}
+          >
+            {renderItems()}
+          </ScrollView>
+        ) : (
+          renderItems()
+        )}
       </View>
     </View>
   );

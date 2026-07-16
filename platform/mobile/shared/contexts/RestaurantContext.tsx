@@ -368,7 +368,7 @@ export const useRestaurantRole = () => {
     /** Is Manager or higher */
     isManager: hasAnyRole(['owner', 'manager']),
     /** Has kitchen access */
-    isKitchenStaff: hasAnyRole(['chef', 'owner', 'manager']),
+    isKitchenStaff: hasAnyRole(['chef', 'cook', 'owner', 'manager']),
     /** Has front-of-house access */
     isFrontOfHouse: hasAnyRole(['waiter', 'maitre', 'host', 'owner', 'manager']),
     /** Has bar access */

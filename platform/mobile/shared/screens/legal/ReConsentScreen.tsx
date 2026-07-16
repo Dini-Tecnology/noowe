@@ -17,6 +17,7 @@ import {
   Alert,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  RefreshControl,
 } from 'react-native';
 import { Text, Button, ActivityIndicator, Divider, Banner } from 'react-native-paper';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -77,6 +78,7 @@ export const ReConsentScreen: React.FC<ReConsentScreenProps> = ({
     isLoading: termsLoading,
     isError: termsError,
     refetch: refetchTerms,
+    isRefetching: termsRefetching,
   } = useQuery<LegalDocument>({
     queryKey: ['legal', 'terms-of-service', 'reconsent'],
     queryFn: () => ApiService.getTermsOfService(),
@@ -88,6 +90,7 @@ export const ReConsentScreen: React.FC<ReConsentScreenProps> = ({
     isLoading: privacyLoading,
     isError: privacyError,
     refetch: refetchPrivacy,
+    isRefetching: privacyRefetching,
   } = useQuery<LegalDocument>({
     queryKey: ['legal', 'privacy-policy', 'reconsent'],
     queryFn: () => ApiService.getPrivacyPolicy(),
@@ -241,6 +244,14 @@ export const ReConsentScreen: React.FC<ReConsentScreenProps> = ({
         contentContainerStyle={styles.scrollContent}
         onScroll={handleScroll}
         scrollEventThrottle={100}
+        refreshControl={(
+          <RefreshControl
+            refreshing={termsRefetching || privacyRefetching}
+            onRefresh={() => { void Promise.all([refetchTerms(), refetchPrivacy()]); }}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        )}
       >
         {/* Terms of Service */}
         {resolvedTerms && (

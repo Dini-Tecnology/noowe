@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Share } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Share, RefreshControl } from 'react-native';
 import { Text, Card, Button, TextInput, IconButton, ActivityIndicator, Avatar, Chip, Divider } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import ApiService from '@/shared/services/api';
@@ -7,6 +7,7 @@ import { useScreenTracking, useAnalytics } from '@/shared/hooks/useAnalytics';
 import { useI18n } from '@/shared/hooks/useI18n';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 
 interface Guest {
   id: string;
@@ -258,6 +259,8 @@ export default function GuestInvitationScreen() {
     }
   };
 
+  const pullToRefresh = usePullToRefresh(loadData);
+
   const confirmedGuests = guests.filter(g => g.status === 'accepted' || g.is_host);
   const pendingGuests = guests.filter(g => g.status === 'pending' && !g.is_host);
   const remainingSlots = partySize - confirmedGuests.length;
@@ -424,7 +427,10 @@ export default function GuestInvitationScreen() {
 
   return (
     <ScreenContainer hasKeyboard>
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={pullToRefresh.refreshing} onRefresh={() => { void pullToRefresh.onRefresh(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+    >
       {/* Header Summary */}
       <Card style={styles.summaryCard}>
         <Card.Content>

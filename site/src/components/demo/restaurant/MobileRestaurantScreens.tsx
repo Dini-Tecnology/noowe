@@ -138,7 +138,6 @@ const MobileDashboard: React.FC<{ onNavigate: (screen: string) => void }> = ({ o
 
   return (
     <div className="space-y-4">
-      <MobileHint text="Resumo executivo otimizado para leitura rápida no celular." />
       <div className="grid grid-cols-2 gap-3">
         <CompactStat label="Receita Hoje" value={`R$ ${analytics.todayRevenue.toLocaleString()}`} tone="success" />
         <CompactStat label="Pedidos Ativos" value={String(activeOrders)} tone="primary" />

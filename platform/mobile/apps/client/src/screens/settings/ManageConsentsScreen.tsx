@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, RefreshControl } from 'react-native';
 import { Text, Switch, Button, ActivityIndicator, Divider } from 'react-native-paper';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -46,7 +46,7 @@ export default function ManageConsentsScreen() {
   const colors = useColors();
   const queryClient = useQueryClient();
 
-  const { data: consents, isLoading } = useQuery<ConsentRecord[]>({
+  const { data: consents, isLoading, isRefetching, refetch } = useQuery<ConsentRecord[]>({
     queryKey: ['user-consents'],
     queryFn: async () => {
       const res = await ApiService.get('/users/me/consent');
@@ -105,7 +105,10 @@ export default function ManageConsentsScreen() {
 
   return (
     <ScreenContainer>
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { void refetch(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+    >
       <Text style={[styles.header, { color: colors.foreground }]}>
         Gerenciar Consentimentos
       </Text>

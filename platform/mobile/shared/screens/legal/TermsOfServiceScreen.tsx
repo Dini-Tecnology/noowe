@@ -6,7 +6,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { Text, ActivityIndicator, Button, Divider } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -31,6 +31,7 @@ export const TermsOfServiceScreen: React.FC<{ navigation?: any }> = ({ navigatio
     isLoading,
     isError,
     refetch,
+    isRefetching,
   } = useQuery<LegalDocument>({
     queryKey: ['legal', 'terms-of-service', language],
     queryFn: () => ApiService.getTermsOfService(language),
@@ -63,7 +64,11 @@ export const TermsOfServiceScreen: React.FC<{ navigation?: any }> = ({ navigatio
 
   return (
     <ScreenContainer>
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { void refetch(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+    >
       <Text style={styles.title}>{document.title}</Text>
 
       <View style={styles.metaRow}>

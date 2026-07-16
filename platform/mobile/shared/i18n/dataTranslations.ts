@@ -128,6 +128,7 @@ export type StaffRole =
   | 'owner'
   | 'manager'
   | 'chef'
+  | 'cook'
   | 'waiter'
   | 'barman'
   | 'maitre'
@@ -139,6 +140,7 @@ export const STAFF_ROLE_KEYS: Record<StaffRole, string> = {
   owner: 'staff.roles.owner',
   manager: 'staff.roles.manager',
   chef: 'staff.roles.chef',
+  cook: 'staff.roles.cook',
   waiter: 'staff.roles.waiter',
   barman: 'staff.roles.barman',
   maitre: 'staff.roles.maitre',

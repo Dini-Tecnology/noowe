@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { EMBEDDED_LOGO_DATA_URI } from "./embedded-logo.ts";
+import {
+  CLIENT_EMBEDDED_LOGO_DATA_URI,
+  RESTAURANT_EMBEDDED_LOGO_DATA_URI,
+} from "./embedded-logos.ts";
 
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://noowebr.com",
@@ -11,7 +14,11 @@ const DEFAULT_REDIRECT_ALLOW_LIST = [
   "okinawa-restaurant://auth/callback",
   "okinawa-client://auth/callback",
   "https://noowebr.com/auth/callback",
+  "https://noowebr.com/auth/callback?app=restaurant",
+  "https://noowebr.com/auth/callback?app=client",
   "https://www.noowebr.com/auth/callback",
+  "https://www.noowebr.com/auth/callback?app=restaurant",
+  "https://www.noowebr.com/auth/callback?app=client",
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -21,16 +28,18 @@ const RESTAURANT_BRAND = {
   primary: "#A855F7",
   primaryDark: "#9333EA",
   primaryLight: "#C084FC",
+  primarySoft: "#F3E8FF",
   secondary: "#FF6B35",
-  logoBg: "#FFF3EE",
-  text: "#1F2937",
-  textSecondary: "#6B7280",
+  text: "#111827",
+  textSecondary: "#4B5563",
   textMuted: "#9CA3AF",
   surface: "#FFFFFF",
-  background: "#F9FAFB",
+  background: "#F3F4F6",
   border: "#E5E7EB",
   appLabel: "app NOOWE Restaurant",
+  productName: "NOOWE Restaurant",
   defaultLogoUrl: "https://noowebr.com/email/logo-restaurant.png",
+  embeddedLogo: RESTAURANT_EMBEDDED_LOGO_DATA_URI,
 } as const;
 
 /** NOOWE Client app palette (shared theme) */
@@ -38,16 +47,18 @@ const CLIENT_BRAND = {
   primary: "#EA580C",
   primaryDark: "#C2410C",
   primaryLight: "#F59E0B",
+  primarySoft: "#FFEDD5",
   secondary: "#FF6B35",
-  logoBg: "#FFF7ED",
-  text: "#1F2937",
-  textSecondary: "#6B7280",
+  text: "#111827",
+  textSecondary: "#4B5563",
   textMuted: "#9CA3AF",
   surface: "#FFFFFF",
-  background: "#F9FAFB",
+  background: "#F3F4F6",
   border: "#E5E7EB",
   appLabel: "app NOOWE",
+  productName: "NOOWE",
   defaultLogoUrl: "https://noowebr.com/email/logo-client.png",
+  embeddedLogo: CLIENT_EMBEDDED_LOGO_DATA_URI,
 } as const;
 
 type EmailBrand = typeof RESTAURANT_BRAND;
@@ -59,16 +70,17 @@ function resolveEmailBrand(emailRedirectTo: string): EmailBrand {
   return RESTAURANT_BRAND;
 }
 
-function resolveLogoUrl(emailRedirectTo: string) {
+function resolveLogoUrl(emailRedirectTo: string, brand: EmailBrand) {
   const configured = Deno.env.get("EMAIL_LOGO_URL");
   if (configured) return configured;
 
   const restaurantLogo = Deno.env.get("EMAIL_LOGO_URL_RESTAURANT");
   const clientLogo = Deno.env.get("EMAIL_LOGO_URL_CLIENT");
-  const hostedLogo = emailRedirectTo.includes("okinawa-client") ? clientLogo : restaurantLogo;
-  if (hostedLogo) return hostedLogo;
+  const envLogo = emailRedirectTo.includes("okinawa-client") ? clientLogo : restaurantLogo;
+  if (envLogo) return envLogo;
 
-  return EMBEDDED_LOGO_DATA_URI;
+  // Embedded logo — garante exibição mesmo sem assets hospedados em noowebr.com
+  return brand.embeddedLogo;
 }
 
 function buildSignupConfirmationEmailHtml(params: {
@@ -83,54 +95,92 @@ function buildSignupConfirmationEmailHtml(params: {
   const year = new Date().getFullYear();
   const { brand } = params;
   const buttonShadow = brand.primary === RESTAURANT_BRAND.primary
-    ? "0 10px 24px rgba(168,85,247,0.28)"
-    : "0 10px 24px rgba(234,88,12,0.28)";
+    ? "0 12px 28px rgba(168,85,247,0.32)"
+    : "0 12px 28px rgba(234,88,12,0.28)";
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Confirme sua conta NOOWE</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Confirme sua conta ${escapeHtml(brand.productName)}</title>
+  <style>
+    @media only screen and (max-width: 620px) {
+      .container { width: 100% !important; }
+      .content-pad { padding: 28px 20px !important; }
+      .logo-img { width: 180px !important; }
+      .cta-btn { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background:${brand.background};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${brand.background};padding:32px 16px;">
+<body style="margin:0;padding:0;background:${brand.background};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">
+    Confirme seu e-mail para ativar sua conta no ${escapeHtml(brand.appLabel)}.
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${brand.background};padding:40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:${brand.surface};border-radius:16px;overflow:hidden;border:1px solid ${brand.border};box-shadow:0 8px 30px rgba(17,24,39,0.08);">
+        <table role="presentation" class="container" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${brand.surface};border-radius:20px;overflow:hidden;border:1px solid ${brand.border};box-shadow:0 16px 40px rgba(17,24,39,0.08);">
           <tr>
-            <td style="background:linear-gradient(135deg, ${brand.primaryDark} 0%, ${brand.primary} 55%, ${brand.primaryLight} 100%);padding:28px 24px 24px;text-align:center;">
-              <div style="display:inline-block;background:${brand.logoBg};border-radius:14px;padding:14px 18px;box-shadow:0 4px 14px rgba(0,0,0,0.08);">
-                <img src="${safeLogoUrl}" alt="NOOWE" width="72" style="display:block;width:72px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" />
-              </div>
+            <td style="height:6px;background:linear-gradient(90deg, ${brand.primaryDark} 0%, ${brand.primary} 50%, ${brand.primaryLight} 100%);font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td class="content-pad" style="padding:32px 32px 24px;text-align:center;background:${brand.surface};">
+              <img
+                class="logo-img"
+                src="${safeLogoUrl}"
+                alt="${escapeHtml(brand.productName)}"
+                width="220"
+                style="display:block;width:220px;max-width:100%;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;"
+              />
             </td>
           </tr>
           <tr>
-            <td style="padding:36px 32px 28px;text-align:center;">
-              <p style="margin:0 0 10px;color:${brand.text};font-size:18px;line-height:1.4;font-weight:600;">
+            <td class="content-pad" style="padding:8px 40px 36px;text-align:center;">
+              <p style="margin:0 0 8px;color:${brand.text};font-size:24px;line-height:1.3;font-weight:700;letter-spacing:-0.02em;">
                 Olá, <span style="color:${brand.primaryDark};">${safeName}</span>!
               </p>
-              <p style="margin:0 0 28px;color:${brand.textSecondary};font-size:15px;line-height:1.6;">
-                Confirme seu e-mail para ativar sua conta no ${escapeHtml(brand.appLabel)}.
+              <p style="margin:0 0 28px;color:${brand.textSecondary};font-size:16px;line-height:1.65;max-width:420px;display:inline-block;">
+                Falta só um passo: confirme seu e-mail para ativar sua conta no ${escapeHtml(brand.appLabel)}.
               </p>
-              <a href="${safeActionLink}" style="display:inline-block;background:${brand.primary};color:#ffffff;text-decoration:none;border-radius:12px;padding:15px 28px;font-size:15px;font-weight:700;box-shadow:${buttonShadow};">
-                Confirmar minha conta
-              </a>
-              <p style="margin:28px 0 0;color:${brand.textMuted};font-size:12px;line-height:1.6;">
-                Se o botão não funcionar, copie e cole este link no navegador:
-              </p>
-              <p style="margin:8px 0 0;color:${brand.textSecondary};font-size:12px;line-height:1.6;word-break:break-all;">
-                ${safeActionLink}
-              </p>
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 28px;">
+                <tr>
+                  <td style="border-radius:14px;background:${brand.primary};box-shadow:${buttonShadow};">
+                    <a
+                      class="cta-btn"
+                      href="${safeActionLink}"
+                      style="display:inline-block;background:${brand.primary};color:#ffffff;text-decoration:none;border-radius:14px;padding:16px 32px;font-size:16px;font-weight:700;letter-spacing:0.01em;border:1px solid ${brand.primaryDark};"
+                    >
+                      Confirmar minha conta
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:460px;margin:0 auto;background:${brand.primarySoft};border-radius:14px;border:1px solid ${brand.border};">
+                <tr>
+                  <td style="padding:18px 20px;text-align:left;">
+                    <p style="margin:0 0 8px;color:${brand.textSecondary};font-size:13px;line-height:1.5;font-weight:600;">
+                      O botão não abriu?
+                    </p>
+                    <p style="margin:0 0 10px;color:${brand.textMuted};font-size:12px;line-height:1.55;">
+                      Copie e cole este link no navegador:
+                    </p>
+                    <p style="margin:0;color:${brand.primaryDark};font-size:12px;line-height:1.6;word-break:break-all;">
+                      <a href="${safeActionLink}" style="color:${brand.primaryDark};text-decoration:underline;">${safeActionLink}</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
           <tr>
-            <td style="padding:18px 32px 24px;border-top:1px solid ${brand.border};text-align:center;background:${brand.background};">
-              <p style="margin:0 0 6px;color:${brand.textMuted};font-size:11px;line-height:1.5;">
+            <td style="padding:22px 32px 28px;border-top:1px solid ${brand.border};text-align:center;background:${brand.background};">
+              <p style="margin:0 0 8px;color:${brand.textMuted};font-size:12px;line-height:1.55;">
                 Você recebeu este e-mail porque criou uma conta na NOOWE.
               </p>
-              <p style="margin:0;color:${brand.textMuted};font-size:11px;line-height:1.5;">
-                © ${year} NOOWE · <span style="color:${brand.secondary};">Experiência gastronômica reinventada</span>
+              <p style="margin:0;color:${brand.textMuted};font-size:12px;line-height:1.55;">
+                © ${year} NOOWE · <span style="color:${brand.secondary};font-weight:600;">Experiência gastronômica reinventada</span>
               </p>
             </td>
           </tr>
@@ -140,6 +190,11 @@ function buildSignupConfirmationEmailHtml(params: {
   </table>
 </body>
 </html>`;
+}
+
+function buildAppConfirmationLink(emailRedirectTo: string, tokenHash: string) {
+  const separator = emailRedirectTo.includes("?") ? "&" : "?";
+  return `${emailRedirectTo}${separator}token_hash=${encodeURIComponent(tokenHash)}&type=email`;
 }
 
 type SupabaseAdmin = ReturnType<typeof createClient>;
@@ -168,7 +223,21 @@ function isAllowedOrigin(origin: string | null) {
 }
 
 function isAllowedRedirect(url: string) {
-  return getRedirectAllowList().some((allowed) => url === allowed || url.startsWith(`${allowed}?`));
+  return getRedirectAllowList().some((allowed) => {
+    if (url === allowed) return true;
+    if (url.startsWith(`${allowed}?`) || url.startsWith(`${allowed}#`)) return true;
+    try {
+      const parsed = new URL(url);
+      const allowedParsed = new URL(allowed);
+      return (
+        parsed.protocol === allowedParsed.protocol &&
+        parsed.host === allowedParsed.host &&
+        parsed.pathname === allowedParsed.pathname
+      );
+    } catch {
+      return url.startsWith(`${allowed}?`) || url.startsWith(`${allowed}#`);
+    }
+  });
 }
 
 function corsHeaders(req: Request) {
@@ -283,6 +352,21 @@ function createSupabaseAdmin() {
   });
 }
 
+async function findAuthUserByEmail(supabase: SupabaseAdmin, email: string) {
+  const perPage = 1000;
+
+  for (let page = 1; page <= 100; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+
+    const user = data.users.find((candidate) => normalizeEmail(candidate.email) === email);
+    if (user) return user;
+    if (data.users.length < perPage) return null;
+  }
+
+  throw new Error("Unable to complete auth user lookup");
+}
+
 async function sendConfirmationEmail(params: {
   email: string;
   fullName: string;
@@ -296,7 +380,7 @@ async function sendConfirmationEmail(params: {
 
   const from = Deno.env.get("RESEND_FROM_EMAIL") ?? "NOOWE <notification@noowebr.com>";
   const brand = resolveEmailBrand(params.emailRedirectTo);
-  const logoUrl = resolveLogoUrl(params.emailRedirectTo);
+  const logoUrl = resolveLogoUrl(params.emailRedirectTo, brand);
   const html = buildSignupConfirmationEmailHtml({
     fullName: params.fullName,
     actionLink: params.actionLink,
@@ -313,7 +397,7 @@ async function sendConfirmationEmail(params: {
     body: JSON.stringify({
       from,
       to: [params.email],
-      subject: "Confirme sua conta NOOWE",
+      subject: `Confirme sua conta ${brand.productName}`,
       html,
     }),
   });
@@ -340,23 +424,65 @@ serve(async (req) => {
 
   try {
     const payload = await req.json().catch(() => null);
+    const action = payload?.action === "resend" ? "resend" : "register";
     const email = normalizeEmail(payload?.email);
     const password = typeof payload?.password === "string" ? payload.password : "";
     const fullName = sanitizeText(payload?.fullName ?? payload?.full_name, 120);
     const emailRedirectTo = typeof payload?.emailRedirectTo === "string" ? payload.emailRedirectTo : "";
 
-    if (!EMAIL_REGEX.test(email) || password.length < 6 || !fullName || !isAllowedRedirect(emailRedirectTo)) {
+    if (
+      !EMAIL_REGEX.test(email) ||
+      !isAllowedRedirect(emailRedirectTo) ||
+      (action === "register" && (password.length < 6 || !fullName))
+    ) {
       return jsonResponse(req, { error: "Invalid registration payload" }, 400);
     }
 
     const supabase = createSupabaseAdmin();
-    const allowed = await enforceRateLimit(supabase, req, "register-with-resend", email, 3, 15 * 60);
+    const allowed = await enforceRateLimit(supabase, req, `register-with-resend:${action}`, email, 3, 15 * 60);
     if (!allowed) {
       return jsonResponse(req, { error: "Too many requests" }, 429);
     }
 
     if (!Deno.env.get("RESEND_API_KEY")) {
       return jsonResponse(req, { error: "RESEND_API_KEY is not configured" }, 500);
+    }
+
+    if (action === "resend") {
+      const existingUser = await findAuthUserByEmail(supabase, email);
+
+      // Generic response avoids exposing whether an email has an account.
+      if (!existingUser || existingUser.email_confirmed_at) {
+        return jsonResponse(req, { success: true, confirmationSent: false });
+      }
+
+      const existingName = sanitizeText(
+        existingUser.user_metadata?.full_name ?? existingUser.user_metadata?.name ?? "tudo bem",
+        120,
+      );
+      const { data: resendData, error: resendError } = await supabase.auth.admin.generateLink({
+        type: "signup",
+        email,
+        password: `${crypto.randomUUID()}Aa1!`,
+        options: {
+          redirectTo: emailRedirectTo,
+          data: existingUser.user_metadata,
+        },
+      });
+
+      if (resendError || !resendData.properties?.hashed_token) {
+        console.error("Supabase resend generateLink error:", resendError);
+        return jsonResponse(req, { error: resendError?.message || "Failed to create confirmation link" }, 400);
+      }
+
+      await sendConfirmationEmail({
+        email,
+        fullName: existingName,
+        actionLink: buildAppConfirmationLink(emailRedirectTo, resendData.properties.hashed_token),
+        emailRedirectTo,
+      });
+
+      return jsonResponse(req, { success: true, confirmationSent: true });
     }
 
     const { data, error } = await supabase.auth.admin.generateLink({
@@ -376,8 +502,8 @@ serve(async (req) => {
       return jsonResponse(req, { error: error.message || "Failed to create confirmation link" }, 400);
     }
 
-    if (!data.properties?.action_link) {
-      console.error("Supabase generateLink did not return action_link");
+    if (!data.properties?.hashed_token) {
+      console.error("Supabase generateLink did not return hashed_token");
       return jsonResponse(req, { error: "Failed to create confirmation link" }, 500);
     }
 
@@ -385,7 +511,7 @@ serve(async (req) => {
       await sendConfirmationEmail({
         email,
         fullName,
-        actionLink: data.properties.action_link,
+        actionLink: buildAppConfirmationLink(emailRedirectTo, data.properties.hashed_token),
         emailRedirectTo,
       });
     } catch (emailError) {

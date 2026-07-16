@@ -8,6 +8,7 @@ import {
   Platform,
   Animated,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import {
   Text,
@@ -33,6 +34,7 @@ import { useI18n } from '@/shared/hooks/useI18n';
 import { useScreenTracking, useAnalytics } from '@/shared/hooks/useAnalytics';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { formatCurrency as fmtCurrencyUtil } from '@okinawa/shared/utils/formatters';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 import { getLanguage } from '@okinawa/shared/i18n';
 import type { RootStackParamList, PaymentSuccessParams } from '../../types';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
@@ -243,6 +245,8 @@ export default function UnifiedPaymentScreen() {
       setInitialLoading(false);
     }
   }, [orderId, t, analytics]);
+
+  const pullToRefresh = usePullToRefresh(loadData);
 
   // Calculations
   const subtotal = useMemo(() => order?.subtotal_amount ?? 0, [order]);
@@ -754,7 +758,11 @@ export default function UnifiedPaymentScreen() {
   return (
     <ScreenContainer hasKeyboard>
     <>
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={pullToRefresh.refreshing} onRefresh={() => { void pullToRefresh.onRefresh(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+      >
         {/* Header */}
         <Text variant="headlineSmall" style={styles.title}>
           {t('payment.title')}

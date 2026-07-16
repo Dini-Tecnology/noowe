@@ -59,6 +59,20 @@ export const authService = {
     return data;
   },
 
+  async resendSignupConfirmation(email: string) {
+    await supabaseAuthAdapter.resendSignupConfirmation(email);
+  },
+
+  async verifyEmailTokenHash(tokenHash: string) {
+    const data = await supabaseAuthAdapter.verifyEmailTokenHash(tokenHash);
+    if (!data.access_token || !data.user) {
+      throw new Error('Supabase did not return an authenticated session');
+    }
+    await this.storeAuthData(data);
+    this.notifyAuthStateChange(true);
+    return data;
+  },
+
   /**
    * Social login (Apple/Google)
    */

@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import { validationMsg, localizeValidationMessage } from './messages';
 
 // ============================================
 // COMMON FIELD VALIDATORS
@@ -19,28 +20,28 @@ import { z } from 'zod';
 export const emailSchema = z
   .string()
   .trim()
-  .min(1, { message: 'Email is required' })
-  .email({ message: 'Invalid email address' })
-  .max(255, { message: 'Email must be less than 255 characters' });
+  .min(1, { message: validationMsg.emailRequired })
+  .email({ message: validationMsg.invalidEmailAddress })
+  .max(255, { message: validationMsg.emailMaxLength });
 
 /**
  * Password validation with security requirements
  */
 export const passwordSchema = z
   .string()
-  .min(8, { message: 'Password must be at least 8 characters' })
-  .max(100, { message: 'Password must be less than 100 characters' })
-  .regex(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
-  .regex(/[a-z]/, { message: 'Password must contain at least one lowercase letter' })
-  .regex(/[0-9]/, { message: 'Password must contain at least one number' });
+  .min(8, { message: validationMsg.passwordMinLength })
+  .max(100, { message: validationMsg.passwordMaxLength })
+  .regex(/[A-Z]/, { message: validationMsg.passwordUppercase })
+  .regex(/[a-z]/, { message: validationMsg.passwordLowercase })
+  .regex(/[0-9]/, { message: validationMsg.passwordNumber });
 
 /**
  * Simple password for login (no complexity requirements)
  */
 export const loginPasswordSchema = z
   .string()
-  .min(1, { message: 'Password is required' })
-  .max(100, { message: 'Password must be less than 100 characters' });
+  .min(1, { message: validationMsg.passwordRequired })
+  .max(100, { message: validationMsg.passwordMaxLength });
 
 /**
  * Full name validation
@@ -48,9 +49,9 @@ export const loginPasswordSchema = z
 export const fullNameSchema = z
   .string()
   .trim()
-  .min(2, { message: 'Name must be at least 2 characters' })
-  .max(100, { message: 'Name must be less than 100 characters' })
-  .regex(/^[a-zA-ZÀ-ÿ\s'-]+$/, { message: 'Name contains invalid characters' });
+  .min(2, { message: validationMsg.nameMinLength })
+  .max(100, { message: validationMsg.nameMaxLength })
+  .regex(/^[a-zA-ZÀ-ÿ\s'-]+$/, { message: validationMsg.nameInvalidChars });
 
 /**
  * Phone number validation (Brazilian format)
@@ -58,9 +59,9 @@ export const fullNameSchema = z
 export const phoneSchema = z
   .string()
   .trim()
-  .min(10, { message: 'Phone number is too short' })
-  .max(15, { message: 'Phone number is too long' })
-  .regex(/^[\d\s()+-]+$/, { message: 'Invalid phone number format' });
+  .min(10, { message: validationMsg.phoneTooShort })
+  .max(15, { message: validationMsg.phoneTooLong })
+  .regex(/^[\d\s()+-]+$/, { message: validationMsg.phoneInvalidFormat });
 
 /**
  * Optional phone number
@@ -81,11 +82,11 @@ export const phoneAuthSchema = z.object({
   phoneNumber: z
     .string()
     .trim()
-    .min(10, { message: 'Phone number is required' })
-    .regex(/^\+?[\d\s()-]+$/, { message: 'Invalid phone number format' }),
+    .min(10, { message: validationMsg.phoneRequired })
+    .regex(/^\+?[\d\s()-]+$/, { message: validationMsg.phoneInvalidFormat }),
   countryCode: z
     .string()
-    .regex(/^\+\d{1,4}$/, { message: 'Invalid country code' })
+    .regex(/^\+\d{1,4}$/, { message: validationMsg.countryCodeInvalid })
     .default('+55'),
 });
 
@@ -97,8 +98,8 @@ export type PhoneAuthFormData = z.infer<typeof phoneAuthSchema>;
 export const otpSchema = z.object({
   code: z
     .string()
-    .length(6, { message: 'OTP code must be 6 digits' })
-    .regex(/^\d{6}$/, { message: 'OTP code must contain only numbers' }),
+    .length(6, { message: validationMsg.otpLength })
+    .regex(/^\d{6}$/, { message: validationMsg.otpNumbersOnly }),
 });
 
 export type OTPFormData = z.infer<typeof otpSchema>;
@@ -107,8 +108,8 @@ export type OTPFormData = z.infer<typeof otpSchema>;
  * Social login validation
  */
 export const socialAuthSchema = z.object({
-  provider: z.enum(['apple', 'google'], { message: 'Invalid provider' }),
-  idToken: z.string().min(1, { message: 'ID token is required' }),
+  provider: z.enum(['apple', 'google'], { message: validationMsg.invalidProvider }),
+  idToken: z.string().min(1, { message: validationMsg.idTokenRequired }),
   deviceInfo: z.object({
     deviceId: z.string().min(1),
     platform: z.enum(['ios', 'android', 'web']),
@@ -123,11 +124,11 @@ export type SocialAuthFormData = z.infer<typeof socialAuthSchema>;
  * Biometric enrollment
  */
 export const biometricEnrollmentSchema = z.object({
-  enrollmentToken: z.string().min(1, { message: 'Enrollment token is required' }),
+  enrollmentToken: z.string().min(1, { message: validationMsg.enrollmentTokenRequired }),
   biometricType: z.enum(['face_id', 'touch_id', 'fingerprint'], { 
-    message: 'Invalid biometric type' 
+    message: validationMsg.invalidBiometricType 
   }),
-  publicKey: z.string().min(1, { message: 'Public key is required' }),
+  publicKey: z.string().min(1, { message: validationMsg.publicKeyRequired }),
 });
 
 export type BiometricEnrollmentFormData = z.infer<typeof biometricEnrollmentSchema>;
@@ -156,19 +157,19 @@ export const registerSchema = z.object({
   // Either email or phone is required
   return data.email || data.phone;
 }, {
-  message: 'Email or phone number is required',
+  message: validationMsg.emailOrPhoneRequired,
   path: ['email'],
 }).refine((data) => {
   if (!data.password) return true;
   return Boolean(data.confirmPassword);
 }, {
-  message: 'Password confirmation is required',
+  message: validationMsg.passwordConfirmationRequired,
   path: ['confirmPassword'],
 }).refine((data) => {
   if (!data.password || !data.confirmPassword) return true;
   return data.password === data.confirmPassword;
 }, {
-  message: "Passwords don't match",
+  message: validationMsg.passwordsDontMatch,
   path: ['confirmPassword'],
 });
 
@@ -201,7 +202,7 @@ export const resetPasswordSchema = z.object({
   password: passwordSchema,
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
+  message: validationMsg.passwordsDontMatch,
   path: ['confirmPassword'],
 });
 
@@ -215,17 +216,17 @@ export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
  * Create reservation form
  */
 export const createReservationSchema = z.object({
-  restaurantId: z.string().min(1, { message: 'Restaurant is required' }),
-  date: z.string().min(1, { message: 'Date is required' }),
-  time: z.string().min(1, { message: 'Time is required' }),
+  restaurantId: z.string().min(1, { message: validationMsg.restaurantRequired }),
+  date: z.string().min(1, { message: validationMsg.dateRequired }),
+  time: z.string().min(1, { message: validationMsg.timeRequired }),
   partySize: z
     .number()
     .int()
-    .min(1, { message: 'Party size must be at least 1' })
-    .max(20, { message: 'Party size cannot exceed 20' }),
+    .min(1, { message: validationMsg.partySizeMin })
+    .max(20, { message: validationMsg.partySizeMax }),
   specialRequests: z
     .string()
-    .max(500, { message: 'Special requests must be less than 500 characters' })
+    .max(500, { message: validationMsg.specialRequestsMaxLength })
     .optional(),
   tablePreference: z.enum(['indoor', 'outdoor', 'bar', 'any']).optional(),
 });
@@ -237,10 +238,10 @@ export type CreateReservationFormData = z.infer<typeof createReservationSchema>;
  */
 export const guestInvitationSchema = z.object({
   method: z.enum(['app', 'sms', 'email', 'link']),
-  recipient: z.string().min(1, { message: 'Recipient is required' }),
+  recipient: z.string().min(1, { message: validationMsg.recipientRequired }),
   message: z
     .string()
-    .max(300, { message: 'Message must be less than 300 characters' })
+    .max(300, { message: validationMsg.messageMaxLength })
     .optional(),
 });
 
@@ -254,15 +255,15 @@ export type GuestInvitationFormData = z.infer<typeof guestInvitationSchema>;
  * Add item to order
  */
 export const addOrderItemSchema = z.object({
-  menuItemId: z.string().min(1, { message: 'Menu item is required' }),
+  menuItemId: z.string().min(1, { message: validationMsg.menuItemRequired }),
   quantity: z
     .number()
     .int()
-    .min(1, { message: 'Quantity must be at least 1' })
-    .max(99, { message: 'Quantity cannot exceed 99' }),
+    .min(1, { message: validationMsg.quantityMin })
+    .max(99, { message: validationMsg.quantityMax }),
   notes: z
     .string()
-    .max(200, { message: 'Notes must be less than 200 characters' })
+    .max(200, { message: validationMsg.notesMaxLength200 })
     .optional(),
   modifiers: z.array(z.string()).optional(),
 });
@@ -275,7 +276,7 @@ export type AddOrderItemFormData = z.infer<typeof addOrderItemSchema>;
 export const orderNotesSchema = z.object({
   notes: z
     .string()
-    .max(500, { message: 'Notes must be less than 500 characters' }),
+    .max(500, { message: validationMsg.notesMaxLength500 }),
 });
 
 export type OrderNotesFormData = z.infer<typeof orderNotesSchema>;
@@ -290,12 +291,12 @@ export type OrderNotesFormData = z.infer<typeof orderNotesSchema>;
 export const tipSchema = z.object({
   amount: z
     .number()
-    .min(0, { message: 'Tip cannot be negative' })
-    .max(10000, { message: 'Tip amount exceeds maximum' }),
+    .min(0, { message: validationMsg.tipNegative })
+    .max(10000, { message: validationMsg.tipMax }),
   percentage: z
     .number()
-    .min(0, { message: 'Percentage cannot be negative' })
-    .max(100, { message: 'Percentage cannot exceed 100%' })
+    .min(0, { message: validationMsg.percentageNegative })
+    .max(100, { message: validationMsg.percentageMax })
     .optional(),
 });
 
@@ -308,7 +309,7 @@ export const splitPaymentSchema = z.object({
   mode: z.enum(['equal', 'custom', 'by_item']),
   participants: z
     .array(z.string())
-    .min(2, { message: 'At least 2 participants required for split' }),
+    .min(2, { message: validationMsg.splitMinParticipants }),
   amounts: z.record(z.string(), z.number()).optional(),
 });
 
@@ -342,12 +343,12 @@ export const reviewSchema = z.object({
   rating: z
     .number()
     .int()
-    .min(1, { message: 'Rating must be at least 1' })
-    .max(5, { message: 'Rating cannot exceed 5' }),
+    .min(1, { message: validationMsg.ratingMin })
+    .max(5, { message: validationMsg.ratingMax }),
   comment: z
     .string()
-    .min(10, { message: 'Review must be at least 10 characters' })
-    .max(1000, { message: 'Review must be less than 1000 characters' }),
+    .min(10, { message: validationMsg.reviewMinLength })
+    .max(1000, { message: validationMsg.reviewMaxLength }),
   tags: z.array(z.string()).optional(),
 });
 
@@ -363,7 +364,7 @@ export type ReviewFormData = z.infer<typeof reviewSchema>;
 export const tableNotesSchema = z.object({
   notes: z
     .string()
-    .max(500, { message: 'Notes must be less than 500 characters' }),
+    .max(500, { message: validationMsg.notesMaxLength500 }),
 });
 
 export type TableNotesFormData = z.infer<typeof tableNotesSchema>;
@@ -374,7 +375,7 @@ export type TableNotesFormData = z.infer<typeof tableNotesSchema>;
 export const staffMemberSchema = z.object({
   name: fullNameSchema,
   email: emailSchema,
-  role: z.enum(['owner', 'manager', 'maitre', 'chef', 'bartender', 'waiter']),
+  role: z.enum(['owner', 'manager', 'maitre', 'chef', 'cook', 'barman', 'waiter']),
   phone: optionalPhoneSchema.optional(),
 });
 
@@ -387,23 +388,23 @@ export const menuItemSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(2, { message: 'Name must be at least 2 characters' })
-    .max(100, { message: 'Name must be less than 100 characters' }),
+    .min(2, { message: validationMsg.nameMinLength })
+    .max(100, { message: validationMsg.nameMaxLength }),
   description: z
     .string()
-    .max(500, { message: 'Description must be less than 500 characters' })
+    .max(500, { message: validationMsg.descriptionMaxLength })
     .optional(),
   price: z
     .number()
-    .positive({ message: 'Price must be positive' })
-    .max(99999.99, { message: 'Price exceeds maximum' }),
-  category: z.string().min(1, { message: 'Category is required' }),
+    .positive({ message: validationMsg.pricePositive })
+    .max(99999.99, { message: validationMsg.priceMax }),
+  category: z.string().min(1, { message: validationMsg.categoryRequired }),
   isAvailable: z.boolean().default(true),
   preparationTime: z
     .number()
     .int()
-    .min(1, { message: 'Preparation time must be at least 1 minute' })
-    .max(180, { message: 'Preparation time cannot exceed 180 minutes' })
+    .min(1, { message: validationMsg.preparationTimeMin })
+    .max(180, { message: validationMsg.preparationTimeMax })
     .optional(),
   allergens: z.array(z.string()).optional(),
   calories: z
@@ -420,12 +421,12 @@ export type MenuItemFormData = z.infer<typeof menuItemSchema>;
  * Financial report export
  */
 export const financialReportSchema = z.object({
-  startDate: z.string().min(1, { message: 'Start date is required' }),
-  endDate: z.string().min(1, { message: 'End date is required' }),
+  startDate: z.string().min(1, { message: validationMsg.startDateRequired }),
+  endDate: z.string().min(1, { message: validationMsg.endDateRequired }),
   format: z.enum(['pdf', 'xlsx', 'csv']),
   includeDetails: z.boolean().default(true),
 }).refine((data) => new Date(data.startDate) <= new Date(data.endDate), {
-  message: 'Start date must be before or equal to end date',
+  message: validationMsg.startDateBeforeEnd,
   path: ['endDate'],
 });
 
@@ -438,7 +439,7 @@ export type FinancialReportFormData = z.infer<typeof financialReportSchema>;
 export const cnpjSchema = z
   .string()
   .trim()
-  .regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$|^\d{14}$/, { message: 'Invalid CNPJ format' });
+  .regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$|^\d{14}$/, { message: validationMsg.cnpjInvalid });
 
 export const fiscalConfigSchema = z.object({
   cnpj: cnpjSchema,
@@ -457,16 +458,16 @@ export type FiscalConfigFormData = z.infer<typeof fiscalConfigSchema>;
 export const cardNumberSchema = z
   .string()
   .trim()
-  .min(13, { message: 'Card number too short' })
-  .max(19, { message: 'Card number too long' })
-  .regex(/^[\d\s]+$/, { message: 'Card number must contain only digits' });
+  .min(13, { message: validationMsg.cardNumberTooShort })
+  .max(19, { message: validationMsg.cardNumberTooLong })
+  .regex(/^[\d\s]+$/, { message: validationMsg.cardNumberDigitsOnly });
 
 export const cardSchema = z.object({
   number: cardNumberSchema,
   holderName: z.string().min(2).max(100),
-  expiryMonth: z.string().regex(/^(0[1-9]|1[0-2])$/, { message: 'Invalid month' }),
-  expiryYear: z.string().regex(/^\d{2,4}$/, { message: 'Invalid year' }),
-  cvv: z.string().regex(/^\d{3,4}$/, { message: 'Invalid CVV' }),
+  expiryMonth: z.string().regex(/^(0[1-9]|1[0-2])$/, { message: validationMsg.invalidMonth }),
+  expiryYear: z.string().regex(/^\d{2,4}$/, { message: validationMsg.invalidYear }),
+  cvv: z.string().regex(/^\d{3,4}$/, { message: validationMsg.invalidCvv }),
 });
 export type CardFormData = z.infer<typeof cardSchema>;
 
@@ -482,7 +483,7 @@ export const addressSchema = z.object({
   neighborhood: z.string().min(2).max(100),
   city: z.string().min(2).max(100),
   state: z.string().length(2),
-  postalCode: z.string().regex(/^\d{5}-?\d{3}$/, { message: 'Invalid CEP format' }),
+  postalCode: z.string().regex(/^\d{5}-?\d{3}$/, { message: validationMsg.cepInvalid }),
 });
 export type AddressFormData = z.infer<typeof addressSchema>;
 
@@ -493,8 +494,8 @@ export type AddressFormData = z.infer<typeof addressSchema>;
 export const billSchema = z.object({
   description: z.string().min(2).max(200),
   supplier: z.string().min(1).max(200),
-  amount: z.number().positive({ message: 'Amount must be positive' }),
-  dueDate: z.string().min(1, { message: 'Due date is required' }),
+  amount: z.number().positive({ message: validationMsg.amountPositive }),
+  dueDate: z.string().min(1, { message: validationMsg.dueDateRequired }),
   category: z.string().min(1).optional(),
   isRecurring: z.boolean().default(false),
 });
@@ -518,14 +519,14 @@ export type TableFormData = z.infer<typeof tableFormSchema>;
 
 export const recipeIngredientSchema = z.object({
   ingredientId: z.string().min(1),
-  quantity: z.number().positive({ message: 'Quantity must be positive' }),
+  quantity: z.number().positive({ message: validationMsg.quantityPositive }),
   unit: z.string().min(1),
 });
 
 export const recipeSchema = z.object({
   name: z.string().min(2).max(200),
   menuItemId: z.string().optional(),
-  ingredients: z.array(recipeIngredientSchema).min(1, { message: 'At least one ingredient required' }),
+  ingredients: z.array(recipeIngredientSchema).min(1, { message: validationMsg.atLeastOneIngredient }),
 });
 export type RecipeFormData = z.infer<typeof recipeSchema>;
 
@@ -564,7 +565,7 @@ export function validateForm<T>(
   for (const issue of result.error.issues) {
     const path = issue.path.join('.');
     if (!errors[path]) {
-      errors[path] = issue.message;
+      errors[path] = localizeValidationMessage(issue.message);
     }
   }
 
@@ -575,7 +576,7 @@ export function validateForm<T>(
  * Get first error message from Zod validation result
  */
 export function getFirstError(result: z.SafeParseError<unknown>): string {
-  return result.error.issues[0]?.message || 'Validation failed';
+  return localizeValidationMessage(result.error.issues[0]?.message || validationMsg.validationFailed);
 }
 
 // ============================================

@@ -146,10 +146,6 @@ const OwnerContent = ({ tab }: { tab: OwnerTab }) => {
 
 const DashboardView = () => (
   <main className="mt-4 space-y-4">
-    <div className="rounded-2xl border border-red-100 bg-red-50 px-3.5 py-3 text-[11px] leading-relaxed text-red-500">
-      Resumo executivo otimizado para leitura rapida no celular.
-    </div>
-
     <div className="grid grid-cols-2 gap-3">
       <Metric value="R$ 13.736" label="Receita Hoje" tone="success" />
       <Metric value="10" label="Pedidos Ativos" tone="danger" />

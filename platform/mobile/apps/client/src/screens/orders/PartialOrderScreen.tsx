@@ -20,6 +20,7 @@ import {
   Alert,
   FlatList,
   TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import {
   Text,
@@ -33,6 +34,7 @@ import {
 } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import ApiService from '@/shared/services/api';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 import { useI18n } from '@/shared/hooks/useI18n';
 import { formatCurrency } from '@okinawa/shared/utils/formatters';
 import { getLanguage } from '@okinawa/shared/i18n';
@@ -132,6 +134,8 @@ export default function PartialOrderScreen() {
       setLoading(false);
     }
   };
+
+  const pullToRefresh = usePullToRefresh(loadData);
 
   // ---- New items management ----
   const addNewItem = useCallback((menuItem: MenuItem) => {
@@ -397,7 +401,11 @@ export default function PartialOrderScreen() {
   // ---- Render ----
   return (
     <ScreenContainer>
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      refreshControl={<RefreshControl refreshing={pullToRefresh.refreshing} onRefresh={() => { void pullToRefresh.onRefresh(); }} />}
+    >
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>{t('partialOrder.title')}</Text>

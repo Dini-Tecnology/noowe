@@ -19,6 +19,24 @@ function createMetroConfig(appRoot) {
   }));
   const config = getDefaultConfig(appRoot);
 
+  // Gradle/pnpm criam e apagam pastas dentro de node_modules durante `run:android`.
+  // No Windows o watcher do Metro quebra com ENOENT se tentar observar esses paths.
+  const nativeBuildBlockList = [
+    /[/\\]\.gradle[/\\]/,
+    /[/\\]\.cxx[/\\]/,
+    /[/\\]android[/\\].*[/\\]build[/\\]/,
+    /[/\\]ios[/\\]build[/\\]/,
+    /[/\\]ios[/\\]Pods[/\\]/,
+    /[/\\]node_modules[/\\].*_tmp_\d+[/\\]/,
+  ];
+
+  const existingBlockList = config.resolver?.blockList;
+  const blockList = Array.isArray(existingBlockList)
+    ? [...existingBlockList, ...nativeBuildBlockList]
+    : existingBlockList
+      ? [existingBlockList, ...nativeBuildBlockList]
+      : nativeBuildBlockList;
+
   config.watchFolders = [...(config.watchFolders || []), mobileRoot];
   config.server = {
     ...config.server,
@@ -26,6 +44,7 @@ function createMetroConfig(appRoot) {
   };
   config.resolver = {
     ...config.resolver,
+    blockList,
     nodeModulesPaths: [
       path.resolve(appRoot, 'node_modules'),
       path.resolve(mobileRoot, 'node_modules'),
