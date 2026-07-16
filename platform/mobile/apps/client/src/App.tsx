@@ -14,6 +14,12 @@ import { theme } from './theme';
 import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import { AnalyticsProvider } from '@/shared/contexts/AnalyticsContext';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
+import { initSentry } from '@/shared/config/sentry';
+
+// Capture crashes/errors in production as early as possible, before the
+// provider tree mounts. No-ops with a console warning if EXPO_PUBLIC_SENTRY_DSN
+// isn't set (see shared/config/sentry.ts).
+initSentry();
 
 export default function App() {
   useEffect(() => {
