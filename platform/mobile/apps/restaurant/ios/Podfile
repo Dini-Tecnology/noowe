@@ -23,6 +23,10 @@ prepare_react_native_project!
 target 'NooweRestaurante' do
   use_expo_modules!
 
+  # FirebaseCoreInternal is written in Swift and needs GoogleUtilities to
+  # expose a module map when CocoaPods integrates it as a static library.
+  pod 'GoogleUtilities', :modular_headers => true
+
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
   else
