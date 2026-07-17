@@ -54,6 +54,8 @@
         ]
       },
       "infoPlist": {
+        "CFBundleDisplayName": "Noowe Restaurant",
+        "CFBundleName": "Noowe Restaurant",
         "UIBackgroundModes": [
           "fetch",
           "remote-notification"
@@ -100,6 +102,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-apple-authentication",
       "expo-router",
       [

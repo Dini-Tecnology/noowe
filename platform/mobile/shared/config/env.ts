@@ -183,15 +183,30 @@ const stagingConfig: EnvironmentConfig = {
 };
 
 /**
- * Reads EAS build-time environment variable from Expo Constants.
- * In EAS Build, set these via `eas.json` env or `--build-env` flags.
- * Falls back to defaultValue if not set (non-production) or throws in production.
+ * Expo replaces EXPO_PUBLIC_* references at bundle time only when it can see
+ * the complete property name (for example process.env.EXPO_PUBLIC_FOO).
+ * Dynamic access such as process.env[key] is not inlined and is therefore
+ * empty in a standalone/TestFlight build.
  */
+function readBundledPublicEnv(key: string): string | undefined {
+  switch (key) {
+    case 'EXPO_PUBLIC_SUPABASE_URL':
+      return process.env.EXPO_PUBLIC_SUPABASE_URL;
+    case 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY':
+      return process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    case 'EXPO_PUBLIC_SUPABASE_ANON_KEY':
+      return process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+    default:
+      return undefined;
+  }
+}
+
+/** Reads build-time configuration with a fallback for local/non-production use. */
 function requireEnv(key: string, defaultValue?: string): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const Constants = require('expo-constants').default;
-    const value = Constants.expoConfig?.extra?.[key] ?? process.env[key];
+    const value = Constants.expoConfig?.extra?.[key] ?? readBundledPublicEnv(key) ?? process.env[key];
     if (value) return value;
   } catch {
     // expo-constants not available (e.g., in tests)

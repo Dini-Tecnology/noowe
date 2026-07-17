@@ -10,10 +10,6 @@ function resolvePackageDir(appRoot, mobileRoot, packageName) {
 function createMetroConfig(appRoot) {
   const mobileRoot = path.resolve(appRoot, '../..');
 
-  // Monorepo: alinha serverRoot e rewrite do entry point com a raiz do workspace,
-  // para que expo-router/entry resolva em mobile/node_modules (e não em apps/*/node_modules).
-  process.env.EXPO_USE_METRO_WORKSPACE_ROOT = '1';
-
   const { getDefaultConfig } = require(require.resolve('expo/metro-config', {
     paths: [appRoot],
   }));
@@ -37,7 +33,15 @@ function createMetroConfig(appRoot) {
       ? [existingBlockList, ...nativeBuildBlockList]
       : nativeBuildBlockList;
 
-  config.watchFolders = [...(config.watchFolders || []), mobileRoot];
+  // Expo SDK 54 already discovers the workspace packages and node_modules.
+  // Watching the entire mobileRoot as well makes Metro index the same files
+  // through overlapping roots (for example node_modules/eslint), which can
+  // corrupt TreeFS when dependencies change between pnpm symlinks and npm
+  // directories. The shared source folder is not a package, so watch it
+  // explicitly without adding the broad workspace root.
+  config.watchFolders = [
+    ...new Set([...(config.watchFolders || []), path.resolve(mobileRoot, 'shared')]),
+  ].filter((folder) => path.resolve(folder) !== path.resolve(appRoot));
   config.server = {
     ...config.server,
     unstable_serverRoot: mobileRoot,
