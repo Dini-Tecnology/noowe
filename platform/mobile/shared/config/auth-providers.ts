@@ -1,5 +1,4 @@
 import { Platform } from 'react-native';
-import { isGoogleNativeOAuthConfigured } from '../utils/googleOAuthEnv';
 
 function readPublicFlag(key: string): boolean {
   const value = process.env[key]?.trim().toLowerCase();
@@ -7,7 +6,7 @@ function readPublicFlag(key: string): boolean {
 }
 
 export function isGoogleAuthProviderConfigured(): boolean {
-  return readPublicFlag('EXPO_PUBLIC_SUPABASE_AUTH_GOOGLE_ENABLED') && isGoogleNativeOAuthConfigured();
+  return readPublicFlag('EXPO_PUBLIC_SUPABASE_AUTH_GOOGLE_ENABLED');
 }
 
 export function isAppleAuthProviderConfigured(): boolean {

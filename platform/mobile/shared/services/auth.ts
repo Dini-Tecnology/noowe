@@ -63,8 +63,8 @@ export const authService = {
     await supabaseAuthAdapter.resendSignupConfirmation(email);
   },
 
-  async verifyEmailTokenHash(tokenHash: string) {
-    const data = await supabaseAuthAdapter.verifyEmailTokenHash(tokenHash);
+  async verifyEmailTokenHash(tokenHash: string, type?: 'email' | 'recovery' | 'signup' | 'invite' | 'magiclink' | 'email_change') {
+    const data = await supabaseAuthAdapter.verifyEmailTokenHash(tokenHash, type ?? 'email');
     if (!data.access_token || !data.user) {
       throw new Error('Supabase did not return an authenticated session');
     }

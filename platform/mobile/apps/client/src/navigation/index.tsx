@@ -15,7 +15,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { authService } from '@/shared/services/auth';
 import { socialAuthService } from '@/shared/services/social-auth';
@@ -27,6 +26,7 @@ import {
   isGoogleAuthProviderConfigured,
 } from '@/shared/config/auth-providers';
 import { captureException } from '@/shared/config/sentry';
+import { showErrorToast } from '@/shared/utils/error-handler';
 import { ClientTabBar } from '../components/navigation/ClientTabBar';
 import { liquidGlassTabNavigatorScreenOptions } from '@okinawa/shared/components/LiquidGlassBottomNav';
 import {
@@ -188,50 +188,16 @@ const bootStyles = StyleSheet.create({
 // AUTH STACK (Passwordless-First)
 // ============================================
 
-const noopGooglePrompt: Parameters<typeof socialAuthService.signInWithGoogle>[2] = async () => ({
-  type: 'cancel',
-});
-
 interface AuthStackBodyProps {
   googleLoginAvailable: boolean;
   appleLoginAvailable: boolean;
   biometricLoginAvailable: boolean;
-  googleRequest: Parameters<typeof socialAuthService.signInWithGoogle>[0];
-  googleResponse: Parameters<typeof socialAuthService.signInWithGoogle>[1];
-  googlePromptAsync: Parameters<typeof socialAuthService.signInWithGoogle>[2];
 }
 
-function AuthStackWithGoogleConfigured(props: Pick<AuthStackBodyProps, 'appleLoginAvailable' | 'biometricLoginAvailable'>) {
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
-    expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    scopes: ['openid', 'profile', 'email'],
-  });
-
-  return (
-    <AuthStackBody
-      googleLoginAvailable
-      appleLoginAvailable={props.appleLoginAvailable}
-      biometricLoginAvailable={props.biometricLoginAvailable}
-      googleRequest={googleRequest}
-      googleResponse={googleResponse}
-      googlePromptAsync={googlePromptAsync}
-    />
-  );
-}
-
-/**
- * OAuth stack screens. When `googleLoginAvailable` is false, the Google hook is not mounted
- * (otherwise Expo throws on native if `iosClientId` / `androidClientId` is missing).
- */
 function AuthStackBody({
   googleLoginAvailable,
   appleLoginAvailable,
   biometricLoginAvailable,
-  googleRequest,
-  googleResponse,
-  googlePromptAsync,
 }: AuthStackBodyProps) {
   const [authLoading, setAuthLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
@@ -244,10 +210,18 @@ function AuthStackBody({
       const result = await socialAuthService.signInWithApple();
       if (result.success && result.idToken) {
         // Supabase validates the provider ID token and creates the session.
-        await authService.socialLogin('apple', result.idToken);
+        const authResult = await authService.socialLogin('apple', result.idToken);
+        if (!authResult.success) {
+          showErrorToast(new Error(authResult.error || 'Não foi possível entrar com Apple.'));
+        }
+      } else if (!result.success) {
+        showErrorToast(new Error(result.error || 'Não foi possível entrar com Apple.'));
+      } else {
+        showErrorToast(new Error('A Apple não retornou uma credencial de acesso.'));
       }
     } catch (error) {
       logger.error('Apple login failed:', error);
+      showErrorToast(error, 'Não foi possível entrar com Apple.');
     } finally {
       setAuthLoading(false);
     }
@@ -258,22 +232,21 @@ function AuthStackBody({
 
     setAuthLoading(true);
     try {
-      const result = await socialAuthService.signInWithGoogle(
-        googleRequest,
-        googleResponse,
-        googlePromptAsync,
-      );
-      if (result.success && result.idToken) {
-        await authService.socialLogin('google', result.idToken);
-      } else if (result.error) {
-        logger.warn('Google login:', result.error);
+      const result = await socialAuthService.signInWithGoogleOAuth();
+      if (result.success && result.callbackUrl) {
+        await authService.recoverSessionFromUrl(result.callbackUrl);
+      } else if (!result.success) {
+        showErrorToast(new Error(result.error || 'Não foi possível entrar com Google.'));
+      } else {
+        showErrorToast(new Error('O Google não retornou ao aplicativo.'));
       }
     } catch (error) {
       logger.error('Google login failed:', error);
+      showErrorToast(error, 'Não foi possível entrar com Google.');
     } finally {
       setAuthLoading(false);
     }
-  }, [googleLoginAvailable, googleRequest, googleResponse, googlePromptAsync]);
+  }, [googleLoginAvailable]);
 
   const handlePhoneLogin = useCallback((navigation: any) => {
     navigation.navigate('PhoneAuth');
@@ -287,10 +260,12 @@ function AuthStackBody({
       const result = await authService.biometricLogin('supabase-session');
       if (!result.success) {
         logger.warn('Biometric login failed:', result.error);
+        showErrorToast(new Error(result.error || 'Não foi possível entrar com biometria.'));
       }
       // If successful, auth state will update and switch to MainStack
     } catch (error) {
       logger.error('Biometric login error:', error);
+      showErrorToast(error, 'Não foi possível entrar com biometria.');
     } finally {
       setBiometricLoading(false);
     }
@@ -302,7 +277,10 @@ function AuthStackBody({
   }, []);
 
   const handleBiometricPrompt = useCallback((enrollmentToken: string, navigation: any) => {
-    navigation.navigate('BiometricEnrollment', { enrollmentToken });
+    navigation.navigate('BiometricEnrollment', {
+      enrollmentToken,
+      userId: enrollmentToken,
+    });
   }, []);
 
   const handleBiometricComplete = useCallback((navigation: any) => {
@@ -421,27 +399,14 @@ function AuthStackBody({
   );
 }
 
-/** Entry auth stack — skips mounting Google OAuth until env client ids exist for this platform. */
 function AuthStack() {
   const appleLoginAvailable = isAppleAuthProviderConfigured();
   const biometricLoginAvailable = isBiometricAuthConfigured();
-
-  if (isGoogleAuthProviderConfigured()) {
-    return (
-      <AuthStackWithGoogleConfigured
-        appleLoginAvailable={appleLoginAvailable}
-        biometricLoginAvailable={biometricLoginAvailable}
-      />
-    );
-  }
   return (
     <AuthStackBody
-      googleLoginAvailable={false}
+      googleLoginAvailable={isGoogleAuthProviderConfigured()}
       appleLoginAvailable={appleLoginAvailable}
       biometricLoginAvailable={biometricLoginAvailable}
-      googleRequest={null}
-      googleResponse={null}
-      googlePromptAsync={noopGooglePrompt}
     />
   );
 }

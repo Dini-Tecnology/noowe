@@ -86,6 +86,12 @@
     },
     "plugins": [
       "expo-apple-authentication",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permite login rápido com biometria"
+        }
+      ],
       "expo-router",
       [
         "expo-camera",

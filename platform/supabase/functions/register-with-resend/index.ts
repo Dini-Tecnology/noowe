@@ -13,12 +13,16 @@ const DEFAULT_ALLOWED_ORIGINS = [
 const DEFAULT_REDIRECT_ALLOW_LIST = [
   "okinawa-restaurant://auth/callback",
   "okinawa-client://auth/callback",
+  "okinawa-restaurant://auth/reset-password",
+  "okinawa-client://auth/reset-password",
   "https://noowebr.com/auth/callback",
   "https://noowebr.com/auth/callback?app=restaurant",
   "https://noowebr.com/auth/callback?app=client",
   "https://www.noowebr.com/auth/callback",
   "https://www.noowebr.com/auth/callback?app=restaurant",
   "https://www.noowebr.com/auth/callback?app=client",
+  "https://noowebr.com/auth/reset-password",
+  "https://www.noowebr.com/auth/reset-password",
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -192,9 +196,123 @@ function buildSignupConfirmationEmailHtml(params: {
 </html>`;
 }
 
+function buildPasswordResetEmailHtml(params: {
+  fullName: string;
+  actionLink: string;
+  brand: EmailBrand;
+  logoUrl: string;
+}) {
+  const safeName = escapeHtml(params.fullName || "tudo bem");
+  const safeActionLink = escapeHtml(params.actionLink);
+  const safeLogoUrl = escapeHtml(params.logoUrl);
+  const year = new Date().getFullYear();
+  const { brand } = params;
+  const buttonShadow = brand.primary === RESTAURANT_BRAND.primary
+    ? "0 12px 28px rgba(168,85,247,0.32)"
+    : "0 12px 28px rgba(234,88,12,0.28)";
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Redefinir senha ${escapeHtml(brand.productName)}</title>
+  <style>
+    @media only screen and (max-width: 620px) {
+      .container { width: 100% !important; }
+      .content-pad { padding: 28px 20px !important; }
+      .logo-img { width: 180px !important; }
+      .cta-btn { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:${brand.background};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">
+    Redefina a senha da sua conta no ${escapeHtml(brand.appLabel)}.
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${brand.background};padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" class="container" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${brand.surface};border-radius:20px;overflow:hidden;border:1px solid ${brand.border};box-shadow:0 16px 40px rgba(17,24,39,0.08);">
+          <tr>
+            <td style="height:6px;background:linear-gradient(90deg, ${brand.primaryDark} 0%, ${brand.primary} 50%, ${brand.primaryLight} 100%);font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td class="content-pad" style="padding:32px 32px 24px;text-align:center;background:${brand.surface};">
+              <img
+                class="logo-img"
+                src="${safeLogoUrl}"
+                alt="${escapeHtml(brand.productName)}"
+                width="220"
+                style="display:block;width:220px;max-width:100%;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;"
+              />
+            </td>
+          </tr>
+          <tr>
+            <td class="content-pad" style="padding:8px 40px 36px;text-align:center;">
+              <p style="margin:0 0 8px;color:${brand.text};font-size:24px;line-height:1.3;font-weight:700;letter-spacing:-0.02em;">
+                Olá, <span style="color:${brand.primaryDark};">${safeName}</span>!
+              </p>
+              <p style="margin:0 0 28px;color:${brand.textSecondary};font-size:16px;line-height:1.65;max-width:420px;display:inline-block;">
+                Recebemos um pedido para redefinir a senha da sua conta no ${escapeHtml(brand.appLabel)}. Toque no botão abaixo para criar uma nova senha.
+              </p>
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 28px;">
+                <tr>
+                  <td style="border-radius:14px;background:${brand.primary};box-shadow:${buttonShadow};">
+                    <a
+                      class="cta-btn"
+                      href="${safeActionLink}"
+                      style="display:inline-block;background:${brand.primary};color:#ffffff;text-decoration:none;border-radius:14px;padding:16px 32px;font-size:16px;font-weight:700;letter-spacing:0.01em;border:1px solid ${brand.primaryDark};"
+                    >
+                      Redefinir minha senha
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:460px;margin:0 auto;background:${brand.primarySoft};border-radius:14px;border:1px solid ${brand.border};">
+                <tr>
+                  <td style="padding:18px 20px;text-align:left;">
+                    <p style="margin:0 0 8px;color:${brand.textSecondary};font-size:13px;line-height:1.5;font-weight:600;">
+                      O botão não abriu?
+                    </p>
+                    <p style="margin:0 0 10px;color:${brand.textMuted};font-size:12px;line-height:1.55;">
+                      Copie e cole este link no navegador:
+                    </p>
+                    <p style="margin:0;color:${brand.primaryDark};font-size:12px;line-height:1.6;word-break:break-all;">
+                      <a href="${safeActionLink}" style="color:${brand.primaryDark};text-decoration:underline;">${safeActionLink}</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:22px 32px 28px;border-top:1px solid ${brand.border};text-align:center;background:${brand.background};">
+              <p style="margin:0 0 8px;color:${brand.textMuted};font-size:12px;line-height:1.55;">
+                Se você não pediu para redefinir a senha, ignore este e-mail — sua senha atual continua válida.
+              </p>
+              <p style="margin:0;color:${brand.textMuted};font-size:12px;line-height:1.55;">
+                © ${year} NOOWE · <span style="color:${brand.secondary};font-weight:600;">Experiência gastronômica reinventada</span>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 function buildAppConfirmationLink(emailRedirectTo: string, tokenHash: string) {
   const separator = emailRedirectTo.includes("?") ? "&" : "?";
   return `${emailRedirectTo}${separator}token_hash=${encodeURIComponent(tokenHash)}&type=email`;
+}
+
+function buildAppRecoveryLink(emailRedirectTo: string, tokenHash: string) {
+  const separator = emailRedirectTo.includes("?") ? "&" : "?";
+  return `${emailRedirectTo}${separator}token_hash=${encodeURIComponent(tokenHash)}&type=recovery`;
 }
 
 type SupabaseAdmin = ReturnType<typeof createClient>;
@@ -367,26 +485,13 @@ async function findAuthUserByEmail(supabase: SupabaseAdmin, email: string) {
   throw new Error("Unable to complete auth user lookup");
 }
 
-async function sendConfirmationEmail(params: {
-  email: string;
-  fullName: string;
-  actionLink: string;
-  emailRedirectTo: string;
-}) {
+async function dispatchResendEmail(params: { to: string; subject: string; html: string }) {
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
   if (!resendApiKey) {
     throw new Error("RESEND_API_KEY is not configured");
   }
 
   const from = Deno.env.get("RESEND_FROM_EMAIL") ?? "NOOWE <notification@noowebr.com>";
-  const brand = resolveEmailBrand(params.emailRedirectTo);
-  const logoUrl = resolveLogoUrl(params.emailRedirectTo, brand);
-  const html = buildSignupConfirmationEmailHtml({
-    fullName: params.fullName,
-    actionLink: params.actionLink,
-    brand,
-    logoUrl,
-  });
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -396,17 +501,61 @@ async function sendConfirmationEmail(params: {
     },
     body: JSON.stringify({
       from,
-      to: [params.email],
-      subject: `Confirme sua conta ${brand.productName}`,
-      html,
+      to: [params.to],
+      subject: params.subject,
+      html: params.html,
     }),
   });
 
   if (!response.ok) {
     const details = await response.text();
     console.error("Resend error:", details);
-    throw new Error("Failed to send confirmation email");
+    throw new Error("Failed to send email");
   }
+}
+
+async function sendConfirmationEmail(params: {
+  email: string;
+  fullName: string;
+  actionLink: string;
+  emailRedirectTo: string;
+}) {
+  const brand = resolveEmailBrand(params.emailRedirectTo);
+  const logoUrl = resolveLogoUrl(params.emailRedirectTo, brand);
+  const html = buildSignupConfirmationEmailHtml({
+    fullName: params.fullName,
+    actionLink: params.actionLink,
+    brand,
+    logoUrl,
+  });
+
+  await dispatchResendEmail({
+    to: params.email,
+    subject: `Confirme sua conta ${brand.productName}`,
+    html,
+  });
+}
+
+async function sendPasswordResetEmail(params: {
+  email: string;
+  fullName: string;
+  actionLink: string;
+  emailRedirectTo: string;
+}) {
+  const brand = resolveEmailBrand(params.emailRedirectTo);
+  const logoUrl = resolveLogoUrl(params.emailRedirectTo, brand);
+  const html = buildPasswordResetEmailHtml({
+    fullName: params.fullName,
+    actionLink: params.actionLink,
+    brand,
+    logoUrl,
+  });
+
+  await dispatchResendEmail({
+    to: params.email,
+    subject: `Redefinir senha ${brand.productName}`,
+    html,
+  });
 }
 
 serve(async (req) => {
@@ -424,7 +573,12 @@ serve(async (req) => {
 
   try {
     const payload = await req.json().catch(() => null);
-    const action = payload?.action === "resend" ? "resend" : "register";
+    const action =
+      payload?.action === "resend"
+        ? "resend"
+        : payload?.action === "password-reset"
+          ? "password-reset"
+          : "register";
     const email = normalizeEmail(payload?.email);
     const password = typeof payload?.password === "string" ? payload.password : "";
     const fullName = sanitizeText(payload?.fullName ?? payload?.full_name, 120);
@@ -483,6 +637,42 @@ serve(async (req) => {
       });
 
       return jsonResponse(req, { success: true, confirmationSent: true });
+    }
+
+    if (action === "password-reset") {
+      const existingUser = await findAuthUserByEmail(supabase, email);
+
+      // Generic response avoids exposing whether an email has an account.
+      // Recovery links can only be generated for existing users.
+      if (!existingUser) {
+        return jsonResponse(req, { success: true, passwordResetSent: false });
+      }
+
+      const existingName = sanitizeText(
+        existingUser.user_metadata?.full_name ?? existingUser.user_metadata?.name ?? "tudo bem",
+        120,
+      );
+      const { data: recoveryData, error: recoveryError } = await supabase.auth.admin.generateLink({
+        type: "recovery",
+        email,
+        options: {
+          redirectTo: emailRedirectTo,
+        },
+      });
+
+      if (recoveryError || !recoveryData.properties?.hashed_token) {
+        console.error("Supabase recovery generateLink error:", recoveryError);
+        return jsonResponse(req, { error: recoveryError?.message || "Failed to create recovery link" }, 400);
+      }
+
+      await sendPasswordResetEmail({
+        email,
+        fullName: existingName,
+        actionLink: buildAppRecoveryLink(emailRedirectTo, recoveryData.properties.hashed_token),
+        emailRedirectTo,
+      });
+
+      return jsonResponse(req, { success: true, passwordResetSent: true });
     }
 
     const { data, error } = await supabase.auth.admin.generateLink({

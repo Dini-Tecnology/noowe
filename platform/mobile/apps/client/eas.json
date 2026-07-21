@@ -14,7 +14,7 @@
         "EXPO_PUBLIC_SUPABASE_AUTH_GOOGLE_ENABLED": "true",
         "EXPO_PUBLIC_SUPABASE_AUTH_APPLE_ENABLED": "true",
         "EXPO_PUBLIC_ENABLE_BIOMETRIC_LOGIN": "true",
-        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "okinawa-restaurant://auth/callback"
+        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "okinawa-client://auth/callback"
       }
     },
     "preview": {
@@ -26,7 +26,7 @@
         "EXPO_PUBLIC_SUPABASE_AUTH_GOOGLE_ENABLED": "true",
         "EXPO_PUBLIC_SUPABASE_AUTH_APPLE_ENABLED": "true",
         "EXPO_PUBLIC_ENABLE_BIOMETRIC_LOGIN": "true",
-        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "okinawa-restaurant://auth/callback"
+        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "okinawa-client://auth/callback"
       }
     },
     "production": {
@@ -38,7 +38,7 @@
         "EXPO_PUBLIC_SUPABASE_AUTH_GOOGLE_ENABLED": "true",
         "EXPO_PUBLIC_SUPABASE_AUTH_APPLE_ENABLED": "true",
         "EXPO_PUBLIC_ENABLE_BIOMETRIC_LOGIN": "true",
-        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "okinawa-restaurant://auth/callback"
+        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "okinawa-client://auth/callback"
       }
     }
   },

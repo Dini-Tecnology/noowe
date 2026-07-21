@@ -1,9 +1,29 @@
-import type { Session, User } from '@supabase/supabase-js';
+import type { EmailOtpType, Session, User } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import { getAuthRedirectUrl } from '../utils/auth-redirect';
 import { getSupabaseClient } from './supabase';
 
 type SocialProvider = 'apple' | 'google';
+
+const EMAIL_OTP_TYPES: EmailOtpType[] = [
+  'signup',
+  'invite',
+  'magiclink',
+  'recovery',
+  'email_change',
+  'email',
+];
+
+/**
+ * Normaliza o `type` recebido no deep link para um EmailOtpType válido.
+ * Links de recuperação de senha chegam com `type=recovery`; qualquer outro
+ * valor cai no fluxo padrão de confirmação de e-mail (`email`).
+ */
+function normalizeEmailOtpType(type?: string | null): EmailOtpType {
+  return type && (EMAIL_OTP_TYPES as string[]).includes(type)
+    ? (type as EmailOtpType)
+    : 'email';
+}
 
 export interface NormalizedAuthUser {
   id: string;
@@ -455,10 +475,10 @@ export const supabaseAuthAdapter = {
     return normalizeSession(data.session, data.user ?? null);
   },
 
-  async verifyEmailTokenHash(tokenHash: string) {
+  async verifyEmailTokenHash(tokenHash: string, type: EmailOtpType = 'email') {
     const { data, error } = await getSupabaseClient().auth.verifyOtp({
       token_hash: tokenHash,
-      type: 'email',
+      type,
     });
     if (error) throw error;
     if (data.user) {
@@ -467,11 +487,21 @@ export const supabaseAuthAdapter = {
     return normalizeSession(data.session, data.user ?? null);
   },
 
+  /**
+   * Envia o e-mail de redefinição de senha pela Edge Function `register-with-resend`
+   * (template NOOWE via Resend + deep link direto do app), em vez do e-mail padrão
+   * do Supabase. O link chega como `<scheme>://auth/reset-password?token_hash=...&type=recovery`,
+   * abrindo o app diretamente, sem passar por `/auth/v1/verify` no navegador.
+   */
   async sendPasswordReset(email: string) {
-    const { error } = await getSupabaseClient().auth.resetPasswordForEmail(email, {
-      redirectTo: getRedirectUrl('auth/reset-password'),
+    const { error } = await getSupabaseClient().functions.invoke('register-with-resend', {
+      body: {
+        action: 'password-reset',
+        email,
+        emailRedirectTo: getRedirectUrl('auth/reset-password'),
+      },
     });
-    if (error) throw error;
+    if (error) await throwFunctionError(error);
   },
 
   async exchangeCodeForSession(code: string) {
@@ -497,7 +527,10 @@ export const supabaseAuthAdapter = {
     }
 
     if (params.token_hash) {
-      return supabaseAuthAdapter.verifyEmailTokenHash(params.token_hash);
+      return supabaseAuthAdapter.verifyEmailTokenHash(
+        params.token_hash,
+        normalizeEmailOtpType(params.type),
+      );
     }
 
     if (params.access_token && params.refresh_token) {

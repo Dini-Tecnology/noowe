@@ -17,6 +17,8 @@ interface ResetPasswordScreenProps {
   route?: {
     params?: {
       url?: string;
+      token_hash?: string;
+      type?: string;
     };
   };
   onComplete?: () => void;
@@ -42,15 +44,21 @@ function firstParam(value: string | string[] | undefined) {
 
 export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPasswordScreenProps) {
   const { t } = useI18n();
-  const localParams = useLocalSearchParams<{ url?: string | string[] }>();
+  const localParams = useLocalSearchParams<{
+    url?: string | string[];
+    token_hash?: string | string[];
+    type?: string | string[];
+  }>();
   const resolvedRoute = useMemo(
     () =>
       route ?? {
         params: {
           url: firstParam(localParams.url),
+          token_hash: firstParam(localParams.token_hash),
+          type: firstParam(localParams.type),
         },
       },
-    [localParams.url, route]
+    [localParams.token_hash, localParams.type, localParams.url, route]
   );
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -65,8 +73,12 @@ export function ResetPasswordScreen({ navigation, route, onComplete }: ResetPass
 
     async function prepareRecoverySession() {
       try {
+        const tokenHash = resolvedRoute?.params?.token_hash;
         const url = resolvedRoute?.params?.url ?? (await Linking.getInitialURL());
-        if (url) {
+        if (tokenHash) {
+          // Deep link direto do app: <scheme>://auth/reset-password?token_hash=...&type=recovery
+          await authService.verifyEmailTokenHash(tokenHash, 'recovery');
+        } else if (url) {
           await authService.recoverSessionFromUrl(url);
         } else if (!(await authService.isAuthenticated())) {
           throw new Error(t('auth.resetLinkMissing'));

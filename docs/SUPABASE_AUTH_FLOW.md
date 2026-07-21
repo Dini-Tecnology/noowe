@@ -7,7 +7,8 @@ Este projeto usa Supabase Auth como única camada de autenticação. Não há em
 - Cadastro: `supabase.auth.signUp()` com `emailRedirectTo` para `/auth/callback` no site ou deep link Expo no mobile. Com confirmação de e-mail ativa, o usuário só recebe sessão após confirmar.
 - Login: `supabase.auth.signInWithPassword()`.
 - Logout: `supabase.auth.signOut()`.
-- Recuperação de senha: `supabase.auth.resetPasswordForEmail()` redireciona para `/auth/reset-password` ou deep link mobile.
+- Recuperação de senha (web): `supabase.auth.resetPasswordForEmail()` redireciona para `/auth/reset-password`.
+- Recuperação de senha (mobile): a Edge Function `register-with-resend` (action `password-reset`) gera um link de recuperação via `admin.generateLink({ type: 'recovery' })` e envia o e-mail com template NOOWE pela Resend. O link é um deep link direto do app (`<scheme>://auth/reset-password?token_hash=...&type=recovery`), sem passar por `/auth/v1/verify` no navegador. O app valida o `token_hash` com `verifyOtp({ token_hash, type: 'recovery' })`.
 - Redefinição de senha: `supabase.auth.updateUser({ password })`.
 - Sessão: clients usam `persistSession: true` e `autoRefreshToken: true`; o mobile também restaura a sessão Supabase no boot antes de abrir rotas protegidas.
 
