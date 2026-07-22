@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ApiService from '@okinawa/shared/services/api';
 import { getSupabaseClient } from '@okinawa/shared/services/supabase';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import type { CustomerAssistanceHub, RestaurantApproval } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import type { KdsOrder, KdsStatus, OrderStatus, TabOrder } from './v2Types';
 import { useRegisterRemoteRefresh } from './remoteRefreshRegistry';
@@ -67,8 +68,11 @@ type RawTable = {
   shape?: string | null;
   qr_code?: string | null;
   active_session?: {
+    id?: string | null;
+    guest_name?: string | null;
     guest_count?: number | string | null;
     started_at?: string | null;
+    total_spent?: number | string | null;
   } | null;
 };
 
@@ -78,6 +82,9 @@ export type V2Table = {
   seats: number;
   status: 'available' | 'occupied' | 'reserved' | 'cleaning' | 'payment' | 'blocked';
   guests: number;
+  guestName: string | null;
+  totalSpent: number;
+  sessionId: string | null;
   time: string;
   section: string;
   shape: string;
@@ -163,6 +170,7 @@ export function mapOrderToTabOrder(raw: RawOrder): TabOrder {
     total,
     time: clockLabel(raw.created_at) || elapsedLabel(raw.created_at),
     status: mapOrderStatus(raw.status),
+    rawStatus: raw.status || 'pending',
     customerName: raw.customer?.full_name || raw.customer_name || raw.customer?.email || undefined,
     notes: raw.special_instructions || undefined,
     createdAt: raw.created_at,
@@ -207,6 +215,9 @@ export function mapTable(raw: RawTable): V2Table {
     seats: toNumber(raw.seats, 1),
     status,
     guests: toNumber(raw.active_session?.guest_count, 0),
+    guestName: raw.active_session?.guest_name?.trim() || null,
+    totalSpent: toNumber(raw.active_session?.total_spent, 0),
+    sessionId: raw.active_session?.id || null,
     time: elapsedLabel(raw.active_session?.started_at),
     section: raw.section || 'Salao',
     shape: raw.shape || 'rectangle',
@@ -316,6 +327,65 @@ export function useRestaurantTables(): AsyncState<V2Table[]> {
 
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('tables', restaurantId, refresh);
+  useRealtimeRefresh('table_sessions', restaurantId, refresh);
+  useRealtimeRefresh('orders', restaurantId, refresh);
+
+  return { data, loading, error, refresh };
+}
+
+const EMPTY_CUSTOMER_ASSISTANCE_HUB: CustomerAssistanceHub = {
+  generated_at: '',
+  onboarding: [],
+  allergens: [],
+  feedback: [],
+  feedback_stats: {
+    positive: 0,
+    neutral: 0,
+    negative: 0,
+    collected: 0,
+    pending: 0,
+  },
+  special_requests: [],
+};
+
+export function useCustomerAssistanceHub(): AsyncState<CustomerAssistanceHub> {
+  const [data, setData] = useState<CustomerAssistanceHub>(EMPTY_CUSTOMER_ASSISTANCE_HUB);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { restaurantId } = useRestaurantRole();
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      if (!restaurantId) {
+        setData(EMPTY_CUSTOMER_ASSISTANCE_HUB);
+        return;
+      }
+      const result = await supabaseApiAdapter.getCustomerAssistanceHub(restaurantId);
+      setData({
+        ...EMPTY_CUSTOMER_ASSISTANCE_HUB,
+        ...result,
+        onboarding: Array.isArray(result?.onboarding) ? result.onboarding : [],
+        allergens: Array.isArray(result?.allergens) ? result.allergens : [],
+        feedback: Array.isArray(result?.feedback) ? result.feedback : [],
+        special_requests: Array.isArray(result?.special_requests) ? result.special_requests : [],
+        feedback_stats: {
+          ...EMPTY_CUSTOMER_ASSISTANCE_HUB.feedback_stats,
+          ...(result?.feedback_stats || {}),
+        },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar assistência ao cliente');
+    } finally {
+      setLoading(false);
+    }
+  }, [restaurantId]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+  useRealtimeRefresh('customer_feedback', restaurantId, refresh);
+  useRealtimeRefresh('restaurant_special_requests', restaurantId, refresh);
+  useRealtimeRefresh('tables', restaurantId, refresh);
+  useRealtimeRefresh('table_sessions', restaurantId, refresh);
 
   return { data, loading, error, refresh };
 }
@@ -451,25 +521,51 @@ export type StaffMember = {
   userId: string;
   fullName: string;
   email?: string;
+  avatarUrl?: string;
   role: string;
   isActive: boolean;
+  shift: {
+    id: string;
+    startTime: string;
+    endTime: string;
+    status: string;
+  } | null;
+  salesValue: number;
+  tipsValue: number;
+  operationalStatus: 'inactive' | 'on_shift' | 'scheduled' | 'active';
 };
 
 function mapStaffMember(raw: {
-  id: string;
+  id?: string;
+  role_id?: string;
   user_id: string;
   full_name?: string | null;
   email?: string | null;
+  avatar_url?: string | null;
   role: string;
   is_active: boolean;
+  shift?: { id: string; start_time: string; end_time: string; status: string } | null;
+  sales_value?: number | string | null;
+  tips_value?: number | string | null;
+  operational_status?: StaffMember['operationalStatus'];
 }): StaffMember {
   return {
-    id: raw.id,
+    id: raw.id || raw.role_id || raw.user_id,
     userId: raw.user_id,
     fullName: raw.full_name || raw.email || 'Sem nome',
     email: raw.email ?? undefined,
+    avatarUrl: raw.avatar_url ?? undefined,
     role: raw.role,
     isActive: Boolean(raw.is_active),
+    shift: raw.shift ? {
+      id: raw.shift.id,
+      startTime: raw.shift.start_time,
+      endTime: raw.shift.end_time,
+      status: raw.shift.status,
+    } : null,
+    salesValue: toNumber(raw.sales_value),
+    tipsValue: toNumber(raw.tips_value),
+    operationalStatus: raw.operational_status || (raw.is_active ? 'active' : 'inactive'),
   };
 }
 
@@ -496,6 +592,31 @@ export function useStaff(): AsyncState<StaffMember[]> {
   return { data, loading, error, refresh };
 }
 
+export function useApprovals(): AsyncState<RestaurantApproval[]> {
+  const [data, setData] = useState<RestaurantApproval[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { restaurantId } = useRestaurantRole();
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const raw = await supabaseApiAdapter.getApprovals(restaurantId ?? undefined, 'pending');
+      setData(raw.map((approval) => ({ ...approval, amount: toNumber(approval.amount) })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar aprovações');
+    } finally {
+      setLoading(false);
+    }
+  }, [restaurantId]);
+
+  useRegisterRemoteRefresh(refresh);
+  useEffect(() => { void refresh(); }, [refresh]);
+  useRealtimeRefresh('approvals', restaurantId, refresh);
+
+  return { data, loading, error, refresh };
+}
+
 export type CashRegisterSession = {
   sessionId: string | null;
   isOpen: boolean;
@@ -507,14 +628,21 @@ export type CashRegisterSession = {
 };
 
 function mapCashRegister(raw: any): CashRegisterSession {
+  const session = raw?.session ?? raw;
+  const movements = Array.isArray(session?.movements) ? session.movements : [];
+  const inflows = movements.reduce((total: number, movement: any) => {
+    return /^(sale|reforco|reinforcement)$/i.test(String(movement?.type || ''))
+      ? total + toNumber(movement?.amount)
+      : total;
+  }, 0);
   return {
-    sessionId: raw?.session_id ?? raw?.id ?? null,
-    isOpen: Boolean(raw?.is_open ?? raw?.status === 'open'),
-    openingBalance: toNumber(raw?.opening_balance),
-    cashSales: toNumber(raw?.cash_sales),
-    cardSales: toNumber(raw?.card_sales),
-    pixSales: toNumber(raw?.pix_sales),
-    expectedBalance: toNumber(raw?.expected_balance, toNumber(raw?.opening_balance)),
+    sessionId: session?.session_id ?? session?.id ?? null,
+    isOpen: Boolean(session?.is_open ?? session?.status === 'open'),
+    openingBalance: toNumber(session?.opening_balance),
+    cashSales: toNumber(session?.cash_sales, inflows),
+    cardSales: toNumber(session?.card_sales),
+    pixSales: toNumber(session?.pix_sales),
+    expectedBalance: toNumber(session?.expected_balance, toNumber(session?.opening_balance)),
   };
 }
 
@@ -527,7 +655,7 @@ export function useCashRegister(): AsyncState<CashRegisterSession | null> {
     setError(null);
     try {
       const raw = await supabaseApiAdapter.getCashRegister();
-      setData(raw ? mapCashRegister(raw) : null);
+      setData(raw?.session ? mapCashRegister(raw) : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar caixa');
     } finally {
@@ -576,8 +704,9 @@ export function useCashMovements(): AsyncState<CashMovement[]> {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const raw = await supabaseApiAdapter.getCashRegisterHistory();
-      setData((Array.isArray(raw) ? raw : []).map(mapCashMovement));
+      const raw = await supabaseApiAdapter.getCashRegister();
+      const movements = raw?.session?.movements;
+      setData((Array.isArray(movements) ? movements : []).map(mapCashMovement));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar movimentações');
     } finally {

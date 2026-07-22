@@ -375,7 +375,10 @@ export default function RegisterScreen({
               },
               {
                 label: t('auth.a11y.goToLogin'),
-                onPress: () => navigation.navigate('Login'),
+                onPress: () => {
+                  setEmailDialog(null);
+                  navigation.navigate('Login');
+                },
                 variant: 'secondary',
               },
               {
@@ -388,7 +391,10 @@ export default function RegisterScreen({
             ? [
                 {
                   label: t('auth.a11y.goToLogin'),
-                  onPress: () => navigation.navigate('Login'),
+                  onPress: () => {
+                    setEmailDialog(null);
+                    navigation.navigate('Login');
+                  },
                   variant: 'primary',
                 },
               ]

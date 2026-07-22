@@ -12,6 +12,8 @@ export interface TabOrder {
   total: number;
   time: string;
   status: OrderStatus;
+  /** Real backend status (pending/confirmed/preparing/ready/…), before collapsing to OrderStatus. */
+  rawStatus: string;
   customerName?: string;
   notes?: string;
   createdAt?: string;

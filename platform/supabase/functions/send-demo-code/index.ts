@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { NOOWE_EMBEDDED_LOGO_DATA_URI } from "./embedded-logo.ts";
 
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://noowebr.com",
@@ -7,6 +8,111 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** NOOWE institutional palette (marketing site + shared brand) */
+const NOOWE_BRAND = {
+  primary: "#EA580C",
+  primaryDark: "#C2410C",
+  primaryLight: "#F59E0B",
+  primarySoft: "#FFEDD5",
+  secondary: "#FF6B35",
+  text: "#111827",
+  textSecondary: "#4B5563",
+  textMuted: "#9CA3AF",
+  surface: "#FFFFFF",
+  background: "#F3F4F6",
+  border: "#E5E7EB",
+  productName: "NOOWE",
+} as const;
+
+function resolveDemoLogoUrl() {
+  return Deno.env.get("EMAIL_LOGO_URL") ??
+    Deno.env.get("EMAIL_LOGO_URL_CLIENT") ??
+    NOOWE_EMBEDDED_LOGO_DATA_URI;
+}
+
+function buildDemoCodeEmailHtml(params: { fullName: string; accessCode: string; logoUrl: string }) {
+  const safeName = escapeHtml(params.fullName || "tudo bem");
+  const safeCode = escapeHtml(params.accessCode);
+  const safeLogoUrl = escapeHtml(params.logoUrl);
+  const year = new Date().getFullYear();
+  const brand = NOOWE_BRAND;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Seu código de acesso à demo ${escapeHtml(brand.productName)}</title>
+  <style>
+    @media only screen and (max-width: 620px) {
+      .container { width: 100% !important; }
+      .content-pad { padding: 28px 20px !important; }
+      .logo-img { width: 180px !important; }
+      .code-txt { font-size: 30px !important; letter-spacing: 8px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:${brand.background};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">
+    Seu código de acesso à demo da NOOWE está pronto.
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${brand.background};padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" class="container" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${brand.surface};border-radius:20px;overflow:hidden;border:1px solid ${brand.border};box-shadow:0 16px 40px rgba(17,24,39,0.08);">
+          <tr>
+            <td style="height:6px;background:linear-gradient(90deg, ${brand.primaryDark} 0%, ${brand.primary} 50%, ${brand.primaryLight} 100%);font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td class="content-pad" style="padding:32px 32px 24px;text-align:center;background:${brand.surface};">
+              <img
+                class="logo-img"
+                src="${safeLogoUrl}"
+                alt="${escapeHtml(brand.productName)}"
+                width="220"
+                style="display:block;width:220px;max-width:100%;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;"
+              />
+            </td>
+          </tr>
+          <tr>
+            <td class="content-pad" style="padding:8px 40px 36px;text-align:center;">
+              <p style="margin:0 0 8px;color:${brand.text};font-size:24px;line-height:1.3;font-weight:700;letter-spacing:-0.02em;">
+                Olá, <span style="color:${brand.primaryDark};">${safeName}</span>!
+              </p>
+              <p style="margin:0 0 28px;color:${brand.textSecondary};font-size:16px;line-height:1.65;max-width:420px;display:inline-block;">
+                Seu código de acesso para explorar a demo da NOOWE está pronto:
+              </p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:360px;margin:0 auto 28px;background:${brand.primarySoft};border-radius:14px;border:1px solid ${brand.border};">
+                <tr>
+                  <td style="padding:24px 20px;text-align:center;">
+                    <span class="code-txt" style="font-size:36px;font-weight:800;letter-spacing:12px;color:${brand.primaryDark};">${safeCode}</span>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;color:${brand.textMuted};font-size:13px;line-height:1.6;">
+                Acesse <a href="https://noowebr.com/access" style="color:${brand.primaryDark};text-decoration:underline;font-weight:600;">noowebr.com/access</a> e insira o código acima.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:22px 32px 28px;border-top:1px solid ${brand.border};text-align:center;background:${brand.background};">
+              <p style="margin:0 0 8px;color:${brand.textMuted};font-size:12px;line-height:1.55;">
+                Você recebeu este e-mail porque solicitou acesso à demo da NOOWE.
+              </p>
+              <p style="margin:0;color:${brand.textMuted};font-size:12px;line-height:1.55;">
+                © ${year} NOOWE · <span style="color:${brand.secondary};font-weight:600;">Experiência gastronômica reinventada</span>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
 
 type SupabaseAdmin = ReturnType<typeof createClient>;
 
@@ -190,7 +296,12 @@ serve(async (req) => {
       throw new Error("RESEND_API_KEY is not configured");
     }
 
-    const safeName = escapeHtml(name);
+    const html = buildDemoCodeEmailHtml({
+      fullName: name,
+      accessCode,
+      logoUrl: resolveDemoLogoUrl(),
+    });
+    const from = Deno.env.get("RESEND_FROM_EMAIL") ?? "NOOWE <notification@noowebr.com>";
     const emailRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -198,36 +309,10 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "NOOWE <notification@noowebr.com>",
+        from,
         to: [email],
-        subject: "Seu codigo de acesso a demo NOOWE",
-        html: `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f8f9fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:480px;margin:40px auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
-    <div style="background:#0A1628;padding:32px 24px;text-align:center;">
-      <h1 style="color:#ffffff;font-size:28px;margin:0;font-weight:700;letter-spacing:-0.5px;">NOOWE</h1>
-    </div>
-    <div style="padding:40px 32px;text-align:center;">
-      <p style="color:#374151;font-size:16px;margin:0 0 8px;">Ola, <strong>${safeName}</strong>!</p>
-      <p style="color:#6b7280;font-size:14px;margin:0 0 32px;line-height:1.5;">
-        Seu codigo de acesso para explorar a demo da NOOWE esta pronto:
-      </p>
-      <div style="background:#f0f4ff;border-radius:12px;padding:24px;margin:0 0 32px;">
-        <span style="font-size:36px;font-weight:800;letter-spacing:12px;color:#0A1628;">${accessCode}</span>
-      </div>
-      <p style="color:#9ca3af;font-size:13px;margin:0;line-height:1.5;">
-        Acesse <a href="https://noowebr.com/access" style="color:#3b82f6;text-decoration:none;font-weight:600;">noowebr.com/access</a> e insira o codigo acima.
-      </p>
-    </div>
-    <div style="padding:20px 32px;border-top:1px solid #f3f4f6;text-align:center;">
-      <p style="color:#d1d5db;font-size:11px;margin:0;">© ${new Date().getFullYear()} NOOWE</p>
-    </div>
-  </div>
-</body>
-</html>`,
+        subject: "Seu código de acesso à demo NOOWE",
+        html,
       }),
     });
 

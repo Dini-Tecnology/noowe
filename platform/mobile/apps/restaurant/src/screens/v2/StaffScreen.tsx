@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, TextInput, View, StyleSheet } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, TextInput, View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Users, Shield, UserCheck, UserX, Plus, Pencil, Ban, CheckCircle2, Trash2, Search } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -14,9 +14,14 @@ interface StaffMember {
   user_id: string;
   full_name?: string;
   email?: string;
+  avatar_url?: string | null;
   role: string;
   is_active: boolean;
   created_at: string;
+  shift?: { id: string; start_time: string; end_time: string; status: string } | null;
+  sales_value?: number | string | null;
+  tips_value?: number | string | null;
+  operational_status?: 'inactive' | 'on_shift' | 'scheduled' | 'active';
 }
 
 type FoundUser = {
@@ -60,6 +65,15 @@ function getErrorMessage(error: unknown, fallback: string): string {
     return error.message;
   }
   return fallback;
+}
+
+function formatMoney(value: number | string | null | undefined): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
 }
 
 export default function StaffScreen() {
@@ -289,9 +303,17 @@ export default function StaffScreen() {
                         ]}
                       >
                         <View style={[styles.avatar, { backgroundColor: `${ROLE_COLORS[member.role] ?? colors.primary}20` }]}>
-                          <Text style={{ fontSize: 16, fontWeight: '700', color: ROLE_COLORS[member.role] ?? colors.primary }}>
-                            {(member.full_name ?? member.email ?? '?')[0].toUpperCase()}
-                          </Text>
+                          {member.avatar_url ? (
+                            <Image
+                              source={{ uri: member.avatar_url }}
+                              style={styles.avatarImage}
+                              accessibilityLabel={`Foto de ${member.full_name ?? member.email ?? 'membro da equipe'}`}
+                            />
+                          ) : (
+                            <Text style={{ fontSize: 16, fontWeight: '700', color: ROLE_COLORS[member.role] ?? colors.primary }}>
+                              {(member.full_name ?? member.email ?? '?')[0].toUpperCase()}
+                            </Text>
+                          )}
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontWeight: '600', color: colors.foreground }}>
@@ -300,6 +322,7 @@ export default function StaffScreen() {
                           {member.email && (
                             <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>{member.email}</Text>
                           )}
+                          <StaffFacts member={member} />
                         </View>
                         {canManage && role !== 'owner' ? (
                           <View style={styles.rowActions}>
@@ -339,9 +362,17 @@ export default function StaffScreen() {
                         ]}
                       >
                         <View style={[styles.avatar, { backgroundColor: '#9CA3AF20' }]}>
-                          <Text style={{ fontSize: 16, fontWeight: '700', color: '#6B7280' }}>
-                            {(member.full_name ?? member.email ?? '?')[0].toUpperCase()}
-                          </Text>
+                          {member.avatar_url ? (
+                            <Image
+                              source={{ uri: member.avatar_url }}
+                              style={[styles.avatarImage, styles.inactiveAvatarImage]}
+                              accessibilityLabel={`Foto de ${member.full_name ?? member.email ?? 'membro da equipe'}`}
+                            />
+                          ) : (
+                            <Text style={{ fontSize: 16, fontWeight: '700', color: '#6B7280' }}>
+                              {(member.full_name ?? member.email ?? '?')[0].toUpperCase()}
+                            </Text>
+                          )}
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontWeight: '600', color: colors.foreground }}>
@@ -350,6 +381,7 @@ export default function StaffScreen() {
                           <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>
                             {ROLE_LABELS[member.role] ?? member.role}
                           </Text>
+                          <StaffFacts member={member} />
                         </View>
                         <View style={styles.rowActions}>
                           <IconAction label="Reativar" onPress={() => setDeleting({ kind: 'reactivate', member })}>
@@ -539,6 +571,36 @@ export default function StaffScreen() {
   );
 }
 
+function StaffFacts({ member }: { member: StaffMember }) {
+  const colors = useColors();
+  const shift = member.shift ? `${member.shift.start_time}–${member.shift.end_time}` : 'Sem turno';
+  const status = member.operational_status === 'on_shift'
+    ? 'Em turno'
+    : member.operational_status === 'scheduled'
+      ? 'Escalado'
+      : member.is_active
+        ? 'Ativo'
+        : 'Inativo';
+  const facts = [
+    ['Função', ROLE_LABELS[member.role] ?? member.role],
+    ['Turno', shift],
+    ['Vendas', formatMoney(member.sales_value)],
+    ['Gorjetas', formatMoney(member.tips_value)],
+    ['Status', status],
+  ];
+
+  return (
+    <View style={styles.memberFacts}>
+      {facts.map(([label, value]) => (
+        <View key={label} style={[styles.memberFact, { backgroundColor: colors.backgroundSecondary }]}>
+          <Text style={[styles.memberFactLabel, { color: colors.foregroundSecondary }]}>{label}</Text>
+          <Text numberOfLines={1} style={[styles.memberFactValue, { color: colors.foreground }]}>{value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   const colors = useColors();
   return (
@@ -580,7 +642,14 @@ const styles = StyleSheet.create({
   avatar: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarImage: { width: '100%', height: '100%' },
+  inactiveAvatarImage: { opacity: 0.55 },
+  memberFacts: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 9 },
+  memberFact: { width: '48%', minHeight: 42, borderRadius: 9, paddingHorizontal: 8, justifyContent: 'center' },
+  memberFactLabel: { fontSize: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.35 },
+  memberFactValue: { fontSize: 10, fontWeight: '800', marginTop: 2 },
   activeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
   emptyBox: { borderRadius: 16, borderWidth: 1, padding: 32, alignItems: 'center', marginTop: 24 },
   rowActions: { flexDirection: 'row', gap: 6 },

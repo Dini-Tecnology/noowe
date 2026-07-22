@@ -39,7 +39,8 @@ export type MaitreRoleView =
   | 'maitre-reservations'
   | 'maitre-flow'
   | 'maitre-tables'
-  | 'maitre-management';
+  | 'maitre-management'
+  | 'maitre-settings';
 
 export type ChefRoleView =
   | 'chef-kds'
@@ -47,28 +48,32 @@ export type ChefRoleView =
   | 'chef-analytics'
   | 'chef-cost'
   | 'chef-menu'
-  | 'chef-stock';
+  | 'chef-stock'
+  | 'chef-settings';
 
 export type BarmanRoleView =
   | 'barman-station'
   | 'bar-kds'
   | 'bar-recipes'
-  | 'bar-stock';
+  | 'bar-stock'
+  | 'barman-settings';
 
 export type CookRoleView =
   | 'cook-station'
-  | 'cook-kds';
+  | 'cook-kds'
+  | 'cook-settings';
 
 export type WaiterRoleView =
   | 'waiter'
   | 'waiter-calls'
   | 'waiter-table-actions'
+  | 'waiter-kitchen'
   | 'waiter-assistance'
   | 'waiter-table-charge'
   | 'waiter-tap-to-pay'
   | 'waiter-order-management'
-  | 'waiter-table-map'
-  | 'waiter-tips';
+  | 'waiter-tips'
+  | 'waiter-settings';
 
 interface RestaurantRoleContextValue {
   role: RestaurantRole;

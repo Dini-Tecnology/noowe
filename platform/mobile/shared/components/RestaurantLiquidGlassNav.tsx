@@ -24,6 +24,7 @@ import {
   Star,
   Smartphone,
   UtensilsCrossed,
+  Radio,
 } from 'lucide-react-native';
 import LiquidGlassBottomNav, { type LiquidGlassNavItem } from './LiquidGlassBottomNav';
 
@@ -54,6 +55,7 @@ const maitreNavItems: LiquidGlassNavItem[] = [
   { id: 'maitre-flow', icon: Users, label: 'Fluxo' },
   { id: 'maitre-tables', icon: LayoutGrid, label: 'Mesas' },
   { id: 'maitre-management', icon: ClipboardList, label: 'Gestão' },
+  { id: 'maitre-settings', icon: Settings, label: 'Config' },
 ];
 
 const chefNavItems: LiquidGlassNavItem[] = [
@@ -63,6 +65,7 @@ const chefNavItems: LiquidGlassNavItem[] = [
   { id: 'chef-cost', icon: DollarSign, label: 'Custo' },
   { id: 'chef-menu', icon: BookOpen, label: 'Cardápio' },
   { id: 'chef-stock', icon: Package, label: 'Estoque' },
+  { id: 'chef-settings', icon: Settings, label: 'Config' },
 ];
 
 const barmanNavItems: LiquidGlassNavItem[] = [
@@ -70,23 +73,23 @@ const barmanNavItems: LiquidGlassNavItem[] = [
   { id: 'bar-kds', icon: Wine, label: 'KDS Bar' },
   { id: 'bar-recipes', icon: BookOpen, label: 'Receitas' },
   { id: 'bar-stock', icon: Package, label: 'Estoque' },
+  { id: 'barman-settings', icon: Settings, label: 'Config' },
 ];
 
 const cookNavItems: LiquidGlassNavItem[] = [
   { id: 'cook-station', icon: Flame, label: 'Minha Estação' },
   { id: 'cook-kds', icon: ChefHat, label: 'KDS Cozinha' },
+  { id: 'cook-settings', icon: Settings, label: 'Config' },
 ];
 
 const waiterNavItems: LiquidGlassNavItem[] = [
-  { id: 'waiter', icon: LayoutGrid, label: 'Minhas Mesas' },
-  { id: 'waiter-calls', icon: Bell, label: 'Chamados' },
-  { id: 'waiter-table-actions', icon: HandPlatter, label: 'Ações' },
+  { id: 'waiter', icon: Radio, label: 'Ao Vivo' },
+  { id: 'waiter-table-actions', icon: LayoutGrid, label: 'Mesas' },
+  { id: 'waiter-order-management', icon: ClipboardList, label: 'Pedidos' },
+  { id: 'waiter-kitchen', icon: ChefHat, label: 'Cozinha' },
   { id: 'waiter-assistance', icon: Star, label: 'Assistência' },
   { id: 'waiter-table-charge', icon: DollarSign, label: 'Cobrar' },
-  { id: 'waiter-tap-to-pay', icon: Smartphone, label: 'TAP' },
-  { id: 'waiter-order-management', icon: UtensilsCrossed, label: 'Pedidos' },
-  { id: 'waiter-table-map', icon: LayoutGrid, label: 'Mapa' },
-  { id: 'waiter-tips', icon: DollarSign, label: 'Gorjetas' },
+  { id: 'waiter-settings', icon: Settings, label: 'Config' },
 ];
 
 const NAV_BY_VARIANT: Record<string, LiquidGlassNavItem[]> = {

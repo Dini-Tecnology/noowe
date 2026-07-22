@@ -33,6 +33,132 @@ export interface SupabaseCreateReservationInput {
   special_requests?: string;
 }
 
+export type AssistanceSentiment = 'positive' | 'neutral' | 'negative';
+export type AssistanceServiceStage = 'main' | 'dessert' | 'finishing' | 'other';
+export type AssistanceSpecialRequestStatus = 'pending' | 'acknowledged' | 'resolved' | 'dismissed';
+
+export interface AssistanceOnboardingTable {
+  table_id: string;
+  table_number: string;
+  section: string | null;
+  seats: number;
+  status: string;
+  guest_name: string | null;
+  guest_count: number;
+  table_session_id: string | null;
+  qr_code_data: string;
+  qr_code_image: string | null;
+}
+
+export interface AssistanceAllergenGroup {
+  key: string;
+  name: string;
+  item_count: number;
+  items: string[];
+  affected_customers: Array<{
+    table_id: string;
+    table_number: string;
+    customer_id: string;
+    customer_name: string;
+  }>;
+}
+
+export interface AssistanceFeedbackCandidate {
+  table_session_id: string;
+  table_id: string;
+  table_number: string;
+  customer_name: string;
+  guest_count: number;
+  service_stage: AssistanceServiceStage;
+  feedback_id: string | null;
+  sentiment: AssistanceSentiment | null;
+  rating: number | null;
+  note: string | null;
+  collected_at: string | null;
+  collected_by_name: string | null;
+}
+
+export interface AssistanceSpecialRequest {
+  id: string;
+  table_id: string | null;
+  table_number: string | null;
+  table_session_id: string | null;
+  reservation_id: string | null;
+  customer_id: string | null;
+  customer_name: string | null;
+  request_type: 'birthday' | 'accessibility' | 'vip' | 'dietary' | 'courtesy' | 'photo' | 'other';
+  source: 'customer' | 'staff' | 'reservation' | 'system';
+  title: string;
+  description: string;
+  action_label: string | null;
+  priority: number;
+  status: AssistanceSpecialRequestStatus;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  handled_by: string | null;
+  handled_by_name: string | null;
+  handled_note: string | null;
+  due_at: string | null;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerAssistanceHub {
+  generated_at: string;
+  onboarding: AssistanceOnboardingTable[];
+  allergens: AssistanceAllergenGroup[];
+  feedback: AssistanceFeedbackCandidate[];
+  feedback_stats: {
+    positive: number;
+    neutral: number;
+    negative: number;
+    collected: number;
+    pending: number;
+  };
+  special_requests: AssistanceSpecialRequest[];
+}
+
+export interface CreateAssistanceSpecialRequestInput {
+  restaurantId: string;
+  requestType: AssistanceSpecialRequest['request_type'];
+  title: string;
+  description: string;
+  tableId?: string;
+  tableSessionId?: string;
+  reservationId?: string;
+  customerId?: string;
+  actionLabel?: string;
+  priority?: number;
+  dueAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type RestaurantApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export interface RestaurantApproval {
+  id: string;
+  restaurant_id: string;
+  type: string;
+  item_name: string;
+  table_id: string | null;
+  table_number: string | null;
+  requester_id: string;
+  requester_name: string;
+  resolver_id: string | null;
+  resolver_name: string | null;
+  reason: string;
+  resolution_note: string | null;
+  amount: number;
+  status: RestaurantApprovalStatus;
+  order_id: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+}
+
 export interface SupabaseReservationsParams {
   date?: string;
   status?: SupabaseReservationStatus | string;
@@ -88,6 +214,34 @@ export interface SupabaseApiAdapter {
   resolveServiceCall(callId: string): Promise<any>;
   createServiceCall(restaurantId: string, tableId?: string, callType?: string, message?: string): Promise<any>;
   getCallStats(restaurantId?: string): Promise<any>;
+  // ── Customer Assistance ───────────────────────────────────────────────────
+  getCustomerAssistanceHub(restaurantId?: string): Promise<CustomerAssistanceHub>;
+  collectCustomerFeedback(
+    tableSessionId: string,
+    sentiment: AssistanceSentiment,
+    rating?: number,
+    note?: string,
+    serviceStage?: AssistanceServiceStage,
+  ): Promise<any>;
+  createAssistanceSpecialRequest(input: CreateAssistanceSpecialRequestInput): Promise<any>;
+  getMyAssistanceSpecialRequests(restaurantId?: string): Promise<any[]>;
+  updateAssistanceSpecialRequestStatus(
+    requestId: string,
+    status: Exclude<AssistanceSpecialRequestStatus, 'pending'>,
+    handledNote?: string,
+    assignedTo?: string,
+  ): Promise<any>;
+  getApprovals(restaurantId?: string, status?: RestaurantApprovalStatus | null): Promise<RestaurantApproval[]>;
+  resolveApproval(approvalId: string, status: Exclude<RestaurantApprovalStatus, 'pending'>, resolutionNote?: string): Promise<any>;
+  requestApproval(input: {
+    restaurantId: string;
+    type: string;
+    itemName: string;
+    reason: string;
+    amount?: number;
+    tableId?: string;
+    orderId?: string;
+  }): Promise<any>;
   // ── Cash Register ──────────────────────────────────────────────────────────────
   getCashRegister(restaurantId?: string): Promise<any>;
   getCashRegisterHistory(restaurantId?: string, limit?: number): Promise<any>;
@@ -677,6 +831,123 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   },
 
   // ── Cash Register ──────────────────────────────────────────────────────────
+  // Customer Assistance
+  async getCustomerAssistanceHub(restaurantId?: string) {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_customer_assistance_hub', {
+      p_restaurant_id: resolvedId,
+    });
+    if (error) throw error;
+    return data as CustomerAssistanceHub;
+  },
+
+  async collectCustomerFeedback(
+    tableSessionId: string,
+    sentiment: AssistanceSentiment,
+    rating?: number,
+    note?: string,
+    serviceStage?: AssistanceServiceStage,
+  ) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_collect_customer_feedback', {
+      p_table_session_id: tableSessionId,
+      p_sentiment: sentiment,
+      p_rating: rating ?? null,
+      p_note: note?.trim() || null,
+      p_service_stage: serviceStage || 'finishing',
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async createAssistanceSpecialRequest(input: CreateAssistanceSpecialRequestInput) {
+    const { data, error } = await getSupabaseClient().rpc('create_restaurant_special_request', {
+      p_restaurant_id: input.restaurantId,
+      p_request_type: input.requestType,
+      p_title: input.title.trim(),
+      p_description: input.description.trim(),
+      p_table_id: input.tableId || null,
+      p_table_session_id: input.tableSessionId || null,
+      p_reservation_id: input.reservationId || null,
+      p_customer_id: input.customerId || null,
+      p_action_label: input.actionLabel?.trim() || null,
+      p_priority: input.priority ?? 3,
+      p_due_at: input.dueAt || null,
+      p_metadata: input.metadata || {},
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getMyAssistanceSpecialRequests(restaurantId?: string) {
+    const { data, error } = await getSupabaseClient().rpc('get_my_restaurant_special_requests', {
+      p_restaurant_id: restaurantId || null,
+    });
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  },
+
+  async updateAssistanceSpecialRequestStatus(
+    requestId: string,
+    status: Exclude<AssistanceSpecialRequestStatus, 'pending'>,
+    handledNote?: string,
+    assignedTo?: string,
+  ) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_update_special_request_status', {
+      p_request_id: requestId,
+      p_status: status,
+      p_handled_note: handledNote?.trim() || null,
+      p_assigned_to: assignedTo || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getApprovals(restaurantId?: string, status: RestaurantApprovalStatus | null = 'pending') {
+    const resolvedId = await resolveRestaurantId(restaurantId);
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_approvals', {
+      p_restaurant_id: resolvedId,
+      p_status: status,
+    });
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  },
+
+  async resolveApproval(
+    approvalId: string,
+    status: Exclude<RestaurantApprovalStatus, 'pending'>,
+    resolutionNote?: string,
+  ) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_resolve_approval', {
+      p_approval_id: approvalId,
+      p_status: status,
+      p_resolution_note: resolutionNote?.trim() || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async requestApproval(input: {
+    restaurantId: string;
+    type: string;
+    itemName: string;
+    reason: string;
+    amount?: number;
+    tableId?: string;
+    orderId?: string;
+  }) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_request_approval', {
+      p_restaurant_id: input.restaurantId,
+      p_type: input.type,
+      p_item_name: input.itemName,
+      p_reason: input.reason,
+      p_amount: input.amount ?? 0,
+      p_table_id: input.tableId ?? null,
+      p_order_id: input.orderId ?? null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
   async getCashRegister(restaurantId?: string) {
     const resolvedId = await resolveRestaurantId(restaurantId);
     const { data, error } = await getSupabaseClient().rpc('restaurant_get_cash_register', {

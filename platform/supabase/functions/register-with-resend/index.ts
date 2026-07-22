@@ -27,38 +27,40 @@ const DEFAULT_REDIRECT_ALLOW_LIST = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** NOOWE Restaurant app palette (platform/mobile/apps/restaurant/src/theme) */
-const RESTAURANT_BRAND = {
-  primary: "#A855F7",
-  primaryDark: "#9333EA",
-  primaryLight: "#C084FC",
-  primarySoft: "#F3E8FF",
-  secondary: "#FF6B35",
-  text: "#111827",
-  textSecondary: "#4B5563",
-  textMuted: "#9CA3AF",
+/**
+ * Shared NOOWE brand palette — mirrors the real app theme rendered by both apps
+ * (platform/mobile/shared/theme/colors.ts, "Warm Sophisticated Orange").
+ * Both apps consume the same Okinawa theme; only labels/logo differ per app.
+ */
+const BRAND_PALETTE = {
+  primary: "#EA580C", // primary[600] — main brand color
+  primaryDark: "#C2410C", // primary[700]
+  primaryLight: "#FB923C", // primary[400]
+  primarySoft: "#FFEDD5", // primary[100]
+  primarySofter: "#FFF7ED", // primary[50]
+  secondary: "#0D9488", // teal[600] — app secondary/accent
+  accent: "#F59E0B", // gold[500]
+  text: "#111827", // neutral[900]
+  textSecondary: "#4B5563", // neutral[600]
+  textMuted: "#9CA3AF", // neutral[400]
   surface: "#FFFFFF",
-  background: "#F3F4F6",
-  border: "#E5E7EB",
+  background: "#F9FAFB", // neutral[50]
+  border: "#E5E7EB", // neutral[200]
+  shadowRgba: "rgba(234,88,12,0.28)",
+} as const;
+
+/** NOOWE Restaurant app */
+const RESTAURANT_BRAND = {
+  ...BRAND_PALETTE,
   appLabel: "app NOOWE Restaurant",
   productName: "NOOWE Restaurant",
   defaultLogoUrl: "https://noowebr.com/email/logo-restaurant.png",
   embeddedLogo: RESTAURANT_EMBEDDED_LOGO_DATA_URI,
 } as const;
 
-/** NOOWE Client app palette (shared theme) */
+/** NOOWE Client app */
 const CLIENT_BRAND = {
-  primary: "#EA580C",
-  primaryDark: "#C2410C",
-  primaryLight: "#F59E0B",
-  primarySoft: "#FFEDD5",
-  secondary: "#FF6B35",
-  text: "#111827",
-  textSecondary: "#4B5563",
-  textMuted: "#9CA3AF",
-  surface: "#FFFFFF",
-  background: "#F3F4F6",
-  border: "#E5E7EB",
+  ...BRAND_PALETTE,
   appLabel: "app NOOWE",
   productName: "NOOWE",
   defaultLogoUrl: "https://noowebr.com/email/logo-client.png",
@@ -87,20 +89,28 @@ function resolveLogoUrl(emailRedirectTo: string, brand: EmailBrand) {
   return brand.embeddedLogo;
 }
 
-function buildSignupConfirmationEmailHtml(params: {
-  fullName: string;
-  actionLink: string;
+/**
+ * Shared transactional-email shell — keeps signup + reset visually identical and
+ * on-brand with the app (soft peach hero, badge, orange CTA, teal footer accent).
+ */
+function buildAuthEmailHtml(params: {
   brand: EmailBrand;
   logoUrl: string;
+  actionLink: string;
+  fullName: string;
+  previewText: string;
+  title: string;
+  intro: string;
+  ctaLabel: string;
+  badgeGlyph: string;
+  footerNote: string;
 }) {
+  const { brand } = params;
   const safeName = escapeHtml(params.fullName || "tudo bem");
   const safeActionLink = escapeHtml(params.actionLink);
   const safeLogoUrl = escapeHtml(params.logoUrl);
   const year = new Date().getFullYear();
-  const { brand } = params;
-  const buttonShadow = brand.primary === RESTAURANT_BRAND.primary
-    ? "0 12px 28px rgba(168,85,247,0.32)"
-    : "0 12px 28px rgba(234,88,12,0.28)";
+  const buttonShadow = `0 12px 28px ${brand.shadowRgba}`;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -108,69 +118,80 @@ function buildSignupConfirmationEmailHtml(params: {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>Confirme sua conta ${escapeHtml(brand.productName)}</title>
+  <title>${escapeHtml(params.title)} · ${escapeHtml(brand.productName)}</title>
   <style>
     @media only screen and (max-width: 620px) {
       .container { width: 100% !important; }
-      .content-pad { padding: 28px 20px !important; }
-      .logo-img { width: 180px !important; }
+      .hero-pad { padding: 28px 20px 22px !important; }
+      .content-pad { padding: 24px 22px 30px !important; }
+      .logo-img { width: 170px !important; }
       .cta-btn { display: block !important; width: 100% !important; box-sizing: border-box !important; }
     }
   </style>
 </head>
 <body style="margin:0;padding:0;background:${brand.background};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">
-    Confirme seu e-mail para ativar sua conta no ${escapeHtml(brand.appLabel)}.
+    ${escapeHtml(params.previewText)}
   </div>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${brand.background};padding:40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" class="container" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${brand.surface};border-radius:20px;overflow:hidden;border:1px solid ${brand.border};box-shadow:0 16px 40px rgba(17,24,39,0.08);">
+        <table role="presentation" class="container" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${brand.surface};border-radius:24px;overflow:hidden;border:1px solid ${brand.border};box-shadow:0 18px 44px rgba(17,24,39,0.10);">
           <tr>
-            <td style="height:6px;background:linear-gradient(90deg, ${brand.primaryDark} 0%, ${brand.primary} 50%, ${brand.primaryLight} 100%);font-size:0;line-height:0;">&nbsp;</td>
+            <td style="height:8px;background:linear-gradient(90deg, ${brand.primaryDark} 0%, ${brand.primary} 50%, ${brand.primaryLight} 100%);font-size:0;line-height:0;">&nbsp;</td>
           </tr>
           <tr>
-            <td class="content-pad" style="padding:32px 32px 24px;text-align:center;background:${brand.surface};">
+            <td class="hero-pad" style="padding:36px 32px 28px;text-align:center;background:linear-gradient(180deg, ${brand.primarySofter} 0%, ${brand.surface} 100%);">
               <img
                 class="logo-img"
                 src="${safeLogoUrl}"
                 alt="${escapeHtml(brand.productName)}"
-                width="220"
-                style="display:block;width:220px;max-width:100%;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;"
+                width="200"
+                style="display:block;width:200px;max-width:100%;height:auto;margin:0 auto 22px;border:0;outline:none;text-decoration:none;"
               />
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto;">
+                <tr>
+                  <td align="center" valign="middle" width="72" height="72" style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg, ${brand.primary} 0%, ${brand.primaryDark} 100%);box-shadow:${buttonShadow};font-size:34px;line-height:72px;color:#ffffff;text-align:center;">
+                    ${params.badgeGlyph}
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
           <tr>
-            <td class="content-pad" style="padding:8px 40px 36px;text-align:center;">
-              <p style="margin:0 0 8px;color:${brand.text};font-size:24px;line-height:1.3;font-weight:700;letter-spacing:-0.02em;">
-                Olá, <span style="color:${brand.primaryDark};">${safeName}</span>!
+            <td class="content-pad" style="padding:6px 40px 38px;text-align:center;">
+              <p style="margin:0 0 6px;color:${brand.primary};font-size:12px;line-height:1;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;">
+                NOOWE
               </p>
-              <p style="margin:0 0 28px;color:${brand.textSecondary};font-size:16px;line-height:1.65;max-width:420px;display:inline-block;">
-                Falta só um passo: confirme seu e-mail para ativar sua conta no ${escapeHtml(brand.appLabel)}.
+              <h1 style="margin:0 0 14px;color:${brand.text};font-size:26px;line-height:1.25;font-weight:800;letter-spacing:-0.02em;">
+                ${escapeHtml(params.title)}
+              </h1>
+              <p style="margin:0 0 28px;color:${brand.textSecondary};font-size:16px;line-height:1.65;max-width:430px;display:inline-block;">
+                Olá, <span style="color:${brand.primaryDark};font-weight:600;">${safeName}</span>! ${escapeHtml(params.intro)}
               </p>
-              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 28px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 30px;">
                 <tr>
                   <td style="border-radius:14px;background:${brand.primary};box-shadow:${buttonShadow};">
                     <a
                       class="cta-btn"
                       href="${safeActionLink}"
-                      style="display:inline-block;background:${brand.primary};color:#ffffff;text-decoration:none;border-radius:14px;padding:16px 32px;font-size:16px;font-weight:700;letter-spacing:0.01em;border:1px solid ${brand.primaryDark};"
+                      style="display:inline-block;background:${brand.primary};color:#ffffff;text-decoration:none;border-radius:14px;padding:16px 34px;font-size:16px;font-weight:700;letter-spacing:0.01em;border:1px solid ${brand.primaryDark};"
                     >
-                      Confirmar minha conta
+                      ${escapeHtml(params.ctaLabel)}
                     </a>
                   </td>
                 </tr>
               </table>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:460px;margin:0 auto;background:${brand.primarySoft};border-radius:14px;border:1px solid ${brand.border};">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:460px;margin:0 auto;background:${brand.primarySofter};border-radius:14px;border:1px solid ${brand.primarySoft};">
                 <tr>
                   <td style="padding:18px 20px;text-align:left;">
-                    <p style="margin:0 0 8px;color:${brand.textSecondary};font-size:13px;line-height:1.5;font-weight:600;">
+                    <p style="margin:0 0 6px;color:${brand.textSecondary};font-size:13px;line-height:1.5;font-weight:600;">
                       O botão não abriu?
                     </p>
                     <p style="margin:0 0 10px;color:${brand.textMuted};font-size:12px;line-height:1.55;">
                       Copie e cole este link no navegador:
                     </p>
-                    <p style="margin:0;color:${brand.primaryDark};font-size:12px;line-height:1.6;word-break:break-all;">
+                    <p style="margin:0;font-size:12px;line-height:1.6;word-break:break-all;">
                       <a href="${safeActionLink}" style="color:${brand.primaryDark};text-decoration:underline;">${safeActionLink}</a>
                     </p>
                   </td>
@@ -181,7 +202,7 @@ function buildSignupConfirmationEmailHtml(params: {
           <tr>
             <td style="padding:22px 32px 28px;border-top:1px solid ${brand.border};text-align:center;background:${brand.background};">
               <p style="margin:0 0 8px;color:${brand.textMuted};font-size:12px;line-height:1.55;">
-                Você recebeu este e-mail porque criou uma conta na NOOWE.
+                ${escapeHtml(params.footerNote)}
               </p>
               <p style="margin:0;color:${brand.textMuted};font-size:12px;line-height:1.55;">
                 © ${year} NOOWE · <span style="color:${brand.secondary};font-weight:600;">Experiência gastronômica reinventada</span>
@@ -196,113 +217,44 @@ function buildSignupConfirmationEmailHtml(params: {
 </html>`;
 }
 
+function buildSignupConfirmationEmailHtml(params: {
+  fullName: string;
+  actionLink: string;
+  brand: EmailBrand;
+  logoUrl: string;
+}) {
+  return buildAuthEmailHtml({
+    brand: params.brand,
+    logoUrl: params.logoUrl,
+    actionLink: params.actionLink,
+    fullName: params.fullName,
+    previewText: `Confirme seu e-mail para ativar sua conta no ${params.brand.appLabel}.`,
+    title: "Confirme seu e-mail",
+    intro: `falta só um passo para ativar sua conta no ${params.brand.appLabel}.`,
+    ctaLabel: "Confirmar minha conta",
+    badgeGlyph: "&#9993;", // envelope
+    footerNote: "Você recebeu este e-mail porque criou uma conta na NOOWE.",
+  });
+}
+
 function buildPasswordResetEmailHtml(params: {
   fullName: string;
   actionLink: string;
   brand: EmailBrand;
   logoUrl: string;
 }) {
-  const safeName = escapeHtml(params.fullName || "tudo bem");
-  const safeActionLink = escapeHtml(params.actionLink);
-  const safeLogoUrl = escapeHtml(params.logoUrl);
-  const year = new Date().getFullYear();
-  const { brand } = params;
-  const buttonShadow = brand.primary === RESTAURANT_BRAND.primary
-    ? "0 12px 28px rgba(168,85,247,0.32)"
-    : "0 12px 28px rgba(234,88,12,0.28)";
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>Redefinir senha ${escapeHtml(brand.productName)}</title>
-  <style>
-    @media only screen and (max-width: 620px) {
-      .container { width: 100% !important; }
-      .content-pad { padding: 28px 20px !important; }
-      .logo-img { width: 180px !important; }
-      .cta-btn { display: block !important; width: 100% !important; box-sizing: border-box !important; }
-    }
-  </style>
-</head>
-<body style="margin:0;padding:0;background:${brand.background};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">
-    Redefina a senha da sua conta no ${escapeHtml(brand.appLabel)}.
-  </div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${brand.background};padding:40px 16px;">
-    <tr>
-      <td align="center">
-        <table role="presentation" class="container" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${brand.surface};border-radius:20px;overflow:hidden;border:1px solid ${brand.border};box-shadow:0 16px 40px rgba(17,24,39,0.08);">
-          <tr>
-            <td style="height:6px;background:linear-gradient(90deg, ${brand.primaryDark} 0%, ${brand.primary} 50%, ${brand.primaryLight} 100%);font-size:0;line-height:0;">&nbsp;</td>
-          </tr>
-          <tr>
-            <td class="content-pad" style="padding:32px 32px 24px;text-align:center;background:${brand.surface};">
-              <img
-                class="logo-img"
-                src="${safeLogoUrl}"
-                alt="${escapeHtml(brand.productName)}"
-                width="220"
-                style="display:block;width:220px;max-width:100%;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;"
-              />
-            </td>
-          </tr>
-          <tr>
-            <td class="content-pad" style="padding:8px 40px 36px;text-align:center;">
-              <p style="margin:0 0 8px;color:${brand.text};font-size:24px;line-height:1.3;font-weight:700;letter-spacing:-0.02em;">
-                Olá, <span style="color:${brand.primaryDark};">${safeName}</span>!
-              </p>
-              <p style="margin:0 0 28px;color:${brand.textSecondary};font-size:16px;line-height:1.65;max-width:420px;display:inline-block;">
-                Recebemos um pedido para redefinir a senha da sua conta no ${escapeHtml(brand.appLabel)}. Toque no botão abaixo para criar uma nova senha.
-              </p>
-              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 28px;">
-                <tr>
-                  <td style="border-radius:14px;background:${brand.primary};box-shadow:${buttonShadow};">
-                    <a
-                      class="cta-btn"
-                      href="${safeActionLink}"
-                      style="display:inline-block;background:${brand.primary};color:#ffffff;text-decoration:none;border-radius:14px;padding:16px 32px;font-size:16px;font-weight:700;letter-spacing:0.01em;border:1px solid ${brand.primaryDark};"
-                    >
-                      Redefinir minha senha
-                    </a>
-                  </td>
-                </tr>
-              </table>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:460px;margin:0 auto;background:${brand.primarySoft};border-radius:14px;border:1px solid ${brand.border};">
-                <tr>
-                  <td style="padding:18px 20px;text-align:left;">
-                    <p style="margin:0 0 8px;color:${brand.textSecondary};font-size:13px;line-height:1.5;font-weight:600;">
-                      O botão não abriu?
-                    </p>
-                    <p style="margin:0 0 10px;color:${brand.textMuted};font-size:12px;line-height:1.55;">
-                      Copie e cole este link no navegador:
-                    </p>
-                    <p style="margin:0;color:${brand.primaryDark};font-size:12px;line-height:1.6;word-break:break-all;">
-                      <a href="${safeActionLink}" style="color:${brand.primaryDark};text-decoration:underline;">${safeActionLink}</a>
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:22px 32px 28px;border-top:1px solid ${brand.border};text-align:center;background:${brand.background};">
-              <p style="margin:0 0 8px;color:${brand.textMuted};font-size:12px;line-height:1.55;">
-                Se você não pediu para redefinir a senha, ignore este e-mail — sua senha atual continua válida.
-              </p>
-              <p style="margin:0;color:${brand.textMuted};font-size:12px;line-height:1.55;">
-                © ${year} NOOWE · <span style="color:${brand.secondary};font-weight:600;">Experiência gastronômica reinventada</span>
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  return buildAuthEmailHtml({
+    brand: params.brand,
+    logoUrl: params.logoUrl,
+    actionLink: params.actionLink,
+    fullName: params.fullName,
+    previewText: `Redefina a senha da sua conta no ${params.brand.appLabel}.`,
+    title: "Redefinir sua senha",
+    intro: `recebemos um pedido para redefinir a senha da sua conta no ${params.brand.appLabel}. Toque no botão abaixo para criar uma nova senha.`,
+    ctaLabel: "Redefinir minha senha",
+    badgeGlyph: "&#128273;", // key
+    footerNote: "Se você não pediu para redefinir a senha, ignore este e-mail — sua senha atual continua válida.",
+  });
 }
 
 function buildAppConfirmationLink(emailRedirectTo: string, tokenHash: string) {

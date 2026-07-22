@@ -73,6 +73,7 @@ import PromotionsScreen from '../screens/v2/PromotionsScreen';
 import LoyaltyScreen from '../screens/v2/LoyaltyScreen';
 import RoleDashboardScreen from '../screens/v2/RoleDashboardScreen';
 import WaiterScreen from '../screens/v2/WaiterScreen';
+import WaiterTapToPayScreen from '../screens/v2/WaiterTapToPayScreen';
 import MaitreScreen from '../screens/v2/MaitreScreen';
 import QRGeneratorScreen from '../screens/v2/QRGeneratorScreen';
 import QRBatchScreen from '../screens/v2/QRBatchScreen';
@@ -175,6 +176,7 @@ const GuardedConfigKitchen = withRoleGuard(ConfigKitchenScreen, ['owner', 'manag
 const GuardedConfigPayments = withRoleGuard(ConfigPaymentsScreen, ['owner', 'manager']);
 const GuardedConfigMarketplace = withRoleGuard(ConfigMarketplaceScreen, ['owner', 'manager']);
 const GuardedWaiter = withRoleGuard(WaiterScreen, ['owner', 'manager', 'waiter', 'maitre']);
+const GuardedWaiterTapToPay = withRoleGuard(WaiterTapToPayScreen, ['owner', 'manager', 'waiter']);
 const GuardedBarKDS = withRoleGuard(BarKDSScreen, ['owner', 'manager', 'barman', 'chef']);
 const GuardedMaitre = withRoleGuard(MaitreScreen, ['owner', 'manager', 'maitre']);
 const GuardedKitchen = withRoleGuard(KitchenDisplayScreen, ['owner', 'manager', 'chef', 'cook']);
@@ -412,6 +414,7 @@ function MainStack() {
       <Stack.Screen name="Loyalty" component={LoyaltyScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RoleDashboard" component={RoleDashboardScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Waiter" component={GuardedWaiter} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="WaiterTapToPay" component={GuardedWaiterTapToPay} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Maitre" component={GuardedMaitre} options={scaleFadeScreenOptions} />
       <Stack.Screen name="BarKDS" component={GuardedBarKDS} options={scaleFadeScreenOptions} />
       <Stack.Screen name="QRGenerator" component={QRGeneratorScreen} options={scaleFadeScreenOptions} />

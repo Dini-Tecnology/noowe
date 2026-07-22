@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Pencil, Plus, QrCode, Trash2, Users } from 'lucide-react-native';
@@ -15,24 +15,38 @@ import { useRestaurantTables, type V2Table } from './shared/useRestaurantOperati
 type StatusKey = 'available' | 'occupied' | 'reserved' | 'cleaning' | 'blocked' | 'payment';
 
 const STATUS_META: Record<StatusKey, { label: string; bg: string; color: string; border: string }> = {
-  available: { label: 'LIVRE', bg: '#ECFDF5', color: '#15803D', border: '#BBF7D0' },
-  occupied: { label: 'OCUPADA', bg: '#FFF7ED', color: '#EA580C', border: '#FED7AA' },
-  reserved: { label: 'RESERVADA', bg: '#F5F3FF', color: '#7C3AED', border: '#DDD6FE' },
+  available: { label: 'LIVRE', bg: '#EAF8F1', color: '#16A66A', border: '#B7E4CF' },
+  occupied: { label: 'OCUPADA', bg: '#FFF0ED', color: '#FF4B2B', border: '#FEC8BC' },
+  reserved: { label: 'RESERVA', bg: '#FFF7E8', color: '#F59E0B', border: '#FED7AA' },
   cleaning: { label: 'LIMPEZA', bg: '#FEFCE8', color: '#A16207', border: '#FEF08A' },
   blocked: { label: 'BLOQUEADA', bg: '#F3F4F6', color: '#4B5563', border: '#D1D5DB' },
-  payment: { label: 'PAGAMENTO', bg: '#EFF6FF', color: '#0284C7', border: '#BAE6FD' },
+  payment: { label: 'CONTA', bg: '#EAF7FF', color: '#0284C7', border: '#BAE6FD' },
 };
 
 function statusMeta(status: string) {
   return STATUS_META[status as StatusKey] ?? STATUS_META.available;
 }
 
+function statusLabel(status: string): string {
+  const label = statusMeta(status).label.toLocaleLowerCase('pt-BR');
+  return label.charAt(0).toLocaleUpperCase('pt-BR') + label.slice(1);
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
 export default function TablesScreen() {
   const colors = useColors();
   const { width } = useWindowDimensions();
   const navigation = useNavigation<any>();
-  const { restaurantId, serverRole } = useRestaurantRole();
+  const { restaurantId, role, serverRole, setWaiterView } = useRestaurantRole();
   const canManage = serverRole === 'owner' || serverRole === 'manager';
+  const isWaiterView = role === 'waiter';
   const [selected, setSelected] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,6 +62,16 @@ export default function TablesScreen() {
   const gridColumns = width >= 900 ? 6 : width >= 600 ? 5 : width < 350 ? 2 : 3;
   const gridGap = 8;
   const cellSize = Math.floor((width - 40 - gridGap * (gridColumns - 1)) / gridColumns);
+
+  const selectTable = useCallback((tableId: string) => {
+    setSelected((current) => current === tableId ? null : tableId);
+  }, []);
+
+  const openSelectedTableCharge = useCallback(() => {
+    if (!selectedTable) return;
+    setWaiterView('waiter-table-charge');
+    navigation.navigate('Hub', { tableNumber: selectedTable.label });
+  }, [navigation, selectedTable, setWaiterView]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -157,9 +181,9 @@ export default function TablesScreen() {
     <>
       <V2Shell
         title="Mapa de Mesas"
-        subtitle={canManage ? 'Cadastre e organize o salão' : 'Acompanhe a ocupação em tempo real'}
+        subtitle={isWaiterView ? 'Acompanhe e atenda as mesas em tempo real' : canManage ? 'Cadastre e organize o salão' : 'Acompanhe a ocupação em tempo real'}
         scroll={false}
-        headerRight={
+        headerRight={isWaiterView ? undefined : (
           <View style={styles.headerActions}>
             <Pressable
               accessibilityLabel="Gerar QR Codes"
@@ -180,7 +204,7 @@ export default function TablesScreen() {
               </Pressable>
             ) : null}
           </View>
-        }
+        )}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -243,20 +267,26 @@ export default function TablesScreen() {
                 table={table}
                 size={cellSize}
                 isSelected={selected === table.id}
-                onPress={() => setSelected(selected === table.id ? null : table.id)}
+                onSelect={selectTable}
               />
             ))}
           </View>
 
           {selectedTable ? (
             <View style={[styles.detail, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={[styles.detailAccent, { backgroundColor: statusMeta(selectedTable.status).color }]} />
               <View style={styles.detailHeader}>
                 <View style={styles.detailIdentity}>
-                  <Text style={[styles.detailEyebrow, { color: colors.foregroundSecondary }]}>MESA SELECIONADA</Text>
                   <Text style={[styles.detailTitle, { color: colors.foreground }]}>Mesa {selectedTable.label}</Text>
+                  <Text numberOfLines={1} style={[styles.detailGuest, { color: colors.foregroundSecondary }]}>
+                    {selectedTable.guestName || (selectedTable.status === 'available' ? 'Mesa livre' : selectedTable.section)}
+                  </Text>
                 </View>
-                {canManage ? (
+                <View style={[styles.detailStatusChip, { backgroundColor: statusMeta(selectedTable.status).bg }]}>
+                  <Text style={[styles.detailStatusText, { color: statusMeta(selectedTable.status).color }]}>
+                    {statusLabel(selectedTable.status)}
+                  </Text>
+                </View>
+                {canManage && !isWaiterView ? (
                   <View style={styles.detailActions}>
                     <Pressable
                       accessibilityLabel="Editar mesa"
@@ -276,64 +306,81 @@ export default function TablesScreen() {
                 ) : null}
               </View>
 
-              <View style={styles.detailSummary}>
-                <View style={[styles.currentStatus, { backgroundColor: statusMeta(selectedTable.status).bg }]}>
-                  <View style={[styles.currentStatusDot, { backgroundColor: statusMeta(selectedTable.status).color }]} />
-                  <View>
-                    <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Status atual</Text>
-                    <Text style={[styles.currentStatusText, { color: statusMeta(selectedTable.status).color }]}>
-                      {statusMeta(selectedTable.status).label.charAt(0) + statusMeta(selectedTable.status).label.slice(1).toLowerCase()}
-                    </Text>
+              {isWaiterView ? (
+                <>
+                  <View style={styles.waiterDetailSummary}>
+                    <View style={[styles.waiterSummaryCard, { borderColor: colors.border }]}>
+                      <Text style={styles.waiterSummarySeats}>{selectedTable.seats}</Text>
+                      <Text style={[styles.waiterSummaryLabel, { color: colors.foregroundSecondary }]}>Lugares</Text>
+                    </View>
+                    <View style={[styles.waiterSummaryCard, { borderColor: colors.border }]}>
+                      <Text style={styles.waiterSummaryTotal}>{formatCurrency(selectedTable.totalSpent)}</Text>
+                      <Text style={[styles.waiterSummaryLabel, { color: colors.foregroundSecondary }]}>Conta</Text>
+                    </View>
                   </View>
-                </View>
-                <View style={[styles.summaryItem, { borderColor: colors.border }]}>
-                  <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Salão</Text>
-                  <Text numberOfLines={1} style={[styles.summaryValue, { color: colors.foreground }]}>{selectedTable.section}</Text>
-                </View>
-                <View style={[styles.summaryItem, { borderColor: colors.border }]}>
-                  <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Lugares</Text>
-                  <Text style={[styles.summaryValue, { color: colors.foreground }]}>{selectedTable.seats}</Text>
-                </View>
-              </View>
-
-              <Text style={[styles.actionLabel, { color: colors.foregroundSecondary }]}>ALTERAR STATUS</Text>
-              <View style={styles.statusActions}>
-                {(['available', 'occupied', 'reserved', 'cleaning', 'blocked'] as StatusKey[]).map((status) => {
-                  const meta = STATUS_META[status];
-                  const active = selectedTable.status === status;
-                  return (
+                  {selectedTable.status === 'occupied' || selectedTable.status === 'payment' || selectedTable.totalSpent > 0 ? (
                     <Pressable
-                      key={status}
-                      disabled={isSubmitting}
                       accessibilityRole="button"
-                      accessibilityState={{ selected: active, disabled: isSubmitting }}
-                      accessibilityLabel={`Alterar status para ${meta.label.toLowerCase()}`}
-                      style={[
-                        styles.statusButton,
-                        {
-                          borderColor: active ? meta.color : colors.border,
-                          backgroundColor: active ? meta.bg : 'transparent',
-                        },
-                      ]}
-                      onPress={() => void updateSelectedStatus(status)}
+                      accessibilityLabel={`Fechar conta da mesa ${selectedTable.label}`}
+                      onPress={openSelectedTableCharge}
+                      style={({ pressed }) => [styles.waiterCloseBillButton, pressed && styles.primaryPressed]}
                     >
-                      <View style={[styles.statusButtonDot, { backgroundColor: meta.color }]} />
-                      <Text style={{ color: active ? meta.color : colors.foreground, fontWeight: '700', fontSize: 12 }}>
-                        {meta.label.charAt(0) + meta.label.slice(1).toLowerCase()}
-                      </Text>
+                      <Text style={styles.waiterCloseBillText}>Fechar conta</Text>
                     </Pressable>
-                  );
-                })}
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Gerar QR Code da mesa ${selectedTable.label}`}
-                style={({ pressed }) => [styles.generateButton, { backgroundColor: colors.primary }, pressed && styles.primaryPressed]}
-                onPress={() => navigation.navigate('QRGenerator')}
-              >
-                <QrCode size={17} color="#FFF" />
-                <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>Gerar QR Code</Text>
-              </Pressable>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <View style={styles.detailSummary}>
+                    <View style={[styles.currentStatus, { backgroundColor: statusMeta(selectedTable.status).bg }]}>
+                      <View style={[styles.currentStatusDot, { backgroundColor: statusMeta(selectedTable.status).color }]} />
+                      <View>
+                        <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Status atual</Text>
+                        <Text style={[styles.currentStatusText, { color: statusMeta(selectedTable.status).color }]}>{statusLabel(selectedTable.status)}</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.summaryItem, { borderColor: colors.border }]}>
+                      <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Salão</Text>
+                      <Text numberOfLines={1} style={[styles.summaryValue, { color: colors.foreground }]}>{selectedTable.section}</Text>
+                    </View>
+                    <View style={[styles.summaryItem, { borderColor: colors.border }]}>
+                      <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Lugares</Text>
+                      <Text style={[styles.summaryValue, { color: colors.foreground }]}>{selectedTable.seats}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.actionLabel, { color: colors.foregroundSecondary }]}>ALTERAR STATUS</Text>
+                  <View style={styles.statusActions}>
+                    {(['available', 'occupied', 'reserved', 'cleaning', 'blocked'] as StatusKey[]).map((status) => {
+                      const meta = STATUS_META[status];
+                      const active = selectedTable.status === status;
+                      return (
+                        <Pressable
+                          key={status}
+                          disabled={isSubmitting}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active, disabled: isSubmitting }}
+                          accessibilityLabel={`Alterar status para ${meta.label.toLowerCase()}`}
+                          style={[styles.statusButton, { borderColor: active ? meta.color : colors.border, backgroundColor: active ? meta.bg : 'transparent' }]}
+                          onPress={() => void updateSelectedStatus(status)}
+                        >
+                          <View style={[styles.statusButtonDot, { backgroundColor: meta.color }]} />
+                          <Text style={{ color: active ? meta.color : colors.foreground, fontWeight: '700', fontSize: 12 }}>{statusLabel(status)}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Gerar QR Code da mesa ${selectedTable.label}`}
+                    style={({ pressed }) => [styles.generateButton, { backgroundColor: colors.primary }, pressed && styles.primaryPressed]}
+                    onPress={() => navigation.navigate('QRGenerator')}
+                  >
+                    <QrCode size={17} color="#FFF" />
+                    <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>Gerar QR Code</Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           ) : null}
         </ScrollView>
@@ -432,7 +479,17 @@ function Legend({ meta, label }: { meta: (typeof STATUS_META)[StatusKey]; label:
   );
 }
 
-function TableCell({ table, size, isSelected, onPress }: { table: V2Table; size: number; isSelected: boolean; onPress: () => void }) {
+const TableCell = React.memo(function TableCell({
+  table,
+  size,
+  isSelected,
+  onSelect,
+}: {
+  table: V2Table;
+  size: number;
+  isSelected: boolean;
+  onSelect: (tableId: string) => void;
+}) {
   const colors = useColors();
   const meta = statusMeta(table.status);
   const scale = useRef(new Animated.Value(1)).current;
@@ -448,42 +505,36 @@ function TableCell({ table, size, isSelected, onPress }: { table: V2Table; size:
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => onSelect(table.id)}
       accessibilityRole="button"
       accessibilityState={{ selected: isSelected }}
-      accessibilityLabel={`Mesa ${table.label}, ${meta.label.toLowerCase()}, ${table.section}, ${table.seats} lugares`}
-      style={({ pressed }) => [{ width: size, height: size }, pressed && styles.cellPressed]}
+      accessibilityLabel={`Mesa ${table.label}, ${meta.label.toLowerCase()}, ${table.guestName || table.section}, ${table.seats} lugares`}
+      style={({ pressed }) => [{ width: size, height: Math.max(96, Math.min(size, 108)) }, pressed && styles.cellPressed]}
     >
       <Animated.View
         style={[
           styles.cell,
           {
-            backgroundColor: meta.bg,
-            borderColor: isSelected ? colors.primary : meta.border,
-            borderWidth: isSelected ? 3 : 1,
+            backgroundColor: isSelected ? `${colors.primary}08` : colors.card,
+            borderColor: isSelected ? colors.primary : colors.border,
+            borderWidth: isSelected ? 1.5 : 1,
             transform: [{ scale }],
           },
           isSelected && styles.cellSelectedShadow,
         ]}
       >
-        <View style={[styles.statusBar, { backgroundColor: meta.color }]} />
-        {table.hasQR ? <QrCode size={12} color={meta.color} style={styles.qrIcon} /> : null}
-        <View style={styles.statusRow}>
-          <Text style={{ fontSize: 9, fontWeight: '800', color: meta.color, letterSpacing: 0.4 }}>{meta.label}</Text>
-        </View>
-        <View style={styles.tableNumberRow}>
-          <Text style={[styles.tablePrefix, { color: colors.foregroundSecondary }]}>Mesa</Text>
+        <View style={styles.tableCellHeader}>
           <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.tableNumber, { color: colors.foreground }]}>{table.label}</Text>
+          <View style={[styles.tableStatusChip, { backgroundColor: meta.bg }]}>
+            <Text numberOfLines={1} style={[styles.tableStatusText, { color: meta.color }]}>{statusLabel(table.status)}</Text>
+          </View>
         </View>
-        <Text numberOfLines={1} style={[styles.tableSection, { color: colors.foregroundSecondary }]}>{table.section}</Text>
-        <View style={styles.capacityRow}>
-          <Users size={12} color={colors.foregroundSecondary} />
-          <Text style={[styles.capacityText, { color: colors.foregroundSecondary }]}>{table.seats} lugares</Text>
-        </View>
+        <Text style={[styles.capacityText, { color: colors.foregroundSecondary }]}>{table.seats} lugares</Text>
+        <Text numberOfLines={1} style={[styles.tableGuest, { color: colors.foreground }]}>{table.guestName || ' '}</Text>
       </Animated.View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 24 },
@@ -496,23 +547,23 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cellPressed: { opacity: 0.86 },
-  cell: { flex: 1, borderRadius: 14, paddingHorizontal: 7, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  cellSelectedShadow: { shadowColor: '#7C2D12', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.24, shadowRadius: 9, elevation: 7 },
-  statusBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
-  qrIcon: { position: 'absolute', top: 9, right: 7 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', minHeight: 12 },
-  tableNumberRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 4, marginTop: 1, maxWidth: '100%' },
-  tablePrefix: { fontSize: 10, fontWeight: '700' },
-  tableNumber: { fontSize: 35, lineHeight: 39, fontWeight: '900', letterSpacing: -1.2, maxWidth: '72%' },
-  tableSection: { fontSize: 11, fontWeight: '600', maxWidth: '94%' },
-  capacityRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  capacityText: { fontSize: 10, fontWeight: '600' },
+  cell: { flex: 1, borderRadius: 18, paddingHorizontal: 11, paddingVertical: 12, overflow: 'hidden' },
+  cellSelectedShadow: { shadowColor: '#7C2D12', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.14, shadowRadius: 7, elevation: 4 },
+  tableCellHeader: { minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
+  tableNumber: { flexShrink: 1, fontSize: 18, lineHeight: 22, fontWeight: '900', letterSpacing: -0.4 },
+  tableStatusChip: { maxWidth: '68%', minHeight: 20, borderRadius: 999, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center' },
+  tableStatusText: { fontSize: 8, fontWeight: '800' },
+  capacityText: { fontSize: 10, fontWeight: '500', marginTop: 14 },
+  tableGuest: { fontSize: 11, fontWeight: '700', marginTop: 3 },
   detail: { marginTop: 14, padding: 16, borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
   detailAccent: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 4 },
   detailHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   detailIdentity: { flex: 1 },
   detailEyebrow: { fontSize: 9, fontWeight: '800', letterSpacing: 0.9 },
   detailTitle: { fontWeight: '900', fontSize: 22, marginTop: 1, letterSpacing: -0.3 },
+  detailGuest: { fontSize: 12, marginTop: 4 },
+  detailStatusChip: { minHeight: 24, borderRadius: 999, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  detailStatusText: { fontSize: 9, fontWeight: '800' },
   detailActions: { flexDirection: 'row', gap: 7 },
   iconAction: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   detailSummary: { flexDirection: 'row', gap: 7, marginTop: 14 },
@@ -522,6 +573,13 @@ const styles = StyleSheet.create({
   summaryItem: { flex: 1, minWidth: 0, minHeight: 54, borderWidth: 1, borderRadius: 12, paddingHorizontal: 9, justifyContent: 'center' },
   summaryLabel: { fontSize: 9, fontWeight: '700' },
   summaryValue: { fontSize: 13, fontWeight: '800', marginTop: 2 },
+  waiterDetailSummary: { flexDirection: 'row', gap: 8, marginTop: 18 },
+  waiterSummaryCard: { flex: 1, minHeight: 76, borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, justifyContent: 'center' },
+  waiterSummarySeats: { alignSelf: 'flex-start', color: '#0284C7', backgroundColor: '#E0F2FE', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, fontSize: 12, fontWeight: '900', overflow: 'hidden' },
+  waiterSummaryTotal: { alignSelf: 'flex-start', color: '#FF4B2B', backgroundColor: '#FFF1ED', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, fontSize: 12, fontWeight: '900', overflow: 'hidden' },
+  waiterSummaryLabel: { fontSize: 11, marginTop: 9 },
+  waiterCloseBillButton: { alignSelf: 'flex-start', minWidth: 140, minHeight: 42, marginTop: 16, borderRadius: 999, paddingHorizontal: 20, backgroundColor: '#0EA5E9', alignItems: 'center', justifyContent: 'center' },
+  waiterCloseBillText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   actionLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginTop: 16, marginBottom: 8 },
   statusActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statusButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8 },

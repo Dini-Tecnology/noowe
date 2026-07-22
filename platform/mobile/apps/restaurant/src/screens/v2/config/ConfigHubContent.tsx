@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Share, View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -15,12 +15,12 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
-import { authService } from '@/shared/services/auth';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import { ConfigHero } from './ConfigHero';
 import { ConfigTipCard } from './ConfigTipCard';
 import { ConfigModuleCard } from './ConfigModuleCard';
 import { ConfigUserCard } from './ConfigUserCard';
+import { useAccountActions } from './useAccountActions';
 import { useRegisterRemoteRefresh } from '../shared/remoteRefreshRegistry';
 import {
   CONFIG_MODULES,
@@ -193,6 +193,8 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
     };
   }, [moduleStates]);
 
+  const { handleSignOut, handleExportData, handleDeleteAccount } = useAccountActions();
+
   const dismissTip = async () => {
     setShowTip(false);
     try {
@@ -209,62 +211,6 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
     }
     if (params) navigation.navigate(route, params);
     else navigation.navigate(route);
-  };
-
-  const handleSignOut = () => {
-    Alert.alert('Sair da conta', 'Deseja encerrar sua sessão neste dispositivo?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Sair',
-        style: 'destructive',
-        onPress: () => {
-          void authService.logout();
-        },
-      },
-    ]);
-  };
-
-  const handleExportData = async () => {
-    try {
-      const data = await supabaseApiAdapter.exportUserData();
-      await Share.share({ message: JSON.stringify(data, null, 2), title: 'Meus dados' });
-    } catch (err) {
-      Alert.alert('Falha ao exportar', err instanceof Error ? err.message : 'Tente novamente.');
-    }
-  };
-
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Excluir minha conta',
-      'Seus dados pessoais serão anonimizados imediatamente e a exclusão definitiva ocorre em 30 dias. Pedidos e pagamentos são mantidos por obrigação legal. Esta ação não pode ser desfeita. Deseja continuar?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir conta',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert('Confirmar exclusão', 'Tem certeza? Você será desconectado.', [
-              { text: 'Cancelar', style: 'cancel' },
-              {
-                text: 'Sim, excluir',
-                style: 'destructive',
-                onPress: async () => {
-                  try {
-                    await supabaseApiAdapter.requestAccountDeletion();
-                    await authService.logout();
-                  } catch (err) {
-                    Alert.alert(
-                      'Falha ao excluir conta',
-                      err instanceof Error ? err.message : 'Tente novamente.',
-                    );
-                  }
-                },
-              },
-            ]);
-          },
-        },
-      ],
-    );
   };
 
   const quickActions = [

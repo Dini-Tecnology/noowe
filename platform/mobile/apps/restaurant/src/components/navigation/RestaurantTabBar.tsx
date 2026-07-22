@@ -88,15 +88,17 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
         onNavigate={(tab) => {
           if (variant === 'manager') {
             setManagerView(tab as ManagerRoleView);
-            if (state.routes.some((item) => item.name === 'Hub')) {
-              navigation.navigate('Hub');
+            const routeName = tab === 'manager-tables' ? 'Tables' : 'Hub';
+            if (state.routes.some((item) => item.name === routeName)) {
+              navigation.navigate(routeName);
             }
             return;
           }
           if (variant === 'maitre') {
             setMaitreView(tab as MaitreRoleView);
-            if (state.routes.some((item) => item.name === 'Hub')) {
-              navigation.navigate('Hub');
+            const routeName = tab === 'maitre-tables' ? 'Tables' : 'Hub';
+            if (state.routes.some((item) => item.name === routeName)) {
+              navigation.navigate(routeName);
             }
             return;
           }
@@ -123,8 +125,9 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
           }
           if (variant === 'waiter') {
             setWaiterView(tab as WaiterRoleView);
-            if (state.routes.some((item) => item.name === 'Hub')) {
-              navigation.navigate('Hub');
+            const routeName = tab === 'waiter-table-actions' ? 'Tables' : 'Hub';
+            if (state.routes.some((item) => item.name === routeName)) {
+              navigation.navigate(routeName);
             }
             return;
           }

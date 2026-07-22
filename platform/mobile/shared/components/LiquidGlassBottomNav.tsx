@@ -2,7 +2,7 @@
  * Okinawa Design System — Liquid Glass bottom navigation (shared base)
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -10,9 +10,11 @@ import {
   StyleSheet,
   Animated,
   Platform,
-  ScrollView,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MoreHorizontal, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOkinawaTheme, useColors } from '../contexts/ThemeContext';
 
@@ -56,11 +58,18 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const scaleValues = useRef<Animated.Value[]>([]);
-  const scrollable = items.length > 5;
+  const [moreOpen, setMoreOpen] = useState(false);
+  const hasOverflow = items.length > 5;
+  const primaryItems = hasOverflow ? items.slice(0, 4) : items;
+  const overflowItems = hasOverflow ? items.slice(4) : [];
+  const activeInOverflow = overflowItems.some((item) => item.id === activeTab);
 
   useEffect(() => {
-    scaleValues.current = items.map((_, index) => scaleValues.current[index] ?? new Animated.Value(1));
-  }, [items]);
+    scaleValues.current = Array.from(
+      { length: items.length + (hasOverflow ? 1 : 0) },
+      (_, index) => scaleValues.current[index] ?? new Animated.Value(1),
+    );
+  }, [hasOverflow, items]);
 
   const shellBackground = colors.card;
   const shellBorder = isDark ? colors.border : colors.border;
@@ -99,7 +108,7 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
         navShell: {
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: scrollable ? 'flex-start' : 'space-around',
+          justifyContent: 'space-around',
           borderRadius: 22,
           borderWidth: StyleSheet.hairlineWidth,
           paddingVertical: 6,
@@ -115,11 +124,11 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
           }),
         },
         navItem: {
+          flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
           paddingVertical: 2,
-          paddingHorizontal: scrollable ? 10 : 6,
-          minWidth: scrollable ? 64 : undefined,
+          paddingHorizontal: 4,
         },
         iconContainer: {
           width: 32,
@@ -141,12 +150,63 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
           letterSpacing: 0.3,
           textAlign: 'center',
         },
+        modalBackdrop: {
+          flex: 1,
+          justifyContent: 'flex-end',
+          backgroundColor: 'rgba(15, 23, 42, 0.42)',
+        },
+        moreSheet: {
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          borderWidth: StyleSheet.hairlineWidth,
+          paddingHorizontal: 18,
+          paddingTop: 14,
+        },
+        moreHeader: {
+          minHeight: 44,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 8,
+        },
+        moreTitle: { fontSize: 17, fontWeight: '800' },
+        closeButton: {
+          width: 38,
+          height: 38,
+          borderRadius: 13,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        overflowGrid: {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: 10,
+        },
+        overflowItem: {
+          width: '48.5%',
+          minHeight: 76,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderRadius: 18,
+          padding: 12,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+        },
+        overflowIcon: {
+          width: 38,
+          height: 38,
+          borderRadius: 13,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        overflowLabel: { flex: 1, fontSize: 12, fontWeight: '700' },
       }),
-    [colors, scrollable],
+    [colors],
   );
 
-  const renderItems = () =>
-    items.map((item, index) => {
+  const renderItems = (visibleItems: LiquidGlassNavItem[]) =>
+    visibleItems.map((item) => {
+      const index = items.findIndex((candidate) => candidate.id === item.id);
       const Icon = item.icon;
       const isActive = activeTab === item.id;
       const scale = scaleValues.current[index] ?? new Animated.Value(1);
@@ -188,6 +248,9 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
       );
     });
 
+  const moreIndex = items.length;
+  const moreScale = scaleValues.current[moreIndex] ?? new Animated.Value(1);
+
   return (
     <View style={[styles.root, { paddingBottom: Math.max(insets.bottom, 6) }]}>
       <View
@@ -196,18 +259,97 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
           { backgroundColor: shellBackground, borderColor: shellBorder },
         ]}
       >
-        {scrollable ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 4 }}
+        {renderItems(primaryItems)}
+        {hasOverflow ? (
+          <TouchableOpacity
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Mais opções"
+            accessibilityState={{ expanded: moreOpen, selected: activeInOverflow }}
+            onPress={() => setMoreOpen(true)}
+            onPressIn={() => handlePressIn(moreIndex)}
+            onPressOut={() => handlePressOut(moreIndex)}
+            style={styles.navItem}
           >
-            {renderItems()}
-          </ScrollView>
-        ) : (
-          renderItems()
-        )}
+            <Animated.View style={[styles.iconContainer, { transform: [{ scale: moreScale }] }]}>
+              {activeInOverflow ? (
+                <LinearGradient
+                  colors={theme.gradients.primary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.activeGradient}
+                />
+              ) : null}
+              <MoreHorizontal
+                size={18}
+                color={activeInOverflow ? colors.primaryForeground : inactiveIconColor}
+                strokeWidth={activeInOverflow ? 2 : 1.5}
+              />
+            </Animated.View>
+            <Text style={[styles.navLabel, { color: activeInOverflow ? colors.primary : inactiveIconColor }]}>Mais</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
+      <Modal visible={moreOpen} transparent animationType="slide" onRequestClose={() => setMoreOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setMoreOpen(false)}>
+          <Pressable
+            onPress={(event) => event.stopPropagation()}
+            style={[
+              styles.moreSheet,
+              {
+                paddingBottom: Math.max(insets.bottom, 18) + 10,
+                backgroundColor: shellBackground,
+                borderColor: shellBorder,
+              },
+            ]}
+          >
+            <View style={styles.moreHeader}>
+              <View>
+                <Text style={[styles.moreTitle, { color: colors.foreground }]}>Mais opções</Text>
+                <Text style={{ color: colors.foregroundSecondary, fontSize: 12, marginTop: 2 }}>Acesse as demais áreas</Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Fechar mais opções"
+                onPress={() => setMoreOpen(false)}
+                style={[styles.closeButton, { backgroundColor: colors.backgroundSecondary }]}
+              >
+                <X size={19} color={colors.foregroundSecondary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.overflowGrid}>
+              {overflowItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = item.id === activeTab;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    activeOpacity={0.76}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                    onPress={() => {
+                      setMoreOpen(false);
+                      onNavigate(item.id);
+                    }}
+                    style={[
+                      styles.overflowItem,
+                      {
+                        borderColor: isActive ? colors.primary : colors.border,
+                        backgroundColor: isActive ? `${colors.primary}10` : colors.backgroundSecondary,
+                      },
+                    ]}
+                  >
+                    <View style={[styles.overflowIcon, { backgroundColor: isActive ? colors.primary : colors.card }]}>
+                      <Icon size={18} color={isActive ? colors.primaryForeground : colors.foregroundSecondary} strokeWidth={1.8} />
+                    </View>
+                    <Text style={[styles.overflowLabel, { color: isActive ? colors.primary : colors.foreground }]}>{item.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 };

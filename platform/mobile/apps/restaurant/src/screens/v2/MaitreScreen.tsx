@@ -34,7 +34,7 @@ export default function MaitreScreen() {
   const openMaitreView = (view: MaitreRoleView) => {
     setRole('maitre');
     setMaitreView(view);
-    navigation.navigate('Tabs');
+    navigation.navigate('Tabs', { screen: view === 'maitre-tables' ? 'Tables' : 'Hub' });
   };
 
   return (
