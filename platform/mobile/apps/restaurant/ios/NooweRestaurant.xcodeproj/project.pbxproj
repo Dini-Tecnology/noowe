@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		3C55C1B2317B65045F88BFBE /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A96C44935B86B0BF6EF316E /* ExpoModulesProvider.swift */; };
-		3E2955303A48700BBA740131 /* libPods-NooweRestaurante.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C8B8C8061C4F2D86F03D887 /* libPods-NooweRestaurante.a */; };
+		3E2955303A48700BBA740131 /* libPods-NooweRestaurant.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C8B8C8061C4F2D86F03D887 /* libPods-NooweRestaurant.a */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		8FACF26DCA9843B1BDFC14E4 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DC29FDC8ABA045A78E93378C /* PrivacyInfo.xcprivacy */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
@@ -17,19 +17,19 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0689744B82C0CF417767025B /* Pods-NooweRestaurante.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NooweRestaurante.release.xcconfig"; path = "Target Support Files/Pods-NooweRestaurante/Pods-NooweRestaurante.release.xcconfig"; sourceTree = "<group>"; };
-		13B07F961A680F5B00A75B9A /* NooweRestaurante.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NooweRestaurante.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = NooweRestaurante/Images.xcassets; sourceTree = "<group>"; };
-		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = NooweRestaurante/Info.plist; sourceTree = "<group>"; };
-		1C8B8C8061C4F2D86F03D887 /* libPods-NooweRestaurante.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-NooweRestaurante.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		7682E7B03F65291E7FE79295 /* Pods-NooweRestaurante.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NooweRestaurante.debug.xcconfig"; path = "Target Support Files/Pods-NooweRestaurante/Pods-NooweRestaurante.debug.xcconfig"; sourceTree = "<group>"; };
-		9A96C44935B86B0BF6EF316E /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-NooweRestaurante/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = NooweRestaurante/SplashScreen.storyboard; sourceTree = "<group>"; };
+		0689744B82C0CF417767025B /* Pods-NooweRestaurant.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NooweRestaurant.release.xcconfig"; path = "Target Support Files/Pods-NooweRestaurant/Pods-NooweRestaurant.release.xcconfig"; sourceTree = "<group>"; };
+		13B07F961A680F5B00A75B9A /* NooweRestaurant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NooweRestaurant.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = NooweRestaurant/Images.xcassets; sourceTree = "<group>"; };
+		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = NooweRestaurant/Info.plist; sourceTree = "<group>"; };
+		1C8B8C8061C4F2D86F03D887 /* libPods-NooweRestaurant.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-NooweRestaurant.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		7682E7B03F65291E7FE79295 /* Pods-NooweRestaurant.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NooweRestaurant.debug.xcconfig"; path = "Target Support Files/Pods-NooweRestaurant/Pods-NooweRestaurant.debug.xcconfig"; sourceTree = "<group>"; };
+		9A96C44935B86B0BF6EF316E /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-NooweRestaurant/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = NooweRestaurant/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		DC29FDC8ABA045A78E93378C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = PrivacyInfo.xcprivacy; path = NooweRestaurante/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		DC29FDC8ABA045A78E93378C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = PrivacyInfo.xcprivacy; path = NooweRestaurant/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = NooweRestaurante/AppDelegate.swift; sourceTree = "<group>"; };
-		F11748442D0722820044C1D9 /* NooweRestaurante-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "NooweRestaurante-Bridging-Header.h"; path = "NooweRestaurante/NooweRestaurante-Bridging-Header.h"; sourceTree = "<group>"; };
+		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = NooweRestaurant/AppDelegate.swift; sourceTree = "<group>"; };
+		F11748442D0722820044C1D9 /* NooweRestaurant-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "NooweRestaurant-Bridging-Header.h"; path = "NooweRestaurant/NooweRestaurant-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -37,48 +37,48 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3E2955303A48700BBA740131 /* libPods-NooweRestaurante.a in Frameworks */,
+				3E2955303A48700BBA740131 /* libPods-NooweRestaurant.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		13B07FAE1A68108700A75B9A /* NooweRestaurante */ = {
+		13B07FAE1A68108700A75B9A /* NooweRestaurant */ = {
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
-				F11748442D0722820044C1D9 /* NooweRestaurante-Bridging-Header.h */,
+				F11748442D0722820044C1D9 /* NooweRestaurant-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
 				DC29FDC8ABA045A78E93378C /* PrivacyInfo.xcprivacy */,
 			);
-			name = NooweRestaurante;
+			name = NooweRestaurant;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				1C8B8C8061C4F2D86F03D887 /* libPods-NooweRestaurante.a */,
+				1C8B8C8061C4F2D86F03D887 /* libPods-NooweRestaurant.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		3B18D8A61C03BC246BF86B11 /* NooweRestaurante */ = {
+		3B18D8A61C03BC246BF86B11 /* NooweRestaurant */ = {
 			isa = PBXGroup;
 			children = (
 				9A96C44935B86B0BF6EF316E /* ExpoModulesProvider.swift */,
 			);
-			name = NooweRestaurante;
+			name = NooweRestaurant;
 			sourceTree = "<group>";
 		};
 		57EF674AD535240DA6DEF377 /* ExpoModulesProviders */ = {
 			isa = PBXGroup;
 			children = (
-				3B18D8A61C03BC246BF86B11 /* NooweRestaurante */,
+				3B18D8A61C03BC246BF86B11 /* NooweRestaurant */,
 			);
 			name = ExpoModulesProviders;
 			sourceTree = "<group>";
@@ -93,7 +93,7 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
-				13B07FAE1A68108700A75B9A /* NooweRestaurante */,
+				13B07FAE1A68108700A75B9A /* NooweRestaurant */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
@@ -108,7 +108,7 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* NooweRestaurante.app */,
+				13B07F961A680F5B00A75B9A /* NooweRestaurant.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -119,14 +119,14 @@
 				BB2F792C24A3F905000567C9 /* Expo.plist */,
 			);
 			name = Supporting;
-			path = NooweRestaurante/Supporting;
+			path = NooweRestaurant/Supporting;
 			sourceTree = "<group>";
 		};
 		F5D67E820EE82B3EA8BA43CF /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				7682E7B03F65291E7FE79295 /* Pods-NooweRestaurante.debug.xcconfig */,
-				0689744B82C0CF417767025B /* Pods-NooweRestaurante.release.xcconfig */,
+				7682E7B03F65291E7FE79295 /* Pods-NooweRestaurant.debug.xcconfig */,
+				0689744B82C0CF417767025B /* Pods-NooweRestaurant.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -134,9 +134,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		13B07F861A680F5B00A75B9A /* NooweRestaurante */ = {
+		13B07F861A680F5B00A75B9A /* NooweRestaurant */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "NooweRestaurante" */;
+			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "NooweRestaurant" */;
 			buildPhases = (
 				B320899B723365ADB890A816 /* [CP] Check Pods Manifest.lock */,
 				C66655454D614B354D991705 /* [Expo] Configure project */,
@@ -152,9 +152,9 @@
 			);
 			dependencies = (
 			);
-			name = NooweRestaurante;
-			productName = NooweRestaurante;
-			productReference = 13B07F961A680F5B00A75B9A /* NooweRestaurante.app */;
+			name = NooweRestaurant;
+			productName = NooweRestaurant;
+			productReference = 13B07F961A680F5B00A75B9A /* NooweRestaurant.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -170,7 +170,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "NooweRestaurante" */;
+			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "NooweRestaurant" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -183,7 +183,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				13B07F861A680F5B00A75B9A /* NooweRestaurante */,
+				13B07F861A680F5B00A75B9A /* NooweRestaurant */,
 			);
 		};
 /* End PBXProject section */
@@ -241,7 +241,7 @@
 			files = (
 			);
 			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-NooweRestaurante/Pods-NooweRestaurante-frameworks.sh",
+				"${PODS_ROOT}/Target Support Files/Pods-NooweRestaurant/Pods-NooweRestaurant-frameworks.sh",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
@@ -254,7 +254,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-NooweRestaurante/Pods-NooweRestaurante-frameworks.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-NooweRestaurant/Pods-NooweRestaurant-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		B320899B723365ADB890A816 /* [CP] Check Pods Manifest.lock */ = {
@@ -272,7 +272,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-NooweRestaurante-checkManifestLockResult.txt",
+				"$(DERIVED_FILE_DIR)/Pods-NooweRestaurant-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -285,7 +285,7 @@
 			files = (
 			);
 			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-NooweRestaurante/Pods-NooweRestaurante-resources.sh",
+				"${PODS_ROOT}/Target Support Files/Pods-NooweRestaurant/Pods-NooweRestaurant-resources.sh",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXApplication/ExpoApplication_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
@@ -299,25 +299,25 @@
 				"${PODS_CONFIGURATION_BUILD_DIR}/PromisesObjC/FBLPromises_Privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/RNCAsyncStorage/RNCAsyncStorage_resources.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/RNSVG/RNSVGFilters.bundle",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/AntDesign.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/Entypo.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/EvilIcons.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/Feather.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/FontAwesome.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/FontAwesome5_Brands.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/FontAwesome5_Regular.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/FontAwesome5_Solid.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/FontAwesome6_Brands.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/FontAwesome6_Regular.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/FontAwesome6_Solid.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/Fontisto.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/Foundation.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/Ionicons.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/MaterialIcons.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/Octicons.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/SimpleLineIcons.ttf",
-				"${PODS_ROOT}/../../../../node_modules/react-native-vector-icons/Fonts/Zocial.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/AntDesign.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/Entypo.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/EvilIcons.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/Feather.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/FontAwesome.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/FontAwesome5_Brands.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/FontAwesome5_Regular.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/FontAwesome5_Solid.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/FontAwesome6_Brands.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/FontAwesome6_Regular.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/FontAwesome6_Solid.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/Fontisto.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/Foundation.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/Ionicons.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/MaterialIcons.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/Octicons.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/SimpleLineIcons.ttf",
+				"${PODS_ROOT}/../../node_modules/react-native-vector-icons/Fonts/Zocial.ttf",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-Core/React-Core_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-cxxreact/React-cxxreact_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/Sentry/Sentry.bundle",
@@ -368,7 +368,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-NooweRestaurante/Pods-NooweRestaurante-resources.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-NooweRestaurant/Pods-NooweRestaurant-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		C66655454D614B354D991705 /* [Expo] Configure project */ = {
@@ -382,18 +382,18 @@
 			inputPaths = (
 				"$(SRCROOT)/.xcode.env",
 				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/NooweRestaurante/NooweRestaurante.entitlements",
-				"$(SRCROOT)/Pods/Target Support Files/Pods-NooweRestaurante/expo-configure-project.sh",
+				"$(SRCROOT)/NooweRestaurant/NooweRestaurant.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-NooweRestaurant/expo-configure-project.sh",
 			);
 			name = "[Expo] Configure project";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(SRCROOT)/Pods/Target Support Files/Pods-NooweRestaurante/ExpoModulesProvider.swift",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-NooweRestaurant/ExpoModulesProvider.swift",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-NooweRestaurante/expo-configure-project.sh\"\n";
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-NooweRestaurant/expo-configure-project.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -412,26 +412,26 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 7682E7B03F65291E7FE79295 /* Pods-NooweRestaurante.debug.xcconfig */;
+			baseConfigurationReference = 7682E7B03F65291E7FE79295 /* Pods-NooweRestaurant.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = NooweRestaurante/NooweRestaurante.entitlements;
-				CURRENT_PROJECT_VERSION = 5;
+				CODE_SIGN_ENTITLEMENTS = NooweRestaurant/NooweRestaurant.entitlements;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = Z65CW25GNH;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
 				);
-				INFOPLIST_FILE = NooweRestaurante/Info.plist;
+				INFOPLIST_FILE = NooweRestaurant/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Noowe Restaurant";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 2.2;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -439,12 +439,12 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.noowe.restaurant;
-				PRODUCT_NAME = NooweRestaurante;
+				PRODUCT_NAME = NooweRestaurant;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_OBJC_BRIDGING_HEADER = "NooweRestaurante/NooweRestaurante-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "NooweRestaurant/NooweRestaurant-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -454,21 +454,21 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 0689744B82C0CF417767025B /* Pods-NooweRestaurante.release.xcconfig */;
+			baseConfigurationReference = 0689744B82C0CF417767025B /* Pods-NooweRestaurant.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = NooweRestaurante/NooweRestaurante.entitlements;
-				CURRENT_PROJECT_VERSION = 5;
+				CODE_SIGN_ENTITLEMENTS = NooweRestaurant/NooweRestaurant.entitlements;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = Z65CW25GNH;
-				INFOPLIST_FILE = NooweRestaurante/Info.plist;
+				INFOPLIST_FILE = NooweRestaurant/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Noowe Restaurant";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 2.2;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -476,12 +476,12 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.noowe.restaurant;
-				PRODUCT_NAME = NooweRestaurante;
+				PRODUCT_NAME = NooweRestaurant;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_OBJC_BRIDGING_HEADER = "NooweRestaurante/NooweRestaurante-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "NooweRestaurant/NooweRestaurant-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
@@ -609,7 +609,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "NooweRestaurante" */ = {
+		13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "NooweRestaurant" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				13B07F941A680F5B00A75B9A /* Debug */,
@@ -618,7 +618,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "NooweRestaurante" */ = {
+		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "NooweRestaurant" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,

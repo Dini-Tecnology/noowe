@@ -7,6 +7,14 @@ function resolvePackageDir(appRoot, mobileRoot, packageName) {
   return path.join(mobileRoot, 'node_modules', packageName);
 }
 
+function isExistingDir(folder) {
+  try {
+    return fs.statSync(folder).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function createMetroConfig(appRoot) {
   const mobileRoot = path.resolve(appRoot, '../..');
 
@@ -39,9 +47,14 @@ function createMetroConfig(appRoot) {
   // corrupt TreeFS when dependencies change between pnpm symlinks and npm
   // directories. The shared source folder is not a package, so watch it
   // explicitly without adding the broad workspace root.
+  // O campo `workspaces` faz o Expo incluir a node_modules da raiz do workspace,
+  // mas cada app instala as próprias dependências, então essa pasta pode não
+  // existir. O Metro aborta a criação do transformer se um watchFolder faltar.
   config.watchFolders = [
     ...new Set([...(config.watchFolders || []), path.resolve(mobileRoot, 'shared')]),
-  ].filter((folder) => path.resolve(folder) !== path.resolve(appRoot));
+  ]
+    .filter((folder) => path.resolve(folder) !== path.resolve(appRoot))
+    .filter(isExistingDir);
   config.server = {
     ...config.server,
     unstable_serverRoot: mobileRoot,

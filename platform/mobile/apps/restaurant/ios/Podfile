@@ -20,7 +20,7 @@ platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
 
-target 'NooweRestaurante' do
+target 'NooweRestaurant' do
   use_expo_modules!
 
   # FirebaseCoreInternal is written in Swift and needs GoogleUtilities to

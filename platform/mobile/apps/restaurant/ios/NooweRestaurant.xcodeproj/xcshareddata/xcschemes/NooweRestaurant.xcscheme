@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "NooweRestaurante.app"
-               BlueprintName = "NooweRestaurante"
-               ReferencedContainer = "container:NooweRestaurante.xcodeproj">
+               BuildableName = "NooweRestaurant.app"
+               BlueprintName = "NooweRestaurant"
+               ReferencedContainer = "container:NooweRestaurant.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "NooweRestauranteTests.xctest"
-               BlueprintName = "NooweRestauranteTests"
-               ReferencedContainer = "container:NooweRestaurante.xcodeproj">
+               BuildableName = "NooweRestaurantTests.xctest"
+               BlueprintName = "NooweRestaurantTests"
+               ReferencedContainer = "container:NooweRestaurant.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "NooweRestaurante.app"
-            BlueprintName = "NooweRestaurante"
-            ReferencedContainer = "container:NooweRestaurante.xcodeproj">
+            BuildableName = "NooweRestaurant.app"
+            BlueprintName = "NooweRestaurant"
+            ReferencedContainer = "container:NooweRestaurant.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "NooweRestaurante.app"
-            BlueprintName = "NooweRestaurante"
-            ReferencedContainer = "container:NooweRestaurante.xcodeproj">
+            BuildableName = "NooweRestaurant.app"
+            BlueprintName = "NooweRestaurant"
+            ReferencedContainer = "container:NooweRestaurant.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
