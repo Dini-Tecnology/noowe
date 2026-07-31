@@ -4,17 +4,26 @@ import { Text } from 'react-native-paper';
 import { Calendar, Check, X, Users, Clock } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 
 interface Reservation {
   id: string;
-  customer_name?: string;
+  customer_name?: string | null;
+  customer?: { full_name?: string | null; email?: string | null } | null;
   reservation_time: string;
   party_size: number;
   status: string;
   table_id?: string;
-  table_number?: number | string;
+  table_number?: number | string | null;
   special_requests?: string;
+}
+
+function reservationCustomerName(res: Reservation): string {
+  return res.customer_name?.trim()
+    || res.customer?.full_name?.trim()
+    || res.customer?.email?.trim()
+    || 'Cliente';
 }
 
 const STATUS_FILTERS = ['Todas', 'pending', 'confirmed', 'seated', 'completed', 'cancelled'] as const;
@@ -53,6 +62,7 @@ function formatDate(iso: string): string {
 
 export default function ReservationsScreen() {
   const colors = useColors();
+  const { restaurantId } = useRestaurantRole();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +75,16 @@ export default function ReservationsScreen() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      const data = await supabaseApiAdapter.getReservations({ date: todayStr });
+      let data: Reservation[] = [];
+      if (restaurantId) {
+        try {
+          data = await supabaseApiAdapter.getRestaurantReservations(restaurantId, todayStr);
+        } catch {
+          data = await supabaseApiAdapter.getReservations({ date: todayStr });
+        }
+      } else {
+        data = await supabaseApiAdapter.getReservations({ date: todayStr });
+      }
       setReservations(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar reservas');
@@ -73,7 +92,7 @@ export default function ReservationsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [todayStr]);
+  }, [restaurantId, todayStr]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -148,7 +167,7 @@ export default function ReservationsScreen() {
               <View style={styles.cardHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontWeight: '700', fontSize: 16, color: colors.foreground }}>
-                    {res.customer_name ?? 'Cliente'}
+                    {reservationCustomerName(res)}
                   </Text>
                   <View style={styles.metaRow}>
                     <Clock size={13} color={colors.foregroundSecondary} />

@@ -734,20 +734,26 @@ export type Reservation = {
 function mapReservation(raw: {
   id: string;
   customer_name?: string | null;
+  customer?: { full_name?: string | null; email?: string | null } | null;
   reservation_time: string;
   party_size: number;
   status: string;
   table_number?: string | number | null;
+  table?: { table_number?: string | number | null } | null;
   special_requests?: string | null;
 }): Reservation {
   return {
     id: raw.id,
-    customerName: raw.customer_name || 'Cliente',
+    customerName:
+      raw.customer_name?.trim()
+      || raw.customer?.full_name?.trim()
+      || raw.customer?.email?.trim()
+      || 'Cliente',
     time: raw.reservation_time,
     clock: clockLabel(raw.reservation_time),
     partySize: toNumber(raw.party_size, 1),
     status: raw.status,
-    tableNumber: raw.table_number ?? null,
+    tableNumber: raw.table_number ?? raw.table?.table_number ?? null,
     specialRequests: raw.special_requests ?? undefined,
   };
 }
@@ -762,14 +768,23 @@ export function useReservations(dateISO?: string): AsyncState<Reservation[]> {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const raw = await supabaseApiAdapter.getReservations({ date });
+      let raw: unknown[] = [];
+      if (restaurantId) {
+        try {
+          raw = await supabaseApiAdapter.getRestaurantReservations(restaurantId, date);
+        } catch {
+          raw = await supabaseApiAdapter.getReservations({ date });
+        }
+      } else {
+        raw = await supabaseApiAdapter.getReservations({ date });
+      }
       setData((Array.isArray(raw) ? raw : []).map(mapReservation));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar reservas');
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [date, restaurantId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('reservations', restaurantId, refresh);

@@ -588,7 +588,13 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   },
 
   async getReservations(params) {
-    let query = getSupabaseClient().from('reservations').select('*').order('reservation_time', { ascending: true });
+    let query = getSupabaseClient()
+      .from('reservations')
+      .select(`
+        *,
+        customer:profiles!customer_id(id, full_name, email, phone, avatar_url)
+      `)
+      .order('reservation_time', { ascending: true });
 
     if (params?.status) query = query.eq('status', params.status);
     if (params?.date) {
@@ -597,13 +603,26 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
     const { data, error } = await query;
     if (error) throw error;
-    return data;
+    return (Array.isArray(data) ? data : []).map((row: any) => ({
+      ...row,
+      customer_name: row.customer_name ?? row.customer?.full_name ?? null,
+    }));
   },
 
   async getReservation(id: string) {
-    const { data, error } = await getSupabaseClient().from('reservations').select('*').eq('id', id).single();
+    const { data, error } = await getSupabaseClient()
+      .from('reservations')
+      .select(`
+        *,
+        customer:profiles!customer_id(id, full_name, email, phone, avatar_url)
+      `)
+      .eq('id', id)
+      .single();
     if (error) throw error;
-    return data;
+    return {
+      ...data,
+      customer_name: data?.customer_name ?? data?.customer?.full_name ?? null,
+    };
   },
 
   async updateReservationStatus(id: string, status: string, extra?: Record<string, unknown>) {
@@ -636,7 +655,12 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_status: status || null,
     });
     if (error) throw error;
-    return data;
+    const rows = Array.isArray(data) ? data : [];
+    return rows.map((row: any) => ({
+      ...row,
+      customer_name: row.customer_name ?? row.customer?.full_name ?? null,
+      table_number: row.table_number ?? row.table?.table_number ?? null,
+    }));
   },
 
   async updateRestaurantReservationStatus(reservationId: string, status: string, tableId?: string, notes?: string) {
