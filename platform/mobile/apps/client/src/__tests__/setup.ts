@@ -1,6 +1,6 @@
 /**
  * Jest Setup File
- * Configures test environment for Okinawa Client App
+ * Configures test environment for the Noowe app
  */
 
 // Mock React Native modules

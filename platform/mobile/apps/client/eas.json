@@ -1,44 +1,55 @@
 {
   "cli": {
-    "version": ">= 12.0.0",
+    "version": ">= 16.0.0",
     "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "env": {
         "EXPO_PUBLIC_ENV": "development",
         "EXPO_PUBLIC_SUPABASE_URL": "https://eplivpvqemowmbivhfpx.supabase.co",
         "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_-odGXjOU8p5Tna1ClhvJ_g_Bsl9JZum",
         "EXPO_PUBLIC_SUPABASE_AUTH_GOOGLE_ENABLED": "true",
         "EXPO_PUBLIC_SUPABASE_AUTH_APPLE_ENABLED": "true",
-        "EXPO_PUBLIC_ENABLE_BIOMETRIC_LOGIN": "true",
-        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "okinawa-client://auth/callback"
+        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "noowe://auth/callback",
+        "EXPO_PUBLIC_FEATURE_PAYMENTS": "false",
+        "EXPO_PUBLIC_FEATURE_SPECIAL_SERVICE_TYPES": "false",
+        "EXPO_PUBLIC_ANALYTICS_ENABLED": "false"
       }
     },
-    "preview": {
+    "staging": {
       "distribution": "internal",
+      "environment": "preview",
+      "channel": "staging",
       "env": {
         "EXPO_PUBLIC_ENV": "staging",
         "EXPO_PUBLIC_SUPABASE_URL": "https://eplivpvqemowmbivhfpx.supabase.co",
         "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_-odGXjOU8p5Tna1ClhvJ_g_Bsl9JZum",
         "EXPO_PUBLIC_SUPABASE_AUTH_GOOGLE_ENABLED": "true",
         "EXPO_PUBLIC_SUPABASE_AUTH_APPLE_ENABLED": "true",
-        "EXPO_PUBLIC_ENABLE_BIOMETRIC_LOGIN": "true",
-        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "okinawa-client://auth/callback"
+        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "noowe://auth/callback",
+        "EXPO_PUBLIC_FEATURE_PAYMENTS": "false",
+        "EXPO_PUBLIC_FEATURE_SPECIAL_SERVICE_TYPES": "false",
+        "EXPO_PUBLIC_ANALYTICS_ENABLED": "false"
       }
     },
     "production": {
       "autoIncrement": true,
+      "environment": "production",
+      "channel": "production",
       "env": {
         "EXPO_PUBLIC_ENV": "production",
         "EXPO_PUBLIC_SUPABASE_URL": "https://eplivpvqemowmbivhfpx.supabase.co",
         "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_-odGXjOU8p5Tna1ClhvJ_g_Bsl9JZum",
         "EXPO_PUBLIC_SUPABASE_AUTH_GOOGLE_ENABLED": "true",
         "EXPO_PUBLIC_SUPABASE_AUTH_APPLE_ENABLED": "true",
-        "EXPO_PUBLIC_ENABLE_BIOMETRIC_LOGIN": "true",
-        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "okinawa-client://auth/callback"
+        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "noowe://auth/callback",
+        "EXPO_PUBLIC_FEATURE_PAYMENTS": "false",
+        "EXPO_PUBLIC_FEATURE_SPECIAL_SERVICE_TYPES": "false",
+        "EXPO_PUBLIC_ANALYTICS_ENABLED": "false"
       }
     }
   },

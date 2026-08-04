@@ -1,1 +1,1 @@
-export { default } from '@/shared/screens/auth/ResetPasswordScreen';
+export { ResetPasswordScreen as default } from '../../src/screens/production/AuthLinkScreens';

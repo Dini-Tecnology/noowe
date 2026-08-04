@@ -1,5 +1,5 @@
 import { FC, useState } from 'react';
-import { ChevronLeft, Pencil, Plus, QrCode, Trash2, Users } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, DoorOpen, Pencil, Plus, QrCode, Receipt, Trash2, UserPlus, Users } from 'lucide-react';
 import RestaurantLiquidGlassNav from '../../components/RestaurantLiquidGlassNav';
 
 interface TablesScreenV2Props { onNavigate: (screen: string) => void; }
@@ -12,18 +12,24 @@ interface RestaurantTable {
   seats: number;
   section: string;
   hasQR: boolean;
+  guestName?: string;
+  guests?: number;
+  total?: number;
+  reservationName?: string;
+  reservationGuests?: number;
+  billClosed?: boolean;
 }
 
 const initialTables: RestaurantTable[] = [
-  { id: '01', status: 'occupied', seats: 4, section: 'Salão', hasQR: true },
+  { id: '01', status: 'occupied', seats: 4, section: 'Salão', hasQR: true, guestName: 'Carlos Mendes', guests: 4, total: 286.4 },
   { id: '02', status: 'available', seats: 2, section: 'Salão', hasQR: true },
-  { id: '03', status: 'reserved', seats: 4, section: 'Salão', hasQR: false },
+  { id: '03', status: 'reserved', seats: 4, section: 'Salão', hasQR: false, reservationName: 'Ana Santos', reservationGuests: 3 },
   { id: '04', status: 'cleaning', seats: 2, section: 'Varanda', hasQR: true },
   { id: '05', status: 'available', seats: 4, section: 'Varanda', hasQR: false },
-  { id: '06', status: 'occupied', seats: 6, section: 'Privativo', hasQR: true },
+  { id: '06', status: 'occupied', seats: 6, section: 'Privativo', hasQR: true, guestName: 'Família Oliveira', guests: 5, total: 512.9 },
   { id: '07', status: 'blocked', seats: 2, section: 'Varanda', hasQR: false },
   { id: '08', status: 'available', seats: 4, section: 'Salão', hasQR: true },
-  { id: '09', status: 'reserved', seats: 6, section: 'Privativo', hasQR: true },
+  { id: '09', status: 'reserved', seats: 6, section: 'Privativo', hasQR: true, reservationName: 'Marina Costa', reservationGuests: 6 },
 ];
 
 const statusMeta: Record<TableStatus, { label: string; card: string; text: string; border: string; dot: string }> = {
@@ -39,11 +45,57 @@ const statusOrder = Object.keys(statusMeta) as TableStatus[];
 const TablesScreenV2: FC<TablesScreenV2Props> = ({ onNavigate }) => {
   const [tables, setTables] = useState(initialTables);
   const [selectedTableId, setSelectedTableId] = useState<string | null>('01');
+  const [showSeatingForm, setShowSeatingForm] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestCount, setGuestCount] = useState('2');
   const selectedTable = tables.find((table) => table.id === selectedTableId);
+
+  const currency = (value = 0) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const updateStatus = (status: TableStatus) => {
     if (!selectedTableId) return;
+    if (status === 'available' && selectedTable?.status === 'occupied') return;
     setTables((current) => current.map((table) => table.id === selectedTableId ? { ...table, status } : table));
+  };
+
+  const openSeatingForm = () => {
+    if (!selectedTable) return;
+    setGuestName(selectedTable.reservationName || '');
+    setGuestCount(String(selectedTable.reservationGuests || Math.min(selectedTable.seats, 2)));
+    setShowSeatingForm(true);
+  };
+
+  const seatClient = () => {
+    if (!selectedTableId || !guestName.trim()) return;
+    const guests = Math.max(1, Math.min(Number(guestCount) || 1, selectedTable?.seats || 1));
+    setTables((current) => current.map((table) => table.id === selectedTableId ? {
+      ...table,
+      status: 'occupied',
+      guestName: guestName.trim(),
+      guests,
+      total: 0,
+      billClosed: false,
+    } : table));
+    setShowSeatingForm(false);
+  };
+
+  const closeBill = () => {
+    if (!selectedTableId) return;
+    setTables((current) => current.map((table) => table.id === selectedTableId ? { ...table, status: 'cleaning', billClosed: true } : table));
+  };
+
+  const releaseTable = () => {
+    if (!selectedTableId) return;
+    setTables((current) => current.map((table) => table.id === selectedTableId ? {
+      ...table,
+      status: 'available',
+      guestName: undefined,
+      guests: undefined,
+      total: undefined,
+      billClosed: false,
+      reservationName: undefined,
+      reservationGuests: undefined,
+    } : table));
   };
 
   return (
@@ -93,7 +145,10 @@ const TablesScreenV2: FC<TablesScreenV2Props> = ({ onNavigate }) => {
                 key={table.id}
                 aria-pressed={selected}
                 aria-label={`Mesa ${table.id}, ${meta.label}, ${table.section}, ${table.seats} lugares`}
-                onClick={() => setSelectedTableId(selected ? null : table.id)}
+                onClick={() => {
+                  setSelectedTableId(selected ? null : table.id);
+                  setShowSeatingForm(false);
+                }}
                 className={`relative aspect-square overflow-hidden rounded-[14px] border p-2 text-center transition-all duration-200 ${meta.card} ${selected ? 'z-10 scale-[1.04] border-[3px] border-primary shadow-[0_8px_20px_rgba(234,88,12,0.24)]' : meta.border}`}
               >
                 <span className={`absolute inset-x-0 top-0 h-1 ${meta.dot}`} />
@@ -106,8 +161,9 @@ const TablesScreenV2: FC<TablesScreenV2Props> = ({ onNavigate }) => {
                   </div>
                   <span className="max-w-full truncate text-[10px] font-semibold text-muted-foreground">{table.section}</span>
                   <span className="mt-1 flex items-center gap-1 text-[9px] font-semibold text-muted-foreground">
-                    <Users className="h-3 w-3" /> {table.seats} lugares
+                    <Users className="h-3 w-3" /> {table.guests || table.reservationGuests || table.seats} {table.guests || table.reservationGuests ? 'pessoas' : 'lugares'}
                   </span>
+                  {(table.guestName || table.reservationName) && <span className="mt-0.5 max-w-full truncate text-[9px] font-bold text-foreground">{table.guestName || table.reservationName}</span>}
                 </div>
               </button>
             );
@@ -121,6 +177,7 @@ const TablesScreenV2: FC<TablesScreenV2Props> = ({ onNavigate }) => {
               <div>
                 <p className="text-[9px] font-black tracking-[0.12em] text-muted-foreground">MESA SELECIONADA</p>
                 <h2 className="text-xl font-black tracking-tight text-foreground">Mesa {selectedTable.id}</h2>
+                <p className="text-xs font-semibold text-muted-foreground">{selectedTable.guestName || selectedTable.reservationName || 'Mesa livre'}</p>
               </div>
               <div className="flex gap-1.5">
                 <button aria-label="Editar mesa" className="rounded-xl bg-muted p-2 text-muted-foreground hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>
@@ -128,22 +185,56 @@ const TablesScreenV2: FC<TablesScreenV2Props> = ({ onNavigate }) => {
               </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-[1.3fr_1fr_.7fr] gap-1.5">
+            <div className="mt-3 grid grid-cols-3 gap-1.5">
               <div className={`flex items-center gap-2 rounded-xl px-2.5 py-2 ${statusMeta[selectedTable.status].card}`}>
                 <span className={`h-2 w-2 rounded-full ${statusMeta[selectedTable.status].dot}`} />
                 <div className="min-w-0"><p className="text-[8px] font-bold text-muted-foreground">Status atual</p><p className={`truncate text-xs font-black ${statusMeta[selectedTable.status].text}`}>{statusMeta[selectedTable.status].label}</p></div>
               </div>
-              <div className="min-w-0 rounded-xl border border-border px-2.5 py-2"><p className="text-[8px] font-bold text-muted-foreground">Salão</p><p className="truncate text-xs font-black text-foreground">{selectedTable.section}</p></div>
-              <div className="rounded-xl border border-border px-2.5 py-2"><p className="text-[8px] font-bold text-muted-foreground">Lugares</p><p className="text-xs font-black text-foreground">{selectedTable.seats}</p></div>
+              <div className="min-w-0 rounded-xl border border-border px-2.5 py-2"><p className="text-[8px] font-bold text-muted-foreground">Pessoas</p><p className="truncate text-xs font-black text-foreground">{selectedTable.guests || selectedTable.reservationGuests || 0}</p></div>
+              <div className="rounded-xl border border-border px-2.5 py-2"><p className="text-[8px] font-bold text-muted-foreground">Conta</p><p className="truncate text-xs font-black text-foreground">{currency(selectedTable.total)}</p></div>
             </div>
+
+            {(selectedTable.status === 'available' || selectedTable.status === 'reserved') && !showSeatingForm && (
+              <button onClick={openSeatingForm} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-black text-white shadow-sm ${selectedTable.status === 'reserved' ? 'bg-emerald-600' : 'bg-primary'}`}>
+                {selectedTable.status === 'reserved' ? <CheckCircle2 className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                {selectedTable.status === 'reserved' ? 'Fazer check-in' : 'Sentar cliente'}
+              </button>
+            )}
+
+            {showSeatingForm && (
+              <div className="mt-3 space-y-2 rounded-xl border border-border bg-muted/40 p-3">
+                <label className="block text-[10px] font-bold text-muted-foreground">Cliente ou responsável
+                  <input value={guestName} onChange={(event) => setGuestName(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none focus:border-primary" placeholder="Nome do cliente" />
+                </label>
+                <label className="block text-[10px] font-bold text-muted-foreground">Quantidade de pessoas
+                  <input value={guestCount} onChange={(event) => setGuestCount(event.target.value.replace(/\D/g, '').slice(0, 2))} inputMode="numeric" className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none focus:border-primary" />
+                </label>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowSeatingForm(false)} className="flex-1 rounded-lg border border-border py-2 text-xs font-bold text-foreground">Cancelar</button>
+                  <button disabled={!guestName.trim()} onClick={seatClient} className="flex-1 rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white disabled:opacity-40">Confirmar</button>
+                </div>
+              </div>
+            )}
+
+            {selectedTable.status === 'occupied' && (
+              <button onClick={closeBill} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-sky-600 py-3 text-sm font-black text-white shadow-sm">
+                <Receipt className="h-4 w-4" /> Fechar a conta · {currency(selectedTable.total)}
+              </button>
+            )}
+
+            {selectedTable.status === 'cleaning' && selectedTable.billClosed && (
+              <button onClick={releaseTable} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-black text-white shadow-sm">
+                <DoorOpen className="h-4 w-4" /> Liberar mesa
+              </button>
+            )}
 
             <p className="mb-2 mt-4 text-[9px] font-black tracking-[0.1em] text-muted-foreground">ALTERAR STATUS</p>
             <div className="flex flex-wrap gap-1.5">
-              {statusOrder.map((status) => {
+              {statusOrder.filter((status) => status !== 'occupied').map((status) => {
                 const meta = statusMeta[status];
                 const active = selectedTable.status === status;
                 return (
-                  <button key={status} aria-pressed={active} onClick={() => updateStatus(status)} className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[10px] font-bold transition-all ${active ? `${meta.card} ${meta.border} ${meta.text} shadow-sm` : 'border-border bg-background text-foreground hover:bg-muted'}`}>
+                  <button key={status} disabled={selectedTable.status === 'occupied'} aria-pressed={active} onClick={() => updateStatus(status)} className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[10px] font-bold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${active ? `${meta.card} ${meta.border} ${meta.text} shadow-sm` : 'border-border bg-background text-foreground hover:bg-muted'}`}>
                     <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}
                   </button>
                 );

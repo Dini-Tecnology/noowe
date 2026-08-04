@@ -1,5 +1,5 @@
 /**
- * Okinawa Client App - Screen Tests
+ * Noowe App - Screen Tests
  * Validates all screens render correctly and contain required elements
  */
 

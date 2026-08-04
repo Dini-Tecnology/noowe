@@ -89,7 +89,7 @@ The Identity Module (`IdentityModule`) is the single source of truth for all cre
   accessTokenExpiresIn: '15m',  // Short-lived
   refreshTokenExpiresIn: '7d',  // Longer-lived with rotation
   issuer: 'okinawa-api',
-  audience: 'okinawa-clients'
+  audience: 'noowe-clients'
 }
 
 // JWT Payload includes unique JTI for secure blacklisting
@@ -784,4 +784,3 @@ Ações sensíveis (cancelamentos, reembolsos) requerem aprovação de MANAGER o
 **Versão do Documento:** 3.1
 **Última Atualização:** Fevereiro 2025
 **Ciclo de Revisão:** Trimestral
-

@@ -8,18 +8,15 @@
     "shared"
   ],
   "overrides": {
-    "@okinawa/client": {
-      "expo": "51.0.39",
-      "react-native-reanimated": "3.10.1",
-      "@react-native-community/datetimepicker": "8.0.1"
-    },
-    "@react-native-community/datetimepicker": "8.0.1",
+    "@react-native-community/datetimepicker": "8.4.4",
     "eslint-plugin-react-hooks": "^7.1.1",
     "@typescript-eslint/parser": "^8.63.0",
     "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/scope-manager": "^8.63.0",
     "@typescript-eslint/typescript-estree": "^8.63.0",
-    "@typescript-eslint/utils": "^8.63.0"
+    "@typescript-eslint/utils": "^8.63.0",
+    "postcss": "^8.5.23",
+    "uuid": "^11.1.1"
   },
   "scripts": {
     "postinstall": "patch-package",
@@ -34,16 +31,20 @@
     "build:restaurant:ios": "cd apps/restaurant && eas build --platform ios",
     "build:restaurant:android": "cd apps/restaurant && eas build --platform android",
     "test": "jest",
-    "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit -p apps/client/tsconfig.json && tsc --noEmit -p apps/restaurant/tsconfig.json"
+    "lint": "npm run lint:client && npm run lint:restaurant",
+    "lint:client": "eslint apps/client/src/App.tsx apps/client/src/navigation/production.tsx apps/client/src/screens/production apps/client/src/services/customer-backend.ts apps/client/src/services/customer-push.ts apps/client/src/contexts/VisitSessionContext.tsx",
+    "lint:restaurant": "eslint apps/restaurant/src --ext .ts,.tsx",
+    "typecheck": "npm run typecheck:client && npm run typecheck:restaurant",
+    "typecheck:client": "tsc --noEmit -p apps/client/tsconfig.json",
+    "typecheck:restaurant": "tsc --noEmit -p apps/restaurant/tsconfig.json",
+    "test:client": "npm test --workspace @noowe/client --"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.28.5",
     "@babel/preset-react": "^7.28.5",
     "@babel/preset-typescript": "^7.28.5",
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@testing-library/jest-native": "^5.4.3",
-    "@testing-library/react-native": "^12.4.5",
+    "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
     "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/parser": "^8.63.0",
@@ -57,22 +58,23 @@
     "jest": "^29.7.0",
     "patch-package": "^8.0.0",
     "prettier": "^3.4.0",
-    "react-test-renderer": "18.2.0",
+    "react-test-renderer": "19.1.0",
     "ts-jest": "^29.4.6",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "@react-native-community/netinfo": "^11.4.1",
-    "@react-native-firebase/analytics": "^23.5.0",
-    "@react-native-firebase/app": "^23.5.0",
-    "@sentry/react-native": "^7.7.0",
-    "@shopify/flash-list": "1.7.3",
+    "@sentry/react-native": "~7.2.0",
+    "@shopify/flash-list": "2.0.2",
     "@tanstack/react-query": "^5.90.12",
-    "expo-camera": "~15.0.16",
-    "expo-device": "~6.0.2",
-    "expo-linking": "~6.3.1",
-    "expo-local-authentication": "~14.0.1",
-    "expo-notifications": "~0.28.19",
-    "react-native-toast-message": "^2.3.3"
+    "expo-camera": "~17.0.10",
+    "expo-device": "~8.0.10",
+    "expo-linking": "~8.0.12",
+    "expo-local-authentication": "~17.0.8",
+    "expo-notifications": "~0.32.17",
+    "react-native-toast-message": "^2.3.3",
+    "expo": "54.0.36",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   }
 }

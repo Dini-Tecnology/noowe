@@ -210,7 +210,7 @@ const EcosystemSlide = () => (
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center mb-6 shadow-lg" style={{ boxShadow: '0 10px 30px -10px hsl(var(--primary) / 0.4)' }}>
             <Smartphone className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h3 className="text-2xl font-bold mb-3 text-foreground">Okinawa Cliente</h3>
+          <h3 className="text-2xl font-bold mb-3 text-foreground">Noowe</h3>
           <p className="text-muted-foreground mb-6 leading-relaxed">
             App para consumidores descobrirem restaurantes, fazerem pedidos, reservas e vivenciarem experiências gastronômicas memoráveis.
           </p>

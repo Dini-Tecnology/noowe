@@ -153,6 +153,27 @@ export function orderStatusTone(status: OrderStatus): V2Tone {
   return map[status];
 }
 
+export function rawOrderStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    pending: 'Novo',
+    confirmed: 'Confirmado',
+    preparing: 'Preparando',
+    open_for_additions: 'Preparando',
+    ready: 'Pronto',
+    delivered: 'Entregue',
+    completed: 'Concluído',
+    cancelled: 'Cancelado',
+  };
+  return map[status] ?? status;
+}
+
+export function rawOrderStatusTone(status: string): V2Tone {
+  if (status === 'ready' || status === 'delivered' || status === 'completed') return 'success';
+  if (status === 'cancelled') return 'danger';
+  if (status === 'pending' || status === 'preparing' || status === 'open_for_additions') return 'warning';
+  return 'info';
+}
+
 export function kdsStatusLabel(status: KdsStatus): string {
   const map: Record<KdsStatus, string> = {
     queue: 'Na fila',

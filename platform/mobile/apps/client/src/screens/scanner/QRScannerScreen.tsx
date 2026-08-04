@@ -210,7 +210,7 @@ export default function QRScannerScreen() {
 
   const parseQRCode = (data: string): { type: QRCodeType; payload: any } => {
     try {
-      // Okinawa-specific QR codes
+      // Noowe-specific QR codes
       if (data.startsWith('okinawa://')) {
         const url = new URL(data);
         const path = url.pathname;

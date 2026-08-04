@@ -9,6 +9,6 @@
       "@okinawa/shared/*": ["../../shared/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", "../../shared/**/*"],
-  "exclude": ["node_modules"]
+  "files": ["src/App.tsx", "app/auth/callback.tsx", "app/auth/reset-password.tsx"],
+  "exclude": ["node_modules", "src/__tests__"]
 }

@@ -74,6 +74,11 @@ type RawTable = {
     started_at?: string | null;
     total_spent?: number | string | null;
   } | null;
+  active_reservation?: {
+    id?: string | null;
+    customer_name?: string | null;
+    party_size?: number | string | null;
+  } | null;
 };
 
 export type V2Table = {
@@ -85,6 +90,9 @@ export type V2Table = {
   guestName: string | null;
   totalSpent: number;
   sessionId: string | null;
+  reservationId: string | null;
+  reservationName: string | null;
+  reservationGuests: number;
   time: string;
   section: string;
   shape: string;
@@ -158,6 +166,16 @@ export function shortOrderId(id: string): string {
   return `#${id.slice(0, 8).toUpperCase()}`;
 }
 
+export function customerDisplayName(customerName?: string | null): string {
+  return customerName?.trim() || 'Cliente';
+}
+
+export function customerInitials(customerName?: string | null): string {
+  const parts = customerDisplayName(customerName).split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toLocaleUpperCase('pt-BR');
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toLocaleUpperCase('pt-BR');
+}
+
 export function mapOrderToTabOrder(raw: RawOrder): TabOrder {
   const items = Array.isArray(raw.order_items) ? raw.order_items : [];
   const itemTotal = items.reduce((sum, item) => sum + toNumber(item.total_price), 0);
@@ -209,15 +227,22 @@ export function mapKdsRowsToOrders(rows: RawKdsItem[]): KdsOrder[] {
 
 export function mapTable(raw: RawTable): V2Table {
   const status = (raw.status || 'available') as V2Table['status'];
+  const sessionGuestName = raw.active_session?.guest_name?.trim() || null;
+  const reservationName = raw.active_reservation?.customer_name?.trim() || null;
+  const sessionGuests = toNumber(raw.active_session?.guest_count, 0);
+  const reservationGuests = toNumber(raw.active_reservation?.party_size, 0);
   return {
     id: raw.id,
     label: String(raw.table_number || raw.id.slice(0, 4)),
     seats: toNumber(raw.seats, 1),
     status,
-    guests: toNumber(raw.active_session?.guest_count, 0),
-    guestName: raw.active_session?.guest_name?.trim() || null,
+    guests: sessionGuests || reservationGuests,
+    guestName: sessionGuestName || reservationName,
     totalSpent: toNumber(raw.active_session?.total_spent, 0),
     sessionId: raw.active_session?.id || null,
+    reservationId: raw.active_reservation?.id || null,
+    reservationName,
+    reservationGuests,
     time: elapsedLabel(raw.active_session?.started_at),
     section: raw.section || 'Salao',
     shape: raw.shape || 'rectangle',
@@ -251,17 +276,20 @@ function useRealtimeRefresh(table: string, restaurantId: string | null, refresh:
   }, [table, restaurantId]);
 }
 
-export function useRestaurantOrders(): AsyncState<TabOrder[]> {
+export function useRestaurantOrders(options?: { includeDelivered?: boolean }): AsyncState<TabOrder[]> {
   const [data, setData] = useState<TabOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { restaurantId } = useRestaurantRole();
+  const statuses = options?.includeDelivered
+    ? 'pending,confirmed,preparing,open_for_additions,ready,delivered'
+    : 'pending,confirmed,preparing,open_for_additions,ready';
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
       const raw = await ApiService.getRestaurantOrders({
-        status: 'pending,confirmed,preparing,open_for_additions,ready',
+        status: statuses,
       });
       setData((Array.isArray(raw) ? raw : []).map(mapOrderToTabOrder));
     } catch (err) {
@@ -269,7 +297,7 @@ export function useRestaurantOrders(): AsyncState<TabOrder[]> {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [statuses]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('orders', restaurantId, refresh);
@@ -728,20 +756,23 @@ export type Reservation = {
   partySize: number;
   status: string;
   tableNumber: string | number | null;
+  customerPhone: string | null;
   specialRequests?: string;
 };
 
-function mapReservation(raw: {
+type RawReservation = {
   id: string;
   customer_name?: string | null;
-  customer?: { full_name?: string | null; email?: string | null } | null;
+  customer?: { full_name?: string | null; email?: string | null; phone?: string | null } | null;
   reservation_time: string;
   party_size: number;
   status: string;
   table_number?: string | number | null;
   table?: { table_number?: string | number | null } | null;
   special_requests?: string | null;
-}): Reservation {
+};
+
+function mapReservation(raw: RawReservation): Reservation {
   return {
     id: raw.id,
     customerName:
@@ -754,6 +785,7 @@ function mapReservation(raw: {
     partySize: toNumber(raw.party_size, 1),
     status: raw.status,
     tableNumber: raw.table_number ?? raw.table?.table_number ?? null,
+    customerPhone: raw.customer?.phone?.trim() || null,
     specialRequests: raw.special_requests ?? undefined,
   };
 }
@@ -768,7 +800,7 @@ export function useReservations(dateISO?: string): AsyncState<Reservation[]> {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      let raw: unknown[] = [];
+      let raw: RawReservation[] = [];
       if (restaurantId) {
         try {
           raw = await supabaseApiAdapter.getRestaurantReservations(restaurantId, date);

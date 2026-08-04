@@ -23,8 +23,8 @@ export const APP_VERSION = {
  */
 export const CLIENT_APP_CONFIG = {
   name: 'Noowe',
-  slug: 'okinawa-client',
-  scheme: 'okinawa-client',
+  slug: 'noowe',
+  scheme: 'noowe',
   
   // App IDs
   ios: {
@@ -33,9 +33,9 @@ export const CLIENT_APP_CONFIG = {
     supportsTablet: true,
     associatedDomains: ['applinks:noowebr.com', 'applinks:*.noowebr.com'],
     infoPlist: {
-      NSCameraUsageDescription: 'Okinawa needs camera access to scan QR codes at restaurants.',
-      NSLocationWhenInUseUsageDescription: 'Okinawa needs your location to show nearby restaurants.',
-      NSLocationAlwaysUsageDescription: 'Okinawa tracks your location for drive-thru order coordination.',
+      NSCameraUsageDescription: 'Noowe needs camera access to scan QR codes at restaurants.',
+      NSLocationWhenInUseUsageDescription: 'Noowe needs your location to show nearby restaurants.',
+      NSLocationAlwaysUsageDescription: 'Noowe tracks your location for drive-thru order coordination.',
       NSFaceIDUsageDescription: 'Use Face ID for quick and secure login.',
       UIBackgroundModes: ['location', 'fetch', 'remote-notification'],
     },

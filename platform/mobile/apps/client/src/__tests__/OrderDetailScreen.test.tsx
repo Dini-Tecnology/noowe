@@ -130,7 +130,7 @@ const sampleOrder = {
       status: 'ready' as const,
     },
   ],
-  restaurant: { id: 'rest-1', name: 'Okinawa Sushi', logo_url: null },
+  restaurant: { id: 'rest-1', name: 'Noowe Sushi', logo_url: null },
   table: { id: 'tbl-1', table_number: '7' },
 };
 
@@ -169,7 +169,7 @@ describe('Client OrderDetailScreen (OrderStatusScreen)', () => {
     render(<OrderStatusScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText('Okinawa Sushi')).toBeTruthy();
+      expect(screen.getByText('Noowe Sushi')).toBeTruthy();
     });
   });
 

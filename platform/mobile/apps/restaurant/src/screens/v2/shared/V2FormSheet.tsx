@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { X } from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 
 interface V2FormSheetProps {
@@ -38,10 +38,32 @@ export function V2FormSheet({
   onSave,
 }: V2FormSheetProps) {
   const colors = useColors();
+  // Read the insets from the app window before opening the native Modal.
+  // On some iOS/Android versions a SafeAreaView mounted inside a full-screen
+  // Modal briefly reports zero, placing the header under the status bar.
+  const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      statusBarTranslucent={false}
+      navigationBarTranslucent={false}
+      onRequestClose={onClose}
+    >
+      <View
+        style={[
+          styles.safeArea,
+          {
+            backgroundColor: colors.background,
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+          },
+        ]}
+      >
         <KeyboardAvoidingView
           style={styles.keyboard}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -104,7 +126,7 @@ export function V2FormSheet({
             </Pressable>
           </View>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }

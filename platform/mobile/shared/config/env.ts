@@ -120,8 +120,8 @@ const developmentConfig: EnvironmentConfig = {
   },
   
   // App Store (placeholder URLs)
-  APP_STORE_URL: 'https://apps.apple.com/app/okinawa-client/id0000000000',
-  PLAY_STORE_URL: 'https://play.google.com/store/apps/details?id=com.okinawa.client',
+  APP_STORE_URL: 'https://apps.apple.com/app/noowe/id0000000000',
+  PLAY_STORE_URL: 'https://play.google.com/store/apps/details?id=com.noowe.client',
   
   // Support
   SUPPORT_EMAIL: 'support@okinawa.dev',
@@ -172,8 +172,8 @@ const stagingConfig: EnvironmentConfig = {
   },
   
   // App Store (placeholder URLs)
-  APP_STORE_URL: 'https://apps.apple.com/app/okinawa-client/id0000000000',
-  PLAY_STORE_URL: 'https://play.google.com/store/apps/details?id=com.okinawa.client',
+  APP_STORE_URL: 'https://apps.apple.com/app/noowe/id0000000000',
+  PLAY_STORE_URL: 'https://play.google.com/store/apps/details?id=com.noowe.client',
   
   // Support
   SUPPORT_EMAIL: 'support@okinawa.com',

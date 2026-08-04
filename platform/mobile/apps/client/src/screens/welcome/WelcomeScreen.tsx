@@ -174,7 +174,7 @@ export default function WelcomeScreen() {
 
   return (
     <ScreenContainer>
-    <View style={styles.container} accessibilityLabel="Welcome to Okinawa">
+    <View style={styles.container} accessibilityLabel="Welcome to Noowe">
       {/* Background gradient effect */}
       <View style={styles.gradientTop} />
       <View style={styles.gradientBottom} />
@@ -193,7 +193,7 @@ export default function WelcomeScreen() {
           <Icon name="silverware-fork-knife" size={80} color={colors.primaryForeground} />
         </View>
         <Text variant="displaySmall" style={styles.appName}>
-          Okinawa
+          Noowe
         </Text>
         <Text variant="titleMedium" style={styles.tagline}>
           Sua experiência gastronômica começa aqui

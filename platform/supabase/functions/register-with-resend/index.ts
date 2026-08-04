@@ -12,9 +12,9 @@ const DEFAULT_ALLOWED_ORIGINS = [
 
 const DEFAULT_REDIRECT_ALLOW_LIST = [
   "okinawa-restaurant://auth/callback",
-  "okinawa-client://auth/callback",
+  "noowe://auth/callback",
   "okinawa-restaurant://auth/reset-password",
-  "okinawa-client://auth/reset-password",
+  "noowe://auth/reset-password",
   "https://noowebr.com/auth/callback",
   "https://noowebr.com/auth/callback?app=restaurant",
   "https://noowebr.com/auth/callback?app=client",
@@ -70,7 +70,7 @@ const CLIENT_BRAND = {
 type EmailBrand = typeof RESTAURANT_BRAND;
 
 function resolveEmailBrand(emailRedirectTo: string): EmailBrand {
-  if (emailRedirectTo.includes("okinawa-client")) {
+  if (emailRedirectTo.startsWith("noowe://")) {
     return CLIENT_BRAND;
   }
   return RESTAURANT_BRAND;
@@ -82,7 +82,7 @@ function resolveLogoUrl(emailRedirectTo: string, brand: EmailBrand) {
 
   const restaurantLogo = Deno.env.get("EMAIL_LOGO_URL_RESTAURANT");
   const clientLogo = Deno.env.get("EMAIL_LOGO_URL_CLIENT");
-  const envLogo = emailRedirectTo.includes("okinawa-client") ? clientLogo : restaurantLogo;
+  const envLogo = emailRedirectTo.startsWith("noowe://") ? clientLogo : restaurantLogo;
   if (envLogo) return envLogo;
 
   // Embedded logo — garante exibição mesmo sem assets hospedados em noowebr.com

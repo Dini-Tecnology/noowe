@@ -1,8 +1,11 @@
 import { NativeModules } from 'react-native';
 
-type FirebaseAnalytics = ReturnType<
-  typeof import('@react-native-firebase/analytics').default
->;
+type FirebaseAnalytics = {
+  logEvent: (name: string, params?: Record<string, unknown>) => Promise<void>;
+  logScreenView: (params: { screen_name: string; screen_class: string }) => Promise<void>;
+  setUserId: (userId: string | null) => Promise<void>;
+  setUserProperties: (properties: Record<string, string>) => Promise<void>;
+};
 
 let firebaseAnalyticsFactory: (() => FirebaseAnalytics) | null = null;
 let firebaseUnavailableLogged = false;
@@ -20,14 +23,14 @@ function getFirebaseAnalytics(): FirebaseAnalytics | null {
   }
   if (!firebaseAnalyticsFactory) {
     try {
-      firebaseAnalyticsFactory = require('@react-native-firebase/analytics')
-        .default as () => FirebaseAnalytics;
+      firebaseAnalyticsFactory = require('@react-native-firebase/analytics').default;
     } catch {
       return null;
     }
   }
   try {
-    return firebaseAnalyticsFactory();
+    const factory = firebaseAnalyticsFactory;
+    return factory ? factory() : null;
   } catch {
     return null;
   }

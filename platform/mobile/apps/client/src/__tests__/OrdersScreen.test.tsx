@@ -87,7 +87,7 @@ const sampleOrders = [
     total_amount: 85.5,
     created_at: '2026-03-20T14:30:00Z',
     items: [{ id: 'i1', menu_item: { name: 'Ramen' }, quantity: 2, unit_price: 42.75 }],
-    restaurant: { name: 'Okinawa Sushi' },
+    restaurant: { name: 'Noowe Sushi' },
   },
   {
     id: 'ord-2',
@@ -95,7 +95,7 @@ const sampleOrders = [
     total_amount: 42.0,
     created_at: '2026-03-19T12:00:00Z',
     items: [{ id: 'i2', menu_item: { name: 'Gyoza' }, quantity: 1, unit_price: 42.0 }],
-    restaurant: { name: 'Okinawa Sushi' },
+    restaurant: { name: 'Noowe Sushi' },
   },
   {
     id: 'ord-3',
@@ -103,7 +103,7 @@ const sampleOrders = [
     total_amount: 30.0,
     created_at: '2026-03-18T10:00:00Z',
     items: [],
-    restaurant: { name: 'Okinawa Sushi' },
+    restaurant: { name: 'Noowe Sushi' },
   },
 ];
 

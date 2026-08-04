@@ -17,6 +17,7 @@ import { Text } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import {
   AlertCircle,
+  Bell,
   ArrowDown,
   Clock,
   CheckCircle,
@@ -60,7 +61,8 @@ import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import type { TableBill, ServiceCall } from './shared/useRestaurantOperations';
 import {
   elapsedLabel,
-  shortOrderId,
+  customerDisplayName,
+  customerInitials,
   useCashMovements,
   useCashRegister,
   useApprovals,
@@ -440,6 +442,11 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function relativeTimeLabel(value?: string): string {
+  const elapsed = elapsedLabel(value);
+  return !elapsed || elapsed === 'agora' ? 'agora' : `${elapsed} atrás`;
+}
+
 function formatApprovalCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -452,6 +459,7 @@ function formatApprovalCurrency(value: number): string {
 function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void; colors: ReturnType<typeof useColors> }) {
   const { data: snapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useDashboardSnapshot();
   const { data: recentOrders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useRestaurantOrders();
+  const { data: serviceCalls, loading: callsLoading, error: callsError, refresh: refreshCalls } = useServiceCalls();
   const primaryActions: { title: string; detail: string; screen: string; icon: IconComponent }[] = [
     { title: 'Cardápio', detail: 'Itens e preços', screen: 'Menu', icon: UtensilsCrossed },
     { title: 'Equipe', detail: 'Staff e turnos', screen: 'Staff', icon: Users },
@@ -470,6 +478,25 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
   const averageTicket = snapshot?.orders_today
     ? snapshot.revenue_today / snapshot.orders_today
     : 0;
+  const alerts = React.useMemo(() => {
+    const orderAlerts = recentOrders
+      .filter((order) => order.rawStatus === 'pending' || order.rawStatus === 'confirmed')
+      .map((order) => ({
+        id: `order-${order.id}`,
+        message: `Novo pedido na ${order.table} — ${customerDisplayName(order.customerName)}`,
+        createdAt: order.createdAt,
+      }));
+    const callAlerts = serviceCalls.map((call) => ({
+      id: `call-${call.id}`,
+      message: call.tableNumber
+        ? `Mesa ${call.tableNumber} chamou o garçom`
+        : 'Cliente chamou o garçom',
+      createdAt: call.createdAt,
+    }));
+    return [...orderAlerts, ...callAlerts]
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      .slice(0, 5);
+  }, [recentOrders, serviceCalls]);
 
   return (
     <View style={styles.section}>
@@ -530,6 +557,36 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
         recentOrders.slice(0, 3).map((order) => (
           <CompactOrder key={order.id} order={order} colors={colors} />
         ))
+      )}
+      <SectionTitle title="Alertas" subtitle="Atualizações da operação em tempo real" colors={colors} />
+      {ordersLoading || callsLoading ? (
+        <InlineNotice message="Carregando alertas..." colors={colors} />
+      ) : ordersError || callsError ? (
+        <InlineNotice
+          message={ordersError || callsError || 'Erro ao carregar alertas'}
+          actionLabel="Recarregar"
+          onPress={() => void Promise.all([refreshOrders(), refreshCalls()])}
+          colors={colors}
+        />
+      ) : alerts.length === 0 ? (
+        <InlineNotice message="Nenhum alerta recente." colors={colors} />
+      ) : (
+        <View style={[styles.alertList, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          {alerts.map((alert, index) => (
+            <View
+              key={alert.id}
+              style={[styles.alertRow, index < alerts.length - 1 && { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }]}
+            >
+              <View style={[styles.alertIcon, { backgroundColor: `${colors.primary}14` }]}>
+                <Bell size={16} color={colors.primary} />
+              </View>
+              <Text style={[styles.alertMessage, { color: colors.foreground }]}>{alert.message}</Text>
+              <Text style={[styles.alertTime, { color: colors.foregroundSecondary }]}>
+                {relativeTimeLabel(alert.createdAt)}
+              </Text>
+            </View>
+          ))}
+        </View>
       )}
     </View>
   );
@@ -905,7 +962,7 @@ function MaitreReservationsView({ colors }: { colors: ReturnType<typeof useColor
   const updateStatus = async (id: string, status: string) => {
     setActing(id);
     try {
-      await supabaseApiAdapter.updateReservationStatus(id, status);
+      await supabaseApiAdapter.updateRestaurantReservationStatus(id, status);
       await refresh();
     } catch (err) {
       Alert.alert('Falha ao atualizar reserva', err instanceof Error ? err.message : 'Tente novamente.');
@@ -933,9 +990,12 @@ function MaitreReservationsView({ colors }: { colors: ReturnType<typeof useColor
             <View style={styles.managerOrderHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{reservation.customerName}</Text>
-                <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
-                  {reservation.clock} · {reservation.partySize} {reservation.partySize === 1 ? 'pessoa' : 'pessoas'}
-                </Text>
+                <View style={styles.managementMetaGrid}>
+                  <MetaLine icon={Clock} label={`Hora: ${reservation.clock}`} color={colors.foregroundSecondary} />
+                  <MetaLine icon={UtensilsCrossed} label={`Mesa: ${reservation.tableNumber ?? 'a definir'}`} color={colors.foregroundSecondary} />
+                  <MetaLine icon={Users} label={`${reservation.partySize} ${reservation.partySize === 1 ? 'pessoa' : 'pessoas'}`} color={colors.foregroundSecondary} />
+                  <MetaLine icon={Phone} label={reservation.customerPhone || 'Telefone não informado'} color={colors.foregroundSecondary} />
+                </View>
               </View>
               <StatusChip label={RESERVATION_STATUS_LABEL[reservation.status] || reservation.status} tone={RESERVATION_STATUS_TONE[reservation.status] || 'info'} />
             </View>
@@ -989,7 +1049,7 @@ function MaitreFlowView({ colors }: { colors: ReturnType<typeof useColors> }) {
           <View key={reservation.id} style={[styles.flowCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
             <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{reservation.customerName}</Text>
             <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
-              {reservation.clock} · {RESERVATION_STATUS_LABEL[reservation.status] || reservation.status}
+              {reservation.clock} · {reservation.partySize} {reservation.partySize === 1 ? 'pessoa' : 'pessoas'} · {RESERVATION_STATUS_LABEL[reservation.status] || reservation.status}
             </Text>
           </View>
         ))
@@ -1057,11 +1117,10 @@ function MaitreManagementView({ colors }: { colors: ReturnType<typeof useColors>
               <StatusChip label={RESERVATION_STATUS_LABEL[reservation.status] || reservation.status} tone={RESERVATION_STATUS_TONE[reservation.status] || 'info'} />
             </View>
             <View style={styles.managementMetaGrid}>
-              <MetaLine icon={Clock} label={reservation.clock} color={colors.foregroundSecondary} />
-              <MetaLine icon={Users} label={`${reservation.partySize} pessoas`} color={colors.foregroundSecondary} />
-              {reservation.tableNumber != null && (
-                <MetaLine icon={UtensilsCrossed} label={`Mesa ${reservation.tableNumber}`} color={colors.foregroundSecondary} />
-              )}
+              <MetaLine icon={Clock} label={`Hora: ${reservation.clock}`} color={colors.foregroundSecondary} />
+              <MetaLine icon={UtensilsCrossed} label={`Mesa: ${reservation.tableNumber ?? 'a definir'}`} color={colors.foregroundSecondary} />
+              <MetaLine icon={Users} label={`${reservation.partySize} ${reservation.partySize === 1 ? 'pessoa' : 'pessoas'}`} color={colors.foregroundSecondary} />
+              <MetaLine icon={Phone} label={reservation.customerPhone || 'Telefone não informado'} color={colors.foregroundSecondary} />
             </View>
           </View>
         ))
@@ -1160,7 +1219,7 @@ function ManagerDashboardTab({
 }
 
 function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const { data: orders, loading, error, refresh } = useRestaurantOrders();
+  const { data: orders, loading, error, refresh } = useRestaurantOrders({ includeDelivered: true });
   const [advancing, setAdvancing] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<ManagerOrderFilter>('all');
   const filters: { id: ManagerOrderFilter; label: string }[] = [
@@ -1168,6 +1227,8 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
     { id: 'pending', label: 'Pendente' },
     { id: 'confirmed', label: 'Confirmado' },
     { id: 'preparing', label: 'Preparando' },
+    { id: 'ready', label: 'Prontos' },
+    { id: 'delivered', label: 'Entregues' },
   ];
   const visibleOrders = filterManagerOrders(orders, activeFilter);
 
@@ -1185,7 +1246,7 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
 
   return (
     <View style={styles.section}>
-      <View style={styles.filterRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         {filters.map((filter) => (
           <TouchableOpacity
             key={filter.id}
@@ -1198,14 +1259,16 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
             <Text style={[styles.filterText, { color: activeFilter === filter.id ? '#FFF' : colors.foregroundSecondary }]}>{filter.label}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
       {loading ? (
         <InlineNotice message="Carregando pedidos..." colors={colors} />
       ) : error ? (
         <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
       ) : visibleOrders.length === 0 ? (
         <InlineNotice message="Nenhum pedido neste status." colors={colors} />
-      ) : visibleOrders.map((order) => (
+      ) : visibleOrders.map((order) => {
+        const action = nextOrderWorkflowAction(order.rawStatus);
+        return (
         <View key={order.id} style={[styles.managerOrderCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
           <View style={styles.orderRow}>
             <View style={styles.tableNumberBubble}>
@@ -1213,8 +1276,8 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
             </View>
             <View style={{ flex: 1 }}>
               <View style={styles.managerOrderHeader}>
-                <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{order.customerName || shortOrderId(order.id)}</Text>
-                <StatusChip label={orderStatusLabel(order.status)} tone={orderStatusTone(order.status)} />
+                <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{customerDisplayName(order.customerName)}</Text>
+                <StatusChip label={RAW_ORDER_LABEL[order.rawStatus] ?? order.rawStatus} tone={RAW_ORDER_TONE[order.rawStatus] ?? 'info'} />
               </View>
               <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{order.items.length} itens · {formatCurrency(order.total)} · {order.time}</Text>
               <View style={styles.orderItemChips}>
@@ -1224,15 +1287,17 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
               </View>
             </View>
           </View>
-          <TouchableOpacity
-            disabled={advancing === order.id}
-            onPress={() => void advanceOrder(order.id, order.status === 'preparing' ? 'ready' : 'preparing')}
-            style={[styles.wideAction, { backgroundColor: order.status === 'preparing' ? '#35B36F' : '#F6A21A' }]}
-          >
-            <Text style={[styles.wideActionText, { color: order.status === 'preparing' ? '#FFF' : '#111827' }]}>{order.status === 'preparing' ? 'Marcar pronto' : 'Preparar'}</Text>
-          </TouchableOpacity>
+          {action ? (
+            <TouchableOpacity
+              disabled={advancing === order.id}
+              onPress={() => void advanceOrder(order.id, action.next)}
+              style={[styles.wideAction, { backgroundColor: action.bg, opacity: advancing === order.id ? 0.6 : 1 }]}
+            >
+              <Text style={[styles.wideActionText, { color: '#FFF' }]}>{action.label}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
-      ))}
+      );})}
     </View>
   );
 }
@@ -2817,6 +2882,7 @@ const WAITER_ORDER_FILTERS: { label: string; value: string }[] = [
   { label: 'Confirmado', value: 'confirmed' },
   { label: 'Preparando', value: 'preparing' },
   { label: 'Prontos', value: 'ready' },
+  { label: 'Entregues', value: 'delivered' },
 ];
 
 const RAW_ORDER_LABEL: Record<string, string> = {
@@ -2841,26 +2907,30 @@ const RAW_ORDER_TONE: Record<string, V2Tone> = {
   cancelled: 'danger',
 };
 
+function nextOrderWorkflowAction(rawStatus: string): { label: string; next: string; bg: string; fg: string } | null {
+  switch (rawStatus) {
+    case 'pending': return { label: 'Aceitar', next: 'confirmed', bg: '#FF5A3D', fg: '#FFFFFF' };
+    case 'confirmed': return { label: 'Preparar', next: 'preparing', bg: '#F59E0B', fg: '#FFFFFF' };
+    case 'open_for_additions':
+    case 'preparing': return { label: 'Marcar como Pronto', next: 'ready', bg: '#22C55E', fg: '#FFFFFF' };
+    case 'ready': return { label: 'Entregar', next: 'delivered', bg: '#3B82F6', fg: '#FFFFFF' };
+    default: return null;
+  }
+}
+
 function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) {
   const { restaurantId } = useRestaurantRole();
-  const { data: orders, loading, error, refresh } = useRestaurantOrders();
+  const { data: orders, loading, error, refresh } = useRestaurantOrders({ includeDelivered: true });
   const [filter, setFilter] = useState<string>('all');
   const [acting, setActing] = useState<string | null>(null);
 
-  const filtered = filter === 'all' ? orders : orders.filter((o) => o.rawStatus === filter);
+  const filtered = filter === 'all'
+    ? orders
+    : orders.filter((order) => filter === 'preparing'
+      ? order.rawStatus === 'preparing' || order.rawStatus === 'open_for_additions'
+      : order.rawStatus === filter);
 
   // Mirrors the preview flow: pending → confirmed → preparing → ready → delivered.
-  const nextAction = (rawStatus: string): { label: string; next: string; bg: string; fg: string } | null => {
-    switch (rawStatus) {
-      case 'pending': return { label: 'Confirmar', next: 'confirmed', bg: colors.primary, fg: '#FFFFFF' };
-      case 'confirmed': return { label: 'Preparar', next: 'preparing', bg: '#F59E0B', fg: '#FFFFFF' };
-      case 'open_for_additions':
-      case 'preparing': return { label: 'Marcar pronto', next: 'ready', bg: '#22C55E', fg: '#FFFFFF' };
-      case 'ready': return { label: 'Entregar', next: 'delivered', bg: '#3B82F6', fg: '#FFFFFF' };
-      default: return null;
-    }
-  };
-
   const advance = async (orderId: string, next: string) => {
     setActing(orderId);
     try {
@@ -2935,7 +3005,7 @@ function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) 
         <InlineNotice message="Nenhum pedido neste filtro." colors={colors} />
       ) : (
         filtered.map((order) => {
-          const action = nextAction(order.rawStatus);
+          const action = nextOrderWorkflowAction(order.rawStatus);
           const ago = elapsedLabel(order.createdAt);
           const timeText = ago === 'agora' ? 'agora' : ago ? `${ago} atrás` : order.time;
           return (
@@ -2944,7 +3014,7 @@ function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) 
                 <View style={styles.tableNumberBubble}><Text style={styles.tableNumberText}>{order.table.replace('Mesa ', '')}</Text></View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.managerOrderHeader}>
-                    <Text style={[styles.staffName, { color: colors.foreground }]}>{order.customerName || shortOrderId(order.id)}</Text>
+                    <Text style={[styles.staffName, { color: colors.foreground }]}>{customerDisplayName(order.customerName)}</Text>
                     <StatusChip label={RAW_ORDER_LABEL[order.rawStatus] ?? order.rawStatus} tone={RAW_ORDER_TONE[order.rawStatus] ?? 'info'} />
                   </View>
                   <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
@@ -2972,13 +3042,13 @@ function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) 
                     <Text style={[styles.waiterOrderPrimaryText, { color: action.fg }]}>{action.label}</Text>
                   </TouchableOpacity>
                 ) : null}
-                <TouchableOpacity
+                {order.rawStatus !== 'delivered' ? <TouchableOpacity
                   disabled={acting === order.id}
                   onPress={() => confirmCancel(order)}
                   style={[styles.waiterOrderCancel, { borderColor: '#FCA5A5', opacity: acting === order.id ? 0.6 : 1 }]}
                 >
                   <Text style={styles.waiterOrderCancelText}>Cancelar</Text>
-                </TouchableOpacity>
+                </TouchableOpacity> : null}
               </View>
             </View>
           );
@@ -3190,11 +3260,11 @@ function CompactOrder({ order, colors }: { order: TabOrder; colors: ReturnType<t
       <View style={styles.orderRow}>
         <View style={[styles.orderInitials, { backgroundColor: `${colors.primary}18` }]}>
           <Text style={{ color: colors.primary, fontWeight: '800', fontSize: 12 }}>
-            {shortOrderId(order.id).replace('#', '')}
+            {customerInitials(order.customerName)}
           </Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontWeight: '700', color: colors.foreground }}>{order.customerName || shortOrderId(order.id)}</Text>
+          <Text style={{ fontWeight: '700', color: colors.foreground }}>{customerDisplayName(order.customerName)}</Text>
           <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>{order.table} · {order.items.length} itens · {formatCurrency(order.total)}</Text>
         </View>
         <V2StatusBadge label={orderStatusLabel(order.status)} tone={orderStatusTone(order.status)} />
@@ -3312,6 +3382,11 @@ const styles = StyleSheet.create({
   orderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: { width: 44, height: 44, borderRadius: 22 },
   orderInitials: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  alertList: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  alertRow: { minHeight: 62, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  alertIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  alertMessage: { flex: 1, fontSize: 12, fontWeight: '700', lineHeight: 17 },
+  alertTime: { maxWidth: 68, fontSize: 10, textAlign: 'right' },
   actionBtn: { marginTop: 12, borderRadius: 16, paddingVertical: 12, alignItems: 'center' },
   delayAlert: {
     minHeight: 42,

@@ -1,5 +1,5 @@
 /**
- * Okinawa Client App - End-to-End Flow Tests
+ * Noowe App - End-to-End Flow Tests
  * Validates complete user journeys through the application
  */
 

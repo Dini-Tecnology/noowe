@@ -1,51 +1,58 @@
 import React, { useMemo, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
-import { Clock, Check, ChefHat, Truck, X, Info } from 'lucide-react-native';
+import { Clock, Check, ChefHat, Truck, X, Info, Play } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import ApiService from '@okinawa/shared/services/api';
 import { V2Shell } from './shared/V2Shell';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2DetailDialog } from './shared/V2DetailDialog';
-import { shortOrderId, useRestaurantOrders } from './shared/useRestaurantOperations';
-import type { OrderFilter, OrderStatus, TabOrder } from './shared/v2Types';
+import { customerDisplayName, useRestaurantOrders } from './shared/useRestaurantOperations';
+import type { OrderStatus, TabOrder } from './shared/v2Types';
+
+type OrdersTab = 'all' | 'new' | 'preparing' | 'ready' | 'delivered';
 
 type PendingAction = {
   orderId: string;
-  action: 'accept' | 'cancel' | 'ready' | 'deliver';
+  action: 'accept' | 'cancel' | 'prepare' | 'ready' | 'deliver';
 };
 
-const FILTER_TABS: { key: OrderFilter; label: string }[] = [
+const FILTER_TABS: { key: OrdersTab; label: string }[] = [
   { key: 'all', label: 'Todos' },
   { key: 'new', label: 'Novos' },
   { key: 'preparing', label: 'Preparando' },
   { key: 'ready', label: 'Prontos' },
+  { key: 'delivered', label: 'Entregues' },
 ];
 
 const ACTION_MESSAGES: Record<PendingAction['action'], { title: string; message: string; destructive?: boolean; confirmLabel: string }> = {
   accept: { title: 'Aceitar pedido', message: '', confirmLabel: 'Aceitar' },
   cancel: { title: 'Cancelar pedido', message: 'Deseja cancelar este pedido?', destructive: true, confirmLabel: 'Cancelar pedido' },
   ready: { title: 'Marcar como pronto', message: 'Confirmar que o pedido está pronto para entrega?', confirmLabel: 'Marcar pronto' },
+  prepare: { title: 'Preparar pedido', message: 'Confirmar o início do preparo?', confirmLabel: 'Preparar' },
   deliver: { title: 'Confirmar entrega', message: 'Confirmar que o pedido foi entregue ao cliente?', confirmLabel: 'Confirmar entrega' },
 };
 
-function nextStatus(action: PendingAction['action']): OrderStatus | null {
-  if (action === 'accept') return 'preparing';
+function nextStatus(action: PendingAction['action']): 'confirmed' | OrderStatus | null {
+  if (action === 'accept') return 'confirmed';
+  if (action === 'prepare') return 'preparing';
   if (action === 'ready') return 'ready';
   return null;
 }
 
 export default function OrdersScreen() {
   const colors = useColors();
-  const [activeTab, setActiveTab] = useState<OrderFilter>('all');
+  const [activeTab, setActiveTab] = useState<OrdersTab>('all');
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [detailOrder, setDetailOrder] = useState<TabOrder | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { data: orders, loading, error, refresh } = useRestaurantOrders();
+  const { data: orders, loading, error, refresh } = useRestaurantOrders({ includeDelivered: true });
 
   const filteredOrders = useMemo(() => {
     if (activeTab === 'all') return orders;
-    return orders.filter((o) => o.status === activeTab);
+    if (activeTab === 'new') return orders.filter((order) => order.rawStatus === 'pending' || order.rawStatus === 'confirmed');
+    if (activeTab === 'preparing') return orders.filter((order) => order.rawStatus === 'preparing' || order.rawStatus === 'open_for_additions');
+    return orders.filter((order) => order.rawStatus === activeTab);
   }, [orders, activeTab]);
 
   const handleConfirm = async () => {
@@ -118,8 +125,15 @@ export default function OrdersScreen() {
           ]}
         >
           <View style={styles.row}>
-            <Text style={{ fontWeight: '700', fontSize: 16, color: colors.foreground }}>{shortOrderId(order.id)}</Text>
-            <Text style={{ color: colors.foregroundSecondary }}>{order.table}</Text>
+            <View style={styles.tableAvatar}>
+              <Text style={styles.tableAvatarText}>{order.table.replace('Mesa ', '')}</Text>
+            </View>
+            <View style={styles.customerBlock}>
+              <Text style={{ fontWeight: '700', fontSize: 16, color: colors.foreground }}>
+                {customerDisplayName(order.customerName)}
+              </Text>
+              <Text style={{ color: colors.foregroundSecondary, fontSize: 12 }}>{order.table}</Text>
+            </View>
             <View style={styles.timeRow}>
               <Clock size={14} color={colors.foregroundSecondary} />
               <Text style={{ color: colors.foregroundSecondary, fontSize: 12 }}>{order.time}</Text>
@@ -136,7 +150,7 @@ export default function OrdersScreen() {
           ))}
           <View style={[styles.footer, { borderTopColor: colors.border }]}>
             <Text style={{ fontWeight: '700', color: colors.primary }}>R$ {order.total.toFixed(2)}</Text>
-            {order.status === 'new' && (
+            {order.rawStatus === 'pending' && (
               <View style={styles.actions}>
                 <TouchableOpacity
                   style={styles.iconBtn}
@@ -153,16 +167,25 @@ export default function OrdersScreen() {
                 </TouchableOpacity>
               </View>
             )}
-            {order.status === 'preparing' && (
+            {order.rawStatus === 'confirmed' && (
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: '#F59E0B' }]}
+                onPress={() => setPendingAction({ orderId: order.id, action: 'prepare' })}
+              >
+                <Play size={16} color="#FFF" />
+                <Text style={styles.btnText}>Preparar</Text>
+              </TouchableOpacity>
+            )}
+            {(order.rawStatus === 'preparing' || order.rawStatus === 'open_for_additions') && (
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#22C55E' }]}
                 onPress={() => setPendingAction({ orderId: order.id, action: 'ready' })}
               >
                 <Check size={16} color="#FFF" />
-                <Text style={styles.btnText}>Pronto</Text>
+                <Text style={styles.btnText}>Marcar como Pronto</Text>
               </TouchableOpacity>
             )}
-            {order.status === 'ready' && (
+            {order.rawStatus === 'ready' && (
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#8B5CF6' }]}
                 onPress={() => setPendingAction({ orderId: order.id, action: 'deliver' })}
@@ -170,6 +193,12 @@ export default function OrdersScreen() {
                 <Truck size={16} color="#FFF" />
                 <Text style={styles.btnText}>Entregar</Text>
               </TouchableOpacity>
+            )}
+            {order.rawStatus === 'delivered' && (
+              <View style={styles.deliveredBadge}>
+                <Check size={14} color="#15803D" />
+                <Text style={styles.deliveredBadgeText}>Entregue</Text>
+              </View>
             )}
           </View>
         </View>
@@ -180,7 +209,7 @@ export default function OrdersScreen() {
         title={dialogConfig?.title ?? ''}
         message={
           pendingAction?.action === 'accept' && pendingOrder
-            ? `Aceitar pedido ${shortOrderId(pendingOrder.id)}?`
+            ? `Aceitar pedido de ${customerDisplayName(pendingOrder.customerName)}?`
             : dialogConfig?.message ?? ''
         }
         confirmLabel={isSubmitting ? 'Salvando...' : dialogConfig?.confirmLabel}
@@ -217,6 +246,9 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
   card: { borderWidth: 2, borderRadius: 16, padding: 16, marginBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
+  tableAvatar: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FEF2F2' },
+  tableAvatarText: { color: '#FF5A3D', fontWeight: '800', fontSize: 15 },
+  customerBlock: { flex: 1, minWidth: 120 },
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
   infoBtn: { padding: 6, borderRadius: 8 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
@@ -224,6 +256,8 @@ const styles = StyleSheet.create({
   iconBtn: { padding: 8, borderRadius: 12, backgroundColor: '#FEE2E2' },
   btn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
   btnText: { color: '#FFF', fontWeight: '600', fontSize: 13 },
+  deliveredBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#DCFCE7' },
+  deliveredBadgeText: { color: '#15803D', fontWeight: '700', fontSize: 12 },
   stateCard: { borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 12, alignItems: 'center', gap: 10 },
   retryBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
 });

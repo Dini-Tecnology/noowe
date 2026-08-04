@@ -1,5 +1,5 @@
 /**
- * Okinawa Client App - API & Endpoint Tests
+ * Noowe App - API & Endpoint Tests
  * Validates API service functions and endpoint connectivity
  */
 

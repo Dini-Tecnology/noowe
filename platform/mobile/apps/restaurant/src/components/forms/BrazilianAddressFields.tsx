@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -44,6 +44,7 @@ type PickerMode = 'city' | 'state' | null;
 
 export function BrazilianAddressFields({ value, onChange, disabled = false }: Props) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [postalCodeLoading, setPostalCodeLoading] = useState(false);
   const [postalCodeError, setPostalCodeError] = useState('');
@@ -134,7 +135,7 @@ export function BrazilianAddressFields({ value, onChange, disabled = false }: Pr
 
   const stateItems = states.filter((item) => `${item.name} ${item.code}`.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR')));
   const cityItems = cities.filter((item) => `${item.name} ${item.stateCode}`.toLocaleLowerCase('pt-BR').includes(query.toLocaleLowerCase('pt-BR')));
-  const pickerItems: Array<BrazilCityOption | BrazilStateOption> = pickerMode === 'city' ? cityItems : stateItems;
+  const pickerItems: (BrazilCityOption | BrazilStateOption)[] = pickerMode === 'city' ? cityItems : stateItems;
 
   return (
     <>
@@ -175,7 +176,18 @@ export function BrazilianAddressFields({ value, onChange, disabled = false }: Pr
       <AuthTextField label="Complemento (opcional)" value={value.complement} onChangeText={(complement) => update({ complement })} placeholder="Apto., bloco, sala..." icon="home-plus-outline" inputProps={{ autoCapitalize: 'sentences', editable: !disabled }} />
 
       <Modal visible={pickerMode !== null} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent={false} onRequestClose={closePicker}>
-        <SafeAreaView edges={['top', 'bottom']} style={[styles.modal, { backgroundColor: colors.background }]}> 
+        <View
+          style={[
+            styles.modal,
+            {
+              backgroundColor: colors.background,
+              paddingTop: insets.top,
+              paddingBottom: insets.bottom,
+              paddingLeft: insets.left,
+              paddingRight: insets.right,
+            },
+          ]}
+        >
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}> 
             <View>
               <Text style={[styles.modalEyebrow, { color: colors.secondary }]}>ENDEREÇO</Text>
@@ -214,7 +226,7 @@ export function BrazilianAddressFields({ value, onChange, disabled = false }: Pr
               }}
             />
           )}
-        </SafeAreaView>
+        </View>
       </Modal>
     </>
   );

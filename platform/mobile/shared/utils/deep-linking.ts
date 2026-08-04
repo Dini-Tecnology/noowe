@@ -8,9 +8,9 @@ import logger from './logger';
  * Deep Linking Configuration
  *
  * Supported URL patterns:
- * - okinawa-client://restaurant/:id - View restaurant details
- * - okinawa-client://auth/callback - Supabase auth callback
- * - okinawa-client://auth/reset-password - Supabase password recovery
+ * - noowe://restaurant/:id - View restaurant details
+ * - noowe://auth/callback - Supabase auth callback
+ * - noowe://auth/reset-password - Supabase password recovery
  *
  * Universal Links:
  * - https://noowebr.com/restaurant/:id
@@ -159,7 +159,7 @@ export const shareDeepLink = async (
  */
 export const deepLinkConfig = {
   prefixes: [
-    'okinawa-client://',
+    'noowe://',
     'okinawa-restaurant://',
     'okinawa://',
     'https://noowebr.com',

@@ -112,7 +112,7 @@ const sampleOrder = {
       total_price: 55.0,
     },
   ],
-  restaurant: { name: 'Okinawa Sushi' },
+  restaurant: { name: 'Noowe Sushi' },
 };
 
 // ============================================================

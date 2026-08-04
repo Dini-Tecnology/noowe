@@ -1,168 +1,58 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.112.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const jsonHeaders = { "Content-Type": "application/json" };
+type Payload = { user_ids: string[]; title: string; body: string; type?: string; related_id?: string; related_type?: string; data?: Record<string, unknown>; record?: Record<string, unknown> };
 
-interface PushPayload {
-  user_ids: string[];
-  title: string;
-  body: string;
-  data?: Record<string, unknown>;
-  restaurant_id?: string;
-}
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
+serve(async (request) => {
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Only service_role or staff with an owner/manager role may call this.
-    // Previously this only checked that *some* Authorization header was
-    // present, so any authenticated user (including customers) could send
-    // arbitrary push notifications to any user_id.
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const authorization = request.headers.get("Authorization") ?? "";
+    if (authorization.replace(/^Bearer\s+/i, "") !== serviceKey) {
+      return new Response(JSON.stringify({ error: "Service role required" }), { status: 403, headers: jsonHeaders });
     }
-
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const bearerToken = authHeader.replace(/^Bearer\s+/i, "");
-    const isServiceRoleCall = bearerToken === serviceRoleKey;
-
-    if (!isServiceRoleCall) {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser(bearerToken);
-
-      if (userError || !user) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const { data: userRoles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .in("role", ["owner", "manager"]);
-
-      const { data: profileRoles } = await supabase
-        .from("profile_roles")
-        .select("role_key")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .in("role_key", ["owner", "manager"]);
-
-      const hasStaffRole = (userRoles?.length ?? 0) > 0 || (profileRoles?.length ?? 0) > 0;
-
-      if (!hasStaffRole) {
-        return new Response(JSON.stringify({ error: "Forbidden" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    let payload = await request.json() as Payload;
+    const fromWebhook = Boolean(payload.record?.user_id);
+    if (fromWebhook) payload = {
+      user_ids: [String(payload.record!.user_id)], title: String(payload.record!.title),
+      body: String(payload.record!.message), type: String(payload.record!.notification_type ?? 'system'),
+      related_id: payload.record!.related_id ? String(payload.record!.related_id) : undefined,
+      related_type: payload.record!.related_type ? String(payload.record!.related_type) : undefined,
+      data: (payload.record!.metadata as Record<string, unknown>) ?? {},
+    };
+    if (!payload.user_ids?.length || !payload.title?.trim() || !payload.body?.trim()) {
+      return new Response(JSON.stringify({ error: "user_ids, title and body are required" }), { status: 400, headers: jsonHeaders });
     }
-
-    const payload: PushPayload = await req.json();
-
-    if (!payload.user_ids?.length || !payload.title || !payload.body) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: user_ids, title, body" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Insert notifications into the notifications table
-    const notifications = payload.user_ids.map((userId) => ({
-      user_id: userId,
-      title: payload.title,
-      message: payload.body,
-      notification_type: "system",
-      related_id: payload.restaurant_id || null,
-      related_type: payload.restaurant_id ? "restaurant" : null,
-      metadata: payload.data || null,
-      is_read: false,
-      created_at: new Date().toISOString(),
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+    const notificationRows = payload.user_ids.map((userId) => ({
+      user_id: userId, title: payload.title, message: payload.body,
+      notification_type: payload.type ?? "system", related_id: payload.related_id ?? null,
+      related_type: payload.related_type ?? null, metadata: payload.data ?? {}, is_read: false,
     }));
-
-    const { error: insertError } = await supabase
-      .from("notifications")
-      .insert(notifications);
-
-    if (insertError) {
-      console.error("Failed to insert notifications:", insertError);
-      return new Response(
-        JSON.stringify({ error: "Failed to create notifications", details: insertError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!fromWebhook) {
+      const { error: notificationError } = await supabase.from("notifications").insert(notificationRows);
+      if (notificationError) throw notificationError;
     }
-
-    // FCM push (optional - only if FCM_SERVER_KEY is configured)
-    const fcmKey = Deno.env.get("FCM_SERVER_KEY");
-    let fcmResults = null;
-
-    if (fcmKey) {
-      // Get FCM tokens for the users. profiles.fcm_token is a direct column,
-      // not a key inside a `metadata` jsonb blob (that column doesn't even
-      // exist on `profiles`) — this used to silently return zero tokens.
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, fcm_token")
-        .in("id", payload.user_ids);
-
-      const tokens = profiles
-        ?.map((p: any) => p.fcm_token)
-        .filter(Boolean) as string[];
-
-      if (tokens.length > 0) {
-        const fcmPayload = {
-          registration_ids: tokens,
-          notification: { title: payload.title, body: payload.body },
-          data: payload.data || {},
-          priority: "high",
-        };
-
-        const fcmResponse = await fetch("https://fcm.googleapis.com/fcm/send", {
-          method: "POST",
-          headers: {
-            "Authorization": `key=${fcmKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(fcmPayload),
-        });
-
-        fcmResults = await fcmResponse.json();
-      }
+    const { data: devices, error: deviceError } = await supabase.from("device_push_tokens")
+      .select("token").in("user_id", payload.user_ids).eq("is_active", true);
+    if (deviceError) throw deviceError;
+    const messages = (devices ?? []).map(({ token }) => ({
+      to: token, sound: "default", title: payload.title, body: payload.body,
+      data: { ...payload.data, relatedId: payload.related_id, relatedType: payload.related_type },
+    }));
+    let tickets: unknown[] = [];
+    for (let offset = 0; offset < messages.length; offset += 100) {
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(messages.slice(offset, offset + 100)),
+      });
+      if (!response.ok) throw new Error(`Expo Push returned ${response.status}`);
+      const result = await response.json();
+      tickets = tickets.concat(result.data ?? []);
     }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        notifications_created: notifications.length,
-        fcm: fcmResults,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (err) {
-    console.error("send-push-notification error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ notifications: notificationRows.length, pushes: tickets.length, tickets }), { headers: jsonHeaders });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: message }), { status: 500, headers: jsonHeaders });
   }
 });

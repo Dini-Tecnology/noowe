@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $AndroidDir = Join-Path $ProjectRoot "android"
-$CacheDir = Join-Path $env:USERPROFILE ".gradle-project-cache\okinawa-client"
+$CacheDir = Join-Path $env:USERPROFILE ".gradle-project-cache\noowe"
 $GradleDir = Join-Path $AndroidDir ".gradle"
 
 New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null

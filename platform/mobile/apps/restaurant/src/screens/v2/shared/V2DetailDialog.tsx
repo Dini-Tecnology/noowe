@@ -4,7 +4,7 @@ import { Text } from 'react-native-paper';
 import { X } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { V2StatusBadge } from './V2StatusBadge';
-import { orderStatusLabel, orderStatusTone, kdsStatusLabel, kdsStatusTone } from './v2Types';
+import { rawOrderStatusLabel, rawOrderStatusTone, kdsStatusLabel, kdsStatusTone } from './v2Types';
 import type { TabOrder, KdsOrder } from './v2Types';
 
 type DetailOrder = TabOrder | KdsOrder;
@@ -30,10 +30,10 @@ export function V2DetailDialog({ visible, onClose, order, footerAction }: V2Deta
   if (!order) return null;
 
   const statusLabel = isTabOrder(order)
-    ? orderStatusLabel(order.status)
+    ? rawOrderStatusLabel(order.rawStatus)
     : kdsStatusLabel(order.status);
   const statusTone = isTabOrder(order)
-    ? orderStatusTone(order.status)
+    ? rawOrderStatusTone(order.rawStatus)
     : kdsStatusTone(order.status);
 
   const items = isTabOrder(order)
@@ -49,7 +49,7 @@ export function V2DetailDialog({ visible, onClose, order, footerAction }: V2Deta
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: colors.foreground }]}>
-                {isTabOrder(order) ? order.id : order.table}
+                {isTabOrder(order) ? (order.customerName?.trim() || 'Cliente') : order.table}
               </Text>
               <Text style={{ color: colors.foregroundSecondary, fontSize: 13 }}>
                 {isTabOrder(order) ? order.table : order.meta}

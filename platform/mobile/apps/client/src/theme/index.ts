@@ -1,5 +1,5 @@
 /**
- * Okinawa Client App Theme
+ * Noowe App Theme
  * Re-exports from shared theme system for semantic token usage
  */
 

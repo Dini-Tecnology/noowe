@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
-import { Calendar, Check, X, Users, Clock } from 'lucide-react-native';
+import { Calendar, Check, X, Users, Clock, Phone, UtensilsCrossed } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
@@ -10,7 +10,7 @@ import { V2Shell } from './shared/V2Shell';
 interface Reservation {
   id: string;
   customer_name?: string | null;
-  customer?: { full_name?: string | null; email?: string | null } | null;
+  customer?: { full_name?: string | null; email?: string | null; phone?: string | null } | null;
   reservation_time: string;
   party_size: number;
   status: string;
@@ -101,10 +101,21 @@ export default function ReservationsScreen() {
   const updateStatus = async (id: string, status: string) => {
     setActing(id);
     try {
-      await supabaseApiAdapter.updateReservationStatus(id, status);
+      const reservation = reservations.find((item) => item.id === id);
+      if (status === 'seated') {
+        if (!reservation?.table_id) throw new Error('Defina uma mesa antes de fazer o check-in.');
+        await supabaseApiAdapter.checkInReservation(
+          reservation.id,
+          reservation.table_id,
+          reservationCustomerName(reservation),
+          reservation.party_size,
+        );
+      } else {
+        await supabaseApiAdapter.updateRestaurantReservationStatus(id, status);
+      }
       void load();
     } catch (err) {
-      console.warn('Erro ao atualizar reserva:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar reserva');
     } finally {
       setActing(null);
     }
@@ -172,14 +183,25 @@ export default function ReservationsScreen() {
                   <View style={styles.metaRow}>
                     <Clock size={13} color={colors.foregroundSecondary} />
                     <Text style={{ fontSize: 13, color: colors.foregroundSecondary, marginLeft: 4 }}>
-                      {formatDate(res.reservation_time)} · {formatTime(res.reservation_time)}
+                      Hora: {formatDate(res.reservation_time)} · {formatTime(res.reservation_time)}
+                    </Text>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <UtensilsCrossed size={13} color={colors.foregroundSecondary} />
+                    <Text style={{ fontSize: 13, color: colors.foregroundSecondary, marginLeft: 4 }}>
+                      Mesa: {res.table_number ?? 'a definir'}
                     </Text>
                   </View>
                   <View style={styles.metaRow}>
                     <Users size={13} color={colors.foregroundSecondary} />
                     <Text style={{ fontSize: 13, color: colors.foregroundSecondary, marginLeft: 4 }}>
                       {res.party_size} {res.party_size === 1 ? 'pessoa' : 'pessoas'}
-                      {res.table_number ? ` · Mesa ${res.table_number}` : ''}
+                    </Text>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <Phone size={13} color={colors.foregroundSecondary} />
+                    <Text style={{ fontSize: 13, color: colors.foregroundSecondary, marginLeft: 4 }}>
+                      {res.customer?.phone || 'Telefone não informado'}
                     </Text>
                   </View>
                   {res.special_requests ? (
@@ -217,11 +239,11 @@ export default function ReservationsScreen() {
               )}
               {res.status === 'confirmed' && (
                 <TouchableOpacity
-                  style={[styles.wideBtn, { backgroundColor: colors.primary, opacity: acting === res.id ? 0.6 : 1 }]}
+                  style={[styles.wideBtn, { backgroundColor: colors.primary, opacity: acting === res.id || !res.table_id ? 0.45 : 1 }]}
                   onPress={() => void updateStatus(res.id, 'seated')}
-                  disabled={acting === res.id}
+                  disabled={acting === res.id || !res.table_id}
                 >
-                  <Text style={styles.btnText}>Sentar cliente</Text>
+                  <Text style={styles.btnText}>{res.table_id ? 'Fazer check-in' : 'Defina a mesa para check-in'}</Text>
                 </TouchableOpacity>
               )}
             </View>

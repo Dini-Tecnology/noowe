@@ -366,7 +366,7 @@ export default function GuestInvitationScreen() {
       const inviteLinkRes = await ApiService.post(`/reservation-guests/reservations/${reservationId}/invite-link`);
       const inviteLink = inviteLinkRes.data?.url || inviteLinkRes.data;
       await Share.share({
-        message: `Você foi convidado para uma reserva no Okinawa! Clique para aceitar: ${inviteLink}`,
+        message: `Você foi convidado para uma reserva no Noowe! Clique para aceitar: ${inviteLink}`,
         title: 'Convite de Reserva',
       });
       
@@ -639,7 +639,7 @@ export default function GuestInvitationScreen() {
           <View style={styles.noteContainer}>
             <IconButton icon="information" size={24} iconColor={colors.primary} />
             <Text variant="bodySmall" style={styles.noteText}>
-              Convidados com o app Okinawa receberão uma notificação. 
+              Convidados com o app Noowe receberão uma notificação.
               Outros receberão um SMS ou email com o link do convite.
             </Text>
           </View>

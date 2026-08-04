@@ -1,12 +1,12 @@
 {
   "expo": {
     "name": "Noowe",
-    "slug": "okinawa-client",
+    "slug": "noowe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": "okinawa-client",
+    "scheme": "noowe",
     "splash": {
       "image": "./assets/logo-completa-client.png",
       "resizeMode": "contain",
@@ -17,7 +17,6 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.noowe.client",
       "usesAppleSignIn": true,
-      "minimumOsVersion": "15.1",
       "associatedDomains": ["applinks:noowebr.com", "applinks:*.noowebr.com"],
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -53,8 +52,6 @@
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.noowe.client",
-      "minSdkVersion": 24,
-      "targetSdkVersion": 34,
       "intentFilters": [
         {
           "action": "VIEW",

@@ -13,7 +13,7 @@ function readHashParams() {
 
 function resolveMobileScheme(appParam: string | null) {
   if (appParam === 'restaurant') return 'okinawa-restaurant';
-  if (appParam === 'client') return 'okinawa-client';
+  if (appParam === 'client') return 'noowe';
   return null;
 }
 

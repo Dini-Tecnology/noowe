@@ -9,6 +9,7 @@ import {
   Settings,
   TrendingUp,
   Users,
+  Bell,
 } from "lucide-react";
 
 interface OwnerPreviewScreenV2Props {
@@ -40,7 +41,7 @@ const orders = [
   { table: "7", name: "Ana Oliveira", items: "3 itens", value: "R$ 90", time: "3min atras", status: "Confirmado", action: "Preparar" },
   { table: "9", name: "Felipe Almeida", items: "1 item", value: "R$ 42", time: "11min atras", status: "Confirmado", action: "Preparar" },
   { table: "9", name: "Lucia Fernandes", items: "2 itens", value: "R$ 88", time: "16min atras", status: "Confirmado", action: "Preparar" },
-  { table: "12", name: "Beatriz Lima", items: "1 item", value: "R$ 192", time: "1min atras", status: "Pendente", action: "Confirmar" },
+  { table: "12", name: "Beatriz Lima", items: "1 item", value: "R$ 192", time: "1min atras", status: "Pendente", action: "Aceitar" },
 ];
 
 const orderItems = [
@@ -85,6 +86,11 @@ const toneClass = {
   danger: "bg-red-50 text-red-500",
   warning: "bg-amber-50 text-amber-600",
   info: "bg-sky-50 text-sky-600",
+};
+
+const customerInitials = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return `${parts[0]?.[0] ?? ""}${parts.length > 1 ? parts[parts.length - 1][0] : parts[0]?.[1] ?? ""}`.toUpperCase();
 };
 
 const OwnerPreviewScreenV2: FC<OwnerPreviewScreenV2Props> = () => {
@@ -168,6 +174,24 @@ const DashboardView = () => (
       <div className="space-y-2.5">
         {orders.slice(0, 3).map((order) => (
           <CompactOrder key={`${order.table}-${order.name}`} order={order} />
+        ))}
+      </div>
+    </section>
+    <section>
+      <SectionTitle title="Alertas" subtitle="Atualizacoes da operacao em tempo real" />
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {[
+          ["Novo pedido na Mesa 2 — Rafael Souza", "agora"],
+          ["Mesa 5 chamou o garcom", "1min atras"],
+          ["Novo pedido na Mesa 12 — Camila Rodrigues", "3min atras"],
+        ].map(([message, time], index) => (
+          <div key={message} className={`flex items-center gap-3 px-3 py-3 ${index < 2 ? "border-b border-slate-100" : ""}`}>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-500">
+              <Bell className="h-4 w-4" />
+            </span>
+            <p className="min-w-0 flex-1 text-xs font-semibold text-slate-700">{message}</p>
+            <span className="text-[10px] text-slate-400">{time}</span>
+          </div>
         ))}
       </div>
     </section>
@@ -384,7 +408,7 @@ const QuickAction = ({
 const CompactOrder = ({ order }: { order: (typeof orders)[number] }) => (
   <article className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-sm font-bold text-red-500">
-      {order.table}
+      {customerInitials(order.name)}
     </div>
     <div className="min-w-0 flex-1">
       <h3 className="truncate text-sm font-bold">{order.name}</h3>

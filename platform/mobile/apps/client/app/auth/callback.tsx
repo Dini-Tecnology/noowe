@@ -1,1 +1,1 @@
-export { default } from '@/shared/screens/auth/AuthCallbackScreen';
+export { AuthCallbackScreen as default } from '../../src/screens/production/AuthLinkScreens';

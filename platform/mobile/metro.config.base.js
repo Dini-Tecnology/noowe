@@ -66,7 +66,6 @@ function createMetroConfig(appRoot) {
       path.resolve(appRoot, 'node_modules'),
       path.resolve(mobileRoot, 'node_modules'),
     ],
-    disableHierarchicalLookup: true,
     extraNodeModules: {
       ...(config.resolver?.extraNodeModules || {}),
       '@': mobileRoot,

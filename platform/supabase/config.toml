@@ -11,9 +11,9 @@ additional_redirect_urls = [
   "https://www.noowebr.com/auth/callback?app=restaurant",
   "https://www.noowebr.com/auth/callback?app=client",
   "okinawa-restaurant://auth/callback",
-  "okinawa-client://auth/callback",
+  "noowe://auth/callback",
   "okinawa-restaurant://auth/reset-password",
-  "okinawa-client://auth/reset-password",
+  "noowe://auth/reset-password",
 ]
 
 [auth.email]

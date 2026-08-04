@@ -19,12 +19,16 @@ describe('operações do gerente', () => {
     order('confirmed', 'confirmed'),
     order('open', 'open_for_additions'),
     order('preparing', 'preparing'),
+    order('ready', 'ready'),
+    order('delivered', 'delivered'),
   ];
 
   it('filtra os status reais usados pelos tabs de pedidos', () => {
     expect(filterManagerOrders(orders, 'pending').map(({ id }) => id)).toEqual(['pending']);
-    expect(filterManagerOrders(orders, 'confirmed').map(({ id }) => id)).toEqual(['confirmed', 'open']);
-    expect(filterManagerOrders(orders, 'preparing').map(({ id }) => id)).toEqual(['preparing']);
+    expect(filterManagerOrders(orders, 'confirmed').map(({ id }) => id)).toEqual(['confirmed']);
+    expect(filterManagerOrders(orders, 'preparing').map(({ id }) => id)).toEqual(['open', 'preparing']);
+    expect(filterManagerOrders(orders, 'ready').map(({ id }) => id)).toEqual(['ready']);
+    expect(filterManagerOrders(orders, 'delivered').map(({ id }) => id)).toEqual(['delivered']);
   });
 
   it('envia os tipos de movimentação aceitos pelo RPC de caixa', () => {

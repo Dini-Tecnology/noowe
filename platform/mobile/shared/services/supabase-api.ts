@@ -182,6 +182,7 @@ export interface SupabaseApiAdapter {
   updateTableNotes(tableId: string, notes: string): Promise<any>;
   getMyTables(restaurantId?: string): Promise<any>;
   openTableSession(tableId: string, guestName?: string, guestCount?: number): Promise<any>;
+  checkInReservation(reservationId: string, tableId: string, guestName?: string, guestCount?: number): Promise<any>;
   closeTableSession(sessionId: string): Promise<any>;
   // ── KDS ──────────────────────────────────────────────────────────────────────
   getKdsQueue(restaurantId?: string, stationId?: string): Promise<any>;
@@ -606,6 +607,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return (Array.isArray(data) ? data : []).map((row: any) => ({
       ...row,
       customer_name: row.customer_name ?? row.customer?.full_name ?? null,
+      table_number: row.table_number ?? row.table?.table_number ?? null,
     }));
   },
 
@@ -622,6 +624,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return {
       ...data,
       customer_name: data?.customer_name ?? data?.customer?.full_name ?? null,
+      table_number: data?.table_number ?? data?.table?.table_number ?? null,
     };
   },
 
@@ -713,6 +716,17 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_table_id: tableId,
       p_guest_name: guestName || null,
       p_guest_count: guestCount || 1,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async checkInReservation(reservationId: string, tableId: string, guestName?: string, guestCount?: number) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_check_in_reservation', {
+      p_reservation_id: reservationId,
+      p_table_id: tableId,
+      p_guest_name: guestName || null,
+      p_guest_count: guestCount || null,
     });
     if (error) throw error;
     return data;

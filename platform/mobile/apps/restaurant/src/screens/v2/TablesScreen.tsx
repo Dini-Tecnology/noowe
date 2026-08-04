@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { Text } from 'react-native-paper';
-import { Pencil, Plus, QrCode, Trash2, Users } from 'lucide-react-native';
+import { CheckCircle, DoorOpen, Pencil, Plus, QrCode, Receipt, Trash2, UserPlus, Users } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
-import ApiService from '@okinawa/shared/services/api';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
@@ -13,6 +12,7 @@ import { V2Shell } from './shared/V2Shell';
 import { useRestaurantTables, type V2Table } from './shared/useRestaurantOperations';
 
 type StatusKey = 'available' | 'occupied' | 'reserved' | 'cleaning' | 'blocked' | 'payment';
+type SeatingMode = 'seat' | 'checkin';
 
 const STATUS_META: Record<StatusKey, { label: string; bg: string; color: string; border: string }> = {
   available: { label: 'LIVRE', bg: '#EAF8F1', color: '#16A66A', border: '#B7E4CF' },
@@ -36,7 +36,8 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -52,9 +53,13 @@ export default function TablesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [editorTable, setEditorTable] = useState<V2Table | null | undefined>(undefined);
   const [deleteTable, setDeleteTable] = useState<V2Table | null>(null);
+  const [seatingTable, setSeatingTable] = useState<{ table: V2Table; mode: SeatingMode } | null>(null);
+  const [closeAccountTable, setCloseAccountTable] = useState<V2Table | null>(null);
   const [tableNumber, setTableNumber] = useState('');
   const [seats, setSeats] = useState('2');
   const [section, setSection] = useState('Salão');
+  const [guestName, setGuestName] = useState('');
+  const [guestCount, setGuestCount] = useState('1');
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const { data: tables, loading, error, refresh } = useRestaurantTables();
@@ -84,13 +89,85 @@ export default function TablesScreen() {
 
   const updateSelectedStatus = async (status: string) => {
     if (!selected) return;
+    if (status === 'available' && selectedTable?.sessionId) {
+      setActionError('Feche a conta antes de liberar esta mesa.');
+      return;
+    }
     setIsSubmitting(true);
     setActionError(null);
     try {
-      await ApiService.updateTableStatus(selected, status);
+      await supabaseApiAdapter.updateTableStatus(selected, status);
       await refresh();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Não foi possível alterar o status.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openSeating = (table: V2Table, mode: SeatingMode) => {
+    setGuestName(table.reservationName || table.guestName || '');
+    setGuestCount(String(table.reservationGuests || table.guests || Math.min(table.seats, 2)));
+    setFormError(null);
+    setSeatingTable({ table, mode });
+  };
+
+  const closeSeating = () => {
+    if (isSubmitting) return;
+    setSeatingTable(null);
+    setFormError(null);
+  };
+
+  const confirmSeating = async () => {
+    if (!seatingTable) return;
+    const cleanName = guestName.trim();
+    const guests = Number(guestCount);
+    if (!cleanName) {
+      setFormError('Informe o nome do cliente ou responsável pela mesa.');
+      return;
+    }
+    if (!Number.isInteger(guests) || guests < 1 || guests > seatingTable.table.seats) {
+      setFormError(`Informe entre 1 e ${seatingTable.table.seats} pessoas para esta mesa.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFormError(null);
+    try {
+      if (seatingTable.mode === 'checkin' && seatingTable.table.reservationId) {
+        await supabaseApiAdapter.checkInReservation(
+          seatingTable.table.reservationId,
+          seatingTable.table.id,
+          cleanName,
+          guests,
+        );
+      } else {
+        await supabaseApiAdapter.openTableSession(seatingTable.table.id, cleanName, guests);
+      }
+      setSeatingTable(null);
+      await refresh();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Não foi possível sentar o cliente.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmCloseAccount = async () => {
+    if (!closeAccountTable?.sessionId) {
+      setCloseAccountTable(null);
+      setActionError('Esta mesa não possui uma sessão ativa para fechar.');
+      return;
+    }
+    setIsSubmitting(true);
+    setActionError(null);
+    try {
+      await supabaseApiAdapter.closeTableSession(closeAccountTable.sessionId);
+      setCloseAccountTable(null);
+      await refresh();
+    } catch (err) {
+      setCloseAccountTable(null);
+      setActionError(err instanceof Error ? err.message : 'Não foi possível fechar a conta.');
     } finally {
       setIsSubmitting(false);
     }
@@ -340,28 +417,82 @@ export default function TablesScreen() {
                       </View>
                     </View>
                     <View style={[styles.summaryItem, { borderColor: colors.border }]}>
-                      <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Salão</Text>
-                      <Text numberOfLines={1} style={[styles.summaryValue, { color: colors.foreground }]}>{selectedTable.section}</Text>
+                      <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Pessoas</Text>
+                      <Text style={[styles.summaryValue, { color: colors.foreground }]}>
+                        {selectedTable.guests || (selectedTable.status === 'available' ? 0 : selectedTable.reservationGuests)}
+                      </Text>
                     </View>
                     <View style={[styles.summaryItem, { borderColor: colors.border }]}>
-                      <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Lugares</Text>
-                      <Text style={[styles.summaryValue, { color: colors.foreground }]}>{selectedTable.seats}</Text>
+                      <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Conta</Text>
+                      <Text style={[styles.summaryValue, { color: colors.foreground }]}>
+                        {selectedTable.sessionId ? formatCurrency(selectedTable.totalSpent) : '—'}
+                      </Text>
                     </View>
                   </View>
 
+                  {selectedTable.status === 'available' ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Sentar cliente na mesa ${selectedTable.label}`}
+                      onPress={() => openSeating(selectedTable, 'seat')}
+                      style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: colors.primary }, pressed && styles.primaryPressed]}
+                    >
+                      <UserPlus size={17} color="#FFF" />
+                      <Text style={styles.primaryOperationText}>Sentar cliente</Text>
+                    </Pressable>
+                  ) : null}
+
+                  {selectedTable.status === 'reserved' ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Fazer check-in na mesa ${selectedTable.label}`}
+                      onPress={() => openSeating(selectedTable, 'checkin')}
+                      style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: '#16A66A' }, pressed && styles.primaryPressed]}
+                    >
+                      <CheckCircle size={17} color="#FFF" />
+                      <Text style={styles.primaryOperationText}>Fazer check-in</Text>
+                    </Pressable>
+                  ) : null}
+
+                  {(selectedTable.status === 'occupied' || selectedTable.status === 'payment') && selectedTable.sessionId ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Fechar a conta da mesa ${selectedTable.label}`}
+                      onPress={() => setCloseAccountTable(selectedTable)}
+                      style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: '#0284C7' }, pressed && styles.primaryPressed]}
+                    >
+                      <Receipt size={17} color="#FFF" />
+                      <Text style={styles.primaryOperationText}>Fechar a conta</Text>
+                    </Pressable>
+                  ) : null}
+
+                  {selectedTable.status === 'cleaning' && !selectedTable.sessionId ? (
+                    <Pressable
+                      disabled={isSubmitting}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Liberar mesa ${selectedTable.label}`}
+                      onPress={() => void updateSelectedStatus('available')}
+                      style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: '#16A66A' }, pressed && styles.primaryPressed]}
+                    >
+                      <DoorOpen size={17} color="#FFF" />
+                      <Text style={styles.primaryOperationText}>Liberar mesa</Text>
+                    </Pressable>
+                  ) : null}
+
                   <Text style={[styles.actionLabel, { color: colors.foregroundSecondary }]}>ALTERAR STATUS</Text>
                   <View style={styles.statusActions}>
-                    {(['available', 'occupied', 'reserved', 'cleaning', 'blocked'] as StatusKey[]).map((status) => {
+                    {(['available', 'reserved', 'cleaning', 'blocked'] as StatusKey[]).map((status) => {
                       const meta = STATUS_META[status];
                       const active = selectedTable.status === status;
+                      const disabled = isSubmitting || Boolean(selectedTable.sessionId);
                       return (
                         <Pressable
                           key={status}
-                          disabled={isSubmitting}
+                          disabled={disabled}
                           accessibilityRole="button"
-                          accessibilityState={{ selected: active, disabled: isSubmitting }}
+                          accessibilityState={{ selected: active, disabled }}
                           accessibilityLabel={`Alterar status para ${meta.label.toLowerCase()}`}
-                          style={[styles.statusButton, { borderColor: active ? meta.color : colors.border, backgroundColor: active ? meta.bg : 'transparent' }]}
+                          style={[styles.statusButton, disabled && styles.disabledButton, { borderColor: active ? meta.color : colors.border, backgroundColor: active ? meta.bg : 'transparent' }]}
                           onPress={() => void updateSelectedStatus(status)}
                         >
                           <View style={[styles.statusButtonDot, { backgroundColor: meta.color }]} />
@@ -385,6 +516,43 @@ export default function TablesScreen() {
           ) : null}
         </ScrollView>
       </V2Shell>
+
+      <V2FormSheet
+        visible={seatingTable !== null}
+        title={seatingTable?.mode === 'checkin' ? 'Check-in da reserva' : 'Sentar cliente'}
+        subtitle={seatingTable ? `Mesa ${seatingTable.table.label} · até ${seatingTable.table.seats} pessoas` : undefined}
+        saveLabel={seatingTable?.mode === 'checkin' ? 'Confirmar check-in' : 'Sentar na mesa'}
+        saving={isSubmitting}
+        onClose={closeSeating}
+        onSave={() => void confirmSeating()}
+      >
+        <Field label="Cliente ou responsável" required>
+          <TextInput
+            value={guestName}
+            onChangeText={setGuestName}
+            autoCapitalize="words"
+            placeholder="Ex.: Maria Oliveira"
+            placeholderTextColor={colors.foregroundMuted}
+            style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
+          />
+        </Field>
+        <Field label="Quantidade de pessoas" required>
+          <TextInput
+            value={guestCount}
+            onChangeText={(value) => setGuestCount(value.replace(/\D/g, '').slice(0, 2))}
+            keyboardType="number-pad"
+            placeholder="2"
+            placeholderTextColor={colors.foregroundMuted}
+            style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
+          />
+        </Field>
+        <View style={[styles.formTip, { backgroundColor: '#EAF8F1', borderColor: '#B7E4CF' }]}>
+          <Text style={{ color: colors.foregroundSecondary, fontSize: 12, lineHeight: 18 }}>
+            O nome e a quantidade ficarão visíveis na mesa durante todo o atendimento.
+          </Text>
+        </View>
+        {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+      </V2FormSheet>
 
       <V2FormSheet
         visible={editorTable !== undefined}
@@ -430,6 +598,15 @@ export default function TablesScreen() {
         </View>
         {formError ? <Text style={styles.formError}>{formError}</Text> : null}
       </V2FormSheet>
+
+      <V2ConfirmDialog
+        visible={closeAccountTable !== null}
+        title="Fechar a conta?"
+        message={`A conta da mesa ${closeAccountTable?.label ?? ''} está em ${formatCurrency(closeAccountTable?.totalSpent ?? 0)}. Confirme somente após concluir o pagamento. A mesa ficará aguardando liberação.`}
+        confirmLabel="Fechar conta"
+        onCancel={() => setCloseAccountTable(null)}
+        onConfirm={() => void confirmCloseAccount()}
+      />
 
       <V2ConfirmDialog
         visible={deleteTable !== null}
@@ -529,7 +706,13 @@ const TableCell = React.memo(function TableCell({
             <Text numberOfLines={1} style={[styles.tableStatusText, { color: meta.color }]}>{statusLabel(table.status)}</Text>
           </View>
         </View>
-        <Text style={[styles.capacityText, { color: colors.foregroundSecondary }]}>{table.seats} lugares</Text>
+        <Text style={[styles.capacityText, { color: colors.foregroundSecondary }]}>
+          {table.sessionId
+            ? `${table.guests} ${table.guests === 1 ? 'pessoa' : 'pessoas'} · ${formatCurrency(table.totalSpent)}`
+            : table.reservationGuests > 0
+              ? `${table.reservationGuests} ${table.reservationGuests === 1 ? 'pessoa' : 'pessoas'}`
+              : `${table.seats} lugares`}
+        </Text>
         <Text numberOfLines={1} style={[styles.tableGuest, { color: colors.foreground }]}>{table.guestName || ' '}</Text>
       </Animated.View>
     </Pressable>
@@ -583,7 +766,10 @@ const styles = StyleSheet.create({
   actionLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginTop: 16, marginBottom: 8 },
   statusActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statusButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8 },
+  disabledButton: { opacity: 0.42 },
   statusButtonDot: { width: 7, height: 7, borderRadius: 3.5 },
+  primaryOperationButton: { minHeight: 48, marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14 },
+  primaryOperationText: { color: '#FFF', fontWeight: '800', fontSize: 14 },
   generateButton: { marginTop: 14, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14 },
   primaryPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
   stateCard: { borderWidth: 1, borderRadius: 16, padding: 20, marginBottom: 12, alignItems: 'center', gap: 10 },
