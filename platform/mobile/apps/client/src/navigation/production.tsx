@@ -14,7 +14,7 @@ import {
   MenuScreen, NotificationsScreen, OrderDetailScreen, OrdersScreen, PrivacyScreen,
   ProfileScreen, PromotionsScreen, QrScannerScreen, ReservationsScreen, RestaurantScreen, ReviewsScreen, SupportScreen,
   WaitlistScreen,
-} from '../screens/production/CustomerScreens';
+} from '../screens/production';
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();

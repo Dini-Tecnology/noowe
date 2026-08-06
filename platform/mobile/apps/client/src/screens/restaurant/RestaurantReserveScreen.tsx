@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -12,24 +12,38 @@ import {
   HintBanner,
   ObservationsField,
 } from '../../components/restaurant/SelectionControls';
-import {
-  MOCK_RESERVE_DATES,
-  MOCK_RESERVE_GUESTS,
-  MOCK_RESERVE_TIMES,
-  resolveRestaurantDetail,
-} from '../../constants/restaurantDetailMocks';
+import { useRestaurant } from '@okinawa/shared/hooks/useRestaurants';
+import ApiService from '@/shared/services/api';
+
+const RESERVE_DATES = [
+  { id: 'today', label: 'Hoje' },
+  { id: 'tomorrow', label: 'Amanhã' },
+  { id: 'in2', label: 'Em 2 dias' },
+  { id: 'in3', label: 'Em 3 dias' },
+] as const;
+
+const RESERVE_TIMES = ['19:00', '19:30', '20:00', '20:30', '21:00', '21:30'] as const;
+const RESERVE_GUESTS = ['1', '2', '3', '4', '5', '6+'] as const;
+
+function dateForOption(id: string): Date {
+  const date = new Date();
+  const daysMap: Record<string, number> = { today: 0, tomorrow: 1, in2: 2, in3: 3 };
+  date.setDate(date.getDate() + (daysMap[id] ?? 0));
+  return date;
+}
 
 export default function RestaurantReserveScreen() {
   const route = useRoute();
   const navigation = useNavigation<any>();
   const colors = useColors();
   const { restaurantId } = (route.params ?? {}) as { restaurantId?: string };
-  const restaurant = useMemo(() => resolveRestaurantDetail(restaurantId), [restaurantId]);
+  const { data: restaurant, isLoading: restaurantLoading } = useRestaurant(restaurantId ?? '');
 
   const [selectedDate, setSelectedDate] = useState('today');
   const [selectedTime, setSelectedTime] = useState('20:00');
   const [guests, setGuests] = useState('2');
   const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const styles = useMemo(
     () =>
@@ -89,18 +103,52 @@ export default function RestaurantReserveScreen() {
           fontSize: 16,
           fontWeight: '700',
         },
+        loadingWrap: {
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
       }),
     [colors],
   );
 
-  const handleConfirm = () => {
-    const dateLabel = MOCK_RESERVE_DATES.find((d) => d.id === selectedDate)?.label ?? selectedDate;
-    Alert.alert(
-      'Reserva confirmada',
-      `${restaurant.name}\n${dateLabel} às ${selectedTime} · ${guests} pessoa(s)`,
-      [{ text: 'OK', onPress: () => navigation.goBack() }],
-    );
+  const handleConfirm = async () => {
+    if (!restaurantId) return;
+    const [hours, minutes] = selectedTime.split(':').map(Number);
+    const reservationDate = dateForOption(selectedDate);
+    reservationDate.setHours(hours, minutes, 0, 0);
+    const partySize = guests === '6+' ? 6 : Number(guests);
+
+    setSubmitting(true);
+    try {
+      await ApiService.createCustomerReservation(
+        restaurantId,
+        reservationDate.toISOString(),
+        partySize,
+        notes || undefined,
+      );
+      Alert.alert(
+        'Reserva confirmada',
+        `${restaurant?.name ?? 'Restaurante'}\n${reservationDate.toLocaleDateString('pt-BR')} às ${selectedTime} · ${guests} pessoa(s)`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
+    } catch (err: any) {
+      Alert.alert('Não foi possível reservar', err?.message ?? 'Tente novamente em instantes.');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (restaurantLoading) {
+    return (
+      <ScreenContainer edges={['top', 'bottom']}>
+        <RestaurantSubscreenHeader title="Reservar Mesa" />
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={['top', 'bottom']}>
@@ -111,10 +159,10 @@ export default function RestaurantReserveScreen() {
             <Ionicons name="restaurant-outline" size={22} color={colors.foregroundMuted} />
           </View>
           <View>
-            <Text style={styles.restaurantName}>{restaurant.name}</Text>
-            <Text style={styles.restaurantLocation}>
-              {restaurant.neighborhood}, {restaurant.city}
-            </Text>
+            <Text style={styles.restaurantName}>{restaurant?.name ?? 'Restaurante'}</Text>
+            {restaurant?.city ? (
+              <Text style={styles.restaurantLocation}>{restaurant.city}</Text>
+            ) : null}
           </View>
         </View>
 
@@ -122,7 +170,7 @@ export default function RestaurantReserveScreen() {
 
         <SelectionSection title="Data">
           <View style={styles.chipRow}>
-            {MOCK_RESERVE_DATES.map((d) => (
+            {RESERVE_DATES.map((d) => (
               <SelectChip
                 key={d.id}
                 label={d.label}
@@ -135,12 +183,11 @@ export default function RestaurantReserveScreen() {
 
         <SelectionSection title="Horário">
           <View style={styles.timeGrid}>
-            {MOCK_RESERVE_TIMES.map((time) => (
+            {RESERVE_TIMES.map((time) => (
               <View key={time} style={styles.timeChip}>
                 <SelectChip
                   label={time}
                   selected={selectedTime === time}
-                  disabled={time === '21:00'}
                   onPress={() => setSelectedTime(time)}
                 />
               </View>
@@ -150,7 +197,7 @@ export default function RestaurantReserveScreen() {
 
         <SelectionSection title="Convidados">
           <View style={styles.chipRow}>
-            {MOCK_RESERVE_GUESTS.map((g) => (
+            {RESERVE_GUESTS.map((g) => (
               <SelectChip
                 key={g}
                 label={g}
@@ -165,13 +212,18 @@ export default function RestaurantReserveScreen() {
         <ObservationsField value={notes} onChangeText={setNotes} />
 
         <TouchableOpacity
-          style={styles.cta}
+          style={[styles.cta, submitting && { opacity: 0.7 }]}
           onPress={handleConfirm}
           activeOpacity={0.85}
+          disabled={submitting}
           accessibilityRole="button"
           accessibilityLabel="Confirmar reserva"
         >
-          <Text style={styles.ctaText}>Confirmar Reserva</Text>
+          {submitting ? (
+            <ActivityIndicator color={colors.primaryForeground} />
+          ) : (
+            <Text style={styles.ctaText}>Confirmar Reserva</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>

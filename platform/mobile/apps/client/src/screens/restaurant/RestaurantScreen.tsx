@@ -6,6 +6,7 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
@@ -14,9 +15,35 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScreenTracking } from '@/shared/hooks/useAnalytics';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import { resolveRestaurantDetail } from '../../constants/restaurantDetailMocks';
+import { useRestaurant } from '@okinawa/shared/hooks/useRestaurants';
 
 const HERO_HEIGHT = Dimensions.get('window').width * 0.55;
+
+const WEEKDAY_LABELS: Record<string, string> = {
+  monday: 'Seg',
+  tuesday: 'Ter',
+  wednesday: 'Qua',
+  thursday: 'Qui',
+  friday: 'Sex',
+  saturday: 'Sáb',
+  sunday: 'Dom',
+};
+
+function formatOpeningHours(openingHours: unknown): string | null {
+  if (!openingHours || typeof openingHours !== 'object') return null;
+  const entries = Object.entries(openingHours as Record<string, { open?: string; close?: string; closed?: boolean }>);
+  const openDays = entries.filter(([, v]) => v && !v.closed && v.open && v.close);
+  if (openDays.length === 0) return null;
+  const [, sample] = openDays[0];
+  const allSame = openDays.every(([, v]) => v.open === sample.open && v.close === sample.close);
+  if (allSame) {
+    const days = openDays.map(([day]) => WEEKDAY_LABELS[day] ?? day).join(', ');
+    return `${days} · ${sample.open}–${sample.close}`;
+  }
+  return openDays
+    .map(([day, v]) => `${WEEKDAY_LABELS[day] ?? day} ${v.open}–${v.close}`)
+    .join(' · ');
+}
 
 export default function RestaurantScreen() {
   useScreenTracking('Restaurant Details');
@@ -26,7 +53,8 @@ export default function RestaurantScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { restaurantId } = (route.params ?? {}) as { restaurantId?: string };
-  const restaurant = useMemo(() => resolveRestaurantDetail(restaurantId), [restaurantId]);
+  const { data: restaurant, isLoading, isError, refetch } = useRestaurant(restaurantId ?? '');
+  const hoursLabel = useMemo(() => formatOpeningHours(restaurant?.opening_hours), [restaurant]);
 
   const styles = useMemo(
     () =>
@@ -181,30 +209,49 @@ export default function RestaurantScreen() {
           color: colors.foreground,
           textAlign: 'center',
         },
+        stateWrap: {
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          gap: 10,
+        },
+        stateText: {
+          fontSize: 14,
+          color: colors.foregroundSecondary,
+          textAlign: 'center',
+        },
+        stateRetry: {
+          fontSize: 14,
+          fontWeight: '700',
+          color: colors.primary,
+        },
       }),
     [colors],
   );
 
   const navParams = useMemo(
-    () => ({
-      restaurantId: restaurant.id,
-      restaurantName: restaurant.name,
-      tableNumber: restaurant.defaultTable.number,
-    }),
+    () =>
+      restaurant
+        ? {
+            restaurantId: restaurant.id,
+            restaurantName: restaurant.name,
+          }
+        : undefined,
     [restaurant],
   );
 
   const openMenu = useCallback(() => {
-    navigation.navigate('MenuTab');
-  }, [navigation]);
+    navigation.navigate('MenuTab', navParams);
+  }, [navigation, navParams]);
 
   const openReserve = useCallback(() => {
     navigation.navigate('RestaurantReserve', navParams);
   }, [navigation, navParams]);
 
   const openQR = useCallback(() => {
-    navigation.navigate('RestaurantQRScan', navParams);
-  }, [navigation, navParams]);
+    navigation.navigate('QRScanner');
+  }, [navigation]);
 
   const openQueue = useCallback(() => {
     navigation.navigate('RestaurantVirtualQueue', navParams);
@@ -213,6 +260,30 @@ export default function RestaurantScreen() {
   const openCallTeam = useCallback(() => {
     navigation.navigate('RestaurantCallTeam', navParams);
   }, [navigation, navParams]);
+
+  if (isLoading) {
+    return (
+      <ScreenContainer edges={['top', 'bottom']}>
+        <View style={styles.stateWrap}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (isError || !restaurant) {
+    return (
+      <ScreenContainer edges={['top', 'bottom']}>
+        <View style={styles.stateWrap}>
+          <Ionicons name="cloud-offline-outline" size={32} color={colors.foregroundMuted} />
+          <Text style={styles.stateText}>Não foi possível carregar o restaurante</Text>
+          <TouchableOpacity onPress={() => refetch()} accessibilityRole="button">
+            <Text style={styles.stateRetry}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={['bottom']}>
@@ -223,7 +294,12 @@ export default function RestaurantScreen() {
       >
         <View>
           <Image
-            source={{ uri: restaurant.imageUrl }}
+            source={{
+              uri:
+                restaurant.banner_url ||
+                restaurant.logo_url ||
+                'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
+            }}
             style={styles.hero}
             resizeMode="cover"
             accessibilityLabel={`Interior do ${restaurant.name}`}
@@ -240,34 +316,43 @@ export default function RestaurantScreen() {
 
         <View style={styles.body}>
           <Text style={styles.title}>{restaurant.name}</Text>
-          <Text style={styles.tagline}>{restaurant.tagline}</Text>
+          {restaurant.description ? (
+            <Text style={styles.tagline}>{restaurant.description}</Text>
+          ) : null}
 
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
               <Ionicons name="star" size={16} color="#FBBF24" />
               <Text style={styles.metaText}>
-                {restaurant.rating} ({restaurant.reviewCount})
+                {restaurant.rating} ({restaurant.total_reviews})
               </Text>
             </View>
-            <View style={styles.metaItem}>
-              <Ionicons name="location-outline" size={16} color={colors.foregroundMuted} />
-              <Text style={styles.metaText}>{restaurant.distanceM}m</Text>
-            </View>
-            <Text style={styles.metaText}>{restaurant.priceLevel}</Text>
-          </View>
-
-          <View style={styles.hoursRow}>
-            <Ionicons name="time-outline" size={16} color={colors.foregroundMuted} />
-            <Text style={styles.hoursText}>{restaurant.hoursLabel}</Text>
-          </View>
-
-          <View style={styles.tagsWrap}>
-            {restaurant.amenities.map((tag) => (
-              <View key={tag} style={styles.tag}>
-                <Text style={styles.tagText}>{tag}</Text>
+            {restaurant.address ? (
+              <View style={styles.metaItem}>
+                <Ionicons name="location-outline" size={16} color={colors.foregroundMuted} />
+                <Text style={styles.metaText}>
+                  {restaurant.city ? `${restaurant.address}, ${restaurant.city}` : restaurant.address}
+                </Text>
               </View>
-            ))}
+            ) : null}
           </View>
+
+          {hoursLabel ? (
+            <View style={styles.hoursRow}>
+              <Ionicons name="time-outline" size={16} color={colors.foregroundMuted} />
+              <Text style={styles.hoursText}>{hoursLabel}</Text>
+            </View>
+          ) : null}
+
+          {Array.isArray(restaurant.cuisine_types) && restaurant.cuisine_types.length > 0 ? (
+            <View style={styles.tagsWrap}>
+              {restaurant.cuisine_types.map((tag: string) => (
+                <View key={tag} style={styles.tag}>
+                  <Text style={styles.tagText}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           <View style={styles.hintBanner}>
             <Ionicons name="flash" size={20} color={colors.primary} />

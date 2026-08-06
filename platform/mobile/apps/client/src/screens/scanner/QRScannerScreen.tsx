@@ -210,15 +210,15 @@ export default function QRScannerScreen() {
 
   const parseQRCode = (data: string): { type: QRCodeType; payload: any } => {
     try {
-      // Noowe-specific QR codes
-      if (data.startsWith('okinawa://')) {
+      // Noowe-specific QR codes (current scheme: noowe://; legacy: okinawa://)
+      if (data.startsWith('noowe://') || data.startsWith('okinawa://')) {
         const url = new URL(data);
         const path = url.pathname;
         const params = Object.fromEntries(url.searchParams);
 
         if (path.includes('/table/')) {
           const tableId = path.split('/table/')[1];
-          return { type: 'table', payload: { tableId, ...params } };
+          return { type: 'table', payload: { tableId, ...params, raw: data } };
         }
         if (path.includes('/menu/')) {
           const restaurantId = path.split('/menu/')[1];
@@ -269,14 +269,11 @@ export default function QRScannerScreen() {
     switch (type) {
       case 'table':
         try {
-          const tableResponse = await ApiService.post('/tables/associate', {
-            tableId: payload.tableId || payload.tableCode,
-          });
-          const tableData = tableResponse.data;
+          const session = await ApiService.openTableSessionByQR(payload.raw ?? payload.tableId ?? payload.tableCode);
           return {
             type: 'table',
-            data: tableData,
-            message: t('scanner.tableAssociated', { table: tableData.table_number }),
+            data: session,
+            message: t('scanner.tableAssociated', { table: session.tableNumber }),
           };
         } catch (error) {
           return {
@@ -295,13 +292,10 @@ export default function QRScannerScreen() {
 
       case 'invite':
         try {
-          const inviteResponse = await ApiService.post('/reservations/guests/accept', {
-            inviteToken: payload.inviteToken,
-          });
-          const inviteData = inviteResponse.data;
+          const reservationId = await ApiService.acceptReservationInviteByToken(payload.inviteToken);
           return {
             type: 'invite',
-            data: inviteData,
+            data: { reservationId },
             message: t('scanner.inviteAccepted'),
           };
         } catch (error) {
@@ -350,7 +344,7 @@ export default function QRScannerScreen() {
     switch (scanResult.type) {
       case 'table':
         if (scanResult.data) {
-          navigation.navigate('Menu', { tableId: scanResult.data.id });
+          navigation.navigate('MenuTab', { restaurantId: scanResult.data.restaurantId });
         }
         break;
       case 'menu':
@@ -360,9 +354,7 @@ export default function QRScannerScreen() {
         break;
       case 'invite':
         if (scanResult.data) {
-          navigation.navigate('SharedOrder', {
-            orderId: scanResult.data.order_id,
-          });
+          navigation.navigate('Reservations');
         }
         break;
       case 'payment':

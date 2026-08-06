@@ -1,38 +1,64 @@
 import React, { useMemo, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import {
-  MOCK_COMANDA_ITEMS,
-  MOCK_ORDERS,
-  type MockOrderListItem,
-} from '../../constants/ordersTabMocks';
+import { useMyOrders } from '@okinawa/shared/hooks/useOrdersQuery';
 
 function formatPrice(value: number): string {
   return `R$ ${value.toFixed(2).replace('.', ',')}`;
 }
 
-const STATUS_COLORS: Record<MockOrderListItem['status'], string> = {
-  received: '#EA580C',
+type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'cancelled';
+
+const STATUS_COLORS: Record<OrderStatus, string> = {
+  pending: '#EA580C',
+  confirmed: '#EA580C',
   preparing: '#D97706',
   ready: '#16A34A',
   delivered: '#6B7280',
+  completed: '#6B7280',
+  cancelled: '#DC2626',
 };
 
-/** Aba Pedidos — pedidos ativos (mock) + comanda da mesa */
+const STATUS_LABELS: Record<OrderStatus, string> = {
+  pending: 'Recebido',
+  confirmed: 'Confirmado',
+  preparing: 'Preparando',
+  ready: 'Pronto',
+  delivered: 'Entregue',
+  completed: 'Concluído',
+  cancelled: 'Cancelado',
+};
+
+const ACTIVE_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'ready'];
+
+function orderTotal(order: any): number {
+  return (order.order_items ?? []).reduce((sum: number, item: any) => sum + Number(item.total_price ?? 0), 0);
+}
+
+function orderItemCount(order: any): number {
+  return (order.order_items ?? []).length;
+}
+
+function formatTime(iso: string): string {
+  const date = new Date(iso);
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Aba Pedidos — pedidos ativos do cliente autenticado */
 export default function OrdersScreen() {
   const navigation = useNavigation<any>();
   const colors = useColors();
-  const orders = MOCK_ORDERS;
-  const comandaItems = MOCK_COMANDA_ITEMS;
-  const hasOrders = orders.length > 0;
-  const comandaTotal = useMemo(
-    () => comandaItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
-    [comandaItems],
+  const { data: allOrders, isLoading, isError, refetch } = useMyOrders();
+
+  const orders = useMemo(
+    () => ((allOrders ?? []) as any[]).filter((o) => ACTIVE_STATUSES.includes(o.status)),
+    [allOrders],
   );
+  const hasOrders = orders.length > 0;
 
   const styles = useMemo(
     () =>
@@ -208,8 +234,8 @@ export default function OrdersScreen() {
     [navigation],
   );
 
-  const openMenu = useCallback(() => {
-    navigation.navigate('MenuTab');
+  const openHome = useCallback(() => {
+    navigation.navigate('Home');
   }, [navigation]);
 
   return (
@@ -225,9 +251,25 @@ export default function OrdersScreen() {
           <View style={styles.content}>
             <View>
               <Text style={styles.sectionLabel}>PEDIDOS ATIVOS</Text>
-              {hasOrders ? (
+              {isLoading ? (
+                <View style={styles.emptyWrap}>
+                  <ActivityIndicator color={colors.primary} />
+                </View>
+              ) : isError ? (
+                <View style={styles.emptyWrap}>
+                  <Ionicons name="cloud-offline-outline" size={40} color={colors.foregroundMuted} />
+                  <Text style={styles.emptyMessage}>Não foi possível carregar seus pedidos</Text>
+                  <TouchableOpacity style={styles.primaryBtn} onPress={() => refetch()} activeOpacity={0.85}>
+                    <Text style={styles.primaryBtnText}>Tentar novamente</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : hasOrders ? (
                 orders.map((order) => {
-                  const statusColor = STATUS_COLORS[order.status];
+                  const status = order.status as OrderStatus;
+                  const statusColor = STATUS_COLORS[status] ?? STATUS_COLORS.pending;
+                  const total = orderTotal(order);
+                  const itemCount = orderItemCount(order);
+                  const restaurantName = order.restaurants?.name ?? 'Restaurante';
                   return (
                     <TouchableOpacity
                       key={order.id}
@@ -235,24 +277,21 @@ export default function OrdersScreen() {
                       onPress={() => openTracking(order.id)}
                       activeOpacity={0.85}
                       accessibilityRole="button"
-                      accessibilityLabel={`Pedido ${order.orderNumber}, ${order.statusLabel}`}
+                      accessibilityLabel={`Pedido em ${restaurantName}, ${STATUS_LABELS[status] ?? status}`}
                     >
                       <View style={styles.orderIcon}>
                         <Ionicons name="receipt-outline" size={24} color={colors.primary} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.orderRestaurant}>{order.restaurantName}</Text>
+                        <Text style={styles.orderRestaurant}>{restaurantName}</Text>
+                        <Text style={styles.orderMeta}>{formatTime(order.created_at)}</Text>
                         <Text style={styles.orderMeta}>
-                          #{order.orderNumber} · Mesa {order.tableNumber} · {order.placedAt}
-                        </Text>
-                        <Text style={styles.orderMeta}>
-                          {order.itemCount} {order.itemCount === 1 ? 'item' : 'itens'} ·{' '}
-                          {formatPrice(order.totalAmount)}
+                          {itemCount} {itemCount === 1 ? 'item' : 'itens'} · {formatPrice(total)}
                         </Text>
                       </View>
                       <View style={[styles.statusPill, { backgroundColor: `${statusColor}18` }]}>
                         <Text style={[styles.statusText, { color: statusColor }]}>
-                          {order.statusLabel}
+                          {STATUS_LABELS[status] ?? status}
                         </Text>
                       </View>
                       <Ionicons
@@ -272,42 +311,14 @@ export default function OrdersScreen() {
                   <Text style={styles.emptyMessage}>Nenhum pedido ativo no momento</Text>
                   <TouchableOpacity
                     style={styles.primaryBtn}
-                    onPress={openMenu}
+                    onPress={openHome}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.primaryBtnText}>Ver Cardápio</Text>
+                    <Text style={styles.primaryBtnText}>Explorar restaurantes</Text>
                   </TouchableOpacity>
                 </View>
               )}
             </View>
-
-            {comandaItems.length > 0 ? (
-              <View>
-                <Text style={styles.sectionLabel}>MINHA COMANDA</Text>
-                {comandaItems.map((item) => (
-                  <View key={item.id} style={styles.comandaItem}>
-                    <Image
-                      source={{ uri: item.imageUrl }}
-                      style={styles.itemImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName}>{item.name}</Text>
-                      <Text style={styles.itemMeta}>
-                        {item.quantity}x · {formatPrice(item.unitPrice)}
-                      </Text>
-                    </View>
-                    <Text style={styles.itemPrice}>
-                      {formatPrice(item.unitPrice * item.quantity)}
-                    </Text>
-                  </View>
-                ))}
-                <View style={styles.comandaFooter}>
-                  <Text style={styles.totalLabel}>Total na comanda</Text>
-                  <Text style={styles.totalValue}>{formatPrice(comandaTotal)}</Text>
-                </View>
-              </View>
-            ) : null}
           </View>
         </ScrollView>
       </View>

@@ -338,26 +338,21 @@ class ApiService {
   // RESTAURANT ENDPOINTS (Customer Side)
   // ======================
 
-  async getRestaurants(params?: { lat?: number; lng?: number; search?: string }) {
-    const response = await this.api.get('/restaurants', { params });
-    return response.data;
+  async getRestaurants(params?: { lat?: number; lng?: number; search?: string; cuisine_type?: string }) {
+    return supabaseApiAdapter.getRestaurantsList(params);
   }
 
   async getNearbyRestaurants(latitude: number, longitude: number, radius: number = 5000) {
-    const response = await this.api.get('/restaurants', {
-      params: { lat: latitude, lng: longitude, radius },
-    });
-    return response.data;
+    // TODO: filter/sort by real distance once device geolocation is wired here.
+    return supabaseApiAdapter.getRestaurantsList();
   }
 
   async getRestaurant(id: string) {
-    const response = await this.api.get(`/restaurants/${id}`);
-    return response.data;
+    return supabaseApiAdapter.getRestaurantDetail(id);
   }
 
   async getRestaurantMenu(restaurantId: string) {
-    const response = await this.api.get(`/menu-items/restaurant/${restaurantId}`);
-    return response.data;
+    return supabaseApiAdapter.getPublicMenu(restaurantId);
   }
 
   // ======================
@@ -513,6 +508,35 @@ class ApiService {
 
   async createReservation(data: SupabaseCreateReservationInput) {
     return supabaseApiAdapter.createReservation(data);
+  }
+
+  async createCustomerReservation(
+    restaurantId: string,
+    reservationTime: string,
+    partySize: number,
+    specialRequests?: string,
+  ) {
+    return supabaseApiAdapter.createCustomerReservation(restaurantId, reservationTime, partySize, specialRequests);
+  }
+
+  async openTableSessionByQR(qrData: string) {
+    return supabaseApiAdapter.openTableSessionByQR(qrData);
+  }
+
+  async joinWaitlist(restaurantId: string, partySize: number, preference?: string, hasKids?: boolean) {
+    return supabaseApiAdapter.joinWaitlist(restaurantId, partySize, preference, hasKids);
+  }
+
+  async updateWaitlist(entryId: string, action: 'cancel' | 'arrive') {
+    return supabaseApiAdapter.updateWaitlist(entryId, action);
+  }
+
+  async callWaiterForTable(restaurantId: string, tableId: string, message?: string) {
+    return supabaseApiAdapter.callWaiterForTable(restaurantId, tableId, message);
+  }
+
+  async acceptReservationInviteByToken(token: string) {
+    return supabaseApiAdapter.acceptReservationInviteByToken(token);
   }
 
   async getMyReservations() {

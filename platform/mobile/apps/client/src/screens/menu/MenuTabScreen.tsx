@@ -6,20 +6,35 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Text } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import {
-  MOCK_MENU_CATEGORIES,
-  MOCK_MENU_ITEMS,
-  MOCK_MENU_RESTAURANT,
-  type MockMenuCategoryId,
-  type MockMenuItem,
-} from '../../constants/menuTabMocks';
+import { useRestaurantMenu } from '@okinawa/shared/hooks/useRestaurants';
+
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&q=80';
+
+interface ApiMenuCategory {
+  id: string;
+  name: string;
+  display_order: number;
+}
+
+interface ApiMenuItem {
+  id: string;
+  category_id: string | null;
+  name: string;
+  description: string | null;
+  price: number;
+  estimated_prep_minutes: number;
+  image_url: string | null;
+  dietary_info: string[] | null;
+}
 
 function formatPrice(value: number): string {
   return `R$ ${value.toFixed(0)}`;
@@ -33,7 +48,7 @@ function MenuListItem({
   styles,
   mutedColor,
 }: {
-  item: MockMenuItem;
+  item: ApiMenuItem;
   onPress: () => void;
   styles: MenuTabStyles;
   mutedColor: string;
@@ -47,7 +62,7 @@ function MenuListItem({
       accessibilityLabel={`${item.name}, ${formatPrice(item.price)}`}
     >
       <Image
-        source={item.image}
+        source={{ uri: item.image_url || FALLBACK_IMAGE }}
         style={styles.menuImage}
         resizeMode="cover"
         accessibilityLabel={`Foto de ${item.name}`}
@@ -57,20 +72,17 @@ function MenuListItem({
           <Text style={styles.menuName} numberOfLines={1}>
             {item.name}
           </Text>
-          {item.popular && (
-            <View style={styles.popularTag}>
-              <Text style={styles.popularText}>Popular</Text>
-            </View>
-          )}
         </View>
-        <Text style={styles.menuDescription} numberOfLines={2}>
-          {item.description}
-        </Text>
+        {item.description ? (
+          <Text style={styles.menuDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+        ) : null}
         <View style={styles.menuFooter}>
           <Text style={styles.menuPrice}>{formatPrice(item.price)}</Text>
           <View style={styles.prepTime}>
             <Ionicons name="time-outline" size={14} color={mutedColor} />
-            <Text style={styles.prepTimeText}>{item.prepMinutes}min</Text>
+            <Text style={styles.prepTimeText}>{item.estimated_prep_minutes}min</Text>
           </View>
         </View>
       </View>
@@ -266,45 +278,78 @@ function createStyles(colors: {
       fontSize: 12,
       color: colors.foregroundMuted,
     },
+    emptyState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 40,
+      paddingHorizontal: 24,
+      gap: 12,
+    },
+    emptyStateText: {
+      fontSize: 14,
+      color: colors.foregroundSecondary,
+      textAlign: 'center',
+    },
+    emptyStateBtn: {
+      marginTop: 8,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 14,
+    },
+    emptyStateBtnText: {
+      color: colors.primaryForeground,
+      fontSize: 14,
+      fontWeight: '700',
+    },
   });
 }
 
 /** Aba Cardápio — layout conforme mockup, dados mockados */
 export default function MenuTabScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute();
   const colors = useColors();
-  const [selectedCategory, setSelectedCategory] = useState<MockMenuCategoryId>('entradas');
+  const { restaurantId } = (route.params ?? {}) as { restaurantId?: string };
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const filteredItems = useMemo(
-    () => MOCK_MENU_ITEMS.filter((item) => item.categoryId === selectedCategory),
-    [selectedCategory],
+  const {
+    data: menu,
+    isLoading,
+    isError,
+    refetch,
+  } = useRestaurantMenu(restaurantId ?? '');
+
+  const categories = (menu?.categories ?? []) as ApiMenuCategory[];
+  const items = (menu?.items ?? []) as ApiMenuItem[];
+
+  const categoryTabs = useMemo(
+    () => [{ id: 'all', name: 'Todos' }, ...categories.map((c) => ({ id: c.id, name: c.name }))],
+    [categories],
   );
 
-  const categoryIndex = MOCK_MENU_CATEGORIES.findIndex((c) => c.id === selectedCategory);
-  const progress =
-    MOCK_MENU_CATEGORIES.length > 1
-      ? (categoryIndex + 1) / MOCK_MENU_CATEGORIES.length
-      : 1;
+  const filteredItems = useMemo(
+    () => (selectedCategory === 'all' ? items : items.filter((item) => item.category_id === selectedCategory)),
+    [items, selectedCategory],
+  );
+
+  const categoryIndex = categoryTabs.findIndex((c) => c.id === selectedCategory);
+  const progress = categoryTabs.length > 1 ? (Math.max(categoryIndex, 0) + 1) / categoryTabs.length : 1;
 
   const goHome = useCallback(() => {
     navigation.navigate('Home');
   }, [navigation]);
 
   const openComanda = useCallback(() => {
-    navigation.navigate('TabScreen', {
-      restaurantId: MOCK_MENU_RESTAURANT.id,
-      tableNumber: MOCK_MENU_RESTAURANT.tableNumber,
-    });
-  }, [navigation]);
+    navigation.navigate('TabScreen', { restaurantId });
+  }, [navigation, restaurantId]);
 
   const callWaiter = useCallback(() => {
-    navigation.navigate('CallWaiter', {
-      restaurantId: MOCK_MENU_RESTAURANT.id,
-      tableNumber: MOCK_MENU_RESTAURANT.tableNumber,
-    });
-  }, [navigation]);
+    navigation.navigate('RestaurantCallTeam', { restaurantId });
+  }, [navigation, restaurantId]);
 
   const openPairing = useCallback(() => {
     Alert.alert(
@@ -314,11 +359,49 @@ export default function MenuTabScreen() {
   }, []);
 
   const onItemPress = useCallback(
-    (item: MockMenuItem) => {
-      navigation.navigate('MenuItemDetail', { itemId: item.id });
+    (item: ApiMenuItem) => {
+      navigation.navigate('MenuItemDetail', { itemId: item.id, restaurantId });
     },
-    [navigation],
+    [navigation, restaurantId],
   );
+
+  if (!restaurantId) {
+    return (
+      <ScreenContainer edges={['top']}>
+        <View style={styles.emptyState}>
+          <Ionicons name="restaurant-outline" size={40} color={colors.foregroundMuted} />
+          <Text style={styles.emptyStateText}>Escolha um restaurante para ver o cardápio</Text>
+          <TouchableOpacity style={styles.emptyStateBtn} onPress={goHome} accessibilityRole="button">
+            <Text style={styles.emptyStateBtnText}>Explorar restaurantes</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <ScreenContainer edges={['top']}>
+        <View style={styles.emptyState}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (isError) {
+    return (
+      <ScreenContainer edges={['top']}>
+        <View style={styles.emptyState}>
+          <Ionicons name="cloud-offline-outline" size={40} color={colors.foregroundMuted} />
+          <Text style={styles.emptyStateText}>Não foi possível carregar o cardápio</Text>
+          <TouchableOpacity style={styles.emptyStateBtn} onPress={() => refetch()} accessibilityRole="button">
+            <Text style={styles.emptyStateBtnText}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={['top']}>
@@ -375,7 +458,7 @@ export default function MenuTabScreen() {
           style={styles.categoryScroll}
           contentContainerStyle={styles.categoryRow}
         >
-          {MOCK_MENU_CATEGORIES.map((cat) => {
+          {categoryTabs.map((cat) => {
             const active = selectedCategory === cat.id;
             return (
               <TouchableOpacity
@@ -387,7 +470,7 @@ export default function MenuTabScreen() {
                 accessibilityState={{ selected: active }}
               >
                 <Text style={[styles.categoryText, active && styles.categoryTextActive]}>
-                  {cat.label}
+                  {cat.name}
                 </Text>
               </TouchableOpacity>
             );
@@ -409,15 +492,22 @@ export default function MenuTabScreen() {
 
         {/* Lista de pratos */}
         <View style={styles.listContent}>
-          {filteredItems.map((item) => (
-            <MenuListItem
-              key={item.id}
-              item={item}
-              styles={styles}
-              mutedColor={colors.foregroundMuted}
-              onPress={() => onItemPress(item)}
-            />
-          ))}
+          {filteredItems.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="fast-food-outline" size={32} color={colors.foregroundMuted} />
+              <Text style={styles.emptyStateText}>Nenhum item disponível nessa categoria</Text>
+            </View>
+          ) : (
+            filteredItems.map((item) => (
+              <MenuListItem
+                key={item.id}
+                item={item}
+                styles={styles}
+                mutedColor={colors.foregroundMuted}
+                onPress={() => onItemPress(item)}
+              />
+            ))
+          )}
         </View>
       </ScrollView>
     </ScreenContainer>

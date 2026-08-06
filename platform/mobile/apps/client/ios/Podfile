@@ -73,6 +73,15 @@ target 'Noowe' do
         end
       end
     end
+
+    # Xcode's script sandbox blocks Node module resolution for the codegen
+    # script phase in this pnpm monorepo, where node_modules is hoisted above
+    # the app directory (platform/mobile/node_modules, not apps/client/node_modules).
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+      end
+    end
   end
 
   post_integrate do |installer|

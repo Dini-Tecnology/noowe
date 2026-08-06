@@ -7,6 +7,7 @@ import {
   Alert,
   Platform,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,20 +16,51 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { gradients } from '@okinawa/shared/theme/colors';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import {
-  getMockOrderTracking,
-  TRACKING_STEPS,
-  type MockOrderTrackingStep,
-} from '../../constants/ordersTabMocks';
+import { useOrder } from '@okinawa/shared/hooks/useOrdersQuery';
 
 type RouteParams = { orderId: string };
+type TrackingStep = 'received' | 'preparing' | 'ready' | 'delivered';
 
-const STEP_INDEX: Record<MockOrderTrackingStep, number> = {
+const TRACKING_STEPS: { key: TrackingStep; label: string; icon: 'checkmark' | 'restaurant' | 'restaurant-outline' | 'checkmark-done' }[] = [
+  { key: 'received', label: 'Recebido', icon: 'checkmark' },
+  { key: 'preparing', label: 'Preparando', icon: 'restaurant' },
+  { key: 'ready', label: 'Pronto', icon: 'restaurant-outline' },
+  { key: 'delivered', label: 'Entregue', icon: 'checkmark-done' },
+];
+
+const STEP_INDEX: Record<TrackingStep, number> = {
   received: 0,
   preparing: 1,
   ready: 2,
   delivered: 3,
 };
+
+const ORDER_TYPE_LABELS: Record<string, string> = {
+  dine_in: 'Pedido local',
+  pickup: 'Retirada',
+  delivery: 'Entrega',
+};
+
+function stepFromStatus(status: string): TrackingStep {
+  if (status === 'preparing') return 'preparing';
+  if (status === 'ready') return 'ready';
+  if (status === 'delivered' || status === 'completed') return 'delivered';
+  return 'received';
+}
+
+function progressFromStatus(status: string): number {
+  switch (status) {
+    case 'preparing':
+      return 0.5;
+    case 'ready':
+      return 0.85;
+    case 'delivered':
+    case 'completed':
+      return 1;
+    default:
+      return 0.1;
+  }
+}
 
 const STATUS_BAR_HEIGHT =
   Platform.OS === 'ios' ? 44 : StatusBar.currentHeight ?? 24;
@@ -38,8 +70,8 @@ export default function OrderTrackingScreen() {
   const navigation = useNavigation<any>();
   const colors = useColors();
   const { orderId } = (route.params ?? {}) as RouteParams;
-  const order = useMemo(() => getMockOrderTracking(orderId), [orderId]);
-  const currentStepIndex = order ? STEP_INDEX[order.currentStep] : 0;
+  const { data: order, isLoading, isError, refetch } = useOrder(orderId);
+  const currentStepIndex = order ? STEP_INDEX[stepFromStatus(order.status)] : 0;
 
   const styles = useMemo(
     () =>
@@ -303,31 +335,48 @@ export default function OrderTrackingScreen() {
 
   const handleHelp = useCallback(() => {
     if (order) {
-      navigation.navigate('RestaurantCallTeam', {
-        restaurantId: order.restaurantId,
-        tableNumber: Number(order.tableNumber),
-      });
+      navigation.navigate('RestaurantCallTeam', { restaurantId: order.restaurant_id });
     }
   }, [navigation, order]);
 
-  if (!order) {
+  if (isLoading) {
     return (
       <ScreenContainer edges={['top']}>
         <View style={styles.notFound}>
-          <Ionicons name="clipboard-outline" size={48} color={colors.foregroundMuted} />
-          <Text style={{ marginTop: 12, color: colors.foregroundSecondary }}>Pedido não encontrado</Text>
-          <TouchableOpacity onPress={goBack} style={{ marginTop: 16 }}>
-            <Text style={{ color: colors.primary, fontWeight: '600' }}>Voltar</Text>
-          </TouchableOpacity>
+          <ActivityIndicator color={colors.primary} />
         </View>
       </ScreenContainer>
     );
   }
 
-  const estimatedLabel =
-    order.estimatedMinutesMin === 0 && order.estimatedMinutesMax === 0
-      ? '0-0 min'
-      : `${order.estimatedMinutesMin}-${order.estimatedMinutesMax} min`;
+  if (isError || !order) {
+    return (
+      <ScreenContainer edges={['top']}>
+        <View style={styles.notFound}>
+          <Ionicons name="clipboard-outline" size={48} color={colors.foregroundMuted} />
+          <Text style={{ marginTop: 12, color: colors.foregroundSecondary }}>
+            {isError ? 'Não foi possível carregar o pedido' : 'Pedido não encontrado'}
+          </Text>
+          {isError ? (
+            <TouchableOpacity onPress={() => refetch()} style={{ marginTop: 16 }}>
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>Tentar novamente</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={goBack} style={{ marginTop: 16 }}>
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>Voltar</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  const restaurantName = order.restaurants?.name ?? 'Restaurante';
+  const orderTypeLabel = ORDER_TYPE_LABELS[order.order_type] ?? order.order_type;
+  const estimatedLabel = order.estimated_time ? `${order.estimated_time} min` : '—';
+  const progress = progressFromStatus(order.status);
+  const orderShortCode = String(order.id).slice(0, 8).toUpperCase();
+  const items = order.order_items ?? [];
 
   const formatPrice = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
 
@@ -353,11 +402,11 @@ export default function OrderTrackingScreen() {
               <View style={styles.headerCenter}>
                 <Text style={styles.headerTitle}>Status do Pedido</Text>
                 <Text style={styles.headerSubtitle}>
-                  Mesa {order.tableNumber} · {order.restaurantName}
+                  {orderTypeLabel} · {restaurantName}
                 </Text>
               </View>
               <View style={styles.orderBadge}>
-                <Text style={styles.orderBadgeText}>#{order.orderNumber}</Text>
+                <Text style={styles.orderBadgeText}>#{orderShortCode}</Text>
               </View>
             </View>
 
@@ -403,7 +452,7 @@ export default function OrderTrackingScreen() {
                 </View>
               </View>
               <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${order.progress * 100}%` }]} />
+                <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
               </View>
             </View>
 
@@ -414,11 +463,8 @@ export default function OrderTrackingScreen() {
                   <Ionicons name="location" size={22} color={colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.tableTitle}>
-                    Mesa {order.tableNumber} · {order.guestCount} pessoa
-                    {order.guestCount > 1 ? 's' : ''}
-                  </Text>
-                  <Text style={styles.tableSub}>{order.guestLabel}</Text>
+                  <Text style={styles.tableTitle}>{orderTypeLabel}</Text>
+                  <Text style={styles.tableSub}>{restaurantName}</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.closeBillBtn}
@@ -433,17 +479,13 @@ export default function OrderTrackingScreen() {
             </View>
 
             <View style={{ gap: 10 }}>
-              {order.items.map((item) => (
+              {items.map((item: any) => (
                 <View key={item.id} style={styles.itemCard}>
                   <View>
-                    <Text style={styles.itemName}>{item.name}</Text>
-                    <Text style={styles.itemMeta}>
-                      {item.quantity}x · {item.orderedBy ?? order.guestLabel}
-                    </Text>
+                    <Text style={styles.itemName}>{item.menu_items?.name ?? 'Item'}</Text>
+                    <Text style={styles.itemMeta}>{item.quantity}x</Text>
                   </View>
-                  <Text style={styles.itemPrice}>
-                    {formatPrice(item.unitPrice * item.quantity)}
-                  </Text>
+                  <Text style={styles.itemPrice}>{formatPrice(Number(item.total_price ?? 0))}</Text>
                 </View>
               ))}
             </View>

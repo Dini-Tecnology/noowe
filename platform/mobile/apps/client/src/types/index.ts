@@ -380,11 +380,6 @@ export type RootStackParamList = {
   TabPayment: { tabId?: string };
   Reservation: { restaurantId: string };
   Restaurant: { restaurantId: string };
-  RestaurantQRScan: {
-    restaurantId?: string;
-    restaurantName?: string;
-    tableNumber?: number;
-  };
   RestaurantVirtualQueue: { restaurantId?: string };
   RestaurantCallTeam: { restaurantId?: string; tableNumber?: number };
   RestaurantReserve: { restaurantId?: string };

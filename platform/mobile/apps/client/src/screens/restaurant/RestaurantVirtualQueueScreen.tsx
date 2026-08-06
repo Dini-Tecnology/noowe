@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -10,21 +10,26 @@ import {
   SelectChip,
   SelectionSection,
 } from '../../components/restaurant/SelectionControls';
-import {
-  MOCK_QUEUE_PARTY,
-  MOCK_QUEUE_PREFERENCES,
-  resolveRestaurantDetail,
-} from '../../constants/restaurantDetailMocks';
+import { useRestaurant } from '@okinawa/shared/hooks/useRestaurants';
+import ApiService from '@/shared/services/api';
+
+const QUEUE_PARTY = ['1', '2', '3', '4', '5+'] as const;
+const QUEUE_PREFERENCES = [
+  { id: 'salao', label: 'Salão' },
+  { id: 'terraco', label: 'Terraço' },
+  { id: 'qualquer', label: 'Qualquer' },
+] as const;
 
 export default function RestaurantVirtualQueueScreen() {
   const route = useRoute();
   const navigation = useNavigation<any>();
   const colors = useColors();
   const { restaurantId } = (route.params ?? {}) as { restaurantId?: string };
-  const restaurant = useMemo(() => resolveRestaurantDetail(restaurantId), [restaurantId]);
+  const { data: restaurant, isLoading: restaurantLoading } = useRestaurant(restaurantId ?? '');
 
   const [partySize, setPartySize] = useState('2');
   const [preference, setPreference] = useState('qualquer');
+  const [submitting, setSubmitting] = useState(false);
 
   const styles = useMemo(
     () =>
@@ -105,17 +110,43 @@ export default function RestaurantVirtualQueueScreen() {
           fontSize: 16,
           fontWeight: '700',
         },
+        loadingWrap: {
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
       }),
     [colors],
   );
 
-  const handleJoin = () => {
-    Alert.alert(
-      'Fila virtual',
-      `Você entrou na fila do ${restaurant.name} para ${partySize} pessoa(s).`,
-      [{ text: 'OK', onPress: () => navigation.goBack() }],
-    );
+  const handleJoin = async () => {
+    if (!restaurantId) return;
+    const size = partySize === '5+' ? 5 : Number(partySize);
+    setSubmitting(true);
+    try {
+      const entry = await ApiService.joinWaitlist(restaurantId, size, preference);
+      Alert.alert(
+        'Você está na fila',
+        `Posição ${entry.position} · ${restaurant?.name ?? 'Restaurante'} · ${partySize} pessoa(s)`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
+    } catch (err: any) {
+      Alert.alert('Não foi possível entrar na fila', err?.message ?? 'Tente novamente em instantes.');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (restaurantLoading) {
+    return (
+      <ScreenContainer edges={['top', 'bottom']}>
+        <RestaurantSubscreenHeader title="Fila Virtual" />
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={['top', 'bottom']}>
@@ -126,29 +157,13 @@ export default function RestaurantVirtualQueueScreen() {
             <Ionicons name="restaurant" size={22} color={colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.summaryName}>{restaurant.name}</Text>
-            <Text style={styles.summarySub}>
-              Lotação atual:{' '}
-              <Text style={{ color: colors.primary, fontWeight: '700' }}>
-                {restaurant.occupancy}
-              </Text>
-            </Text>
+            <Text style={styles.summaryName}>{restaurant?.name ?? 'Restaurante'}</Text>
           </View>
-        </View>
-
-        <View style={styles.statusBlock}>
-          <View style={styles.statusCircle}>
-            <Ionicons name="timer-outline" size={44} color={colors.primary} />
-          </View>
-          <Text style={styles.statusTitle}>{restaurant.queueGroups} grupos na fila</Text>
-          <Text style={styles.statusSub}>
-            Espera estimada: ~{restaurant.queueWaitMinutes} min
-          </Text>
         </View>
 
         <SelectionSection title="Quantas pessoas?">
           <View style={styles.chipRow}>
-            {MOCK_QUEUE_PARTY.map((n) => (
+            {QUEUE_PARTY.map((n) => (
               <SelectChip
                 key={n}
                 label={n}
@@ -161,7 +176,7 @@ export default function RestaurantVirtualQueueScreen() {
 
         <SelectionSection title="Preferência">
           <View style={styles.prefRow}>
-            {MOCK_QUEUE_PREFERENCES.map((pref) => (
+            {QUEUE_PREFERENCES.map((pref) => (
               <View key={pref.id} style={styles.prefChip}>
                 <SelectChip
                   label={pref.label}
@@ -174,13 +189,18 @@ export default function RestaurantVirtualQueueScreen() {
         </SelectionSection>
 
         <TouchableOpacity
-          style={styles.cta}
+          style={[styles.cta, submitting && { opacity: 0.7 }]}
           onPress={handleJoin}
           activeOpacity={0.85}
+          disabled={submitting}
           accessibilityRole="button"
           accessibilityLabel="Entrar na fila virtual"
         >
-          <Text style={styles.ctaText}>Entrar na Fila Virtual</Text>
+          {submitting ? (
+            <ActivityIndicator color={colors.primaryForeground} />
+          ) : (
+            <Text style={styles.ctaText}>Entrar na Fila Virtual</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>

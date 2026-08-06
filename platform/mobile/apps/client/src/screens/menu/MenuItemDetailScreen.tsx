@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
@@ -13,10 +14,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import { getMockMenuItem } from '../../constants/menuTabMocks';
+import { useRestaurantMenu } from '@okinawa/shared/hooks/useRestaurants';
 
 const HERO_HEIGHT = Dimensions.get('window').width * 0.72;
 const CARD_OVERLAP = 28;
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
 
 function formatPrice(value: number): string {
   return `R$ ${value.toFixed(0)}`;
@@ -27,8 +30,12 @@ export default function MenuItemDetailScreen() {
   const navigation = useNavigation<any>();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { itemId } = (route.params ?? {}) as { itemId: string };
-  const item = useMemo(() => getMockMenuItem(itemId), [itemId]);
+  const { itemId, restaurantId } = (route.params ?? {}) as { itemId: string; restaurantId?: string };
+  const { data: menu, isLoading } = useRestaurantMenu(restaurantId ?? '');
+  const item = useMemo(
+    () => (menu?.items ?? []).find((i: any) => i.id === itemId),
+    [menu, itemId],
+  );
 
   const [quantity, setQuantity] = useState(1);
 
@@ -222,6 +229,16 @@ export default function MenuItemDetailScreen() {
     );
   }, [item, quantity, totalPrice, navigation]);
 
+  if (isLoading) {
+    return (
+      <ScreenContainer edges={['top', 'bottom']}>
+        <View style={styles.fallback}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   if (!item) {
     return (
       <ScreenContainer edges={['top', 'bottom']}>
@@ -235,12 +252,14 @@ export default function MenuItemDetailScreen() {
     );
   }
 
+  const dietaryTags: string[] = Array.isArray(item.dietary_info) ? item.dietary_info : [];
+
   return (
     <ScreenContainer edges={['bottom']}>
       <View style={styles.screen}>
         <View style={styles.heroWrap}>
           <Image
-            source={item.image}
+            source={{ uri: item.image_url || FALLBACK_IMAGE }}
             style={styles.heroImage}
             resizeMode="cover"
             accessibilityLabel={`Foto de ${item.name}`}
@@ -258,18 +277,13 @@ export default function MenuItemDetailScreen() {
         <View style={styles.card}>
           <View style={styles.titleRow}>
             <Text style={styles.title}>{item.name}</Text>
-            {item.popular ? (
-              <View style={styles.popularTag}>
-                <Text style={styles.popularText}>Popular</Text>
-              </View>
-            ) : null}
           </View>
 
-          <Text style={styles.description}>{item.description}</Text>
+          {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
 
-          {(item.dietaryTags?.length ?? 0) > 0 ? (
+          {dietaryTags.length > 0 ? (
             <View style={styles.tagsRow}>
-              {item.dietaryTags!.map((tag) => (
+              {dietaryTags.map((tag) => (
                 <View key={tag} style={styles.dietaryTag}>
                   <Text style={styles.dietaryText}>{tag}</Text>
                 </View>
@@ -279,7 +293,7 @@ export default function MenuItemDetailScreen() {
 
           <View style={styles.prepRow}>
             <Ionicons name="time-outline" size={16} color={colors.foregroundMuted} />
-            <Text style={styles.prepText}>Preparo: {item.prepMinutes} min</Text>
+            <Text style={styles.prepText}>Preparo: {item.estimated_prep_minutes} min</Text>
           </View>
 
           <View style={styles.priceRow}>

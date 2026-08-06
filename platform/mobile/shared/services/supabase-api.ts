@@ -341,6 +341,17 @@ export interface SupabaseApiAdapter {
     zipCode?: string;
     serviceType?: string;
   }): Promise<any>;
+  // ── Customer Discovery (public/authenticated read, RLS: restaurants_select_active / menu_items_select_public) ──
+  getRestaurantsList(filters?: { search?: string; cuisine_type?: string }): Promise<any[]>;
+  getRestaurantDetail(id: string): Promise<any>;
+  getPublicMenu(restaurantId: string): Promise<{ categories: any[]; items: any[] }>;
+  // ── Customer table session / waitlist / service calls (RPCs from client_production_backend) ──
+  openTableSessionByQR(qrData: string): Promise<{ restaurantId: string; tableId: string; tableSessionId: string; tableNumber: string }>;
+  joinWaitlist(restaurantId: string, partySize: number, preference?: string, hasKids?: boolean): Promise<any>;
+  updateWaitlist(entryId: string, action: 'cancel' | 'arrive'): Promise<any>;
+  callWaiterForTable(restaurantId: string, tableId: string, message?: string): Promise<any>;
+  createCustomerReservation(restaurantId: string, reservationTime: string, partySize: number, specialRequests?: string): Promise<any>;
+  acceptReservationInviteByToken(token: string): Promise<string>;
 }
 
 async function resolveRestaurantId(restaurantId?: string): Promise<string> {
@@ -405,7 +416,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select('*, order_items(*, menu_items(name, image_url)), restaurants(name, logo_url)')
       .eq('customer_id', user.id)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -415,7 +426,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   async getOrder(id: string) {
     const { data, error } = await getSupabaseClient()
       .from('orders')
-      .select('*, order_items(*)')
+      .select('*, order_items(*, menu_items(name, image_url)), restaurants(name, logo_url)')
       .eq('id', id)
       .single();
     if (error) throw error;
@@ -1826,5 +1837,123 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     }
 
     return data;
+  },
+
+  // ── Customer Discovery ──────────────────────────────────────────────────────
+  async getRestaurantsList(filters) {
+    const supabase = getSupabaseClient();
+    let query = supabase
+      .from('restaurants')
+      .select(
+        'id, name, description, cuisine_types, logo_url, banner_url, rating, total_reviews, average_ticket, address, city, state, lat, lng, opening_hours, service_type',
+      )
+      .eq('is_active', true)
+      .order('rating', { ascending: false });
+
+    if (filters?.search) {
+      query = query.ilike('name', `%${filters.search}%`);
+    }
+    if (filters?.cuisine_type) {
+      query = query.contains('cuisine_types', [filters.cuisine_type]);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  async getRestaurantDetail(id: string) {
+    const { data, error } = await getSupabaseClient()
+      .from('restaurants')
+      .select('*')
+      .eq('id', id)
+      .eq('is_active', true)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async getPublicMenu(restaurantId: string) {
+    const supabase = getSupabaseClient();
+    const [categoriesRes, itemsRes] = await Promise.all([
+      supabase
+        .from('menu_categories')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .eq('is_active', true)
+        .order('display_order', { ascending: true }),
+      supabase
+        .from('menu_items')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .eq('is_available', true)
+        .order('display_order', { ascending: true }),
+    ]);
+    if (categoriesRes.error) throw categoriesRes.error;
+    if (itemsRes.error) throw itemsRes.error;
+    return { categories: categoriesRes.data ?? [], items: itemsRes.data ?? [] };
+  },
+
+  // ── Customer table session / waitlist / service calls ─────────────────────────
+  async openTableSessionByQR(qrData: string) {
+    const { data, error } = await getSupabaseClient().rpc('customer_open_table_session', {
+      p_qr_data: qrData,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async joinWaitlist(restaurantId: string, partySize: number, preference = 'qualquer', hasKids = false) {
+    const { data, error } = await getSupabaseClient().rpc('customer_join_waitlist', {
+      p_restaurant_id: restaurantId,
+      p_party_size: partySize,
+      p_preference: preference,
+      p_has_kids: hasKids,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async updateWaitlist(entryId: string, action: 'cancel' | 'arrive') {
+    const { data, error } = await getSupabaseClient().rpc('customer_update_waitlist', {
+      p_entry_id: entryId,
+      p_action: action,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async callWaiterForTable(restaurantId: string, tableId: string, message?: string) {
+    const { data, error } = await getSupabaseClient().rpc('customer_call_waiter', {
+      p_restaurant_id: restaurantId,
+      p_table_id: tableId,
+      p_message: message ?? null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async createCustomerReservation(
+    restaurantId: string,
+    reservationTime: string,
+    partySize: number,
+    specialRequests?: string,
+  ) {
+    const { data, error } = await getSupabaseClient().rpc('customer_create_reservation', {
+      p_restaurant_id: restaurantId,
+      p_reservation_time: reservationTime,
+      p_party_size: partySize,
+      p_special_requests: specialRequests ?? null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async acceptReservationInviteByToken(token: string) {
+    const { data, error } = await getSupabaseClient().rpc('customer_accept_reservation_invite', {
+      p_token: token,
+    });
+    if (error) throw error;
+    return data as string;
   },
 };

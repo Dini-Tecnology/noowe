@@ -78,7 +78,6 @@ import WalletScreen from '../screens/wallet/WalletScreen';
 import MenuScreen from '../screens/menu/MenuScreen';
 import CartScreen from '../screens/cart/CartScreen';
 import RestaurantScreen from '../screens/restaurant/RestaurantScreen';
-import RestaurantQRScanScreen from '../screens/restaurant/RestaurantQRScanScreen';
 import RestaurantVirtualQueueScreen from '../screens/restaurant/RestaurantVirtualQueueScreen';
 import RestaurantCallTeamScreen from '../screens/restaurant/RestaurantCallTeamScreen';
 import RestaurantReserveScreen from '../screens/restaurant/RestaurantReserveScreen';
@@ -487,11 +486,6 @@ function MainStack() {
       <Stack.Screen
         name="Restaurant"
         component={RestaurantScreen}
-        options={{ headerShown: false, ...scaleFadeScreenOptions }}
-      />
-      <Stack.Screen
-        name="RestaurantQRScan"
-        component={RestaurantQRScanScreen}
         options={{ headerShown: false, ...scaleFadeScreenOptions }}
       />
       <Stack.Screen

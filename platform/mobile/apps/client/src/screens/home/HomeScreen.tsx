@@ -7,6 +7,7 @@ import {
   Image,
   TextInput,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -14,13 +15,31 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import {
-  MOCK_CATEGORIES,
-  MOCK_FEATURED_RESTAURANT,
-  MOCK_NEARBY_RESTAURANTS,
-  MOCK_NOTIFICATION_COUNT,
-  MOCK_QUICK_ACTIONS,
-} from '../../constants/homeMocks';
+import { useRestaurants } from '@okinawa/shared/hooks/useRestaurants';
+import { MOCK_QUICK_ACTIONS } from '../../constants/homeMocks';
+
+interface ApiRestaurant {
+  id: string;
+  name: string;
+  description: string | null;
+  cuisine_types: string[] | null;
+  logo_url: string | null;
+  banner_url: string | null;
+  rating: number;
+  total_reviews: number;
+}
+
+function restaurantImage(r: ApiRestaurant): string {
+  return (
+    r.banner_url ||
+    r.logo_url ||
+    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80'
+  );
+}
+
+function primaryCuisine(r: ApiRestaurant): string {
+  return r.cuisine_types?.[0] ?? 'Restaurante';
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HORIZONTAL_PADDING = 16;
@@ -39,7 +58,32 @@ export default function HomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isFavorite, setIsFavorite] = useState(false);
 
-  const featured = MOCK_FEATURED_RESTAURANT;
+  const {
+    data: restaurants,
+    isLoading: restaurantsLoading,
+    isError: restaurantsError,
+    refetch: refetchRestaurants,
+  } = useRestaurants();
+
+  const allRestaurants = (restaurants ?? []) as ApiRestaurant[];
+
+  const categories = useMemo(() => {
+    const unique = new Map<string, string>();
+    allRestaurants.forEach((r) => {
+      r.cuisine_types?.forEach((c) => {
+        if (c) unique.set(c, c);
+      });
+    });
+    return [{ id: 'all', label: 'Todos' }, ...Array.from(unique.keys()).map((c) => ({ id: c, label: c }))];
+  }, [allRestaurants]);
+
+  const restaurantList = useMemo(() => {
+    if (selectedCategory === 'all') return allRestaurants;
+    return allRestaurants.filter((r) => r.cuisine_types?.includes(selectedCategory));
+  }, [allRestaurants, selectedCategory]);
+
+  const featured = restaurantList[0];
+  const nearby = restaurantList.slice(1);
 
   const openNotifications = useCallback(() => {
     navigation.navigate('Profile', { screen: 'ProfileNotifications' });
@@ -296,26 +340,56 @@ export default function HomeScreen() {
           fontWeight: '600',
           fontSize: 14,
         },
+        stateWrap: {
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 32,
+          paddingHorizontal: 24,
+          gap: 10,
+        },
+        stateText: {
+          fontSize: 14,
+          color: colors.foregroundSecondary,
+          textAlign: 'center',
+        },
+        stateRetry: {
+          fontSize: 14,
+          fontWeight: '700',
+          color: colors.primary,
+        },
       }),
     [colors],
   );
 
+  const searchedList = useMemo(() => {
+    if (!searchQuery.trim()) return restaurantList;
+    const q = searchQuery.trim().toLowerCase();
+    return restaurantList.filter((r) => r.name.toLowerCase().includes(q));
+  }, [restaurantList, searchQuery]);
+
+  const displayFeatured = searchQuery.trim() ? undefined : featured;
+  const displayNearby = searchQuery.trim() ? searchedList : nearby;
+
   const handleRestaurantPress = useCallback(
-    (restaurantId: string = featured.id) => {
-      navigation.navigate('Restaurant', { restaurantId });
+    (restaurantId?: string) => {
+      const id = restaurantId ?? featured?.id;
+      if (!id) return;
+      navigation.navigate('Restaurant', { restaurantId: id });
     },
-    [navigation, featured.id],
+    [navigation, featured?.id],
   );
 
   const handleQuickAction = useCallback(
     (route: string, params?: Record<string, unknown>) => {
       if (route === 'MenuTab') {
-        navigation.navigate('MenuTab');
+        navigation.navigate('MenuTab', featured?.id ? { restaurantId: featured.id } : undefined);
         return;
       }
-      navigation.navigate(route as never, params as never);
+      const resolvedParams =
+        params && featured?.id ? { ...params, restaurantId: featured.id } : params;
+      navigation.navigate(route as never, resolvedParams as never);
     },
-    [navigation],
+    [navigation, featured?.id],
   );
 
   return (
@@ -338,27 +412,24 @@ export default function HomeScreen() {
             accessibilityLabel="Notificações"
           >
             <Ionicons name="notifications-outline" size={26} color={colors.foreground} />
-            {MOCK_NOTIFICATION_COUNT > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{MOCK_NOTIFICATION_COUNT}</Text>
-              </View>
-            )}
           </TouchableOpacity>
         </View>
 
         {/* Banner */}
-        <TouchableOpacity
-          style={styles.hintBanner}
-          activeOpacity={0.85}
-          onPress={() => handleRestaurantPress()}
-          accessibilityRole="button"
-          accessibilityLabel="Toque no restaurante para começar sua jornada"
-        >
-          <Ionicons name="flash" size={20} color={colors.primary} />
-          <Text style={styles.hintText}>
-            Toque no restaurante para começar sua jornada
-          </Text>
-        </TouchableOpacity>
+        {featured && (
+          <TouchableOpacity
+            style={styles.hintBanner}
+            activeOpacity={0.85}
+            onPress={() => handleRestaurantPress()}
+            accessibilityRole="button"
+            accessibilityLabel="Toque no restaurante para começar sua jornada"
+          >
+            <Ionicons name="flash" size={20} color={colors.primary} />
+            <Text style={styles.hintText}>
+              Toque no restaurante para começar sua jornada
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Busca */}
         <View style={styles.searchWrap}>
@@ -381,7 +452,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles.chipsRow}
           style={styles.chipScroll}
         >
-          {MOCK_CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const selected = selectedCategory === cat.id;
             return (
               <TouchableOpacity
@@ -400,103 +471,138 @@ export default function HomeScreen() {
           })}
         </ScrollView>
 
+        {/* Estado de carregamento */}
+        {restaurantsLoading && (
+          <View style={styles.stateWrap}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )}
+
+        {/* Estado de erro */}
+        {!restaurantsLoading && restaurantsError && (
+          <View style={styles.stateWrap}>
+            <Ionicons name="cloud-offline-outline" size={32} color={colors.foregroundMuted} />
+            <Text style={styles.stateText}>Não foi possível carregar os restaurantes</Text>
+            <TouchableOpacity onPress={() => refetchRestaurants()} accessibilityRole="button">
+              <Text style={styles.stateRetry}>Tentar novamente</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Card destaque */}
-        <TouchableOpacity
-          style={styles.featuredCard}
-          activeOpacity={0.92}
-          onPress={() => handleRestaurantPress()}
-          accessibilityRole="button"
-          accessibilityLabel={`${featured.name}, ${featured.rating} estrelas`}
-        >
-          <Image
-            source={{ uri: featured.imageUrl }}
-            style={styles.featuredImage}
-            resizeMode="cover"
-          />
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.75)']}
-            style={styles.featuredGradient}
-          />
-          <View style={styles.featuredTopRow}>
-            <View style={styles.tapPill}>
-              <Ionicons name="flash" size={14} color={colors.primaryForeground} />
-              <Text style={styles.tapPillText}>Toque aqui</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.favoriteBtn}
-              onPress={() => setIsFavorite((v) => !v)}
-              accessibilityRole="button"
-              accessibilityLabel={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-            >
-              <Ionicons
-                name={isFavorite ? 'heart' : 'heart-outline'}
-                size={22}
-                color="#FFFFFF"
-              />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.featuredBottom}>
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={16} color="#FBBF24" />
-              <Text style={styles.ratingText}>
-                {featured.rating} ({featured.reviewCount})
-              </Text>
-            </View>
-            <Text style={styles.featuredName}>{featured.name}</Text>
-            <Text style={styles.featuredMeta}>
-              {featured.cuisine} · {featured.priceLevel}
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Ações rápidas */}
-        <View style={styles.quickActions}>
-          {MOCK_QUICK_ACTIONS.map((action) => (
-            <TouchableOpacity
-              key={action.id}
-              style={styles.quickAction}
-              onPress={() =>
-                handleQuickAction(
-                  action.route,
-                  'params' in action ? action.params : undefined,
-                )
-              }
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel={action.label}
-            >
-              <Ionicons name={action.icon} size={26} color={colors.primary} />
-              <Text style={styles.quickActionLabel}>{action.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Perto de você */}
-        <Text style={styles.sectionTitle}>Perto de você</Text>
-        {MOCK_NEARBY_RESTAURANTS.map((item) => (
+        {!restaurantsLoading && !restaurantsError && displayFeatured && (
           <TouchableOpacity
-            key={item.id}
-            style={styles.nearbyItem}
-            onPress={() => handleRestaurantPress(item.id)}
-            activeOpacity={0.85}
+            style={styles.featuredCard}
+            activeOpacity={0.92}
+            onPress={() => handleRestaurantPress()}
             accessibilityRole="button"
-            accessibilityLabel={`${item.name}, ${item.distanceM} metros`}
+            accessibilityLabel={`${displayFeatured.name}, ${displayFeatured.rating} estrelas`}
           >
-            <View style={styles.nearbyIcon}>
-              <Ionicons name="restaurant" size={26} color={colors.primary} />
+            <Image
+              source={{ uri: restaurantImage(displayFeatured) }}
+              style={styles.featuredImage}
+              resizeMode="cover"
+            />
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.75)']}
+              style={styles.featuredGradient}
+            />
+            <View style={styles.featuredTopRow}>
+              <View style={styles.tapPill}>
+                <Ionicons name="flash" size={14} color={colors.primaryForeground} />
+                <Text style={styles.tapPillText}>Toque aqui</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.favoriteBtn}
+                onPress={() => setIsFavorite((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+              >
+                <Ionicons
+                  name={isFavorite ? 'heart' : 'heart-outline'}
+                  size={22}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
             </View>
-            <View style={styles.nearbyInfo}>
-              <Text style={styles.nearbyName}>{item.name}</Text>
-              <Text style={styles.nearbySub}>
-                {item.cuisine} · {item.distanceM}m
-              </Text>
-            </View>
-            <View style={styles.nearbyRating}>
-              <Ionicons name="star" size={14} color="#FBBF24" />
-              <Text style={styles.nearbyRatingText}>{item.rating}</Text>
+            <View style={styles.featuredBottom}>
+              <View style={styles.ratingRow}>
+                <Ionicons name="star" size={16} color="#FBBF24" />
+                <Text style={styles.ratingText}>
+                  {displayFeatured.rating} ({displayFeatured.total_reviews})
+                </Text>
+              </View>
+              <Text style={styles.featuredName}>{displayFeatured.name}</Text>
+              <Text style={styles.featuredMeta}>{primaryCuisine(displayFeatured)}</Text>
             </View>
           </TouchableOpacity>
-        ))}
+        )}
+
+        {/* Ações rápidas */}
+        {!restaurantsLoading && !restaurantsError && featured && (
+          <View style={styles.quickActions}>
+            {MOCK_QUICK_ACTIONS.map((action) => (
+              <TouchableOpacity
+                key={action.id}
+                style={styles.quickAction}
+                onPress={() =>
+                  handleQuickAction(
+                    action.route,
+                    'params' in action ? action.params : undefined,
+                  )
+                }
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={action.label}
+              >
+                <Ionicons name={action.icon} size={26} color={colors.primary} />
+                <Text style={styles.quickActionLabel}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Perto de você / resultado da busca */}
+        {!restaurantsLoading && !restaurantsError && (
+          <>
+            <Text style={styles.sectionTitle}>
+              {searchQuery.trim() ? 'Resultados da busca' : 'Perto de você'}
+            </Text>
+            {displayNearby.length === 0 ? (
+              <View style={styles.stateWrap}>
+                <Ionicons name="restaurant-outline" size={32} color={colors.foregroundMuted} />
+                <Text style={styles.stateText}>
+                  {searchQuery.trim()
+                    ? 'Nenhum restaurante encontrado'
+                    : 'Nenhum restaurante disponível no momento'}
+                </Text>
+              </View>
+            ) : (
+              displayNearby.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.nearbyItem}
+                  onPress={() => handleRestaurantPress(item.id)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.name}
+                >
+                  <View style={styles.nearbyIcon}>
+                    <Ionicons name="restaurant" size={26} color={colors.primary} />
+                  </View>
+                  <View style={styles.nearbyInfo}>
+                    <Text style={styles.nearbyName}>{item.name}</Text>
+                    <Text style={styles.nearbySub}>{primaryCuisine(item)}</Text>
+                  </View>
+                  <View style={styles.nearbyRating}>
+                    <Ionicons name="star" size={14} color="#FBBF24" />
+                    <Text style={styles.nearbyRatingText}>{item.rating}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </>
+        )}
       </ScrollView>
     </ScreenContainer>
   );

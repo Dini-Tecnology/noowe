@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { PaperProvider } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import { CartProvider } from '@/shared/contexts/CartContext';
+import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import { queryClient } from '@/shared/config/react-query';
 import Navigation from './navigation/production';
 import { theme } from './theme';
@@ -33,15 +34,17 @@ export default function App() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <VisitSessionProvider>
-            <CartProvider>
-              <PaperProvider theme={theme}>
-                <Navigation />
-                <StatusBar style="auto" />
-                <Toast />
-              </PaperProvider>
-            </CartProvider>
-          </VisitSessionProvider>
+          <ThemeProvider defaultMode="light">
+            <VisitSessionProvider>
+              <CartProvider>
+                <PaperProvider theme={theme}>
+                  <Navigation />
+                  <StatusBar style="auto" />
+                  <Toast />
+                </PaperProvider>
+              </CartProvider>
+            </VisitSessionProvider>
+          </ThemeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

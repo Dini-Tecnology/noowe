@@ -467,12 +467,6 @@ type SupportTab = 'FAQ' | 'Chat' | 'Histórico';
 
 const SUPPORT_TABS: SupportTab[] = ['FAQ', 'Chat', 'Histórico'];
 
-const MOCK_SUPPORT_HISTORY = [
-  { id: '1042', title: 'Dúvida sobre cashback', date: '01/04' },
-  { id: '1038', title: 'Erro no pagamento PIX', date: '28/03' },
-  { id: '1021', title: 'Convite para comanda compartilhada', date: '15/03' },
-];
-
 export function ProfileSupportScreen() {
   const colors = useColors();
   const styles = useMemo(() => createSharedStyles(colors), [colors]);
@@ -589,20 +583,12 @@ export function ProfileSupportScreen() {
 
           {activeTab === 'Histórico' && (
             <View style={styles.supportTabContent}>
-              {MOCK_SUPPORT_HISTORY.map((ticket) => (
-                <View key={ticket.id} style={styles.historyTicketCard}>
-                  <View style={styles.flex}>
-                    <Text style={styles.historyTicketTitle}>{ticket.title}</Text>
-                    <Text style={styles.historyTicketMeta}>
-                      #{ticket.id} · {ticket.date}
-                    </Text>
-                  </View>
-                  <View style={styles.resolvedBadge}>
-                    <Text style={styles.resolvedBadgeText}>Resolvido</Text>
-                  </View>
-                </View>
-              ))}
-              <Text style={styles.historyFooter}>Todos os chamados foram resolvidos ✓</Text>
+              <View style={styles.faqRow}>
+                <Ionicons name="time-outline" size={20} color={colors.foregroundMuted} />
+                <Text style={[styles.faqText, { marginLeft: 10 }]}>
+                  Nenhum chamado registrado ainda. Fale conosco pelo Chat ou WhatsApp acima.
+                </Text>
+              </View>
             </View>
           )}
         </ScrollView>
