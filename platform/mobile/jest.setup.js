@@ -3,6 +3,12 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+// Ensure RN Firebase JS loads in tests (shared/services/analytics gate)
+const RN = require('react-native');
+if (!RN.NativeModules.RNFBAppModule) {
+  RN.NativeModules.RNFBAppModule = {};
+}
+
 // Mock React Native Firebase
 jest.mock('@react-native-firebase/app', () => ({
   analytics: jest.fn(() => ({
@@ -85,9 +91,6 @@ jest.mock('react-native-maps', () => ({
   default: 'MapView',
   Marker: 'Marker',
 }));
-
-// Mock Vector Icons
-jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => 'Icon');
 
 // Mock Camera
 jest.mock('expo-camera', () => ({

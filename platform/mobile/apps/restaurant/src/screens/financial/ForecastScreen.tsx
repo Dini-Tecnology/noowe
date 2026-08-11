@@ -10,8 +10,8 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
-import {
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import {
   Text,
   Card,
   Chip,

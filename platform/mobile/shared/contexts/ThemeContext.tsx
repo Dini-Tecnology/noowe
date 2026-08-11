@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
-import { OkinawaLightTheme, OkinawaDarkTheme, OkinawaTheme } from '../theme';
+import { OkinawaLightTheme, OkinawaDarkTheme, OkinawaTheme } from '../theme/okinawa-presets';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 

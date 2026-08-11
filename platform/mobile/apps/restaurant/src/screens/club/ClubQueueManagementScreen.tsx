@@ -9,8 +9,8 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import {
   View,
   StyleSheet,
   FlatList,
@@ -28,9 +28,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { t } from '@okinawa/shared/i18n';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
+import { useWebSocket } from '@/shared/hooks/useWebSocket';
 import ApiService from '@/shared/services/api';
-import io, { Socket } from 'socket.io-client';
-import { ENV } from '@okinawa/shared/config/env';
 
 // ============================================
 // TYPES
@@ -219,9 +218,9 @@ function QueueEntryCard({
 export default function ClubQueueManagementScreen({ route }: ClubQueueManagementScreenProps) {
   const colors = useColors();
   const queryClient = useQueryClient();
+  const { connected, on, off, emit } = useWebSocket('/queue');
 
   const restaurantId = route?.params?.restaurantId || '';
-  const socketRef = useRef<Socket | null>(null);
 
   // Fetch queue
   const {
@@ -250,32 +249,26 @@ export default function ClubQueueManagementScreen({ route }: ClubQueueManagement
 
   // WebSocket for real-time updates
   useEffect(() => {
-    if (!restaurantId) return;
+    if (!restaurantId || !connected) return;
+    emit('joinQueueRoom', restaurantId);
 
-    const socket = io(`${ENV.API_BASE_URL}/queue`, {
-      transports: ['websocket'],
-    });
-
-    socketRef.current = socket;
-
-    socket.on('connect', () => {
-      socket.emit('joinQueueRoom', restaurantId);
-    });
-
-    socket.on('queueUpdate', () => {
+    const onQueueUpdate = () => {
       queryClient.invalidateQueries({ queryKey: ['club-queue', restaurantId] });
       queryClient.invalidateQueries({ queryKey: ['club-queue-stats', restaurantId] });
-    });
+    };
 
-    socket.on('statsUpdate', () => {
+    const onStatsUpdate = () => {
       queryClient.invalidateQueries({ queryKey: ['club-queue-stats', restaurantId] });
-    });
+    };
+    on('queueUpdate', onQueueUpdate);
+    on('statsUpdate', onStatsUpdate);
 
     return () => {
-      socket.emit('leaveQueueRoom', restaurantId);
-      socket.disconnect();
+      off('queueUpdate', onQueueUpdate);
+      off('statsUpdate', onStatsUpdate);
+      emit('leaveQueueRoom', restaurantId);
     };
-  }, [restaurantId, queryClient]);
+  }, [restaurantId, connected, emit, on, off, queryClient]);
 
   // Call next mutation
   const callNextMutation = useMutation({

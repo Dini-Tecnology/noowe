@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '../services/auth';
 
 interface User {
@@ -19,13 +18,22 @@ export const useAuth = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
+    authService.initialize();
     checkAuthStatus();
+    return authService.onAuthStateChange((authenticated) => {
+      setIsAuthenticated(authenticated);
+      if (authenticated) {
+        void refreshUser();
+      } else {
+        setUser(null);
+      }
+    });
   }, []);
 
   const checkAuthStatus = async () => {
     try {
-      const token = await AsyncStorage.getItem('access_token');
-      if (token) {
+      const authenticated = await authService.isAuthenticated();
+      if (authenticated) {
         const currentUser = await authService.getCurrentUser();
         setUser(currentUser);
         setIsAuthenticated(true);

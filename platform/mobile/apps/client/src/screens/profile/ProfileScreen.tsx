@@ -24,6 +24,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 
 import ApiService from '@/shared/services/api';
+import { authService } from '@/shared/services/auth';
 import { useI18n } from '@/shared/hooks/useI18n';
 import { useColors, useOkinawaTheme } from '@okinawa/shared/contexts/ThemeContext';
 import logger from '@okinawa/shared/utils/logger';
@@ -86,7 +87,7 @@ export default function ProfileScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await ApiService.logout();
+            await authService.logout();
           } catch (error) {
             logger.error('Error logging out:', error);
           }

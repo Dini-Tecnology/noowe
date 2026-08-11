@@ -12,8 +12,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import {
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import {
   Text,
   Card,
   Button,

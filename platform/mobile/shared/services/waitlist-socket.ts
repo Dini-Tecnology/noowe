@@ -1,132 +1,148 @@
-import { io, Socket } from 'socket.io-client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { getSupabaseClient } from './supabase';
 
 class WaitlistSocketService {
-  private socket: Socket | null = null;
+  private channel: RealtimeChannel | null = null;
   private connected = false;
+  private userId: string | null = null;
+  private restaurantRooms = new Set<string>();
+  private userRooms = new Set<string>();
+  private waitlistRooms = new Set<string>();
+  private onPositionUpdateListeners = new Set<(data: { waitlist_id: string; position: number; estimated_wait_minutes?: number }) => void>();
+  private onCalledListeners = new Set<(data: { waitlist_id: string; table_id?: string; message?: string }) => void>();
+  private onAutoCalledListeners = new Set<(data: { waitlist_id: string; table_id?: string; message?: string }) => void>();
 
   async connect() {
-    if (this.socket?.connected) {
-      console.log('Waitlist socket already connected');
+    if (this.connected && this.channel) {
+      console.log('Waitlist realtime already connected');
       return;
     }
 
-    try {
-      const token = await AsyncStorage.getItem('access_token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
+    const supabase = getSupabaseClient();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    this.userId = userData.user?.id ?? null;
 
-      this.socket = io(`${SOCKET_URL}/waitlist`, {
-        auth: { token },
-        transports: ['websocket'],
+    this.channel = supabase
+      .channel('waitlist-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'waitlist_entries' }, (payload) => {
+        const row = (payload.new || payload.old || {}) as any;
+        if (!row) return;
+        if (!this.shouldEmit(row)) return;
+
+        if (payload.eventType === 'UPDATE') {
+          if (typeof row.position === 'number') {
+            this.onPositionUpdateListeners.forEach((listener) =>
+              listener({
+                waitlist_id: row.id,
+                position: row.position,
+                estimated_wait_minutes: row.estimated_wait_minutes,
+              })
+            );
+          }
+
+          if (row.status === 'called') {
+            const calledData = { waitlist_id: row.id, table_id: row.table_number, message: row.notes };
+            this.onCalledListeners.forEach((listener) => listener(calledData));
+            if (row.called_by === 'system') {
+              this.onAutoCalledListeners.forEach((listener) => listener(calledData));
+            }
+          }
+        }
       });
 
-      this.socket.on('connect', () => {
-        console.log('Connected to waitlist socket');
-        this.connected = true;
-      });
-
-      this.socket.on('disconnect', () => {
-        console.log('Disconnected from waitlist socket');
-        this.connected = false;
-      });
-
-      this.socket.on('error', (error: any) => {
-        console.error('Waitlist socket error:', error);
-      });
-    } catch (error) {
-      console.error('Failed to connect to waitlist socket:', error);
-      throw error;
-    }
+    await new Promise<void>((resolve, reject) => {
+      this.channel!
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            this.connected = true;
+            console.log('Connected to waitlist realtime');
+            resolve();
+          }
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            reject(new Error(`Waitlist realtime failed: ${status}`));
+          }
+        });
+    });
   }
 
-  disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-      this.connected = false;
-    }
+  private shouldEmit(row: any) {
+    if (this.waitlistRooms.size > 0 && row.id && this.waitlistRooms.has(row.id)) return true;
+    if (this.restaurantRooms.size > 0 && row.restaurant_id && this.restaurantRooms.has(row.restaurant_id)) return true;
+    if (this.userRooms.size > 0 && row.customer_id && this.userRooms.has(row.customer_id)) return true;
+    if (this.userId && row.customer_id && row.customer_id === this.userId) return true;
+    return this.waitlistRooms.size === 0 && this.restaurantRooms.size === 0 && this.userRooms.size === 0;
   }
 
-  // IMPORTANT: Event names must match backend gateway handlers
+  async disconnect() {
+    if (this.channel) {
+      await getSupabaseClient().removeChannel(this.channel);
+      this.channel = null;
+    }
+    this.connected = false;
+    this.restaurantRooms.clear();
+    this.userRooms.clear();
+    this.waitlistRooms.clear();
+  }
+
   joinRestaurantRoom(restaurantId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('joinRestaurant', { restaurantId });
-    }
+    this.restaurantRooms.add(restaurantId);
   }
 
   joinUserRoom(userId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('joinUser', { userId });
-    }
+    this.userRooms.add(userId);
   }
 
   leaveRestaurantRoom(restaurantId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('leaveRestaurant', { restaurantId });
-    }
+    this.restaurantRooms.delete(restaurantId);
   }
 
   leaveUserRoom(userId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('leaveUser', { userId });
-    }
+    this.userRooms.delete(userId);
   }
 
-  // Event: Queue position update (for customers waiting)
-  onPositionUpdate(callback: (data: { waitlist_id: string; position: number; estimated_wait?: number }) => void) {
-    if (this.socket) {
-      this.socket.on('waitlist:positionUpdate', callback);
-    }
+  onPositionUpdate(callback: (data: { waitlist_id: string; position: number; estimated_wait_minutes?: number }) => void) {
+    this.onPositionUpdateListeners.add(callback);
   }
 
-  // Event: Customer's table is ready
   onCalled(callback: (data: { waitlist_id: string; table_id?: string; message?: string }) => void) {
-    if (this.socket) {
-      this.socket.on('waitlist:called', callback);
-    }
+    this.onCalledListeners.add(callback);
   }
 
-  // Event: Auto-called (system triggered, same behavior as called)
   onAutoCalled(callback: (data: { waitlist_id: string; table_id?: string; message?: string }) => void) {
-    if (this.socket) {
-      this.socket.on('waitlist:auto_called', callback);
-    }
+    this.onAutoCalledListeners.add(callback);
   }
 
   offPositionUpdate(callback?: (data: any) => void) {
-    if (this.socket) {
-      this.socket.off('waitlist:positionUpdate', callback);
+    if (!callback) {
+      this.onPositionUpdateListeners.clear();
+      return;
     }
+    this.onPositionUpdateListeners.delete(callback);
   }
 
   offCalled(callback?: (data: any) => void) {
-    if (this.socket) {
-      this.socket.off('waitlist:called', callback);
+    if (!callback) {
+      this.onCalledListeners.clear();
+      return;
     }
+    this.onCalledListeners.delete(callback);
   }
 
   offAutoCalled(callback?: (data: any) => void) {
-    if (this.socket) {
-      this.socket.off('waitlist:auto_called', callback);
+    if (!callback) {
+      this.onAutoCalledListeners.clear();
+      return;
     }
+    this.onAutoCalledListeners.delete(callback);
   }
 
-  // Send: Join waitlist room to receive updates for a specific entry
   joinWaitlistRoom(waitlistId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('waitlist:join', { waitlist_id: waitlistId });
-    }
+    this.waitlistRooms.add(waitlistId);
   }
 
-  // Send: Leave waitlist room
   leaveWaitlistRoom(waitlistId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('waitlist:leave', { waitlist_id: waitlistId });
-    }
+    this.waitlistRooms.delete(waitlistId);
   }
 
   isConnected() {

@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Okinawa Cliente",
+    "name": "Noowe Cliente",
     "slug": "okinawa-client",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": "okinawa",
+    "scheme": "okinawa-client",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -16,7 +16,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.noowe.client",
-      "minimumOsVersion": "14.0",
       "associatedDomains": ["applinks:noowebr.com", "applinks:*.noowebr.com"],
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -52,8 +51,6 @@
         "backgroundColor": "#FF6B35"
       },
       "package": "com.noowe.client",
-      "minSdkVersion": 24,
-      "targetSdkVersion": 34,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -84,6 +81,20 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1",
+            "newArchEnabled": true
+          },
+          "android": {
+            "minSdkVersion": 24,
+            "targetSdkVersion": 34,
+            "newArchEnabled": true
+          }
+        }
+      ],
       "expo-router",
       [
         "expo-camera",
@@ -107,9 +118,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "78d5da5d-5049-4569-b08e-6113c5ef5092"
       }
     },
-    "owner": "okinawa"
+    "owner": "dini-technologies"
   }
 }

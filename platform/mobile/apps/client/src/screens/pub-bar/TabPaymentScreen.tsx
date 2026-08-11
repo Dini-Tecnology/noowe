@@ -514,6 +514,7 @@ export default function TabPaymentScreen() {
             <View style={styles.totalRow}>
               <Text variant="bodyMedium" style={[styles.totalLabel, { color: colors.success }]}>
                 {t('tab.payment.credits')}
+              </Text>
               <Text variant="bodyMedium" style={{ color: colors.success }}>
                 -{formatCurrency(Number(tab.cover_charge_credit) + Number(tab.deposit_credit), getLanguage())}
               </Text>

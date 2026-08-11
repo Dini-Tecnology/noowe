@@ -8,8 +8,8 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import {
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import {
   View,
   StyleSheet,
   FlatList,
@@ -33,14 +33,13 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { useI18n } from '@/shared/hooks/useI18n';
+import { useWebSocket } from '@/shared/hooks/useWebSocket';
 import { useRestaurant } from '@/shared/contexts/RestaurantContext';
 import { formatCurrency } from '@okinawa/shared/utils/formatters';
 import { getLanguage } from '@okinawa/shared/i18n';
 import ApiService from '@/shared/services/api';
 import { Card } from '@okinawa/shared/components';
 import * as Haptics from 'expo-haptics';
-import { io, Socket } from 'socket.io-client';
-import { ENV } from '@okinawa/shared/config/env';
 
 interface CashMovement {
   id: string;
@@ -86,6 +85,7 @@ export default function CashRegisterScreen() {
   const { t } = useI18n();
   const colors = useColors();
   const { restaurantId } = useRestaurant();
+  const { connected, on, off, emit } = useWebSocket('/');
   const locale = getLanguage();
 
   // State
@@ -155,16 +155,10 @@ export default function CashRegisterScreen() {
 
   // Real-time: refresh cash register when a payment is completed
   useEffect(() => {
-    if (!restaurantId) return;
+    if (!restaurantId || !connected) return;
+    emit('restaurant:join', { restaurant_id: restaurantId });
 
-    const socket = io(ENV.API_BASE_URL, { transports: ['websocket'] });
-
-    const onConnect = () => {
-      socket.emit('restaurant:join', { restaurant_id: restaurantId });
-    };
-
-    socket.on('connect', onConnect);
-    socket.on('notification', (data: any) => {
+    const onNotification = (data: any) => {
       if (
         data?.type === 'payment:completed' ||
         data?.type === 'tip:created' ||
@@ -173,13 +167,14 @@ export default function CashRegisterScreen() {
       ) {
         loadSession();
       }
-    });
+    };
+    on('notification', onNotification);
 
     return () => {
-      socket.emit('restaurant:leave', { restaurant_id: restaurantId });
-      socket.disconnect();
+      off('notification', onNotification);
+      emit('restaurant:leave', { restaurant_id: restaurantId });
     };
-  }, [restaurantId, loadSession]);
+  }, [restaurantId, connected, emit, on, off, loadSession]);
 
   // Actions
   const handleOpenRegister = useCallback(async () => {

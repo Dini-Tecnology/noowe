@@ -1,4 +1,31 @@
-import analytics from '@react-native-firebase/analytics';
+import { NativeModules } from 'react-native';
+
+type FirebaseAnalyticsFn = () => {
+  logEvent: (name: string, params?: { [key: string]: any }) => Promise<void>;
+  logScreenView: (params: { screen_name: string; screen_class?: string }) => Promise<void>;
+  setUserId: (id: string | null) => Promise<void>;
+  setUserProperties: (properties: { [key: string]: string }) => Promise<void>;
+};
+
+let firebaseAnalyticsModule: FirebaseAnalyticsFn | null | undefined;
+
+function getFirebaseAnalytics(): FirebaseAnalyticsFn | null {
+  if (firebaseAnalyticsModule !== undefined) {
+    return firebaseAnalyticsModule;
+  }
+  if (!(NativeModules as Record<string, unknown>)?.RNFBAppModule) {
+    firebaseAnalyticsModule = null;
+    return null;
+  }
+  try {
+    firebaseAnalyticsModule =
+      require('@react-native-firebase/analytics').default as FirebaseAnalyticsFn;
+    return firebaseAnalyticsModule;
+  } catch {
+    firebaseAnalyticsModule = null;
+    return null;
+  }
+}
 
 /**
  * Firebase Analytics Service
@@ -11,6 +38,8 @@ class AnalyticsService {
    * @param params - Event parameters
    */
   async logEvent(eventName: string, params?: { [key: string]: any }) {
+    const analytics = getFirebaseAnalytics();
+    if (!analytics) return;
     try {
       await analytics().logEvent(eventName, params);
     } catch (error) {
@@ -24,6 +53,8 @@ class AnalyticsService {
    * @param screenClass - Class/component name of the screen
    */
   async logScreenView(screenName: string, screenClass?: string) {
+    const analytics = getFirebaseAnalytics();
+    if (!analytics) return;
     try {
       await analytics().logScreenView({
         screen_name: screenName,
@@ -39,6 +70,8 @@ class AnalyticsService {
    * @param userId - Unique user identifier
    */
   async setUserId(userId: string | null) {
+    const analytics = getFirebaseAnalytics();
+    if (!analytics) return;
     try {
       await analytics().setUserId(userId);
     } catch (error) {
@@ -51,6 +84,8 @@ class AnalyticsService {
    * @param properties - User properties object
    */
   async setUserProperties(properties: { [key: string]: string }) {
+    const analytics = getFirebaseAnalytics();
+    if (!analytics) return;
     try {
       await analytics().setUserProperties(properties);
     } catch (error) {

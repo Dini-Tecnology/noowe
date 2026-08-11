@@ -17,69 +17,14 @@ export * from './spacing';
 export * from './shadows';
 export * from './animations';
 
-// Import for theme object construction
-import { lightTheme, darkTheme, colorPalette, gradients } from './colors';
-import { typography, fontFamily, fontWeight, fontSize, lineHeight, letterSpacing } from './typography';
-import { spacing, borderRadius, layout, zIndex } from './spacing';
-import { shadows, componentShadows, glowEffects } from './shadows';
-import { duration, easing, animationPresets } from './animations';
+export {
+  OkinawaLightTheme,
+  OkinawaDarkTheme,
+  type OkinawaTheme,
+  default,
+} from './okinawa-presets';
 
-// Unified theme object for light mode
-export const OkinawaLightTheme = {
-  colors: lightTheme,
-  palette: colorPalette,
-  gradients,
-  typography,
-  fontFamily,
-  fontWeight,
-  fontSize,
-  lineHeight,
-  letterSpacing,
-  spacing,
-  borderRadius,
-  layout,
-  zIndex,
-  shadows,
-  componentShadows,
-  glowEffects,
-  duration,
-  easing,
-  animations: animationPresets,
-  dark: false,
-} as const;
-
-// Unified theme object for dark mode
-export const OkinawaDarkTheme = {
-  colors: darkTheme,
-  palette: colorPalette,
-  gradients,
-  typography,
-  fontFamily,
-  fontWeight,
-  fontSize,
-  lineHeight,
-  letterSpacing,
-  spacing,
-  borderRadius,
-  layout,
-  zIndex,
-  shadows,
-  componentShadows,
-  glowEffects,
-  duration,
-  easing,
-  animations: animationPresets,
-  dark: true,
-} as const;
-
-// Theme type — union of light and dark so either can be assigned
-export type OkinawaTheme = typeof OkinawaLightTheme | typeof OkinawaDarkTheme;
-
-// Re-export theme hooks for convenience
-export { useColors, useTheme, useOkinawaTheme } from '../contexts/ThemeContext';
-
-// Default export
-export default OkinawaLightTheme;
+export { useColors, useTheme, useOkinawaTheme } from './theme-hooks';
 
 // Migration helper: Convert old theme to new theme
 // This helps existing components transition to the new design system

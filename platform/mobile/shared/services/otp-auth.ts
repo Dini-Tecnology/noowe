@@ -1,12 +1,11 @@
 /**
  * OTP Authentication Service
- * 
- * Handles phone-based OTP authentication via WhatsApp and SMS.
- * Follows the Okinawa authentication specification.
+ *
+ * Handles phone-based OTP authentication via WhatsApp and SMS through Supabase Auth.
  */
 
-import ApiService from './api';
-import { secureStorage } from './secure-storage';
+import { supabaseAuthAdapter } from './supabase-auth';
+import { authService } from './auth';
 import logger from '../utils/logger';
 
 export type OTPChannel = 'whatsapp' | 'sms';
@@ -54,49 +53,41 @@ export interface VerifyOTPResponse {
 }
 
 class OTPAuthService {
-  private baseUrl = '/auth/phone';
-
   /**
    * Send OTP code to phone number
    * Priority: WhatsApp → SMS
    */
   async sendOTP(request: SendOTPRequest): Promise<SendOTPResponse> {
     try {
-      logger.info('Sending OTP', { 
+      logger.info('Sending OTP', {
         phone: this.maskPhone(request.phoneNumber),
         channel: request.channel || 'whatsapp',
         purpose: request.purpose,
       });
 
-      const response = await ApiService.post(`${this.baseUrl}/send-otp`, {
-        phone_number: request.phoneNumber,
-        channel: request.channel || 'whatsapp',
-        purpose: request.purpose,
-      });
+      await supabaseAuthAdapter.sendPhoneOtp(request.phoneNumber, request.channel || 'whatsapp');
 
       return {
         success: true,
-        message: response.data.message || 'OTP sent successfully',
-        channel: response.data.channel || request.channel || 'whatsapp',
-        expiresAt: response.data.expires_at,
-        retryAfter: response.data.retry_after,
+        message: 'OTP sent successfully',
+        channel: request.channel || 'whatsapp',
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { status?: number; data?: { retry_after?: number } }; message?: string };
       logger.error('Send OTP failed', error);
 
-      // Handle rate limiting
-      if (error.response?.status === 429) {
+      if (err.response?.status === 429) {
         return {
           success: false,
           message: 'Too many attempts. Please wait before trying again.',
           channel: request.channel || 'whatsapp',
-          retryAfter: error.response.data?.retry_after || 60,
+          retryAfter: err.response.data?.retry_after || 60,
         };
       }
 
       return {
         success: false,
-        message: error.response?.data?.message || 'Failed to send OTP',
+        message: err.message || 'Failed to send OTP',
         channel: request.channel || 'whatsapp',
       };
     }
@@ -107,46 +98,40 @@ class OTPAuthService {
    */
   async verifyOTP(request: VerifyOTPRequest): Promise<VerifyOTPResponse> {
     try {
-      logger.info('Verifying OTP', { 
+      logger.info('Verifying OTP', {
         phone: this.maskPhone(request.phoneNumber),
       });
 
-      const response = await ApiService.post(`${this.baseUrl}/verify-otp`, {
-        phone_number: request.phoneNumber,
-        otp_code: request.code,
-        temp_token: request.tempToken,
-        device_info: request.deviceInfo,
-      });
+      void request.tempToken;
+      void request.deviceInfo;
 
-      const data = response.data;
+      const data = await supabaseAuthAdapter.verifyPhoneOtp(request.phoneNumber, request.code);
 
-      // Store tokens if authenticated
       if (data.access_token) {
-        await Promise.all([
-          secureStorage.setAccessToken(data.access_token),
-          secureStorage.setRefreshToken(data.refresh_token),
-          data.user && secureStorage.setUser(data.user),
-        ]);
+        await authService.storeAuthData(data);
+        if (data.profileComplete) {
+          authService.notifyAuthStateChange(true);
+        }
       }
 
       return {
         success: true,
-        status: data.status,
+        status: data.profileComplete ? 'authenticated' : 'registration_required',
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
-        biometricEnrollmentToken: data.biometric_enrollment_token,
+        biometricEnrollmentToken: data.user?.id,
         user: data.user ? {
           id: data.user.id,
           email: data.user.email,
           fullName: data.user.full_name,
-          phoneVerified: data.user.phone_verified || true,
+          phoneVerified: true,
         } : undefined,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { status?: number }; message?: string };
       logger.error('Verify OTP failed', error);
 
-      // Handle invalid code
-      if (error.response?.status === 401) {
+      if (err.response?.status === 401) {
         return {
           success: false,
           status: 'authenticated',
@@ -154,8 +139,7 @@ class OTPAuthService {
         };
       }
 
-      // Handle too many attempts
-      if (error.response?.status === 429) {
+      if (err.response?.status === 429) {
         return {
           success: false,
           status: 'authenticated',
@@ -166,7 +150,7 @@ class OTPAuthService {
       return {
         success: false,
         status: 'authenticated',
-        message: error.response?.data?.message || 'Verification failed',
+        message: err.message || 'Verification failed',
       };
     }
   }
@@ -186,8 +170,9 @@ class OTPAuthService {
     try {
       logger.info('Completing registration');
 
-      const response = await ApiService.post(`${this.baseUrl}/complete-registration`, {
-        temp_token: data.tempToken,
+      void data.tempToken;
+
+      const profile = await supabaseAuthAdapter.updateProfile({
         full_name: data.fullName,
         email: data.email,
         birth_date: data.birthDate,
@@ -196,36 +181,27 @@ class OTPAuthService {
         marketing_consent: data.marketingConsent,
       });
 
-      const responseData = response.data;
-
-      // Store tokens
-      if (responseData.access_token) {
-        await Promise.all([
-          secureStorage.setAccessToken(responseData.access_token),
-          secureStorage.setRefreshToken(responseData.refresh_token),
-          responseData.user && secureStorage.setUser(responseData.user),
-        ]);
-      }
+      await authService.storeAuthData({ user: profile });
+      authService.notifyAuthStateChange(true);
 
       return {
         success: true,
         status: 'authenticated',
-        accessToken: responseData.access_token,
-        refreshToken: responseData.refresh_token,
-        biometricEnrollmentToken: responseData.biometric_enrollment_token,
-        user: responseData.user ? {
-          id: responseData.user.id,
-          email: responseData.user.email,
-          fullName: responseData.user.full_name,
+        biometricEnrollmentToken: profile.id,
+        user: profile ? {
+          id: profile.id,
+          email: profile.email,
+          fullName: profile.full_name,
           phoneVerified: true,
         } : undefined,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { message?: string };
       logger.error('Complete registration failed', error);
       return {
         success: false,
         status: 'registration_required',
-        message: error.response?.data?.message || 'Registration failed',
+        message: err.message || 'Registration failed',
       };
     }
   }

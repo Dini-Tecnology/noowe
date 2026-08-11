@@ -24,6 +24,7 @@ import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { logger } from '@/shared/utils/logger';
 import { captureException } from '@/shared/config/sentry';
 import { useColors } from '@/shared/contexts/ThemeContext';
+import { useRestaurantRole } from '@/shared/contexts/RestaurantContext';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
   defaultScreenOptions,
@@ -230,6 +231,7 @@ function AuthStack() {
     expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    scopes: ['openid', 'profile', 'email'],
   });
 
   const handleAppleLogin = useCallback(async () => {
@@ -765,7 +767,7 @@ const ROLE_SCREENS: Record<string, string[]> = {
     'MaitreDashboard', 'Reservations', 'FloorPlan', 'FloorFlow',
     'RoleDashboard',
   ],
-  cook: [
+  chef: [
     'KDS', 'CookStation', 'StationSettings', 'RoleDashboard',
   ],
 };
@@ -778,12 +780,14 @@ const ROLE_SCREENS: Record<string, string[]> = {
  */
 function MainDrawer() {
   const colors = useColors();
-  const { user } = useAuth();
+  const { roles } = useRestaurantRole();
 
-  // Determine user role (first role's role field, default to 'owner' for full access)
-  const userRole = user?.roles?.[0]?.role?.toLowerCase() || 'owner';
-  const allowedScreens = ROLE_SCREENS[userRole] || ROLE_SCREENS.owner;
-  const canSee = (screen: string) => allowedScreens.includes(screen);
+  const normalizedRoles = roles.map((role) => role.toLowerCase());
+  const allowedScreens = new Set<string>(['Dashboard']);
+  normalizedRoles.forEach((role) => {
+    (ROLE_SCREENS[role] || []).forEach((screen) => allowedScreens.add(screen));
+  });
+  const canSee = (screen: string) => allowedScreens.has(screen);
   
   return (
     <Drawer.Navigator

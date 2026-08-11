@@ -69,14 +69,13 @@ vi.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Success: 'success' },
 }));
 
-vi.mock('socket.io-client', () => ({
-  io: vi.fn(() => ({
+vi.mock('@/shared/hooks/useWebSocket', () => ({
+  useWebSocket: () => ({
+    connected: true,
     on: vi.fn(),
     off: vi.fn(),
     emit: vi.fn(),
-    disconnect: vi.fn(),
-    connected: false,
-  })),
+  }),
 }));
 
 vi.mock('@/shared/services/api', () => ({

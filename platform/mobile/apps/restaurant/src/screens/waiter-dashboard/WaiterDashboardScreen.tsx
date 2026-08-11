@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
-import {
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import {
   Text,
   Card,
   Button,
@@ -303,7 +303,7 @@ export default function WaiterDashboardScreen() {
           <Card style={styles.statCard}>
             <Card.Content style={styles.statContent}>
               <View style={styles.statIcon}>
-                <Icon name="table-furniture" size={24} color=colors.info />
+                <Icon name="table-furniture" size={24} color={colors.info} />
               </View>
               <Text variant="bodySmall" style={styles.statLabel}>
                 Mesas
@@ -317,7 +317,7 @@ export default function WaiterDashboardScreen() {
           <Card style={styles.statCard}>
             <Card.Content style={styles.statContent}>
               <View style={styles.statIcon}>
-                <Icon name="receipt" size={24} color=colors.success />
+                <Icon name="receipt" size={24} color={colors.success} />
               </View>
               <Text variant="bodySmall" style={styles.statLabel}>
                 Pedidos Ativos
@@ -331,7 +331,7 @@ export default function WaiterDashboardScreen() {
           <Card style={styles.statCard}>
             <Card.Content style={styles.statContent}>
               <View style={styles.statIcon}>
-                <Icon name="cash-multiple" size={24} color=colors.warning />
+                <Icon name="cash-multiple" size={24} color={colors.warning} />
               </View>
               <Text variant="bodySmall" style={styles.statLabel}>
                 Gorjetas Hoje
@@ -380,7 +380,7 @@ export default function WaiterDashboardScreen() {
 
         {myTables.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Icon name="table-furniture" size={80} color=colors.border />
+            <Icon name="table-furniture" size={80} color={colors.border} />
             <Text variant="headlineSmall" style={styles.emptyTitle}>
               Nenhuma Mesa Atribuída
             </Text>
@@ -421,14 +421,14 @@ export default function WaiterDashboardScreen() {
                                 Mesa {table.number}
                               </Text>
                               <View style={styles.tableMetaRow}>
-                                <Icon name="account-group" size={14} color=colors.foregroundSecondary />
+                                <Icon name="account-group" size={14} color={colors.foregroundSecondary} />
                                 <Text variant="bodySmall" style={styles.tableMetaText}>
                                   {table.guests} pessoas
                                 </Text>
                                 <Text variant="bodySmall" style={styles.separator}>
                                   •
                                 </Text>
-                                <Icon name="clock-outline" size={14} color=colors.foregroundSecondary />
+                                <Icon name="clock-outline" size={14} color={colors.foregroundSecondary} />
                                 <Text variant="bodySmall" style={styles.tableMetaText}>
                                   {getSeatedTime(table.seated_at)}
                                 </Text>

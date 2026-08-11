@@ -271,7 +271,7 @@ export default function ReservationDetailScreen() {
               mode="outlined"
               onPress={() => handleStatusChange('no_show')}
               style={styles.actionButton}
-              textColor=colors.foregroundMuted
+              textColor={colors.foregroundMuted}
               icon="account-off"
               accessibilityRole="button"
               accessibilityLabel={t('reservations.markNoShow')}
@@ -282,7 +282,7 @@ export default function ReservationDetailScreen() {
               mode="outlined"
               onPress={() => handleStatusChange('cancelled')}
               style={styles.cancelButton}
-              textColor=colors.error
+              textColor={colors.error}
               icon="close-circle"
               accessibilityRole="button"
               accessibilityLabel={t('reservations.cancelReservation')}

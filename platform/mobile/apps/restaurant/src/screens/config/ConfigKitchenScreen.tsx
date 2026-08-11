@@ -11,8 +11,8 @@
  */
 
 import React, { useMemo, useEffect, useCallback, useState } from 'react';
-import {
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import {
   View,
   ScrollView,
   StyleSheet,

@@ -14,13 +14,12 @@ import { Text, Card, SegmentedButtons, DataTable, Button, IconButton, Chip } fro
 import { useNavigation } from '@react-navigation/native';
 import ApiService from '@/shared/services/api';
 import { useI18n } from '@/shared/hooks/useI18n';
+import { useWebSocket } from '@/shared/hooks/useWebSocket';
 import { formatCurrency } from '@okinawa/shared/utils/formatters';
 import { getLanguage } from '@okinawa/shared/i18n';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { useRestaurant } from '@/shared/contexts/RestaurantContext';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
-import { io, Socket } from 'socket.io-client';
-import { ENV } from '@okinawa/shared/config/env';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 
 interface FinancialSummary {
@@ -68,6 +67,7 @@ interface ForecastAlert {
 export default function FinancialScreen() {
   const { t } = useI18n();
   const colors = useColors();
+  const { connected, on, off, emit } = useWebSocket('/');
   const navigation = useNavigation<any>();
   const { restaurantId } = useRestaurant();
   const [period, setPeriod] = useState('today');
@@ -230,26 +230,22 @@ export default function FinancialScreen() {
 
   // Real-time: refresh financial data when a payment is completed
   useEffect(() => {
-    if (!restaurantId) return;
+    if (!restaurantId || !connected) return;
+    emit('restaurant:join', { restaurant_id: restaurantId });
 
-    const socket = io(ENV.API_BASE_URL, { transports: ['websocket'] });
-
-    const onConnect = () => {
-      socket.emit('restaurant:join', { restaurant_id: restaurantId });
-    };
-
-    socket.on('connect', onConnect);
-    socket.on('notification', (data: any) => {
+    const onNotification = (data: any) => {
       if (data?.type === 'payment:completed' || data?.type === 'tip:created' || data?.type === 'tips:distributed') {
         loadFinancialData();
       }
-    });
+    };
+
+    on('notification', onNotification);
 
     return () => {
-      socket.emit('restaurant:leave', { restaurant_id: restaurantId });
-      socket.disconnect();
+      off('notification', onNotification);
+      emit('restaurant:leave', { restaurant_id: restaurantId });
     };
-  }, [restaurantId]);
+  }, [restaurantId, connected, emit, on, off]);
 
   // Compute margin from summary
   const marginPercentage = summary

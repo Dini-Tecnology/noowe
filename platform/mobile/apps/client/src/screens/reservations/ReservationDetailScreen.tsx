@@ -654,7 +654,7 @@ export default function ReservationDetailScreen() {
             loading={cancelling}
             disabled={cancelling}
             style={styles.cancelButton}
-            textColor=colors.error
+            textColor={colors.error}
             icon="close"
           >
             Cancelar Reserva

@@ -193,10 +193,18 @@ class SocialAuthService {
 
       logger.info('Google Sign In successful', { userId: userInfo.id });
 
+      if (!result.authentication.idToken) {
+        return {
+          success: false,
+          provider: 'google',
+          error: 'Google did not return an ID token for Supabase authentication',
+        };
+      }
+
       return {
         success: true,
         provider: 'google',
-        idToken: result.authentication.idToken || result.authentication.accessToken,
+        idToken: result.authentication.idToken,
         user: {
           id: userInfo.id,
           email: userInfo.email,

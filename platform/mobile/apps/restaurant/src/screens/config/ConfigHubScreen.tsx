@@ -12,8 +12,8 @@
  */
 
 import React, { useMemo } from 'react';
-import {
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import {
   View,
   ScrollView,
   TouchableOpacity,

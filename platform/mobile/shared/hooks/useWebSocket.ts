@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { getSupabaseClient } from '../services/supabase';
 
-const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+type Listener = (data: any) => void;
 
 export const useWebSocket = (namespace: string = '/') => {
-  const socketRef = useRef<Socket | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const listenersRef = useRef<Map<string, Set<Listener>>>(new Map());
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,83 +20,67 @@ export const useWebSocket = (namespace: string = '/') => {
 
   const connectSocket = async () => {
     try {
-      const token = await AsyncStorage.getItem('access_token');
+      const supabase = getSupabaseClient();
+      const channelName = namespace === '/' ? 'root-events' : namespace.replace(/\//g, '-').replace(/^-+/, '');
 
-      if (!token) {
-        setError('No authentication token found');
-        return;
-      }
-
-      socketRef.current = io(`${SOCKET_URL}${namespace}`, {
-        auth: {
-          token,
-        },
-        transports: ['websocket'],
+      channelRef.current = supabase.channel(`ws-${channelName || 'root'}`);
+      channelRef.current.on('broadcast', { event: '*' }, (payload) => {
+        const event = payload.event;
+        const callbacks = listenersRef.current.get(event);
+        callbacks?.forEach((cb) => cb(payload.payload));
       });
 
-      socketRef.current.on('connect', () => {
-        console.log(`Connected to ${namespace}`);
-        setConnected(true);
-        setError(null);
-      });
-
-      socketRef.current.on('disconnect', () => {
-        console.log(`Disconnected from ${namespace}`);
-        setConnected(false);
-      });
-
-      socketRef.current.on('error', (err: any) => {
-        console.error(`Socket error on ${namespace}:`, err);
-        setError(err.message || 'Socket connection error');
-      });
-
-      socketRef.current.on('connect_error', async (err: any) => {
-        console.error(`Socket connection error on ${namespace}:`, err);
-        setError(err.message || 'Failed to connect to socket');
-
-        // Refresh token and reconnect on auth errors
-        if (err.message?.includes('unauthorized') || err.message?.includes('jwt')) {
-          const freshToken = await AsyncStorage.getItem('access_token');
-          if (freshToken && socketRef.current) {
-            socketRef.current.auth = { token: freshToken };
-            socketRef.current.connect();
+      await new Promise<void>((resolve, reject) => {
+        channelRef.current!.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            setConnected(true);
+            setError(null);
+            resolve();
           }
-        }
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            reject(new Error(`Realtime channel error: ${status}`));
+          }
+        });
       });
     } catch (err: any) {
       setError(err.message || 'Failed to initialize socket');
-    }
-  };
-
-  const disconnectSocket = () => {
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-      socketRef.current = null;
       setConnected(false);
     }
   };
 
+  const disconnectSocket = async () => {
+    if (channelRef.current) {
+      await getSupabaseClient().removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+    setConnected(false);
+  };
+
   const emit = (event: string, data?: any) => {
-    if (socketRef.current && connected) {
-      socketRef.current.emit(event, data);
+    if (channelRef.current && connected) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event,
+        payload: data ?? {},
+      });
     } else {
       console.warn('Socket not connected, cannot emit event:', event);
     }
   };
 
   const on = (event: string, callback: (data: any) => void) => {
-    if (socketRef.current) {
-      socketRef.current.on(event, callback);
+    if (!listenersRef.current.has(event)) {
+      listenersRef.current.set(event, new Set());
     }
+    listenersRef.current.get(event)!.add(callback);
   };
 
   const off = (event: string, callback?: (data: any) => void) => {
-    if (socketRef.current) {
-      if (callback) {
-        socketRef.current.off(event, callback);
-      } else {
-        socketRef.current.off(event);
-      }
+    if (!listenersRef.current.has(event)) return;
+    if (callback) {
+      listenersRef.current.get(event)!.delete(callback);
+    } else {
+      listenersRef.current.delete(event);
     }
   };
 
@@ -108,7 +93,7 @@ export const useWebSocket = (namespace: string = '/') => {
   };
 
   return {
-    socket: socketRef.current,
+    socket: channelRef.current,
     connected,
     error,
     emit,

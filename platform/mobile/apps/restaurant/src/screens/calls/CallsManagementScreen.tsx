@@ -9,8 +9,8 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import {
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import {
   View,
   StyleSheet,
   FlatList,
@@ -30,12 +30,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/shared/hooks/useI18n';
+import { useWebSocket } from '@/shared/hooks/useWebSocket';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import ApiService from '@/shared/services/api';
-import { io, Socket } from 'socket.io-client';
-import { ENV } from '@okinawa/shared/config/env';
 import * as Haptics from 'expo-haptics';
 
 // ============================================
@@ -273,9 +272,9 @@ export default function CallsManagementScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const socketRef = useRef<Socket | null>(null);
   const { user } = useAuth();
   const route = useRoute<RouteProp<CallsManagementRouteParams, 'CallsManagement'>>();
+  const { connected, on, off, emit } = useWebSocket('/calls');
 
   const [activeTab, setActiveTab] = useState<Tab>('pending');
   const [refreshing, setRefreshing] = useState(false);
@@ -290,17 +289,8 @@ export default function CallsManagementScreen() {
   // ============================================
 
   useEffect(() => {
-    if (!restaurantId) return;
-
-    const socket = io(`${ENV.API_BASE_URL}/calls`, {
-      transports: ['websocket'],
-    });
-
-    socketRef.current = socket;
-
-    const onConnect = () => {
-      socket.emit('joinRestaurant', { restaurantId });
-    };
+    if (!restaurantId || !connected) return;
+    emit('joinRestaurant', { restaurantId });
 
     const onNewCall = () => {
       if (Platform.OS !== 'web') {
@@ -315,19 +305,15 @@ export default function CallsManagementScreen() {
       queryClient.invalidateQueries({ queryKey: ['service-calls-stats'] });
     };
 
-    socket.on('connect', onConnect);
-    socket.on('call:new', onNewCall);
-    socket.on('call:updated', onCallUpdated);
+    on('call:new', onNewCall);
+    on('call:updated', onCallUpdated);
 
     return () => {
-      socket.off('connect', onConnect);
-      socket.off('call:new', onNewCall);
-      socket.off('call:updated', onCallUpdated);
-      socket.emit('leaveRestaurant', { restaurantId });
-      socket.disconnect();
-      socketRef.current = null;
+      off('call:new', onNewCall);
+      off('call:updated', onCallUpdated);
+      emit('leaveRestaurant', { restaurantId });
     };
-  }, [restaurantId, queryClient]);
+  }, [restaurantId, connected, emit, on, off, queryClient]);
 
   // ============================================
   // QUERIES

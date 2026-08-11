@@ -37,6 +37,11 @@ interface EnvironmentConfig {
   // WebSocket Configuration
   WS_URL: string;
   WS_RECONNECT_INTERVAL_MS: number;
+
+  // Supabase public client configuration
+  SUPABASE_URL: string;
+  SUPABASE_PUBLISHABLE_KEY: string;
+  SUPABASE_ANON_KEY: string;
   
   // Authentication
   AUTH_TOKEN_EXPIRY_DAYS: number;
@@ -84,6 +89,11 @@ const developmentConfig: EnvironmentConfig = {
   // WebSocket Configuration
   WS_URL: 'ws://localhost:3000',
   WS_RECONNECT_INTERVAL_MS: 5000,
+
+  // Supabase public client configuration
+  SUPABASE_URL: requireEnv('EXPO_PUBLIC_SUPABASE_URL', ''),
+  SUPABASE_PUBLISHABLE_KEY: requireEnv('EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY', ''),
+  SUPABASE_ANON_KEY: requireEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY', ''),
   
   // Authentication
   AUTH_TOKEN_EXPIRY_DAYS: 7,
@@ -131,6 +141,11 @@ const stagingConfig: EnvironmentConfig = {
   // WebSocket Configuration
   WS_URL: 'wss://api-staging.okinawa.com',
   WS_RECONNECT_INTERVAL_MS: 5000,
+
+  // Supabase public client configuration
+  SUPABASE_URL: requireEnv('EXPO_PUBLIC_SUPABASE_URL', ''),
+  SUPABASE_PUBLISHABLE_KEY: requireEnv('EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY', ''),
+  SUPABASE_ANON_KEY: requireEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY', ''),
   
   // Authentication
   AUTH_TOKEN_EXPIRY_DAYS: 7,
@@ -199,14 +214,19 @@ const productionConfig: EnvironmentConfig = {
   WS_URL: requireEnv('WS_URL', 'wss://api.noowebr.com'),
   WS_RECONNECT_INTERVAL_MS: 5000,
 
+  SUPABASE_URL: requireEnv('EXPO_PUBLIC_SUPABASE_URL', ''),
+  SUPABASE_PUBLISHABLE_KEY: requireEnv('EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY', ''),
+  SUPABASE_ANON_KEY: requireEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY', ''),
+
   AUTH_TOKEN_EXPIRY_DAYS: 7,
   AUTH_REFRESH_TOKEN_EXPIRY_DAYS: 30,
 
-  SENTRY_DSN: requireEnv('SENTRY_DSN'),
-  FIREBASE_PROJECT_ID: requireEnv('FIREBASE_PROJECT_ID'),
-  FIREBASE_APP_ID: requireEnv('FIREBASE_APP_ID'),
-  FIREBASE_API_KEY: requireEnv('FIREBASE_API_KEY'),
-  FIREBASE_MESSAGING_SENDER_ID: requireEnv('FIREBASE_MESSAGING_SENDER_ID'),
+  // Valores opcionais via EAS secrets / extra; defaults evitam spam em builds locais sem .env
+  SENTRY_DSN: requireEnv('SENTRY_DSN', ''),
+  FIREBASE_PROJECT_ID: requireEnv('FIREBASE_PROJECT_ID', ''),
+  FIREBASE_APP_ID: requireEnv('FIREBASE_APP_ID', ''),
+  FIREBASE_API_KEY: requireEnv('FIREBASE_API_KEY', ''),
+  FIREBASE_MESSAGING_SENDER_ID: requireEnv('FIREBASE_MESSAGING_SENDER_ID', ''),
 
   ANALYTICS_ENABLED: true,
   ANALYTICS_DEBUG: false,

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Okinawa Restaurante",
+    "name": "Noowe Restaurante",
     "slug": "okinawa-restaurant",
     "version": "1.0.0",
     "orientation": "default",
@@ -16,7 +16,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.noowe.restaurant",
-      "minimumOsVersion": "14.0",
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
           {
@@ -51,8 +50,6 @@
         "backgroundColor": "#A855F7"
       },
       "package": "com.noowe.restaurant",
-      "minSdkVersion": 24,
-      "targetSdkVersion": 34,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -80,21 +77,33 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1",
+            "newArchEnabled": true
+          },
+          "android": {
+            "minSdkVersion": 24,
+            "targetSdkVersion": 34,
+            "newArchEnabled": true
+          }
+        }
+      ],
       [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#A855F7",
-          "sounds": ["./assets/sounds/order-notification.wav"]
+          "color": "#A855F7"
         }
       ]
     ],
     "extra": {
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "744e4a02-0a92-4dfb-bf5a-ea0e68169afe"
       }
     },
-    "owner": "okinawa"
+    "owner": "dini-technologies"
   }
 }

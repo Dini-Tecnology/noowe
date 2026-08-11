@@ -1,151 +1,166 @@
-import { io, Socket } from 'socket.io-client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { supabaseApiAdapter } from './supabase-api';
+import { getSupabaseClient } from './supabase';
 
 class OrdersSocketService {
-  private socket: Socket | null = null;
+  private channel: RealtimeChannel | null = null;
   private connected = false;
+  private userId: string | null = null;
+  private restaurantRooms = new Set<string>();
+  private userRooms = new Set<string>();
+  private orderRooms = new Set<string>();
+  private onOrderNewListeners = new Set<(order: any) => void>();
+  private onOrderUpdateListeners = new Set<(order: any) => void>();
+  private onOrderCancelledListeners = new Set<(data: { order_id: string; reason?: string }) => void>();
 
   async connect() {
-    if (this.socket?.connected) {
-      console.log('Orders socket already connected');
+    if (this.connected && this.channel) {
+      console.log('Orders realtime already connected');
       return;
     }
 
-    try {
-      const token = await AsyncStorage.getItem('access_token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
+    const supabase = getSupabaseClient();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    this.userId = userData.user?.id ?? null;
 
-      this.socket = io(`${SOCKET_URL}/orders`, {
-        auth: { token },
-        transports: ['websocket'],
+    this.channel = supabase
+      .channel('orders-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+        const row = (payload.new || payload.old || {}) as any;
+        if (!this.shouldEmit(row)) return;
+
+        if (payload.eventType === 'INSERT') {
+          this.onOrderNewListeners.forEach((listener) => listener(payload.new));
+          return;
+        }
+
+        if (payload.eventType === 'UPDATE') {
+          this.onOrderUpdateListeners.forEach((listener) => listener(payload.new));
+          if (payload.new?.status === 'cancelled') {
+            this.onOrderCancelledListeners.forEach((listener) =>
+              listener({
+                order_id: payload.new.id,
+                reason: payload.new.cancellation_reason,
+              })
+            );
+          }
+        }
       });
 
-      this.socket.on('connect', () => {
-        console.log('Connected to orders socket');
-        this.connected = true;
-      });
-
-      this.socket.on('disconnect', () => {
-        console.log('Disconnected from orders socket');
-        this.connected = false;
-      });
-
-      this.socket.on('error', (error: any) => {
-        console.error('Orders socket error:', error);
-      });
-    } catch (error) {
-      console.error('Failed to connect to orders socket:', error);
-      throw error;
-    }
+    await new Promise<void>((resolve, reject) => {
+      this.channel!
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            this.connected = true;
+            console.log('Connected to orders realtime');
+            resolve();
+          }
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            reject(new Error(`Orders realtime failed: ${status}`));
+          }
+        });
+    });
   }
 
-  disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-      this.connected = false;
+  private shouldEmit(row: any) {
+    if (!row) return false;
+
+    if (this.orderRooms.size > 0 && row.id && this.orderRooms.has(row.id)) {
+      return true;
     }
+    if (this.restaurantRooms.size > 0 && row.restaurant_id && this.restaurantRooms.has(row.restaurant_id)) {
+      return true;
+    }
+    if (this.userRooms.size > 0 && row.customer_id && this.userRooms.has(row.customer_id)) {
+      return true;
+    }
+    if (this.userId && row.customer_id && row.customer_id === this.userId) {
+      return true;
+    }
+
+    // If no room filters were set by the caller, emit all rows visible via RLS
+    return this.orderRooms.size === 0 && this.restaurantRooms.size === 0 && this.userRooms.size === 0;
   }
 
-  // IMPORTANT: Event names must match backend gateway handlers
-  // Backend expects 'joinRestaurant' and 'leaveRestaurant' events
+  async disconnect() {
+    if (this.channel) {
+      const supabase = getSupabaseClient();
+      await supabase.removeChannel(this.channel);
+      this.channel = null;
+    }
+    this.connected = false;
+    this.restaurantRooms.clear();
+    this.userRooms.clear();
+    this.orderRooms.clear();
+  }
+
   joinRestaurantRoom(restaurantId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('joinRestaurant', { restaurantId });
-    }
+    this.restaurantRooms.add(restaurantId);
   }
 
   joinUserRoom(userId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('joinUser', { userId });
-    }
+    this.userRooms.add(userId);
   }
 
   leaveRestaurantRoom(restaurantId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('leaveRestaurant', { restaurantId });
-    }
+    this.restaurantRooms.delete(restaurantId);
   }
 
   leaveUserRoom(userId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('leaveUser', { userId });
-    }
+    this.userRooms.delete(userId);
   }
 
-  // Event: New order received (for restaurant apps)
   onOrderNew(callback: (order: any) => void) {
-    if (this.socket) {
-      this.socket.on('order:new', callback);
-    }
+    this.onOrderNewListeners.add(callback);
   }
 
-  // Event: Order was updated (status, items, etc.)
   onOrderUpdate(callback: (order: any) => void) {
-    if (this.socket) {
-      this.socket.on('order:update', callback);
-    }
+    this.onOrderUpdateListeners.add(callback);
   }
 
-  // Event: Order was cancelled
   onOrderCancelled(callback: (data: { order_id: string; reason?: string }) => void) {
-    if (this.socket) {
-      this.socket.on('order:cancelled', callback);
-    }
+    this.onOrderCancelledListeners.add(callback);
   }
 
   offOrderNew(callback?: (order: any) => void) {
-    if (this.socket) {
-      this.socket.off('order:new', callback);
+    if (!callback) {
+      this.onOrderNewListeners.clear();
+      return;
     }
+    this.onOrderNewListeners.delete(callback);
   }
 
   offOrderUpdate(callback?: (order: any) => void) {
-    if (this.socket) {
-      this.socket.off('order:update', callback);
+    if (!callback) {
+      this.onOrderUpdateListeners.clear();
+      return;
     }
+    this.onOrderUpdateListeners.delete(callback);
   }
 
   offOrderCancelled(callback?: (data: any) => void) {
-    if (this.socket) {
-      this.socket.off('order:cancelled', callback);
+    if (!callback) {
+      this.onOrderCancelledListeners.clear();
+      return;
     }
+    this.onOrderCancelledListeners.delete(callback);
   }
 
-  // Send: Join order room to receive updates for a specific order
   joinOrderRoom(orderId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('order:join', { order_id: orderId });
-    }
+    this.orderRooms.add(orderId);
   }
 
-  // Send: Leave order room
   leaveOrderRoom(orderId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('order:leave', { order_id: orderId });
-    }
+    this.orderRooms.delete(orderId);
   }
 
-  // Send: Update order status (for restaurant staff)
-  updateOrderStatus(orderId: string, status: string, estimatedTime?: number) {
-    if (this.socket && this.connected) {
-      this.socket.emit('order:status_update', {
-        order_id: orderId,
-        status,
-        estimated_time: estimatedTime,
-      });
-    }
+  async updateOrderStatus(orderId: string, status: string, estimatedTime?: number) {
+    await supabaseApiAdapter.updateOrderStatus(orderId, status, estimatedTime);
   }
 
-  // Send: Mark order as ready
-  markOrderReady(orderId: string) {
-    if (this.socket && this.connected) {
-      this.socket.emit('order:ready', { order_id: orderId });
-    }
+  async markOrderReady(orderId: string) {
+    await supabaseApiAdapter.updateOrderStatus(orderId, 'ready');
   }
 
   isConnected() {

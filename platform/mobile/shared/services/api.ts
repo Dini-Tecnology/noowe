@@ -1,5 +1,14 @@
 import axios, { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { secureStorage } from './secure-storage';
+import { supabaseAuthAdapter } from './supabase-auth';
+import {
+  supabaseApiAdapter,
+  type SupabaseCreateOrderInput,
+  type SupabaseCreateReservationInput,
+  type SupabaseRestaurantOrdersParams,
+  type SupabaseReservationsParams,
+} from './supabase-api';
+import { getSupabaseClient } from './supabase';
 import logger from '../utils/logger';
 
 // React Native global __DEV__ type declaration
@@ -171,17 +180,16 @@ class ApiService {
               throw new Error('Session expired - too many refresh attempts');
             }
 
-            const refreshToken = await secureStorage.getRefreshToken();
+            let access_token: string | undefined;
+            let newRefreshToken: string | undefined;
 
-            if (!refreshToken) {
-              throw new Error('No refresh token');
+            const session = await supabaseAuthAdapter.refreshSession();
+            access_token = session.access_token;
+            newRefreshToken = session.refresh_token;
+
+            if (!access_token) {
+              throw new Error('No refreshed access token');
             }
-
-            const response = await axios.post(`${API_URL}/auth/refresh`, {
-              refresh_token: refreshToken,
-            });
-
-            const { access_token, refresh_token: newRefreshToken } = response.data;
 
             await secureStorage.setAccessToken(access_token);
             if (newRefreshToken) {
@@ -251,29 +259,29 @@ class ApiService {
   // ======================
 
   async login(email: string, password: string) {
-    const response = await this.api.post('/auth/login', { email, password });
-    const { access_token, refresh_token, user } = response.data;
+    const data = await supabaseAuthAdapter.login(email, password);
+    const { access_token, refresh_token, user } = data;
 
     await Promise.all([
-      secureStorage.setAccessToken(access_token),
-      secureStorage.setRefreshToken(refresh_token),
-      secureStorage.setUser(user),
+      access_token ? secureStorage.setAccessToken(access_token) : Promise.resolve(),
+      refresh_token ? secureStorage.setRefreshToken(refresh_token) : Promise.resolve(),
+      user ? secureStorage.setUser(user) : Promise.resolve(),
     ]);
 
-    return response.data;
+    return data;
   }
 
   async register(data: { email: string; password: string; full_name: string }) {
-    const response = await this.api.post('/auth/register', data);
-    const { access_token, refresh_token, user } = response.data;
+    const authData = await supabaseAuthAdapter.register(data.email, data.password, data.full_name);
+    const { access_token, refresh_token, user } = authData;
 
     await Promise.all([
-      secureStorage.setAccessToken(access_token),
-      secureStorage.setRefreshToken(refresh_token),
-      secureStorage.setUser(user),
+      access_token ? secureStorage.setAccessToken(access_token) : Promise.resolve(),
+      refresh_token ? secureStorage.setRefreshToken(refresh_token) : Promise.resolve(),
+      user ? secureStorage.setUser(user) : Promise.resolve(),
     ]);
 
-    return response.data;
+    return authData;
   }
 
   async logout() {
@@ -281,21 +289,41 @@ class ApiService {
   }
 
   async getCurrentUser() {
-    const response = await this.api.get('/auth/me');
-    await secureStorage.setUser(response.data);
-    return response.data;
+    const user = await supabaseAuthAdapter.getCurrentUser();
+    if (user) {
+      await secureStorage.setUser(user);
+    }
+    return user;
   }
 
   async updateProfile(data: { full_name?: string; phone?: string; avatar_url?: string }) {
-    const response = await this.api.patch('/users/profile', data);
-    await secureStorage.setUser(response.data);
-    return response.data;
+    const row = await supabaseAuthAdapter.updateProfile({
+      full_name: data.full_name,
+      phone: data.phone,
+      avatar_url: data.avatar_url,
+    });
+    await secureStorage.setUser(row);
+    return row;
   }
 
   async deleteAccount() {
-    const response = await this.api.delete('/users/account');
+    const supabase = getSupabaseClient();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    if (!userData.user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        deletion_requested_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userData.user.id);
+    if (error) throw error;
+
+    await supabaseAuthAdapter.logout();
     await secureStorage.clearAll();
-    return response.data;
+    return { success: true };
   }
 
   // ======================
@@ -370,33 +398,20 @@ class ApiService {
   // ORDER ENDPOINTS (Customer Side)
   // ======================
 
-  async createOrder(data: {
-    restaurant_id: string;
-    items: Array<{ menu_item_id: string; quantity: number; special_instructions?: string }>;
-    delivery_address?: { street: string; city: string; state: string; zip: string; complement?: string };
-    order_type: 'dine_in' | 'pickup' | 'delivery';
-    table_id?: string;
-  }) {
-    const response = await this.api.post('/orders', data);
-    return response.data;
+  async createOrder(data: SupabaseCreateOrderInput) {
+    return supabaseApiAdapter.createOrder(data);
   }
 
   async getMyOrders() {
-    const response = await this.api.get('/orders/my-orders');
-    return response.data;
+    return supabaseApiAdapter.getMyOrders();
   }
 
   async getOrder(id: string) {
-    const response = await this.api.get(`/orders/${id}`);
-    return response.data;
+    return supabaseApiAdapter.getOrder(id);
   }
 
   async cancelOrder(id: string, reason?: string) {
-    const response = await this.api.patch(`/orders/${id}/status`, {
-      status: 'cancelled',
-      cancellation_reason: reason
-    });
-    return response.data;
+    return supabaseApiAdapter.cancelOrder(id, reason);
   }
 
   async rateOrder(orderId: string, rating: number, review?: string) {
@@ -412,14 +427,8 @@ class ApiService {
   // ORDER MANAGEMENT (Restaurant Side)
   // ======================
 
-  async getRestaurantOrders(params?: {
-    restaurant_id?: string;
-    status?: string;
-    date?: string;
-    table_id?: string;
-  }) {
-    const response = await this.api.get('/orders/restaurant', { params });
-    return response.data;
+  async getRestaurantOrders(params?: SupabaseRestaurantOrdersParams) {
+    return supabaseApiAdapter.getRestaurantOrders(params);
   }
 
   async updateOrderStatus(
@@ -427,11 +436,7 @@ class ApiService {
     status: string,
     estimated_time?: number
   ) {
-    const response = await this.api.patch(`/orders/${orderId}/status`, {
-      status,
-      estimated_time,
-    });
-    return response.data;
+    return supabaseApiAdapter.updateOrderStatus(orderId, status, estimated_time);
   }
 
   async acceptOrder(orderId: string, estimated_time?: number) {
@@ -512,70 +517,44 @@ class ApiService {
   // RESERVATION ENDPOINTS (Customer Side)
   // ======================
 
-  async createReservation(data: {
-    restaurant_id: string;
-    reservation_time: string;
-    party_size: number;
-    special_requests?: string;
-  }) {
-    const response = await this.api.post('/reservations', data);
-    return response.data;
+  async createReservation(data: SupabaseCreateReservationInput) {
+    return supabaseApiAdapter.createReservation(data);
   }
 
   async getMyReservations() {
-    const response = await this.api.get('/reservations/my-reservations');
-    return response.data;
+    return supabaseApiAdapter.getMyReservations();
   }
 
   async cancelReservation(id: string, reason?: string) {
-    const response = await this.api.patch(`/reservations/${id}/status`, {
-      status: 'cancelled',
-      cancellation_reason: reason
-    });
-    return response.data;
+    return supabaseApiAdapter.updateReservationStatus(id, 'cancelled', { cancellation_reason: reason });
   }
 
   // ======================
   // RESERVATION MANAGEMENT (Restaurant Side)
   // ======================
 
-  async getReservations(params?: { date?: string; status?: string }) {
-    const response = await this.api.get('/reservations/restaurant', { params });
-    return response.data;
+  async getReservations(params?: SupabaseReservationsParams) {
+    return supabaseApiAdapter.getReservations(params);
   }
 
   async getReservation(id: string) {
-    const response = await this.api.get(`/reservations/${id}`);
-    return response.data;
+    return supabaseApiAdapter.getReservation(id);
   }
 
   async confirmReservation(id: string) {
-    const response = await this.api.patch(`/reservations/${id}/status`, {
-      status: 'confirmed'
-    });
-    return response.data;
+    return supabaseApiAdapter.updateReservationStatus(id, 'confirmed');
   }
 
   async rejectReservation(id: string, reason: string) {
-    const response = await this.api.patch(`/reservations/${id}/status`, {
-      status: 'cancelled',
-      cancellation_reason: reason,
-    });
-    return response.data;
+    return supabaseApiAdapter.updateReservationStatus(id, 'cancelled', { cancellation_reason: reason });
   }
 
   async assignReservationTable(id: string, tableId: string) {
-    const response = await this.api.patch(`/reservations/${id}`, {
-      table_id: tableId,
-    });
-    return response.data;
+    return supabaseApiAdapter.updateReservation(id, { table_id: tableId });
   }
 
   async updateReservationStatus(id: string, status: string) {
-    const response = await this.api.patch(`/reservations/${id}/status`, {
-      status,
-    });
-    return response.data;
+    return supabaseApiAdapter.updateReservationStatus(id, status);
   }
 
   // ======================

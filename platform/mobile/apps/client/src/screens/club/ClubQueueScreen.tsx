@@ -28,11 +28,10 @@ import { useNavigation } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { t } from '@okinawa/shared/i18n';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
+import { useWebSocket } from '@okinawa/shared/hooks/useWebSocket';
 import { useAuth } from '@okinawa/shared/hooks/useAuth';
 import { ApiService } from '@okinawa/shared/services/api';
-import io, { Socket } from 'socket.io-client';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import { ENV } from '@okinawa/shared/config/env';
 
 // ============================================
 // TYPES
@@ -95,7 +94,7 @@ export default function ClubQueueScreen({ route }: ClubQueueScreenProps) {
     { value: 'vip', label: t('club.areas.vip') },
     { value: 'rooftop', label: t('club.areas.rooftop') },
   ];
-  const socketRef = useRef<Socket | null>(null);
+  const { connected, on, off, emit } = useWebSocket('/queue');
   const positionAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const prevPositionRef = useRef<number | null>(null);
@@ -139,23 +138,15 @@ export default function ClubQueueScreen({ route }: ClubQueueScreenProps) {
 
   // WebSocket connection
   useEffect(() => {
-    if (!restaurantId || !user?.id) return;
+    if (!restaurantId || !user?.id || !connected) return;
 
-    const socket = io(`${ENV.API_BASE_URL}/queue`, {
-      transports: ['websocket'],
+    emit('joinQueueRoom', restaurantId);
+    emit('subscribeToMyPosition', {
+      restaurantId,
+      userId: user.id,
     });
 
-    socketRef.current = socket;
-
-    socket.on('connect', () => {
-      socket.emit('joinQueueRoom', restaurantId);
-      socket.emit('subscribeToMyPosition', {
-        restaurantId,
-        userId: user.id,
-      });
-    });
-
-    socket.on('positionUpdate', (data: { data: Partial<QueueEntry> }) => {
+    const onPositionUpdate = (data: { data: Partial<QueueEntry> }) => {
       setQueueEntry((prev) => {
         if (!prev) return prev;
         const newPosition = data.data.position ?? prev.position;
@@ -180,20 +171,24 @@ export default function ClubQueueScreen({ route }: ClubQueueScreenProps) {
 
         return { ...prev, ...data.data };
       });
-    });
+    };
 
-    socket.on('called', () => {
+    const onCalled = () => {
       triggerHaptic();
       setQueueEntry((prev) =>
         prev ? { ...prev, status: 'called' } : prev,
       );
-    });
+    };
+
+    on('positionUpdate', onPositionUpdate);
+    on('called', onCalled);
 
     return () => {
-      socket.emit('leaveQueueRoom', restaurantId);
-      socket.disconnect();
+      off('positionUpdate', onPositionUpdate);
+      off('called', onCalled);
+      emit('leaveQueueRoom', restaurantId);
     };
-  }, [restaurantId, user?.id, positionAnim]);
+  }, [restaurantId, user?.id, positionAnim, connected, emit, on, off]);
 
   // Join queue mutation
   const joinQueueMutation = useMutation({

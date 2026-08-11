@@ -1,10 +1,12 @@
 module.exports = {
-  preset: 'react-native',
+  preset: 'jest-expo',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   transformIgnorePatterns: [
     'node_modules/(?!(react-native|@react-native|@react-navigation|expo|@expo|react-native-paper|react-native-vector-icons|@shopify/flash-list|@react-native-firebase|@sentry/react-native|expo-.*|@tanstack/react-query)/)',
   ],
   moduleNameMapper: {
+    '^react-native-vector-icons/MaterialCommunityIcons$':
+      '<rootDir>/__mocks__/rnMaterialCommunityIcons.tsx',
     '^@/(.*)$': '<rootDir>/shared/$1',
     '\\.(jpg|jpeg|png|gif|svg)$': '<rootDir>/__mocks__/fileMock.js',
   },
