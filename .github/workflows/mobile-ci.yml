@@ -2,10 +2,10 @@ name: Mobile CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, recovery-fix]
     paths: ['platform/mobile/**', 'platform/supabase/**', '.github/workflows/mobile-ci.yml']
   pull_request:
-    branches: [main]
+    branches: [main, recovery-fix]
     paths: ['platform/mobile/**', 'platform/supabase/**', '.github/workflows/mobile-ci.yml']
 
 concurrency:

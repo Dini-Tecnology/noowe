@@ -17,7 +17,7 @@ describe('CustomerBackend production contracts', () => {
     await customerBackend.placeOrder({ restaurantId: 'restaurant-1', tableSessionId: 'session-1', items: [{ menuItemId: 'item-1', quantity: 2 }] });
     expect(mockRpc).toHaveBeenCalledWith('customer_place_order', {
       p_restaurant_id: 'restaurant-1', p_table_session_id: 'session-1', p_client_request_id: 'request-1',
-      p_items: [{ menu_item_id: 'item-1', quantity: 2, special_instructions: undefined, customizations: [] }],
+      p_items: [{ menu_item_id: 'item-1', quantity: 2, special_instructions: undefined, customizations: [], diner_id: null }],
     });
     expect(JSON.stringify(mockRpc.mock.calls[0][1])).not.toContain('price');
   });
