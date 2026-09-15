@@ -1,7 +1,7 @@
 /**
  * ApiService — Comprehensive Tests
  *
- * Tests the ApiService class for HTTP methods, auth header injection,
+ * Tests the ApiService class for business HTTP methods, auth header injection,
  * token refresh flow, error handling, and endpoint coverage.
  *
  * @module shared/__tests__/ApiService.test
@@ -204,8 +204,8 @@ describe('ApiService', () => {
     });
 
     it('POST returns status 201 with correct method and data', async () => {
-      const payload = { email: 'a@b.com', password: 'pass' };
-      const response = await api.post('/auth/login', payload);
+      const payload = { restaurant_id: 'rest-1', party_size: 2 };
+      const response = await api.post('/reservations', payload);
       expect(response.status).toBe(201);
       expect(response.config.method).toBe('POST');
       expect(response.config.data).toEqual(payload);
@@ -290,25 +290,25 @@ describe('ApiService', () => {
     });
   });
 
-  // ---- Endpoint coverage (key endpoints from real ApiService) ----
+  // ---- Endpoint coverage (key business endpoints from real ApiService) ----
 
   describe('endpoint coverage', () => {
-    it('login endpoint calls POST /auth/login', async () => {
-      const response = await api.post('/auth/login', {
-        email: 'test@okinawa.com',
-        password: 'pass',
+    it('createReservation endpoint calls POST /reservations', async () => {
+      const response = await api.post('/reservations', {
+        restaurant_id: 'rest-1',
+        party_size: 2,
       });
-      expect(response.config.url).toBe('/auth/login');
+      expect(response.config.url).toBe('/reservations');
       expect(response.config.method).toBe('POST');
     });
 
-    it('register endpoint calls POST /auth/register', async () => {
-      const response = await api.post('/auth/register', {
-        email: 'new@okinawa.com',
-        password: 'pass',
-        full_name: 'New User',
+    it('processPayment endpoint calls POST /payments', async () => {
+      const response = await api.post('/payments', {
+        order_id: 'order-1',
+        amount: 42,
+        method: 'pix',
       });
-      expect(response.config.url).toBe('/auth/register');
+      expect(response.config.url).toBe('/payments');
     });
 
     it('getMyOrders endpoint calls GET /orders/mine', async () => {

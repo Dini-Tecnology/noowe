@@ -1,20 +1,60 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
-import { TextInput, Button, Text, HelperText, Checkbox } from 'react-native-paper';
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
+import { Text, HelperText, IconButton } from 'react-native-paper';
 import { authService } from '@/shared/services/auth';
+import { useBiometricAuth } from '@/shared/hooks/useBiometricAuth';
 import { useScreenTracking, useAnalytics } from '@/shared/hooks/useAnalytics';
 import { useAnalyticsContext } from '@/shared/contexts/AnalyticsContext';
 import { useI18n } from '@/shared/hooks/useI18n';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
-import { registerSchema, validateForm, type RegisterFormData } from '@/shared/validation/schemas';
+import { registerSchema, validateForm } from '@/shared/validation/schemas';
 import { LegalConsentSection } from '@okinawa/shared/components/LegalConsentSection';
 import Haptic from '@/shared/utils/haptics';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { NooweDialog } from '@okinawa/shared/components/NooweDialog';
+import { AuthScreenHeader } from '../../components/auth/AuthScreenHeader';
+import { AuthTextField } from '../../components/auth/AuthTextField';
+import { SocialAuthChips } from '../../components/auth/SocialAuthChips';
+import { AUTH_BRAND } from '../../components/auth/authScreenTheme';
+import { AuthConsentCheckbox } from '../../components/auth/AuthConsentCheckbox';
+import {
+  getLocalizedAuthErrorMessage,
+  isEmailAlreadyRegisteredError,
+} from '@/shared/utils/auth-errors';
+import {
+  isEmailBlockedForSignup,
+  useEmailAvailability,
+} from '@/shared/hooks/useEmailAvailability';
 
-const CURRENT_TERMS_VERSION = '1.0';
-const CURRENT_PRIVACY_VERSION = '1.0';
+interface RegisterScreenProps {
+  navigation: any;
+  onAppleLogin?: () => void;
+  onGoogleLogin?: () => void;
+  onBiometricLogin?: () => void;
+  googleLoginAvailable?: boolean;
+  appleLoginAvailable?: boolean;
+  loading?: boolean;
+  biometricLoading?: boolean;
+}
 
-export default function RegisterScreen({ navigation }: any) {
+export default function RegisterScreen({
+  navigation,
+  onAppleLogin,
+  onGoogleLogin,
+  onBiometricLogin,
+  googleLoginAvailable = false,
+  appleLoginAvailable = false,
+  loading: externalLoading = false,
+  biometricLoading = false,
+}: RegisterScreenProps) {
   useScreenTracking('Register');
   const { t } = useI18n();
   const colors = useColors();
@@ -23,6 +63,8 @@ export default function RegisterScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [acceptedLegal, setAcceptedLegal] = useState(false);
   const [confirmedAge, setConfirmedAge] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
@@ -31,9 +73,32 @@ export default function RegisterScreen({ navigation }: any) {
   const [showConsentError, setShowConsentError] = useState(false);
   const [showAgeError, setShowAgeError] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [emailDialog, setEmailDialog] = useState<
+    'sent' | 'existing' | 'confirmed' | 'success' | 'error' | null
+  >(null);
+  const [emailDialogMessage, setEmailDialogMessage] = useState('');
+
+  const emailAvailability = useEmailAvailability(email);
+  const emailBlocked = isEmailBlockedForSignup(emailAvailability);
+  const emailAvailabilityError =
+    emailAvailability === 'registered'
+      ? t('auth.emailAlreadyRegisteredSignIn')
+      : emailAvailability === 'unconfirmed'
+        ? t('auth.emailPendingConfirmation')
+        : '';
 
   const analytics = useAnalytics();
   const { setUser } = useAnalyticsContext();
+  const { biometricType } = useBiometricAuth();
+  const biometricIcon =
+    biometricType === 'FaceID' ? 'face-recognition' : 'fingerprint';
+
+  const isBusy = loading || externalLoading || biometricLoading;
+  const hasSecondaryAuth = true;
+
+  const goToLogin = useCallback(() => {
+    navigation.navigate('Login', { email: email.trim().toLowerCase() });
+  }, [navigation, email]);
 
   const clearFieldError = useCallback((field: string) => {
     if (fieldErrors[field]) {
@@ -42,44 +107,88 @@ export default function RegisterScreen({ navigation }: any) {
   }, [fieldErrors]);
 
   const validateFields = useCallback((): boolean => {
-    const result = validateForm(registerSchema, { 
-      fullName, 
-      email, 
-      password, 
-      confirmPassword 
+    const result = validateForm(registerSchema, {
+      fullName,
+      email,
+      password,
+      confirmPassword,
     });
-    
+
     if (!result.success) {
       setFieldErrors(result.errors);
       Haptic.errorNotification();
       return false;
     }
-    
+
     setFieldErrors({});
     return true;
   }, [fullName, email, password, confirmPassword]);
 
+  const showConfirmEmailDialog = useCallback((message: string) => {
+    setEmailDialogMessage(message);
+    setEmailDialog('sent');
+  }, []);
+
+  const handleResendConfirmation = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const { confirmationSent } = await authService.resendSignupConfirmation(
+        email.trim().toLowerCase(),
+      );
+      if (confirmationSent) {
+        setEmailDialogMessage(t('auth.resendConfirmationSent'));
+        setEmailDialog('success');
+        Haptic.successNotification();
+      } else {
+        setEmailDialogMessage(t('auth.emailAlreadyConfirmed'));
+        setEmailDialog('confirmed');
+      }
+    } catch (err) {
+      const message = getLocalizedAuthErrorMessage(err, 'auth.resendConfirmationFailed');
+      setError(message);
+      setEmailDialogMessage(message);
+      setEmailDialog('error');
+      Haptic.errorNotification();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showExistingEmailDialog = () => {
+    setEmailDialogMessage(t('auth.existingEmailConfirmation'));
+    setEmailDialog('existing');
+  };
+
   const handleRegister = async () => {
-    if (!validateFields()) return;
-
-    if (!confirmedAge) {
-      setShowAgeError(true);
-      Haptic.errorNotification();
-      return;
-    }
-
-    if (!acceptedLegal) {
-      setShowConsentError(true);
-      Haptic.errorNotification();
-      return;
-    }
-
     setLoading(true);
     setError('');
     setShowConsentError(false);
 
     try {
+      if (!validateFields()) return;
+
+      if (!confirmedAge) {
+        setShowAgeError(true);
+        Haptic.errorNotification();
+        return;
+      }
+
+      if (!acceptedLegal) {
+        setShowConsentError(true);
+        Haptic.errorNotification();
+        return;
+      }
+
       const result = await authService.register(email, password, fullName);
+
+      if (result?.needsEmailConfirmation) {
+        const message = t('auth.confirmEmailSent') || 'Enviamos um e-mail de confirmação para ativar sua conta.';
+        Haptic.successNotification();
+        showConfirmEmailDialog(message);
+        return;
+      }
 
       await analytics.logSignUp('email');
 
@@ -90,11 +199,14 @@ export default function RegisterScreen({ navigation }: any) {
       }
 
       Haptic.successNotification();
-      navigation.replace('Main');
     } catch (err: any) {
-      setError(err.response?.data?.message || t('auth.registerFailed'));
+      if (isEmailAlreadyRegisteredError(err)) {
+        setError('');
+        showExistingEmailDialog();
+      } else {
+        setError(getLocalizedAuthErrorMessage(err, 'auth.registerFailed'));
+      }
       Haptic.errorNotification();
-
       await analytics.logError('Registration failed', err.code || 'REGISTER_ERROR', false);
     } finally {
       setLoading(false);
@@ -102,173 +214,356 @@ export default function RegisterScreen({ navigation }: any) {
   };
 
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const registerDisabled = isBusy || emailBlocked;
 
   return (
     <ScreenContainer hasKeyboard>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Text variant="headlineLarge" style={styles.title}>
-          {t('auth.createAccount')}
-        </Text>
+        <View style={styles.topBar}>
+          <IconButton
+            icon="arrow-left"
+            onPress={() => navigation.goBack()}
+            accessibilityLabel={t('common.back')}
+            accessibilityRole="button"
+            style={styles.backButton}
+          />
+        </View>
 
-        <TextInput
-          label={t('auth.fullName')}
-          value={fullName}
-          onChangeText={(text) => {
-            setFullName(text);
-            clearFieldError('fullName');
-          }}
-          style={styles.input}
-          error={!!fieldErrors.fullName}
-          accessibilityLabel="Full name"
-          accessibilityHint="Enter your full name"
-          autoCapitalize="words"
-        />
-        {fieldErrors.fullName ? <HelperText type="error">{fieldErrors.fullName}</HelperText> : null}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <AuthScreenHeader
+            title={t('auth.createAccount')}
+            subtitle={t('auth.registerSubtitle')}
+          />
 
-        <TextInput
-          label={t('auth.email')}
-          value={email}
-          onChangeText={(text) => {
-            setEmail(text);
-            clearFieldError('email');
-          }}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          style={styles.input}
-          error={!!fieldErrors.email}
-          accessibilityLabel="Email address"
-          accessibilityHint="Enter your email address"
-        />
-        {fieldErrors.email ? <HelperText type="error">{fieldErrors.email}</HelperText> : null}
+          <AuthTextField
+            label={t('auth.fullName')}
+            icon="account-outline"
+            value={fullName}
+            onChangeText={(text) => {
+              setFullName(text);
+              clearFieldError('fullName');
+            }}
+            placeholder={t('auth.fullNamePlaceholder')}
+            error={fieldErrors.fullName}
+            accessibilityLabel={t('auth.a11y.fullName')}
+            accessibilityHint={t('auth.a11y.fullNameHint')}
+            inputProps={{ autoCapitalize: 'words' }}
+          />
 
-        <TextInput
-          label={t('auth.password')}
-          value={password}
-          onChangeText={(text) => {
-            setPassword(text);
-            clearFieldError('password');
-          }}
-          secureTextEntry
-          style={styles.input}
-          error={!!fieldErrors.password}
-          accessibilityLabel="Password"
-          accessibilityHint="Create a password for your account"
-        />
-        {fieldErrors.password ? <HelperText type="error">{fieldErrors.password}</HelperText> : null}
+          <AuthTextField
+            label={t('auth.email')}
+            icon="email-outline"
+            value={email}
+            onChangeText={(text) => {
+              setEmail(text);
+              clearFieldError('email');
+            }}
+            placeholder={t('auth.emailPlaceholder')}
+            error={fieldErrors.email || emailAvailabilityError}
+            accessibilityLabel={t('auth.a11y.email')}
+            accessibilityHint={t('auth.a11y.emailHint')}
+            inputProps={{
+              keyboardType: 'email-address',
+              autoCapitalize: 'none',
+              autoCorrect: false,
+            }}
+          />
 
-        <TextInput
-          label={t('auth.confirmPassword')}
-          value={confirmPassword}
-          onChangeText={(text) => {
-            setConfirmPassword(text);
-            clearFieldError('confirmPassword');
-          }}
-          secureTextEntry
-          style={styles.input}
-          error={!!fieldErrors.confirmPassword}
-          accessibilityLabel="Confirm password"
-          accessibilityHint="Re-enter your password to confirm"
-        />
-        {fieldErrors.confirmPassword ? <HelperText type="error">{fieldErrors.confirmPassword}</HelperText> : null}
+          {emailAvailability === 'checking' ? (
+            <HelperText type="info" style={styles.emailStatus}>
+              {t('auth.emailCheckInProgress')}
+            </HelperText>
+          ) : null}
 
-        {/* Age Verification — Google Play / LGPD requirement */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-          <Checkbox
-            status={confirmedAge ? 'checked' : 'unchecked'}
-            onPress={() => {
+          {emailAvailability === 'registered' || emailAvailability === 'unconfirmed' ? (
+            <View style={styles.emailActions}>
+              <TouchableOpacity
+                onPress={goToLogin}
+                accessibilityLabel={t('auth.a11y.goToLogin')}
+                accessibilityRole="link"
+              >
+                <Text style={styles.emailActionText}>{t('auth.a11y.goToLogin')}</Text>
+              </TouchableOpacity>
+              {emailAvailability === 'unconfirmed' ? (
+                <TouchableOpacity
+                  onPress={() => void handleResendConfirmation()}
+                  disabled={isBusy}
+                  accessibilityLabel={t('auth.resendConfirmation')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.emailActionText}>{t('auth.resendConfirmation')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
+
+          <AuthTextField
+            label={t('auth.password')}
+            icon="lock-outline"
+            value={password}
+            onChangeText={(text) => {
+              setPassword(text);
+              clearFieldError('password');
+            }}
+            placeholder={t('auth.passwordPlaceholder')}
+            error={fieldErrors.password}
+            secureTextEntry={!showPassword}
+            showPasswordToggle
+            showPassword={showPassword}
+            onTogglePassword={() => setShowPassword((v) => !v)}
+            accessibilityLabel={t('auth.a11y.password')}
+            accessibilityHint={t('auth.a11y.passwordRegisterHint')}
+          />
+
+          <AuthTextField
+            label={t('auth.confirmPassword')}
+            icon="lock-check-outline"
+            value={confirmPassword}
+            onChangeText={(text) => {
+              setConfirmPassword(text);
+              clearFieldError('confirmPassword');
+            }}
+            placeholder={t('auth.passwordPlaceholder')}
+            error={fieldErrors.confirmPassword}
+            secureTextEntry={!showConfirmPassword}
+            showPasswordToggle
+            showPassword={showConfirmPassword}
+            onTogglePassword={() => setShowConfirmPassword((v) => !v)}
+            accessibilityLabel={t('auth.a11y.confirmPassword')}
+            accessibilityHint={t('auth.a11y.confirmPasswordHint')}
+          />
+
+          <AuthConsentCheckbox
+            checked={confirmedAge}
+            onToggle={() => {
               setConfirmedAge(!confirmedAge);
               setShowAgeError(false);
               Haptic.lightImpact();
             }}
-            color={colors.primary}
+            label={t('auth.confirmAge18')}
+            showError={showAgeError}
+            errorMessage={t('auth.ageRequired')}
           />
-          <Text
-            style={{ flex: 1, color: colors.text, fontSize: 14 }}
-            onPress={() => {
-              setConfirmedAge(!confirmedAge);
-              setShowAgeError(false);
+
+          <LegalConsentSection
+            acceptedLegal={acceptedLegal}
+            onToggleLegal={(value) => {
+              setAcceptedLegal(value);
+              setShowConsentError(false);
+              Haptic.lightImpact();
             }}
+            marketingOptIn={marketingConsent}
+            onToggleMarketing={(value) => {
+              setMarketingConsent(value);
+              Haptic.lightImpact();
+            }}
+            showError={showConsentError}
+          />
+
+          {error ? <HelperText type="error">{error}</HelperText> : null}
+
+          <TouchableOpacity
+            style={[styles.primaryButton, registerDisabled && styles.buttonDisabled]}
+            onPress={handleRegister}
+            disabled={registerDisabled}
+            accessibilityLabel={t('auth.a11y.createAccount')}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: registerDisabled }}
           >
-            Confirmo que tenho 18 anos ou mais
-          </Text>
-        </View>
-        {showAgeError && (
-          <HelperText type="error" visible>
-            Você precisa ter 18 anos ou mais para criar uma conta.
-          </HelperText>
-        )}
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>{t('auth.register')}</Text>
+            )}
+          </TouchableOpacity>
 
-        {/* Legal Consent — Terms of Use + Privacy Policy */}
-        <LegalConsentSection
-          acceptedLegal={acceptedLegal}
-          onToggleLegal={(value) => {
-            setAcceptedLegal(value);
-            setShowConsentError(false);
-            Haptic.lightImpact();
-          }}
-          marketingOptIn={marketingConsent}
-          onToggleMarketing={(value) => {
-            setMarketingConsent(value);
-            Haptic.lightImpact();
-          }}
-          showError={showConsentError}
-        />
+          {hasSecondaryAuth ? (
+            <>
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>{t('auth.or')}</Text>
+                <View style={styles.dividerLine} />
+              </View>
 
-        {error ? <HelperText type="error">{error}</HelperText> : null}
+              <SocialAuthChips
+                onGoogleLogin={onGoogleLogin}
+                onAppleLogin={onAppleLogin}
+                onBiometricLogin={onBiometricLogin}
+                googleAvailable={googleLoginAvailable}
+                appleAvailable={appleLoginAvailable}
+                showBiometric={false}
+                biometricLoading={biometricLoading}
+                biometricIcon={biometricIcon}
+                disabled={isBusy}
+              />
+            </>
+          ) : null}
 
-        <Button
-          mode="contained"
-          onPress={handleRegister}
-          loading={loading}
-          disabled={loading}
-          style={styles.button}
-          contentStyle={styles.buttonContent}
-          accessibilityLabel="Create account"
-          accessibilityRole="button"
-        >
-          {t('auth.register')}
-        </Button>
-
-        <Button
-          onPress={() => navigation.navigate('Login')}
-          accessibilityLabel="Go to login"
-          accessibilityRole="button"
-        >
-          {t('auth.hasAccount')}
-        </Button>
-      </ScrollView>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>{t('auth.hasAccountQuestion')} </Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Login')}
+              accessibilityLabel={t('auth.a11y.goToLogin')}
+              accessibilityRole="link"
+            >
+              <Text style={styles.footerLink}>{t('auth.signIn')}</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+      <NooweDialog
+        visible={emailDialog !== null}
+        title={
+          emailDialog === 'error'
+            ? t('common.error')
+            : emailDialog === 'confirmed'
+              ? t('auth.emailAlreadyExists')
+              : t('auth.confirmEmailTitle')
+        }
+        message={emailDialogMessage}
+        icon={
+          emailDialog === 'success'
+            ? 'email-check-outline'
+            : emailDialog === 'error'
+              ? 'alert-circle-outline'
+              : emailDialog === 'confirmed'
+                ? 'account-check-outline'
+                : 'email-fast-outline'
+        }
+        tone={emailDialog === 'success' ? 'success' : emailDialog === 'error' ? 'error' : 'brand'}
+        dismissible={emailDialog !== 'sent'}
+        onDismiss={() => setEmailDialog(null)}
+        actions={emailDialog === 'existing'
+          ? [
+              {
+                label: t('auth.resendConfirmation'),
+                onPress: () => void handleResendConfirmation(),
+                variant: 'primary',
+                loading,
+              },
+              {
+                label: t('auth.a11y.goToLogin'),
+                onPress: goToLogin,
+                variant: 'secondary',
+              },
+              {
+                label: t('common.cancel'),
+                onPress: () => setEmailDialog(null),
+                variant: 'ghost',
+              },
+            ]
+          : emailDialog === 'sent' || emailDialog === 'confirmed'
+            ? [
+                {
+                  label: t('auth.a11y.goToLogin'),
+                  onPress: () => {
+                    setEmailDialog(null);
+                    goToLogin();
+                  },
+                  variant: 'primary',
+                },
+              ]
+            : [
+                {
+                  label: t('common.ok'),
+                  onPress: () => setEmailDialog(null),
+                  variant: 'primary',
+                },
+              ]}
+      />
     </ScreenContainer>
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-  title: {
-    marginBottom: 30,
-    textAlign: 'center',
-    color: colors.foreground,
-  },
-  input: {
-    marginBottom: 8,
-    backgroundColor: colors.card,
-  },
-  button: {
-    borderRadius: 12,
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  buttonContent: {
-    height: 52,
-  },
-});
+const createStyles = (colors: ReturnType<typeof useColors>) =>
+  StyleSheet.create({
+    flex: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    topBar: {
+      paddingHorizontal: 8,
+      paddingTop: 4,
+    },
+    backButton: {
+      margin: 0,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      paddingHorizontal: 24,
+      paddingTop: 8,
+      paddingBottom: 32,
+    },
+    emailStatus: {
+      marginTop: -8,
+      marginBottom: 8,
+    },
+    emailActions: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 20,
+      marginTop: -4,
+      marginBottom: 16,
+      paddingHorizontal: 4,
+    },
+    emailActionText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.primary,
+      textDecorationLine: 'underline',
+    },
+    primaryButton: {
+      backgroundColor: colors.primary,
+      borderRadius: AUTH_BRAND.borderRadius,
+      paddingVertical: 16,
+      alignItems: 'center',
+      marginTop: 12,
+      marginBottom: 28,
+    },
+    primaryButtonText: {
+      color: '#FFFFFF',
+      fontSize: 17,
+      fontWeight: '700',
+    },
+    buttonDisabled: {
+      opacity: 0.7,
+    },
+    dividerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+    dividerLine: {
+      flex: 1,
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: AUTH_BRAND.inputBorder,
+    },
+    dividerText: {
+      marginHorizontal: 16,
+      fontSize: 14,
+      color: colors.mutedForeground ?? colors.foregroundSecondary,
+    },
+    footer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+    },
+    footerText: {
+      fontSize: 15,
+      color: colors.mutedForeground ?? colors.foregroundSecondary,
+    },
+    footerLink: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.primary,
+      textDecorationLine: 'underline',
+    },
+  });

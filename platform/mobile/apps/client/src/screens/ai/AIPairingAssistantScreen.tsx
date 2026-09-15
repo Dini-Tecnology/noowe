@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -15,6 +16,7 @@ import { spacing } from '@okinawa/shared/theme/spacing';
 import { BetaBadge } from '@okinawa/shared/components/BetaBadge';
 import ApiService from '@okinawa/shared/services/api';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 
 interface MenuItem {
   id: string;
@@ -155,6 +157,8 @@ export const AIPairingAssistantScreen: React.FC<AIPairingAssistantScreenProps> =
     }
   };
 
+  const pullToRefresh = usePullToRefresh(generatePairings);
+
   const togglePairing = (id: string) => {
     setSelectedPairings(prev =>
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
@@ -223,7 +227,11 @@ export const AIPairingAssistantScreen: React.FC<AIPairingAssistantScreenProps> =
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={pullToRefresh.refreshing} onRefresh={() => { void pullToRefresh.onRefresh(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+        >
           <Text style={styles.sectionTitle}>
             Sugestões da IA
           </Text>

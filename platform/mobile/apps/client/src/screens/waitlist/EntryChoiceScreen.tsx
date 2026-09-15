@@ -4,6 +4,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import { Text, Card, Chip, IconButton } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -11,6 +12,7 @@ import { t } from '@okinawa/shared/i18n';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ApiService } from '@okinawa/shared/services/api';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 
 interface WaitlistStatsData {
   totalWaiting: number;
@@ -89,6 +91,8 @@ export default function EntryChoiceScreen({ route }: EntryChoiceScreenProps) {
       setLoading(false);
     }
   }, [restaurantId]);
+
+  const pullToRefresh = usePullToRefresh(fetchStats);
 
   useEffect(() => {
     fetchStats();
@@ -197,7 +201,10 @@ export default function EntryChoiceScreen({ route }: EntryChoiceScreenProps) {
 
   return (
     <ScreenContainer>
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={pullToRefresh.refreshing} onRefresh={() => { void pullToRefresh.onRefresh(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+    >
       <View style={styles.content}>
         <Text style={styles.title}>{t('entryChoice.title')}</Text>
         <Text style={styles.hint}>{t('entryChoice.hint')}</Text>

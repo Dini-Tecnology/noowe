@@ -69,8 +69,8 @@ export default function SupportScreen() {
   };
 
   const handleCall = () => Linking.openURL('tel:+551140028922');
-  const handleEmail = () => Linking.openURL('mailto:support@okinawa.app?subject=Suporte Okinawa');
-  const handleWhatsApp = () => Linking.openURL('https://wa.me/5511940028922?text=Olá, preciso de ajuda com o app Okinawa');
+  const handleEmail = () => Linking.openURL('mailto:suporte@noowebr.com?subject=Suporte Noowe');
+  const handleWhatsApp = () => Linking.openURL('https://wa.me/5511940028922?text=Olá, preciso de ajuda com o app Noowe');
 
   const styles = createStyles(colors);
 

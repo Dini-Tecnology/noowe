@@ -19,10 +19,16 @@ class SocketService {
   private readonly handleWaitlistCalled = (data: unknown) => this.emit('waitlist:called', data);
 
   async connect() {
-    await socketManager.connectAll();
+    const connected = await socketManager.connectAll();
+    if (!connected) {
+      this.connected = false;
+      return false;
+    }
+
     this.bindRealtimeEvents();
     this.connected = true;
     this.emit('connect', { connected: true });
+    return true;
   }
 
   async disconnect() {

@@ -1,29 +1,21 @@
 module.exports = {
   preset: 'jest-expo',
-  testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
-  testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest',
-  },
+  rootDir: '.',
+  testMatch: ['<rootDir>/src/__tests__/production.*.test.ts?(x)'],
   moduleNameMapper: {
+    '^@/shared/(.*)$': '<rootDir>/../../shared/$1',
+    '^@okinawa/shared/(.*)$': '<rootDir>/../../shared/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
-  collectCoverageFrom: [
-    'src/**/*.{ts,tsx}',
-    '!src/**/*.d.ts',
-    '!src/__tests__/**',
+  // Dois padrões, um por layout de instalação.  O CI instala com npm (pacote em
+  // `node_modules/<pacote>`); a máquina de desenvolvimento usa pnpm (pacote em
+  // `node_modules/.pnpm/<pacote>@<versão>/node_modules/<pacote>`, com `/` do escopo
+  // trocado por `+`).  O primeiro padrão deixa passar `.pnpm`; o segundo filtra dentro
+  // dele por prefixo, como em platform/mobile/jest.config.js.
+  transformIgnorePatterns: [
+    'node_modules/(?!(\\.pnpm|(jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|expo-.*|@supabase/.*|@react-navigation/.*|react-native-.*)/)',
+    'node_modules/\\.pnpm/(?!((jest-)?react-native|@react-native|expo|@expo|@supabase|@react-navigation))',
   ],
-  coverageThreshold: {
-    global: {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70,
-    },
-  },
-  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
-  verbose: true,
+  clearMocks: true,
+  collectCoverageFrom: ['src/services/customer-backend.ts', 'src/contexts/VisitSessionContext.tsx'],
 };

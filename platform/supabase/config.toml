@@ -1,7 +1,50 @@
-project_id = "micstczoxsvnrkordftk"
+project_id = "eplivpvqemowmbivhfpx"
+
+[auth]
+enabled = true
+site_url = "https://noowebr.com"
+additional_redirect_urls = [
+  "https://noowebr.com/auth/callback",
+  "https://noowebr.com/auth/callback?app=restaurant",
+  "https://noowebr.com/auth/callback?app=client",
+  "https://www.noowebr.com/auth/callback",
+  "https://www.noowebr.com/auth/callback?app=restaurant",
+  "https://www.noowebr.com/auth/callback?app=client",
+  "okinawa-restaurant://auth/callback",
+  "noowe://auth/callback",
+  "okinawa-restaurant://auth/reset-password",
+  "noowe://auth/reset-password",
+]
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+double_confirm_changes = true
+secure_password_change = false
+max_frequency = "1m0s"
+otp_length = 8
+otp_expiry = 3600
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
 
 [functions.send-demo-code]
 verify_jwt = false
 
 [functions.verify-demo-code]
 verify_jwt = false
+
+[functions.register-with-resend]
+verify_jwt = false
+
+[functions.create-staff-user]
+# Authentication and restaurant authorization are validated inside the
+# function. Disabling the gateway's legacy JWT check also supports projects
+# using asymmetric signing keys.
+verify_jwt = false
+
+[functions.send-push-notification]
+# The function additionally requires the service_role claim, but gateway JWT
+# verification must remain enabled so that claim cannot be forged.
+verify_jwt = true

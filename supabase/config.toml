@@ -1,1 +1,4 @@
-project_id = "micstczoxsvnrkordftk"
+# Supabase CLI: migrations and functions live under platform/supabase.
+# Always run db commands from the platform/ directory:
+#   cd platform && supabase db push
+project_id = "eplivpvqemowmbivhfpx"

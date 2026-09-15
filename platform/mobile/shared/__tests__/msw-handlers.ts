@@ -15,92 +15,6 @@ import { http, HttpResponse } from 'msw';
 const API_BASE = 'http://localhost:3000';
 
 // ============================================================
-// AUTH HANDLERS
-// ============================================================
-
-export const authHandlers = [
-  // POST /auth/login
-  http.post(`${API_BASE}/auth/login`, async ({ request }) => {
-    const body = await request.json() as { email: string; password: string };
-    
-    // Validate required fields
-    if (!body.email || !body.password) {
-      return HttpResponse.json(
-        { statusCode: 400, message: 'Email and password are required' },
-        { status: 400 }
-      );
-    }
-    
-    // Simulate invalid credentials
-    if (body.password === 'wrongpassword') {
-      return HttpResponse.json(
-        { statusCode: 401, message: 'Invalid credentials' },
-        { status: 401 }
-      );
-    }
-    
-    // Success response
-    return HttpResponse.json({
-      access_token: 'mock_jwt_token_' + Date.now(),
-      refresh_token: 'mock_refresh_token_' + Date.now(),
-      user: {
-        id: 'user-123',
-        email: body.email,
-        full_name: 'Test User',
-      },
-    });
-  }),
-
-  // POST /auth/register
-  http.post(`${API_BASE}/auth/register`, async ({ request }) => {
-    const body = await request.json() as { email: string; password: string; full_name: string };
-    
-    // Validate email format
-    if (!body.email?.includes('@')) {
-      return HttpResponse.json(
-        { statusCode: 400, message: 'Invalid email format' },
-        { status: 400 }
-      );
-    }
-    
-    // Validate password length
-    if (body.password?.length < 8) {
-      return HttpResponse.json(
-        { statusCode: 400, message: 'Password must be at least 8 characters' },
-        { status: 400 }
-      );
-    }
-    
-    // Success response
-    return HttpResponse.json({
-      id: 'user-' + Date.now(),
-      email: body.email,
-      full_name: body.full_name,
-      created_at: new Date().toISOString(),
-    });
-  }),
-
-  // GET /auth/me
-  http.get(`${API_BASE}/auth/me`, ({ request }) => {
-    const authHeader = request.headers.get('Authorization');
-    
-    if (!authHeader?.startsWith('Bearer ')) {
-      return HttpResponse.json(
-        { statusCode: 401, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-    
-    return HttpResponse.json({
-      id: 'user-123',
-      email: 'test@example.com',
-      full_name: 'Test User',
-      roles: ['customer'],
-    });
-  }),
-];
-
-// ============================================================
 // RESERVATION HANDLERS
 // ============================================================
 
@@ -334,7 +248,6 @@ export const paymentHandlers = [
 // ============================================================
 
 export const handlers = [
-  ...authHandlers,
   ...reservationHandlers,
   ...orderHandlers,
   ...paymentHandlers,

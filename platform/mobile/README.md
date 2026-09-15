@@ -47,20 +47,28 @@ cd apps/restaurant && npm install
 
 ### 2. Configure variáveis de ambiente
 
-Crie `.env` em cada app:
+Copie o exemplo em cada app e preencha com os valores do seu projeto Supabase:
 
-**apps/client/.env**:
 ```bash
-API_URL=http://localhost:3000/api/v1
-WEBSOCKET_URL=http://localhost:3000
-GOOGLE_MAPS_API_KEY=your-key
+cp apps/client/.env.example apps/client/.env
+cp apps/restaurant/.env.example apps/restaurant/.env
 ```
 
-**apps/restaurant/.env**:
+Variáveis **obrigatórias** em ambos os apps:
+
 ```bash
-API_URL=http://localhost:3000/api/v1
-WEBSOCKET_URL=http://localhost:3000
+EXPO_PUBLIC_SUPABASE_URL=https://SEU_PROJETO.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxxxxxxx
 ```
+
+Opcionais (OAuth, biometria, Sentry, auth redirect): veja comentários em cada `.env.example`.
+
+**Notas importantes:**
+
+- API e WebSocket em dev usam `http://localhost:3000` fixo (`shared/config/env.ts`) — não defina `API_URL` nem `WEBSOCKET_URL` no `.env`.
+- Google Maps (app cliente): a chave é configurada nativamente (`app.json` / EAS secrets), não no `.env`.
+- E-mail de cadastro (Resend): configure secrets no Supabase (`platform/supabase/.env.example`).
+- Builds de produção (EAS): `API_BASE_URL`, `WS_URL`, `FIREBASE_*` e `SENTRY_DSN` vão em `eas.json` ou `eas secret:create`.
 
 ## 💻 Desenvolvimento
 

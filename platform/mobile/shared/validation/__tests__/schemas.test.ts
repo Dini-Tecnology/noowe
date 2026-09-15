@@ -20,6 +20,7 @@ import {
   LoginFormData,
   RegisterFormData,
 } from '../schemas';
+import { validationMsg } from '../messages';
 
 // ============================================================
 // AUTH SCHEMA TESTS
@@ -85,7 +86,7 @@ describe('Zod Schemas: Authentication', () => {
       const result = registerSchema.safeParse(invalidData);
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].message).toContain("match");
+        expect(result.error.issues[0].message).toBe(validationMsg.passwordsDontMatch);
       }
     });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Share } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Share, RefreshControl } from 'react-native';
 import { Text, Card, Button, TextInput, IconButton, ActivityIndicator, Avatar, Chip, Divider } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import ApiService from '@/shared/services/api';
@@ -7,6 +7,7 @@ import { useScreenTracking, useAnalytics } from '@/shared/hooks/useAnalytics';
 import { useI18n } from '@/shared/hooks/useI18n';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 
 interface Guest {
   id: string;
@@ -258,6 +259,8 @@ export default function GuestInvitationScreen() {
     }
   };
 
+  const pullToRefresh = usePullToRefresh(loadData);
+
   const confirmedGuests = guests.filter(g => g.status === 'accepted' || g.is_host);
   const pendingGuests = guests.filter(g => g.status === 'pending' && !g.is_host);
   const remainingSlots = partySize - confirmedGuests.length;
@@ -363,7 +366,7 @@ export default function GuestInvitationScreen() {
       const inviteLinkRes = await ApiService.post(`/reservation-guests/reservations/${reservationId}/invite-link`);
       const inviteLink = inviteLinkRes.data?.url || inviteLinkRes.data;
       await Share.share({
-        message: `Você foi convidado para uma reserva no Okinawa! Clique para aceitar: ${inviteLink}`,
+        message: `Você foi convidado para uma reserva no Noowe! Clique para aceitar: ${inviteLink}`,
         title: 'Convite de Reserva',
       });
       
@@ -424,7 +427,10 @@ export default function GuestInvitationScreen() {
 
   return (
     <ScreenContainer hasKeyboard>
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={pullToRefresh.refreshing} onRefresh={() => { void pullToRefresh.onRefresh(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+    >
       {/* Header Summary */}
       <Card style={styles.summaryCard}>
         <Card.Content>
@@ -633,7 +639,7 @@ export default function GuestInvitationScreen() {
           <View style={styles.noteContainer}>
             <IconButton icon="information" size={24} iconColor={colors.primary} />
             <Text variant="bodySmall" style={styles.noteText}>
-              Convidados com o app Okinawa receberão uma notificação. 
+              Convidados com o app Noowe receberão uma notificação.
               Outros receberão um SMS ou email com o link do convite.
             </Text>
           </View>

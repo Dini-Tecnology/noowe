@@ -39,6 +39,27 @@ vi.mock('@/shared/services/auth', () => ({
   },
 }));
 
+vi.mock('@/shared/services/secure-storage', () => ({
+  secureStorage: {
+    getBiometricEnabled: vi.fn().mockResolvedValue(false),
+    setUserEmail: vi.fn(),
+  },
+}));
+
+vi.mock('@/shared/hooks/useBiometricAuth', () => ({
+  useBiometricAuth: () => ({
+    isAvailable: false,
+    isEnrolled: false,
+    biometricType: 'TouchID',
+  }),
+}));
+
+vi.mock('@okinawa/shared/utils/logger', () => ({
+  default: {
+    error: vi.fn(),
+  },
+}));
+
 vi.mock('@/shared/hooks/useI18n', () => ({
   useI18n: () => ({
     t: (key: string) => key,
@@ -50,13 +71,16 @@ vi.mock('@okinawa/shared/contexts/ThemeContext', () => ({
   useColors: () => ({
     background: '#FFFFFF',
     foreground: '#111827',
+    foregroundSecondary: '#6B7280',
+    mutedForeground: '#6B7280',
     card: '#F9FAFB',
     primary: '#EA580C',
     border: '#E5E7EB',
+    error: '#DC2626',
   }),
 }));
 
-const mockValidateForm = vi.fn(() => ({ success: true, errors: {} }));
+const mockValidateForm = vi.fn((...args: any[]) => ({ success: true, errors: {} }));
 vi.mock('@/shared/validation/schemas', () => ({
   loginSchema: {},
   validateForm: (...args: any[]) => mockValidateForm(...args),
@@ -94,9 +118,9 @@ describe('Restaurant LoginScreen', () => {
 
   // ---- Rendering ----
 
-  it('renders the "Okinawa Restaurant" title', () => {
+  it('renders the restaurant auth title', () => {
     render(<LoginScreen {...defaultProps} />);
-    expect(screen.getByText('Okinawa Restaurant')).toBeTruthy();
+    expect(screen.getByText('NOOWE Restaurant')).toBeTruthy();
   });
 
   it('renders email and password inputs with accessibility labels', () => {

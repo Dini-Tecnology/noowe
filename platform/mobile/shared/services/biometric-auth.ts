@@ -10,6 +10,8 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { secureStorage } from './secure-storage';
+import { getOptionalSupabaseSessionUser } from './supabase-auth';
+import { isBiometricAuthConfigured } from '../config/auth-providers';
 import logger from '../utils/logger';
 
 // Storage keys for biometric settings (enhanced with token support)
@@ -91,16 +93,19 @@ class BiometricAuthService {
    */
   private async hasValidBiometricToken(): Promise<boolean> {
     try {
-      const token = await secureStorage.getItem(BIOMETRIC_STORAGE_KEYS.AUTH_TOKEN);
-      if (!token) return false;
-      
-      const expiresAt = await secureStorage.getItem(BIOMETRIC_STORAGE_KEYS.TOKEN_EXPIRES_AT);
-      if (expiresAt && new Date(expiresAt) < new Date()) {
-        // Token expired, clear it
-        await this.clearBiometricToken();
+      if (!isBiometricAuthConfigured()) return false;
+
+      const isEnabled = await this.isEnabled();
+      if (!isEnabled) return false;
+
+      const storedUserId = await secureStorage.getItem(BIOMETRIC_STORAGE_KEYS.USER_ID);
+      if (!storedUserId) return false;
+
+      const { user } = await getOptionalSupabaseSessionUser();
+      if (!user || user.id !== storedUserId) {
         return false;
       }
-      
+
       return true;
     } catch {
       return false;
@@ -144,7 +149,8 @@ class BiometricAuthService {
   async isEnabled(): Promise<boolean> {
     try {
       const enabled = await secureStorage.getItem(BIOMETRIC_STORAGE_KEYS.ENABLED);
-      return enabled === 'true';
+      if (enabled === 'true') return true;
+      return secureStorage.getBiometricEnabled();
     } catch (error) {
       return false;
     }
@@ -156,7 +162,23 @@ class BiometricAuthService {
    */
   async enable(userId: string): Promise<BiometricAuthResult> {
     try {
-      // First verify with biometrics
+      if (!isBiometricAuthConfigured()) {
+        return {
+          success: false,
+          error: 'Biometric login is not configured for this app',
+          errorCode: 'not_configured',
+        };
+      }
+
+      const { user } = await getOptionalSupabaseSessionUser();
+      if (!user || user.id !== userId) {
+        return {
+          success: false,
+          error: 'A valid Supabase session is required to enable biometric login',
+          errorCode: 'session_required',
+        };
+      }
+
       const authResult = await this.authenticate(
         'Confirm your identity to enable biometric login'
       );
@@ -168,6 +190,7 @@ class BiometricAuthService {
       // Store biometric settings
       await secureStorage.setItem(BIOMETRIC_STORAGE_KEYS.ENABLED, 'true');
       await secureStorage.setItem(BIOMETRIC_STORAGE_KEYS.USER_ID, userId);
+      await secureStorage.setBiometricEnabled(true);
 
       logger.info('[BiometricAuth] Biometric login enabled for user:', userId);
       return { success: true };
@@ -188,6 +211,8 @@ class BiometricAuthService {
       await secureStorage.removeItem(BIOMETRIC_STORAGE_KEYS.ENABLED);
       await secureStorage.removeItem(BIOMETRIC_STORAGE_KEYS.USER_ID);
       await secureStorage.removeItem(BIOMETRIC_STORAGE_KEYS.CREDENTIALS_HASH);
+      await this.clearBiometricToken();
+      await secureStorage.setBiometricEnabled(false);
       logger.info('[BiometricAuth] Biometric login disabled');
     } catch (error) {
       logger.error('[BiometricAuth] Failed to disable:', error);
@@ -230,11 +255,12 @@ class BiometricAuthService {
         return { success: true };
       }
 
-      logger.warn('[BiometricAuth] Authentication failed:', result.error);
+      const errorCode = 'error' in result ? result.error : undefined;
+      logger.warn('[BiometricAuth] Authentication failed:', errorCode);
       return {
         success: false,
-        error: this.getErrorMessage(result.error),
-        errorCode: result.error,
+        error: this.getErrorMessage(errorCode),
+        errorCode,
       };
     } catch (error: any) {
       logger.error('[BiometricAuth] Authentication error:', error);
@@ -252,6 +278,13 @@ class BiometricAuthService {
    */
   async authenticateAndGetUserId(): Promise<{ success: boolean; userId?: string; error?: string }> {
     try {
+      if (!isBiometricAuthConfigured()) {
+        return {
+          success: false,
+          error: 'Biometric login is not configured',
+        };
+      }
+
       const isEnabled = await this.isEnabled();
       if (!isEnabled) {
         return {
@@ -260,19 +293,27 @@ class BiometricAuthService {
         };
       }
 
-      const authResult = await this.authenticate('Login with biometrics');
-      if (!authResult.success) {
-        return {
-          success: false,
-          error: authResult.error,
-        };
-      }
-
       const userId = await secureStorage.getItem(BIOMETRIC_STORAGE_KEYS.USER_ID);
       if (!userId) {
         return {
           success: false,
           error: 'No user associated with biometric login',
+        };
+      }
+
+      const { user } = await getOptionalSupabaseSessionUser();
+      if (!user || user.id !== userId) {
+        return {
+          success: false,
+          error: 'No valid Supabase session associated with biometric login',
+        };
+      }
+
+      const authResult = await this.authenticate('Login with biometrics');
+      if (!authResult.success) {
+        return {
+          success: false,
+          error: authResult.error,
         };
       }
 
@@ -351,9 +392,11 @@ class BiometricAuthService {
   async canQuickLogin(): Promise<boolean> {
     const status = await this.getStatus();
     return (
+      isBiometricAuthConfigured() &&
       status.isHardwareAvailable &&
       status.isEnrolled &&
-      status.isEnabledForApp
+      status.isEnabledForApp &&
+      status.hasValidToken
     );
   }
 }

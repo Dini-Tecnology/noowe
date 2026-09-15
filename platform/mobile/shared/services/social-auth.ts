@@ -11,6 +11,9 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import * as Crypto from 'expo-crypto';
 import { secureStorage } from './secure-storage';
+import { supabaseAuthAdapter } from './supabase-auth';
+import { isAppleAuthProviderConfigured, isGoogleAuthProviderConfigured } from '../config/auth-providers';
+import { getAuthRedirectUrl } from '../utils/auth-redirect';
 import logger from '../utils/logger';
 
 // Complete auth session for web-based OAuth
@@ -20,6 +23,7 @@ export interface SocialAuthResult {
   success: boolean;
   provider: 'apple' | 'google';
   idToken?: string;
+  callbackUrl?: string;
   user?: {
     id: string;
     email?: string;
@@ -83,6 +87,7 @@ class SocialAuthService {
    * Check if Apple Sign In is available on this device
    */
   async isAppleAuthAvailable(): Promise<boolean> {
+    if (!isAppleAuthProviderConfigured()) return false;
     if (Platform.OS !== 'ios') return false;
     return AppleAuthentication.isAvailableAsync();
   }
@@ -154,7 +159,7 @@ class SocialAuthService {
     promptAsync: () => Promise<Google.AuthSessionResult>
   ): Promise<SocialAuthResult> {
     try {
-      if (!request) {
+      if (!isGoogleAuthProviderConfigured() || !request) {
         return {
           success: false,
           provider: 'google',
@@ -214,6 +219,67 @@ class SocialAuthService {
       };
     } catch (error: any) {
       logger.error('Google Sign In failed', error);
+      return {
+        success: false,
+        provider: 'google',
+        error: error.message || 'Google Sign In failed',
+      };
+    }
+  }
+
+  /**
+   * Authenticate with Google through Supabase OAuth.
+   *
+   * Unlike the native Google client flow, this uses the provider configured in
+   * Supabase and can return to each app's own deep-link scheme. This is important
+   * because Client and Restaurant have different bundle identifiers and therefore
+   * cannot share one native iOS/Android OAuth credential.
+   */
+  async signInWithGoogleOAuth(): Promise<SocialAuthResult> {
+    try {
+      if (!isGoogleAuthProviderConfigured()) {
+        return {
+          success: false,
+          provider: 'google',
+          error: 'Google Sign In is not configured',
+        };
+      }
+
+      const redirectUrl = getAuthRedirectUrl('auth/callback');
+      const oauth = await supabaseAuthAdapter.socialOAuthLogin('google', redirectUrl);
+
+      if (!oauth.url) {
+        return {
+          success: false,
+          provider: 'google',
+          error: 'Supabase did not return the Google authorization URL',
+        };
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(oauth.url, redirectUrl);
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        return {
+          success: false,
+          provider: 'google',
+          error: 'Sign in was cancelled',
+        };
+      }
+
+      if (result.type !== 'success' || !result.url) {
+        return {
+          success: false,
+          provider: 'google',
+          error: 'Google Sign In did not return to the app',
+        };
+      }
+
+      return {
+        success: true,
+        provider: 'google',
+        callbackUrl: result.url,
+      };
+    } catch (error: any) {
+      logger.error('Google OAuth Sign In failed', error);
       return {
         success: false,
         provider: 'google',

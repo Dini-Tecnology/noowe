@@ -397,6 +397,8 @@ export default function VipTableScreen({ route }: VipTableScreenProps) {
       {/* Table Grid */}
       <FlatList
         data={tables || []}
+        refreshing={isRefetching}
+        onRefresh={() => { void refetch(); }}
         keyExtractor={(item) => item.id}
         renderItem={renderTable}
         numColumns={3}

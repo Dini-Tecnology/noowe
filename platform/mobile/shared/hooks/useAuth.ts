@@ -1,16 +1,8 @@
 import { useState, useEffect } from 'react';
 import { authService } from '../services/auth';
+import type { NormalizedAuthUser } from '../services/supabase-auth';
 
-interface User {
-  id: string;
-  email: string;
-  full_name: string;
-  avatar_url?: string;
-  roles?: Array<{
-    role: string;
-    restaurant_id?: string;
-  }>;
-}
+type User = NormalizedAuthUser;
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -18,7 +10,6 @@ export const useAuth = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    authService.initialize();
     checkAuthStatus();
     return authService.onAuthStateChange((authenticated) => {
       setIsAuthenticated(authenticated);
@@ -32,12 +23,9 @@ export const useAuth = () => {
 
   const checkAuthStatus = async () => {
     try {
-      const authenticated = await authService.isAuthenticated();
-      if (authenticated) {
-        const currentUser = await authService.getCurrentUser();
-        setUser(currentUser);
-        setIsAuthenticated(true);
-      }
+      const currentUser = await authService.restoreSession();
+      setUser(currentUser);
+      setIsAuthenticated(Boolean(currentUser));
     } catch (error) {
       console.error('Failed to check auth status:', error);
       await logout();
@@ -49,6 +37,9 @@ export const useAuth = () => {
   const login = async (email: string, password: string) => {
     try {
       const { user: loggedInUser } = await authService.login(email, password);
+      if (!loggedInUser) {
+        return { success: false, error: 'Login did not return an authenticated Supabase user' };
+      }
       setUser(loggedInUser);
       setIsAuthenticated(true);
       return { success: true };
@@ -67,6 +58,11 @@ export const useAuth = () => {
         password,
         fullName
       );
+      if (!registeredUser) {
+        setUser(null);
+        setIsAuthenticated(false);
+        return { success: true };
+      }
       setUser(registeredUser);
       setIsAuthenticated(true);
       return { success: true };
@@ -92,6 +88,7 @@ export const useAuth = () => {
     try {
       const currentUser = await authService.getCurrentUser();
       setUser(currentUser);
+      setIsAuthenticated(Boolean(currentUser));
     } catch (error) {
       console.error('Failed to refresh user:', error);
     }

@@ -10,7 +10,7 @@
  */
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, StyleSheet, Image, Platform, Animated } from 'react-native';
+import { View, StyleSheet, Image, ImageSourcePropType, Platform, Animated } from 'react-native';
 import { Text, Button, Divider, ActivityIndicator } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '../../components/ScreenContainer';
@@ -27,8 +27,17 @@ interface WelcomeScreenProps {
   onGoogleLogin: () => void;
   onPhoneLogin: () => void;
   onBiometricLogin: () => void;
+  /** When false, Google SSO button is hidden (e.g. native OAuth env not configured yet). */
+  googleLoginAvailable?: boolean;
+  appleLoginAvailable?: boolean;
+  biometricLoginAvailable?: boolean;
   loading?: boolean;
   biometricLoading?: boolean;
+  /** Optional app icon (e.g. NOOWE client `icon.png`). */
+  logoIconSource?: ImageSourcePropType;
+  /** Optional full wordmark (e.g. `logo-completa-client.png`). */
+  logoFullSource?: ImageSourcePropType;
+  brandTitle?: string;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
@@ -37,8 +46,14 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onGoogleLogin,
   onPhoneLogin,
   onBiometricLogin,
+  googleLoginAvailable = true,
+  appleLoginAvailable = false,
+  biometricLoginAvailable = false,
   loading = false,
   biometricLoading = false,
+  logoIconSource,
+  logoFullSource,
+  brandTitle = 'NOOWE',
 }) => {
   useScreenTracking('Welcome');
   const { t } = useI18n();
@@ -59,10 +74,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       duration: 600,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [biometricLoginAvailable, onBiometricLogin]);
 
   const checkBiometricQuickLogin = async () => {
     try {
+      if (!biometricLoginAvailable) {
+        setCanQuickLogin(false);
+        return;
+      }
+
       const canLogin = await biometricAuthService.canQuickLogin();
       setCanQuickLogin(canLogin);
       
@@ -100,12 +120,25 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       {/* Logo and Branding */}
       <View style={styles.header}>
-        <View style={styles.logoContainer}>
+        {logoIconSource ? (
+          <View style={styles.logoWrapper}>
+            <Image source={logoIconSource} style={styles.logoImage} resizeMode="cover" />
+          </View>
+        ) : (
           <Text style={styles.logoText}>🍽️</Text>
-        </View>
-        <Text style={styles.title}>Okinawa</Text>
+        )}
+        {logoFullSource ? (
+          <Image
+            source={logoFullSource}
+            style={styles.logoFull}
+            resizeMode="contain"
+            accessibilityLabel={brandTitle}
+          />
+        ) : (
+          <Text style={styles.title}>{brandTitle}</Text>
+        )}
         <Text style={styles.subtitle}>
-          {t('auth.welcomeMessage') || 'Your dining experience, reimagined'}
+          {t('auth.welcomeMessage')}
         </Text>
       </View>
 
@@ -125,7 +158,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </Button>
           
           <Divider style={styles.divider} />
-          <Text style={styles.orText}>{t('auth.orContinueWith') || 'or continue with'}</Text>
+          <Text style={styles.orText}>{t('auth.orContinueWith')}</Text>
         </View>
       )}
 
@@ -133,35 +166,44 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       <View style={styles.socialButtons}>
         {isIOS ? (
           <>
-            <SocialLoginButton
-              provider="apple"
-              onPress={onAppleLogin}
-              loading={loading}
-              disabled={loading || biometricLoading}
-              variant="primary"
-            />
-            <SocialLoginButton
-              provider="google"
-              onPress={onGoogleLogin}
-              loading={loading}
-              disabled={loading || biometricLoading}
-            />
+            {appleLoginAvailable && (
+              <SocialLoginButton
+                provider="apple"
+                onPress={onAppleLogin}
+                loading={loading}
+                disabled={loading || biometricLoading}
+                variant="primary"
+              />
+            )}
+            {googleLoginAvailable && (
+              <SocialLoginButton
+                provider="google"
+                onPress={onGoogleLogin}
+                loading={loading}
+                disabled={loading || biometricLoading}
+              />
+            )}
           </>
         ) : (
           <>
-            <SocialLoginButton
-              provider="google"
-              onPress={onGoogleLogin}
-              loading={loading}
-              disabled={loading || biometricLoading}
-              variant="primary"
-            />
-            <SocialLoginButton
-              provider="apple"
-              onPress={onAppleLogin}
-              loading={loading}
-              disabled={loading || biometricLoading}
-            />
+            {googleLoginAvailable && (
+              <SocialLoginButton
+                provider="google"
+                onPress={onGoogleLogin}
+                loading={loading}
+                disabled={loading || biometricLoading}
+                variant="primary"
+              />
+            )}
+            {appleLoginAvailable && (
+              <SocialLoginButton
+                provider="apple"
+                onPress={onAppleLogin}
+                loading={loading}
+                disabled={loading || biometricLoading}
+                variant={googleLoginAvailable ? undefined : 'primary'}
+              />
+            )}
           </>
         )}
       </View>
@@ -174,7 +216,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         style={styles.phoneButton}
         icon="cellphone"
       >
-        {t('auth.continueWithPhone') || 'Continue with Phone'}
+        {t('auth.continueWithPhone')}
       </Button>
 
       {/* Email/Password Fallback (subtle) */}
@@ -185,16 +227,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         style={styles.emailButton}
         textColor={colors.mutedForeground}
       >
-        {t('auth.useEmailPassword') || 'Use email and password'}
+        {t('auth.useEmailPassword')}
       </Button>
 
       {/* Terms and Privacy */}
       <View style={styles.footer}>
         <Text style={styles.termsText}>
-          {t('auth.termsPrefix') || 'By continuing, you agree to our'}{' '}
-          <Text style={styles.termsLink}>{t('auth.termsOfService') || 'Terms of Service'}</Text>
-          {' '}{t('auth.and') || 'and'}{' '}
-          <Text style={styles.termsLink}>{t('auth.privacyPolicy') || 'Privacy Policy'}</Text>
+          {t('auth.termsPrefix')}{' '}
+          <Text style={styles.termsLink}>{t('auth.termsOfService')}</Text>
+          {' '}{t('auth.and')}{' '}
+          <Text style={styles.termsLink}>{t('auth.privacyPolicy')}</Text>
         </Text>
       </View>
     </Animated.View>
@@ -219,17 +261,25 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     marginTop: 60,
   },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: colors.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
   logoText: {
     fontSize: 40,
+    marginBottom: 16,
+  },
+  logoWrapper: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  logoImage: {
+    width: 72,
+    height: 72,
+  },
+  logoFull: {
+    width: 180,
+    height: 48,
+    marginBottom: 8,
   },
   title: {
     fontSize: 32,

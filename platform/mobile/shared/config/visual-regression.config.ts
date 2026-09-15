@@ -27,7 +27,7 @@ export const VISUAL_REGRESSION_CONFIG = {
   components: [
     'Button', 'Card', 'Input', 'Badge', 'Avatar', 'AvatarGroup',
     'Text', 'LoadingSpinner', 'EmptyState', 'Skeleton', 'StatusBadge',
-    'LiquidGlassNav', 'RestaurantLiquidGlassNav', 'ErrorBoundary',
+    'LiquidGlassNav', 'LiquidGlassBottomNav', 'RestaurantLiquidGlassNav', 'ClientLiquidGlassNav', 'ErrorBoundary',
   ],
   
   // Themes to test

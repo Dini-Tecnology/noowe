@@ -1,47 +1,222 @@
-import type { Session, User } from '@supabase/supabase-js';
+import type { EmailOtpType, Session, User } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
+import { getAuthRedirectUrl } from '../utils/auth-redirect';
 import { getSupabaseClient } from './supabase';
 
 type SocialProvider = 'apple' | 'google';
-type AppRole = 'owner' | 'manager' | 'chef' | 'waiter' | 'barman' | 'maitre' | 'cashier' | 'host';
 
-export interface UserContextRole {
-  role: AppRole;
-  restaurant_id: string;
-  restaurant?: {
-    id: string;
-    name: string;
-    logo_url?: string;
-    service_type?: string;
-  };
+const EMAIL_OTP_TYPES: EmailOtpType[] = [
+  'signup',
+  'invite',
+  'magiclink',
+  'recovery',
+  'email_change',
+  'email',
+];
+
+/**
+ * Normaliza o `type` recebido no deep link para um EmailOtpType válido.
+ * Links de recuperação de senha chegam com `type=recovery`; qualquer outro
+ * valor cai no fluxo padrão de confirmação de e-mail (`email`).
+ */
+function normalizeEmailOtpType(type?: string | null): EmailOtpType {
+  return type && (EMAIL_OTP_TYPES as string[]).includes(type)
+    ? (type as EmailOtpType)
+    : 'email';
 }
 
-export interface UserContext {
-  account_type: 'customer' | 'restaurant';
-  profile: Record<string, unknown> | null;
-  roles: UserContextRole[];
+export interface NormalizedAuthUser {
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url?: string | null;
+  phone?: string | null;
+  role: string;
+  roles: Array<{ role: string; restaurant_id?: string | null }>;
   restaurant_ids: string[];
 }
 
-function normalizeUser(user: User | null) {
-  if (!user) return null;
-
-  const metadataRoles = Array.isArray(user.app_metadata?.roles) ? user.app_metadata.roles : [];
-
-  return {
-    id: user.id,
-    email: user.email ?? '',
-    full_name: typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '',
-    avatar_url: typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : undefined,
-    roles: metadataRoles.map((role) => ({ role: String(role).toLowerCase() })),
-  };
+function getRedirectUrl(path: 'auth/callback' | 'auth/reset-password') {
+  return getAuthRedirectUrl(path);
 }
 
-function normalizeSession(session: Session | null, user: User | null = session?.user ?? null) {
-  return {
-    access_token: session?.access_token,
-    refresh_token: session?.refresh_token,
-    user: normalizeUser(user) ?? undefined,
+function mapAuthCallbackError(params: Record<string, string>) {
+  const code = params.error_code ?? params.error;
+  const description = params.error_description ?? params.error;
+
+  if (code === 'otp_expired') {
+    return 'Este link de confirmação expirou. Faça um novo cadastro ou solicite outro e-mail de confirmação.';
+  }
+  if (code === 'access_denied' && description) {
+    return description;
+  }
+  if (description) {
+    return description;
+  }
+  return 'Não foi possível confirmar este link.';
+}
+
+function readAuthParamsFromUrl(url: string) {
+  const params: Record<string, string> = {};
+
+  try {
+    const parsed = Linking.parse(url);
+    Object.entries(parsed.queryParams ?? {}).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        if (value[0] !== undefined) params[key] = String(value[0]);
+      } else if (value !== undefined && value !== null) {
+        params[key] = String(value);
+      }
+    });
+  } catch {
+    // Continue with manual parsing below.
+  }
+
+  const collect = (segment?: string) => {
+    if (!segment) return;
+    const query = segment.includes('?') ? segment.split('?').pop() : segment;
+    if (!query) return;
+
+    new URLSearchParams(query).forEach((value, key) => {
+      if (value && params[key] === undefined) {
+        params[key] = value;
+      }
+    });
   };
+
+  collect(url.split('?')[1]?.split('#')[0]);
+  collect(url.split('#')[1]);
+
+  return params;
+}
+
+function decodeBase64Url(value: string) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+  let buffer = 0;
+  let bits = 0;
+  let output = '';
+
+  for (const char of base64) {
+    const index = alphabet.indexOf(char);
+    if (index < 0) continue;
+    buffer = (buffer << 6) | index;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      output += String.fromCharCode((buffer >> bits) & 0xff);
+    }
+  }
+
+  try {
+    return decodeURIComponent(
+      output
+        .split('')
+        .map((char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`)
+        .join('')
+    );
+  } catch {
+    return output;
+  }
+}
+
+function readSessionClaims(session: Session | null): Record<string, unknown> {
+  if (!session?.access_token) return {};
+
+  try {
+    const payload = session.access_token.split('.')[1];
+    if (!payload) return {};
+    return JSON.parse(decodeBase64Url(payload));
+  } catch {
+    return {};
+  }
+}
+
+export function isMissingAuthSessionError(error: unknown) {
+  const authError = error as { name?: string; message?: string; status?: number; __isAuthError?: boolean };
+  const message = authError?.message ?? '';
+
+  return (
+    authError?.name === 'AuthSessionMissingError' ||
+    message.includes('Auth session missing') ||
+    Boolean(authError?.__isAuthError && authError?.status === 400 && message.toLowerCase().includes('session'))
+  );
+}
+
+export async function getOptionalSupabaseSessionUser() {
+  const supabase = getSupabaseClient();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    if (isMissingAuthSessionError(sessionError)) {
+      return { session: null, user: null };
+    }
+    throw sessionError;
+  }
+
+  const session = sessionData.session ?? null;
+  if (!session?.access_token) {
+    return { session: null, user: null };
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) {
+    if (isMissingAuthSessionError(userError)) {
+      return { session: null, user: null };
+    }
+    throw userError;
+  }
+
+  return { session, user: userData.user ?? null };
+}
+
+function uniqueRoleRows(rows: Array<{ role: string; restaurant_id?: string | null }>) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = `${row.role}:${row.restaurant_id ?? 'global'}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function loadProfile(userId: string) {
+  const { data, error } = await getSupabaseClient()
+    .from('profiles')
+    .select('id,email,full_name,avatar_url,phone,is_active,last_login_at')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as {
+    id: string;
+    email?: string | null;
+    full_name?: string | null;
+    avatar_url?: string | null;
+    phone?: string | null;
+  } | null;
+}
+
+async function loadRoles(userId: string) {
+  const [{ data: profileRoles, error: profileRolesError }, { data: restaurantRoles, error: restaurantRolesError }] =
+    await Promise.all([
+      getSupabaseClient().from('profile_roles').select('role_key,restaurant_id,is_active').eq('user_id', userId).eq('is_active', true),
+      getSupabaseClient().from('user_roles').select('role,restaurant_id,is_active').eq('user_id', userId).eq('is_active', true),
+    ]);
+
+  if (profileRolesError) throw profileRolesError;
+  if (restaurantRolesError) throw restaurantRolesError;
+
+  return uniqueRoleRows([
+    ...(((profileRoles as Array<{ role_key: string; restaurant_id?: string | null }> | null) ?? []).map((row) => ({
+      role: row.role_key,
+      restaurant_id: row.restaurant_id,
+    }))),
+    ...(((restaurantRoles as Array<{ role: string; restaurant_id?: string | null }> | null) ?? []).map((row) => ({
+      role: row.role,
+      restaurant_id: row.restaurant_id,
+    }))),
+  ]);
 }
 
 async function upsertProfile(user: User | null, extra?: Record<string, unknown>) {
@@ -73,32 +248,62 @@ async function upsertProfile(user: User | null, extra?: Record<string, unknown>)
   return data;
 }
 
-async function getAuthenticatedUserId(userId?: string) {
-  if (userId) return userId;
+async function normalizeUser(user: User | null, session: Session | null): Promise<NormalizedAuthUser | null> {
+  if (!user) return null;
 
-  const { data, error } = await getSupabaseClient().auth.getUser();
-  if (error) throw error;
-  if (!data.user) throw new Error('No authenticated Supabase user');
-  return data.user.id;
-}
-
-function normalizeRoleRow(row: any): UserContextRole | null {
-  if (!row?.restaurant_id || !row?.role) return null;
-
-  const restaurant = Array.isArray(row.restaurants) ? row.restaurants[0] : row.restaurants;
+  const claims = readSessionClaims(session);
+  const profile = await loadProfile(user.id).catch(() => null);
+  const dbRoles = await loadRoles(user.id).catch(() => []);
+  const claimRoles = ((claims.roles as string[] | undefined) ?? []).map((role) => ({ role }));
+  const claimRestaurantIds = (claims.restaurant_ids as string[] | undefined) ?? [];
+  const roles = uniqueRoleRows([...dbRoles, ...claimRoles]);
+  const restaurantIds = Array.from(
+    new Set([
+      ...roles.map((row) => row.restaurant_id).filter(Boolean),
+      ...claimRestaurantIds,
+    ] as string[])
+  );
+  const primaryRole =
+    (claims.app_role as string | undefined) ??
+    roles.find((row) => ['admin', 'owner', 'manager'].includes(row.role))?.role ??
+    roles[0]?.role ??
+    'customer';
 
   return {
-    role: String(row.role).toLowerCase() as AppRole,
-    restaurant_id: row.restaurant_id,
-    restaurant: restaurant
-      ? {
-          id: restaurant.id,
-          name: restaurant.name,
-          logo_url: restaurant.logo_url,
-          service_type: restaurant.service_type,
-        }
-      : undefined,
+    id: user.id,
+    email: user.email ?? profile?.email ?? '',
+    full_name:
+      profile?.full_name ??
+      (typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '') ??
+      '',
+    avatar_url:
+      profile?.avatar_url ??
+      (typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : undefined),
+    phone: profile?.phone ?? user.phone ?? undefined,
+    role: primaryRole,
+    roles: roles.length > 0 ? roles : [{ role: 'customer' }],
+    restaurant_ids: restaurantIds,
   };
+}
+
+async function normalizeSession(session: Session | null, user: User | null = session?.user ?? null) {
+  return {
+    access_token: session?.access_token,
+    refresh_token: session?.refresh_token,
+    user: (await normalizeUser(user, session)) ?? undefined,
+  };
+}
+
+async function throwFunctionError(error: unknown): Promise<never> {
+  const context = (error as { context?: unknown })?.context;
+  if (context instanceof Response) {
+    const body = await context.json().catch(() => null);
+    if (body?.error) {
+      throw new Error(String(body.error));
+    }
+  }
+
+  throw error instanceof Error ? error : new Error(String(error));
 }
 
 export const supabaseAuthAdapter = {
@@ -112,22 +317,53 @@ export const supabaseAuthAdapter = {
     return normalizeSession(data.session, data.user);
   },
 
-  async register(email: string, password: string, fullName: string) {
-    const { data, error } = await getSupabaseClient().auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
+  async resendSignupConfirmation(email: string) {
+    const { data, error } = await getSupabaseClient().functions.invoke('register-with-resend', {
+      body: {
+        action: 'resend',
+        email,
+        emailRedirectTo: getRedirectUrl('auth/callback'),
       },
     });
-    if (error) throw error;
-    if (data.session && data.user) {
-      await upsertProfile(data.user, { full_name: fullName });
-    }
+    if (error) await throwFunctionError(error);
+    return { confirmationSent: data?.confirmationSent !== false };
+  },
 
-    return normalizeSession(data.session, data.user);
+  async checkEmailAvailability(email: string) {
+    const { data, error } = await getSupabaseClient().functions.invoke('register-with-resend', {
+      body: {
+        action: 'check-email',
+        email,
+      },
+    });
+    if (error) await throwFunctionError(error);
+    return { exists: data?.exists === true, confirmed: data?.confirmed === true };
+  },
+
+  async register(email: string, password: string, fullName: string) {
+    const { data, error } = await getSupabaseClient().functions.invoke('register-with-resend', {
+      body: {
+        email,
+        password,
+        fullName,
+        emailRedirectTo: getRedirectUrl('auth/callback'),
+      },
+    });
+    if (error) await throwFunctionError(error);
+
+    return {
+      user: data?.user
+        ? {
+            id: data.user.id,
+            email: data.user.email ?? email,
+            full_name: fullName,
+            role: 'customer',
+            roles: [{ role: 'customer' }],
+            restaurant_ids: [],
+          }
+        : undefined,
+      needsEmailConfirmation: true,
+    };
   },
 
   async socialLogin(provider: SocialProvider, idToken: string) {
@@ -141,7 +377,7 @@ export const supabaseAuthAdapter = {
     }
 
     return {
-      ...normalizeSession(data.session, data.user),
+      ...(await normalizeSession(data.session, data.user)),
       success: true,
       authenticated: Boolean(data.session?.access_token),
     };
@@ -150,7 +386,7 @@ export const supabaseAuthAdapter = {
   async socialOAuthLogin(provider: SocialProvider, redirectTo?: string) {
     const { data, error } = await getSupabaseClient().auth.signInWithOAuth({
       provider,
-      options: redirectTo ? { redirectTo } : undefined,
+      options: { redirectTo: redirectTo ?? getRedirectUrl('auth/callback') },
     });
     if (error) throw error;
 
@@ -177,7 +413,7 @@ export const supabaseAuthAdapter = {
     if (error) throw error;
 
     const profile = await upsertProfile(data.user, { phone });
-    const sessionData = normalizeSession(data.session, data.user);
+    const sessionData = await normalizeSession(data.session, data.user);
 
     return {
       ...sessionData,
@@ -195,9 +431,8 @@ export const supabaseAuthAdapter = {
     accepted_terms_version?: string;
     accepted_privacy_version?: string;
   }) {
-    const { data: userData, error: userError } = await getSupabaseClient().auth.getUser();
-    if (userError) throw userError;
-    if (!userData.user) throw new Error('No authenticated Supabase user');
+    const { user } = await getOptionalSupabaseSessionUser();
+    if (!user) throw new Error('No authenticated Supabase user');
 
     const prefs =
       patch.accepted_terms_version !== undefined || patch.accepted_privacy_version !== undefined
@@ -220,7 +455,7 @@ export const supabaseAuthAdapter = {
         ...((patch.phone !== undefined && patch.phone !== '') ? { phone_verified: true } : {}),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', userData.user.id)
+      .eq('id', user.id)
       .select()
       .single();
     if (error) throw error;
@@ -231,7 +466,10 @@ export const supabaseAuthAdapter = {
   async sendEmailOtp(email: string) {
     const { error } = await getSupabaseClient().auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: getRedirectUrl('auth/callback'),
+      },
     });
     if (error) throw error;
   },
@@ -249,33 +487,83 @@ export const supabaseAuthAdapter = {
     return normalizeSession(data.session, data.user ?? null);
   },
 
-  async fetchUserContext(userId?: string): Promise<UserContext> {
-    const id = await getAuthenticatedUserId(userId);
-    const supabase = getSupabaseClient();
+  async verifyEmailTokenHash(tokenHash: string, type: EmailOtpType = 'email') {
+    const { data, error } = await getSupabaseClient().auth.verifyOtp({
+      token_hash: tokenHash,
+      type,
+    });
+    if (error) throw error;
+    if (data.user) {
+      await upsertProfile(data.user);
+    }
+    return normalizeSession(data.session, data.user ?? null);
+  },
 
-    const [{ data: profile, error: profileError }, { data: roleRows, error: rolesError }] =
-      await Promise.all([
-        supabase.from('profiles').select('*').eq('id', id).maybeSingle(),
-        supabase
-          .from('user_roles')
-          .select('role, restaurant_id, is_active, restaurants(id, name, logo_url, service_type)')
-          .eq('user_id', id)
-          .eq('is_active', true),
-      ]);
+  /**
+   * Envia o e-mail de redefinição de senha pela Edge Function `register-with-resend`
+   * (template NOOWE via Resend + deep link direto do app), em vez do e-mail padrão
+   * do Supabase. O link chega como `<scheme>://auth/reset-password?token_hash=...&type=recovery`,
+   * abrindo o app diretamente, sem passar por `/auth/v1/verify` no navegador.
+   */
+  async sendPasswordReset(email: string) {
+    const { error } = await getSupabaseClient().functions.invoke('register-with-resend', {
+      body: {
+        action: 'password-reset',
+        email,
+        emailRedirectTo: getRedirectUrl('auth/reset-password'),
+      },
+    });
+    if (error) await throwFunctionError(error);
+  },
 
-    if (profileError) throw profileError;
-    if (rolesError) throw rolesError;
+  async exchangeCodeForSession(code: string) {
+    const { data, error } = await getSupabaseClient().auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    if (data.user) {
+      await upsertProfile(data.user);
+    }
 
-    const roles = (roleRows ?? [])
-      .map(normalizeRoleRow)
-      .filter((role): role is UserContextRole => Boolean(role));
+    return normalizeSession(data.session, data.user ?? null);
+  },
 
-    return {
-      account_type: roles.length > 0 ? 'restaurant' : 'customer',
-      profile: profile ?? null,
-      roles,
-      restaurant_ids: Array.from(new Set(roles.map((role) => role.restaurant_id))),
-    };
+  async recoverSessionFromUrl(url: string) {
+    const params = readAuthParamsFromUrl(url);
+    const authError = params.error ?? params.error_code ?? params.error_description;
+
+    if (authError) {
+      throw new Error(mapAuthCallbackError(params));
+    }
+
+    if (params.code) {
+      return supabaseAuthAdapter.exchangeCodeForSession(params.code);
+    }
+
+    if (params.token_hash) {
+      return supabaseAuthAdapter.verifyEmailTokenHash(
+        params.token_hash,
+        normalizeEmailOtpType(params.type),
+      );
+    }
+
+    if (params.access_token && params.refresh_token) {
+      const { data, error } = await getSupabaseClient().auth.setSession({
+        access_token: params.access_token,
+        refresh_token: params.refresh_token,
+      });
+      if (error) throw error;
+      if (data.user) {
+        await upsertProfile(data.user);
+      }
+
+      return normalizeSession(data.session, data.user ?? null);
+    }
+
+    return supabaseAuthAdapter.getSession();
+  },
+
+  async updatePassword(password: string) {
+    const { error } = await getSupabaseClient().auth.updateUser({ password });
+    if (error) throw error;
   },
 
   async logout() {
@@ -283,23 +571,15 @@ export const supabaseAuthAdapter = {
     if (error) throw error;
   },
 
-  async getCurrentUser() {
-    const { data, error } = await getSupabaseClient().auth.getUser();
+  async getSession() {
+    const { data, error } = await getSupabaseClient().auth.getSession();
     if (error) throw error;
-    const user = normalizeUser(data.user);
-    if (!user || !data.user) return user;
+    return normalizeSession(data.session);
+  },
 
-    try {
-      const context = await this.fetchUserContext(data.user.id);
-      return {
-        ...user,
-        account_type: context.account_type,
-        roles: context.roles,
-        restaurant_ids: context.restaurant_ids,
-      };
-    } catch {
-      return user;
-    }
+  async getCurrentUser() {
+    const { session, user } = await getOptionalSupabaseSessionUser();
+    return normalizeUser(user, session);
   },
 
   async isAuthenticated(): Promise<boolean> {
@@ -317,5 +597,17 @@ export const supabaseAuthAdapter = {
     const { data, error } = await getSupabaseClient().auth.refreshSession();
     if (error) throw error;
     return normalizeSession(data.session);
+  },
+
+  onAuthStateChange(callback: (authenticated: boolean, user?: NormalizedAuthUser | null) => void) {
+    const { data } = getSupabaseClient().auth.onAuthStateChange((_event, session) => {
+      setTimeout(() => {
+        normalizeSession(session)
+          .then((payload) => callback(Boolean(payload.access_token), payload.user ?? null))
+          .catch(() => callback(false, null));
+      }, 0);
+    });
+
+    return () => data.subscription.unsubscribe();
   },
 };

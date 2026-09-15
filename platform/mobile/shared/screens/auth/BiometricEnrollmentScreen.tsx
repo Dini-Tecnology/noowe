@@ -64,7 +64,7 @@ export const BiometricEnrollmentScreen: React.FC<BiometricEnrollmentScreenProps>
         onComplete();
       } else {
         Haptic.errorNotification();
-        showErrorToast(new Error(result.error || 'Failed to enable biometric'));
+        showErrorToast(new Error(result.error || t('auth.biometricEnableFailed')));
       }
     } catch (error: any) {
       Haptic.errorNotification();

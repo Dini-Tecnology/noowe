@@ -6,6 +6,7 @@ import {
   Animated,
   TouchableOpacity,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import {
   Text,
@@ -27,6 +28,7 @@ import { useScreenTracking, useAnalytics } from '@/shared/hooks/useAnalytics';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import type { RootStackParamList } from '../../types';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -193,6 +195,8 @@ export default function CheckoutScreen() {
       setLoading(false);
     }
   }, [orderId, t, analytics]);
+
+  const pullToRefresh = usePullToRefresh(loadOrder);
 
   const subtotal = useMemo(() => {
     if (!order) return 0;
@@ -440,7 +444,10 @@ export default function CheckoutScreen() {
   return (
     <ScreenContainer>
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={pullToRefresh.refreshing} onRefresh={() => { void pullToRefresh.onRefresh(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+      >
         {/* Header */}
         <Text variant="headlineSmall" style={styles.headerTitle}>
           {t('checkout.title')}

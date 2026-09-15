@@ -49,7 +49,14 @@ export {
 // NAVIGATION COMPONENTS
 // ============================================
 export { default as LiquidGlassNav } from './LiquidGlassNav';
+export {
+  default as LiquidGlassBottomNav,
+  LIQUID_GLASS_BOTTOM_NAV_OFFSET,
+  liquidGlassTabNavigatorScreenOptions,
+} from './LiquidGlassBottomNav';
+export type { LiquidGlassNavItem, LiquidGlassBottomNavProps } from './LiquidGlassBottomNav';
 export { default as RestaurantLiquidGlassNav } from './RestaurantLiquidGlassNav';
+export { default as ClientLiquidGlassNav } from './ClientLiquidGlassNav';
 
 // ============================================
 // DOMAIN COMPONENTS
@@ -61,6 +68,8 @@ export type { OrderCardProps, OrderCardOrder, OrderCardItem } from './orders/Ord
 // LEGAL / COMPLIANCE COMPONENTS
 // ============================================
 export { AIDisclaimerModal } from './AIDisclaimerModal';
+export { NooweDialog } from './NooweDialog';
+export type { NooweDialogAction } from './NooweDialog';
 export { BetaBadge } from './BetaBadge';
 export { LegalConsentSection } from './LegalConsentSection';
 export type { LegalConsentProps } from './LegalConsentSection';

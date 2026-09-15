@@ -1,0 +1,108 @@
+name: Install Dependencies
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+    paths:
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '.github/workflows/install-dependencies.yml'
+
+concurrency:
+  group: install-dependencies-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install-backend:
+    name: Backend — npm ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ./platform/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: platform/backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify install
+        run: npm ls --depth=0
+
+  install-mobile:
+    name: Mobile — npm ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ./platform/mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: platform/mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify install
+        run: npm ls --depth=0
+
+  install-site:
+    name: Site — npm ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ./site
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Verify install
+        run: npm ls --depth=0
+
+  summary:
+    name: Install Summary
+    runs-on: ubuntu-latest
+    needs: [install-backend, install-mobile, install-site]
+    if: always()
+
+    steps:
+      - name: Report status
+        run: |
+          echo "## Dependency Installation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend (\`platform/backend\`) | ${{ needs.install-backend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Mobile (\`platform/mobile\`) | ${{ needs.install-mobile.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Site (\`site\`) | ${{ needs.install-site.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if any install failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

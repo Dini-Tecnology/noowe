@@ -22,25 +22,26 @@ export const APP_VERSION = {
  * Client App Configuration
  */
 export const CLIENT_APP_CONFIG = {
-  name: 'Okinawa',
-  slug: 'okinawa-client',
-  scheme: 'okinawa',
+  name: 'Noowe',
+  slug: 'noowe',
+  scheme: 'noowe',
   
   // App IDs
   ios: {
-    bundleIdentifier: 'com.okinawa.client',
+    bundleIdentifier: 'com.noowe.client',
     buildNumber: APP_VERSION.buildNumber,
     supportsTablet: true,
+    associatedDomains: ['applinks:noowebr.com', 'applinks:*.noowebr.com'],
     infoPlist: {
-      NSCameraUsageDescription: 'Okinawa needs camera access to scan QR codes at restaurants.',
-      NSLocationWhenInUseUsageDescription: 'Okinawa needs your location to show nearby restaurants.',
-      NSLocationAlwaysUsageDescription: 'Okinawa tracks your location for drive-thru order coordination.',
+      NSCameraUsageDescription: 'Noowe needs camera access to scan QR codes at restaurants.',
+      NSLocationWhenInUseUsageDescription: 'Noowe needs your location to show nearby restaurants.',
+      NSLocationAlwaysUsageDescription: 'Noowe tracks your location for drive-thru order coordination.',
       NSFaceIDUsageDescription: 'Use Face ID for quick and secure login.',
       UIBackgroundModes: ['location', 'fetch', 'remote-notification'],
     },
   },
   android: {
-    package: 'com.okinawa.client',
+    package: 'com.noowe.client',
     versionCode: APP_VERSION.versionCode,
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
@@ -92,15 +93,16 @@ export const CLIENT_APP_CONFIG = {
  * Restaurant App Configuration
  */
 export const RESTAURANT_APP_CONFIG = {
-  name: 'Okinawa Restaurant',
+  name: 'Noowe Restaurant',
   slug: 'okinawa-restaurant',
   scheme: 'okinawa-restaurant',
   
   // App IDs
   ios: {
-    bundleIdentifier: 'com.okinawa.restaurant',
+    bundleIdentifier: 'com.noowe.restaurant',
     buildNumber: APP_VERSION.buildNumber,
     supportsTablet: true,
+    associatedDomains: ['applinks:noowebr.com', 'applinks:*.noowebr.com'],
     infoPlist: {
       NSCameraUsageDescription: 'Camera access for scanning order QR codes.',
       NSFaceIDUsageDescription: 'Use Face ID for quick staff login.',
@@ -108,7 +110,7 @@ export const RESTAURANT_APP_CONFIG = {
     },
   },
   android: {
-    package: 'com.okinawa.restaurant',
+    package: 'com.noowe.restaurant',
     versionCode: APP_VERSION.versionCode,
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon-restaurant.png',

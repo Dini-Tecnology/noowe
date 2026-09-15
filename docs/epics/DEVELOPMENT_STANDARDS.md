@@ -965,7 +965,7 @@ Todo empty state deve ter 4 elementos:
 ```typescript
 {data.length === 0 && (
   <View style={styles.emptySection}>
-    <IconButton icon="receipt-text-outline" size={64} iconColor={colors.foregroundMuted} />
+    <IconButton icon="receipt" size={64} iconColor={colors.foregroundMuted} />
     <Text variant="titleMedium" style={styles.emptyTitle}>
       {t('orders.noOrders')}
     </Text>

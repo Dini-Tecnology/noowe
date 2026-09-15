@@ -1,31 +1,23 @@
 import { useMemo } from 'react';
-import { useServiceType, ServiceType } from '../contexts/ServiceTypeContext';
+import { useQuery } from '@tanstack/react-query';
+import {
+  useServiceType,
+  isSupportedServiceType,
+  ServiceType,
+  ServiceTypeStatus,
+  ServiceTypeFeatures,
+} from '../contexts/ServiceTypeContext';
+import {
+  SERVICE_TYPE_CONFIGS,
+} from '@okinawa/shared/config/service-types';
+import {
+  clientFeaturesFromCapabilities,
+  type RestaurantCapabilities,
+  type RestaurantCapabilityPolicies,
+} from '@okinawa/shared/config/capabilities';
+import customerBackend from '../services/customer-backend';
 
-interface FeatureAvailability {
-  reservations: boolean;
-  virtualQueue: boolean;
-  tableManagement: boolean;
-  menuPersonalization: boolean;
-  geolocationTracking: boolean;
-  dishBuilder: boolean;
-  callWaiter: boolean;
-  splitPayment: boolean;
-  guestInvitations: boolean;
-  aiPairing: boolean;
-  loyalty: boolean;
-  // Pub & Bar features
-  digitalTab: boolean;
-  happyHour: boolean;
-  repeatRound: boolean;
-  tabSplit: boolean;
-  // Club & Balada features
-  ticketPurchase: boolean;
-  vipTables: boolean;
-  guestList: boolean;
-  occupancyTracking: boolean;
-  lineup: boolean;
-  birthdayEntry: boolean;
-}
+type FeatureAvailability = ServiceTypeFeatures;
 
 interface ServiceTypeFeatureHook {
   features: FeatureAvailability;
@@ -40,26 +32,19 @@ const DEFAULT_FEATURES: FeatureAvailability = {
   reservations: false,
   virtualQueue: false,
   tableManagement: false,
+  menu: false,
   menuPersonalization: false,
-  geolocationTracking: false,
-  dishBuilder: false,
+  ordering: false,
+  orderTracking: false,
+  qrOrdering: false,
   callWaiter: false,
   splitPayment: false,
+  billing: false,
+  payments: false,
   guestInvitations: false,
   aiPairing: false,
   loyalty: false,
-  // Pub & Bar
-  digitalTab: false,
-  happyHour: false,
-  repeatRound: false,
-  tabSplit: false,
-  // Club & Balada
-  ticketPurchase: false,
-  vipTables: false,
-  guestList: false,
-  occupancyTracking: false,
-  lineup: false,
-  birthdayEntry: false,
+  postVisit: false,
 };
 
 export const useServiceTypeFeatures = (): ServiceTypeFeatureHook => {
@@ -105,66 +90,24 @@ export const useConditionalFeature = (feature: keyof FeatureAvailability): boole
 // Hook to get service-type specific UI configurations
 export const useServiceTypeUI = () => {
   const { currentServiceType, config } = useServiceType();
+  const features = config?.features ?? DEFAULT_FEATURES;
 
-  const getOrderFlowType = (): 'table' | 'counter' | 'queue' | 'pickup' => {
-    switch (currentServiceType) {
-      case 'full-service':
-      case 'chefs-table':
-      case 'buffet':
-        return 'table';
-      case 'quick-service':
-      case 'cafe-bakery':
-        return 'counter';
-      case 'fast-casual':
-        return 'queue';
-      case 'drive-thru':
-      case 'food-truck':
-        return 'pickup';
-      default:
-        return 'counter';
-    }
+  const getOrderFlowType = (): 'table' | 'counter' | 'queue' => {
+    if (features.tableManagement) return 'table';
+    if (features.virtualQueue) return 'queue';
+    return 'counter';
   };
 
   const getPaymentTiming = (): 'pre-order' | 'post-meal' | 'immediate' => {
-    switch (currentServiceType) {
-      case 'full-service':
-      case 'chefs-table':
-      case 'buffet':
-        return 'post-meal';
-      case 'quick-service':
-      case 'fast-casual':
-      case 'drive-thru':
-      case 'food-truck':
-        return 'pre-order';
-      case 'cafe-bakery':
-        return 'immediate';
-      default:
-        return 'immediate';
-    }
+    if (features.tableManagement) return 'post-meal';
+    return features.payments ? 'pre-order' : 'immediate';
   };
 
-  const shouldShowTableSelection = (): boolean => {
-    return ['full-service', 'chefs-table', 'buffet'].includes(currentServiceType ?? '');
-  };
+  const shouldShowTableSelection = (): boolean => features.tableManagement;
 
-  const shouldShowQueuePosition = (): boolean => {
-    return ['quick-service', 'fast-casual', 'drive-thru', 'food-truck'].includes(currentServiceType ?? '');
-  };
+  const shouldShowQueuePosition = (): boolean => features.virtualQueue;
 
-  const getMenuStyle = (): 'traditional' | 'builder' | 'buffet' | 'simple' => {
-    switch (currentServiceType) {
-      case 'fast-casual':
-        return 'builder';
-      case 'buffet':
-        return 'buffet';
-      case 'quick-service':
-      case 'drive-thru':
-      case 'food-truck':
-        return 'simple';
-      default:
-        return 'traditional';
-    }
-  };
+  const getMenuStyle = (): 'traditional' | 'simple' => features.menuPersonalization ? 'simple' : 'traditional';
 
   return {
     serviceType: currentServiceType,
@@ -176,4 +119,96 @@ export const useServiceTypeUI = () => {
     shouldShowQueuePosition: shouldShowQueuePosition(),
     menuStyle: getMenuStyle(),
   };
+};
+
+export interface ServiceTypeResolution {
+  status: ServiceTypeStatus;
+  type: ServiceType | null;
+  serviceName: string;
+  features: FeatureAvailability;
+  isFeatureEnabled: (feature: keyof FeatureAvailability) => boolean;
+  /** Journey capabilities from the server; null until resolved. */
+  capabilities: RestaurantCapabilities | null;
+  /** Configured values (fees, discounts, tolerances); null until resolved. */
+  policies: RestaurantCapabilityPolicies | null;
+}
+
+const UNRESOLVED: Pick<ServiceTypeResolution, 'features' | 'isFeatureEnabled' | 'capabilities' | 'policies'> = {
+  features: DEFAULT_FEATURES,
+  isFeatureEnabled: () => false,
+  capabilities: null,
+  policies: null,
+};
+
+/**
+ * Single entry point every screen should use to know which service-type
+ * features apply.
+ *
+ * - With a `restaurantId`: resolves that specific restaurant, independent of
+ *   the active visit session (e.g. a restaurant the user is looking at but
+ *   hasn't scanned a table QR for yet). Shares the `['restaurant', id]`
+ *   query key used across the app, so this is a cache hit — not an extra
+ *   request — wherever that restaurant was already fetched.
+ * - Without a `restaurantId`: falls back to the session-wide
+ *   ServiceTypeContext (kept in sync by ServiceTypeSync), for screens that
+ *   only know "the restaurant of the table I'm sitting at" — Cart,
+ *   CallWaiter.
+ *
+ * A network failure resolving the restaurant is reported as `loading`, not
+ * `unsupported` — screens must not tell the user a feature is unavailable
+ * just because the request is still retrying.
+ */
+export const useServiceTypeFor = (restaurantId?: string | null): ServiceTypeResolution => {
+  const globalContext = useServiceType();
+
+  const ownQuery = useQuery({
+    queryKey: ['restaurant', restaurantId],
+    queryFn: () => customerBackend.getRestaurant(restaurantId!),
+    enabled: !!restaurantId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const ownServiceType = ownQuery.data?.serviceType;
+  const ownCapabilities = useQuery({
+    queryKey: ['restaurant-capabilities', restaurantId, ownServiceType],
+    queryFn: () => customerBackend.getRestaurantCapabilities(restaurantId!, ownServiceType as ServiceType),
+    enabled: !!restaurantId && isSupportedServiceType(ownServiceType),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return useMemo<ServiceTypeResolution>(() => {
+    if (!restaurantId) {
+      return {
+        status: globalContext.status,
+        type: globalContext.currentServiceType,
+        serviceName: globalContext.config?.name ?? 'Desconhecido',
+        features: globalContext.config?.features ?? DEFAULT_FEATURES,
+        isFeatureEnabled: globalContext.isFeatureEnabled,
+        capabilities: globalContext.contract?.capabilities ?? null,
+        policies: globalContext.contract?.policies ?? null,
+      };
+    }
+
+    if (ownQuery.isPending || ownQuery.isError || ownCapabilities.isPending || ownCapabilities.isError) {
+      return { status: 'loading', type: null, serviceName: 'Desconhecido', ...UNRESOLVED };
+    }
+
+    const serviceType = ownServiceType;
+    if (!isSupportedServiceType(serviceType)) {
+      return { status: 'unsupported', type: null, serviceName: 'Desconhecido', ...UNRESOLVED };
+    }
+    if (!ownCapabilities.data) return { status: 'loading', type: null, serviceName: 'Desconhecido', ...UNRESOLVED };
+
+    const config = SERVICE_TYPE_CONFIGS[serviceType];
+    const features = clientFeaturesFromCapabilities(ownCapabilities.data);
+    return {
+      status: 'ready',
+      type: serviceType,
+      serviceName: config.name,
+      features,
+      isFeatureEnabled: (feature) => features[feature],
+      capabilities: ownCapabilities.data.capabilities,
+      policies: ownCapabilities.data.policies,
+    };
+  }, [restaurantId, globalContext, ownQuery.isPending, ownQuery.isError, ownServiceType, ownCapabilities.isPending, ownCapabilities.isError, ownCapabilities.data]);
 };

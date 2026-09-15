@@ -8,17 +8,14 @@ import logger from './logger';
  * Deep Linking Configuration
  *
  * Supported URL patterns:
- * - okinawa://restaurant/:id - View restaurant details
- * - okinawa://menu/:restaurantId - View restaurant menu
- * - okinawa://order/:orderId - View order details
- * - okinawa://reservation/:reservationId - View reservation
- * - okinawa://qr/:tableId - Scan QR code and navigate to table
+ * - noowe://restaurant/:id - View restaurant details
+ * - noowe://auth/callback - Supabase auth callback
+ * - noowe://auth/reset-password - Supabase password recovery
  *
  * Universal Links:
- * - https://okinawa.app/restaurant/:id
- * - https://okinawa.app/menu/:restaurantId
- * - https://okinawa.app/order/:orderId
- * - https://okinawa.app/reservation/:reservationId
+ * - https://noowebr.com/restaurant/:id
+ * - https://noowebr.com/auth/callback
+ * - https://noowebr.com/auth/reset-password
  */
 
 export interface DeepLinkParams {
@@ -55,26 +52,31 @@ export const handleDeepLink = (url: string): void => {
   }
 
   const { path, params } = parsed;
+  const normalizedPath = path.replace(/^--\//, '').replace(/^\/+/, '');
   logger.info('Handling deep link:', { path, params });
 
   // Route based on path
-  if (path.startsWith('restaurant/')) {
-    const restaurantId = path.split('/')[1];
+  if (normalizedPath === 'auth/callback') {
+    router.push(`/auth/callback?url=${encodeURIComponent(url)}`);
+  } else if (normalizedPath === 'auth/reset-password') {
+    router.push(`/auth/reset-password?url=${encodeURIComponent(url)}`);
+  } else if (normalizedPath.startsWith('restaurant/')) {
+    const restaurantId = normalizedPath.split('/')[1];
     router.push(`/restaurant/${restaurantId}`);
-  } else if (path.startsWith('menu/')) {
-    const restaurantId = path.split('/')[1];
+  } else if (normalizedPath.startsWith('menu/')) {
+    const restaurantId = normalizedPath.split('/')[1];
     router.push(`/menu/${restaurantId}`);
-  } else if (path.startsWith('order/')) {
-    const orderId = path.split('/')[1];
+  } else if (normalizedPath.startsWith('order/')) {
+    const orderId = normalizedPath.split('/')[1];
     router.push(`/orders/${orderId}`);
-  } else if (path.startsWith('reservation/')) {
-    const reservationId = path.split('/')[1];
+  } else if (normalizedPath.startsWith('reservation/')) {
+    const reservationId = normalizedPath.split('/')[1];
     router.push(`/reservations/${reservationId}`);
-  } else if (path.startsWith('qr/')) {
-    const tableId = path.split('/')[1];
+  } else if (normalizedPath.startsWith('qr/')) {
+    const tableId = normalizedPath.split('/')[1];
     router.push(`/qr/${tableId}`);
   } else {
-    logger.warn('Unknown deep link path:', path);
+    logger.warn('Unknown deep link path:', normalizedPath);
   }
 };
 
@@ -157,12 +159,16 @@ export const shareDeepLink = async (
  */
 export const deepLinkConfig = {
   prefixes: [
+    'noowe://',
+    'okinawa-restaurant://',
     'okinawa://',
-    'https://okinawa.app',
-    'https://*.okinawa.app',
+    'https://noowebr.com',
+    'https://www.noowebr.com',
   ],
   config: {
     screens: {
+      AuthCallback: 'auth/callback',
+      ResetPassword: 'auth/reset-password',
       Restaurant: 'restaurant/:id',
       Menu: 'menu/:restaurantId',
       Order: 'orders/:orderId',

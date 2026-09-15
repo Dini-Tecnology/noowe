@@ -9,6 +9,7 @@ import LangProvider from "@/components/site/LangProvider";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import SkipNavLink from "@/components/a11y/SkipNavLink";
 import CookieConsent from "@/components/CookieConsent";
+import { AuthProvider } from "@/hooks/useAuth";
 import { lazy, Suspense } from "react";
 import DemoLayout from "@/components/site/DemoLayout";
 import SiteLayout from "@/components/site/SiteLayout";
@@ -22,11 +23,15 @@ const SiteIntentCapture = lazy(() => import("./pages/SiteIntentCapture"));
 const SiteDemoHub = lazy(() => import("./pages/SiteDemoHub"));
 const SiteForYou = lazy(() => import("./pages/SiteForYou"));
 const SiteImpact = lazy(() => import("./pages/SiteImpact"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminFeedback = lazy(() => import("./pages/AdminFeedback"));
 const AdminSimulationLeads = lazy(() => import("./pages/AdminSimulationLeads"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const DemoClient = lazy(() => import("./pages/DemoClient"));
 const DemoRestaurant = lazy(() => import("./pages/DemoRestaurant"));
 const GuidedSimulation = lazy(() => import("./pages/GuidedSimulation"));
+const MobilePreviewV2 = lazy(() => import("./pages/MobilePreviewV2"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const SiteTerms = lazy(() => import("./pages/SiteTerms"));
 const SitePrivacy = lazy(() => import("./pages/SitePrivacy"));
@@ -56,38 +61,44 @@ const App = () => (
         <LangProvider>
           <TooltipProvider>
             <ErrorBoundary>
-              <SkipNavLink />
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
-                <Suspense fallback={<PageLoader />}>
-                  <div id="main-content">
-                    <Routes>
-                      <Route element={<SiteLayout />}>
-                        <Route path="/" element={<SiteHome />} />
-                        <Route path="/platform" element={<SitePlatform />} />
-                        <Route path="/request-demo" element={<SiteRequestDemo />} />
-                        <Route path="/access" element={<SiteAccess />} />
-                        <Route path="/para-voce" element={<SiteForYou />} />
-                        <Route path="/terms" element={<SiteTerms />} />
-                        <Route path="/privacy" element={<SitePrivacy />} />
-                      </Route>
-                      <Route path="/demo" element={<DemoLayout />}>
-                        <Route index element={<SiteDemoHub />} />
-                        <Route path="intent" element={<SiteIntentCapture />} />
-                        <Route path="impact" element={<SiteImpact />} />
-                        <Route path="guided" element={<GuidedSimulation />} />
-                        <Route path="client" element={<DemoClient />} />
-                        <Route path="restaurant" element={<DemoRestaurant />} />
-                      </Route>
-                      <Route path="/admin/feedback" element={<AdminFeedback />} />
-                      <Route path="/admin/simulation" element={<AdminSimulationLeads />} />
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </div>
-                </Suspense>
-              </BrowserRouter>
-              <CookieConsent />
+              <AuthProvider>
+                <SkipNavLink />
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                  <Suspense fallback={<PageLoader />}>
+                    <div id="main-content">
+                      <Routes>
+                        <Route element={<SiteLayout />}>
+                          <Route path="/" element={<SiteHome />} />
+                          <Route path="/platform" element={<SitePlatform />} />
+                          <Route path="/request-demo" element={<SiteRequestDemo />} />
+                          <Route path="/access" element={<SiteAccess />} />
+                          <Route path="/para-voce" element={<SiteForYou />} />
+                          <Route path="/terms" element={<SiteTerms />} />
+                          <Route path="/privacy" element={<SitePrivacy />} />
+                        </Route>
+                        <Route path="/demo" element={<DemoLayout />}>
+                          <Route index element={<SiteDemoHub />} />
+                          <Route path="intent" element={<SiteIntentCapture />} />
+                          <Route path="impact" element={<SiteImpact />} />
+                          <Route path="guided" element={<GuidedSimulation />} />
+                          <Route path="client" element={<DemoClient />} />
+                          <Route path="restaurant" element={<DemoRestaurant />} />
+                        </Route>
+                        <Route path="/auth/callback" element={<AuthCallback />} />
+                        <Route path="/auth/reset-password" element={<ResetPassword />} />
+                        <Route path="/admin" element={<AdminDashboard />} />
+                        <Route path="/admin/feedback" element={<AdminFeedback />} />
+                        <Route path="/admin/simulation" element={<AdminSimulationLeads />} />
+                        <Route path="/mobile-v2" element={<MobilePreviewV2 />} />
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </div>
+                  </Suspense>
+                </BrowserRouter>
+                <CookieConsent />
+              </AuthProvider>
             </ErrorBoundary>
           </TooltipProvider>
         </LangProvider>

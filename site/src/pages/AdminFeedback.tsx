@@ -6,15 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
-  Bug, Lightbulb, MousePointerClick, HelpCircle, Star, Download, Lock,
+  Bug, Lightbulb, MousePointerClick, HelpCircle, Star, Download,
   ArrowUpDown, MessageSquare, TrendingUp, BarChart3, Eye,
   Monitor, Smartphone, Tablet, ChevronRight, Calendar, MapPin, Activity,
 } from 'lucide-react';
 import { format, subDays, isAfter } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import NooweLogo from '@/components/site/NooweLogo';
-
-const ADMIN_CODE = 'noowe2026';
+import RequireAuth from '@/components/auth/RequireAuth';
 
 const TYPE_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string; bgClass: string }> = {
   bug: { icon: Bug, label: 'Bug', color: 'hsl(0 84% 60%)', bgClass: 'bg-destructive/10 text-destructive' },
@@ -147,10 +146,7 @@ const ViewportIcon = ({ mode }: { mode: string | null }) => {
 };
 
 // ── Main Component ──
-const AdminFeedback: React.FC = () => {
-  const [authenticated, setAuthenticated] = useState(false);
-  const [code, setCode] = useState('');
-  const [codeError, setCodeError] = useState(false);
+const AdminFeedbackContent: React.FC = () => {
   const [data, setData] = useState<FeedbackRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('all');
@@ -160,18 +156,7 @@ const AdminFeedback: React.FC = () => {
   const [selectedRow, setSelectedRow] = useState<FeedbackRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (code === ADMIN_CODE) {
-      setAuthenticated(true);
-      setCodeError(false);
-    } else {
-      setCodeError(true);
-    }
-  };
-
   useEffect(() => {
-    if (!authenticated) return;
     const fetchData = async () => {
       setLoading(true);
       const { data: rows } = await supabase
@@ -182,7 +167,7 @@ const AdminFeedback: React.FC = () => {
       setLoading(false);
     };
     fetchData();
-  }, [authenticated]);
+  }, []);
 
   const uniqueRoutes = useMemo(() => [...new Set(data.map(r => r.page_route))].sort(), [data]);
 
@@ -269,37 +254,6 @@ const AdminFeedback: React.FC = () => {
     a.href = url; a.download = `noowe-feedback-${format(new Date(), 'yyyy-MM-dd')}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
-
-  // ── Login ──
-  if (!authenticated) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <form onSubmit={handleLogin} className="w-full max-w-sm">
-          <div className="rounded-2xl border border-border bg-card p-8 shadow-lg">
-            <div className="flex flex-col items-center gap-4 mb-8">
-              <NooweLogo size="sm" />
-              <div className="text-center">
-                <h1 className="text-lg font-bold text-foreground">Painel de Feedbacks</h1>
-                <p className="text-sm text-muted-foreground mt-1">Acesso restrito</p>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-foreground mb-1.5 block">Código de acesso</label>
-                <Input
-                  type="password" value={code}
-                  onChange={e => { setCode(e.target.value); setCodeError(false); }}
-                  placeholder="••••••••" autoFocus className="h-11"
-                />
-                {codeError && <p className="text-destructive text-xs mt-1.5">Código inválido</p>}
-              </div>
-              <Button type="submit" className="w-full h-11 font-semibold">Acessar</Button>
-            </div>
-          </div>
-        </form>
-      </div>
-    );
-  }
 
   // ── Dashboard ──
   return (
@@ -518,4 +472,14 @@ const AdminFeedback: React.FC = () => {
   );
 };
 
-export default AdminFeedback;
+export default function AdminFeedback() {
+  return (
+    <RequireAuth
+      allowedRoles={['admin', 'owner', 'manager']}
+      title="Painel de Feedbacks"
+      description="Entre com Supabase Auth para consultar feedbacks."
+    >
+      <AdminFeedbackContent />
+    </RequireAuth>
+  );
+}

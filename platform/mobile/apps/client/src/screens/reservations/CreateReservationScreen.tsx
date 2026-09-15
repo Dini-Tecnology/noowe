@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Platform, RefreshControl } from 'react-native';
 import { Text, Card, Button, TextInput, IconButton, ActivityIndicator, Divider } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -11,6 +11,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import logger from '@okinawa/shared/utils/logger';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { createReservationSchema, validateForm } from '@okinawa/shared/validation/schemas';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 
 interface Restaurant {
   id: string;
@@ -188,6 +189,8 @@ export default function CreateReservationScreen() {
     }
   };
 
+  const pullToRefresh = usePullToRefresh(loadRestaurant);
+
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
@@ -323,7 +326,10 @@ export default function CreateReservationScreen() {
 
   return (
     <ScreenContainer hasKeyboard>
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={pullToRefresh.refreshing} onRefresh={() => { void pullToRefresh.onRefresh(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+    >
       <Text variant="headlineSmall" style={styles.title}>
         {t('restaurant.makeReservation')}
       </Text>

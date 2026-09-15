@@ -89,13 +89,14 @@ EOF
 # Teste para Auth Service
 cat > shared/services/__tests__/auth.test.ts << 'EOF'
 import { authService } from '../auth';
-import axios from 'axios';
-import { secureStorage } from '../storage';
+import { secureStorage } from '../secure-storage';
+import { supabaseAuthAdapter } from '../supabase-auth';
 
-jest.mock('axios');
-jest.mock('../storage');
+jest.mock('../secure-storage');
+jest.mock('../supabase-auth');
 
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+const mockedSupabaseAuth = supabaseAuthAdapter as jest.Mocked<typeof supabaseAuthAdapter>;
+const mockedSecureStorage = secureStorage as jest.Mocked<typeof secureStorage>;
 
 describe('AuthService', () => {
   beforeEach(() => {
@@ -103,46 +104,55 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('should login successfully', async () => {
+    it('should login successfully through Supabase Auth', async () => {
       const mockResponse = {
-        user: { id: '1', email: 'test@example.com', role: 'customer' },
+        user: {
+          id: '1',
+          email: 'test@example.com',
+          full_name: 'Test User',
+          role: 'customer',
+          roles: [{ role: 'customer' }],
+          restaurant_ids: [],
+        },
         access_token: 'token123',
+        refresh_token: 'refresh123',
       };
-      mockedAxios.post.mockResolvedValueOnce({ data: mockResponse });
+      mockedSupabaseAuth.login.mockResolvedValueOnce(mockResponse);
 
       const result = await authService.login('test@example.com', 'password123');
 
       expect(result).toEqual(mockResponse);
-      expect(mockedAxios.post).toHaveBeenCalledWith('/auth/login', {
-        email: 'test@example.com',
-        password: 'password123',
-      });
-      expect(secureStorage.setAccessToken).toHaveBeenCalledWith('token123');
+      expect(mockedSupabaseAuth.login).toHaveBeenCalledWith('test@example.com', 'password123');
+      expect(mockedSecureStorage.setAccessToken).toHaveBeenCalledWith('token123');
+      expect(mockedSecureStorage.setRefreshToken).toHaveBeenCalledWith('refresh123');
     });
 
     it('should handle login errors', async () => {
-      mockedAxios.post.mockRejectedValueOnce({ response: { data: { message: 'Invalid credentials' } } });
+      mockedSupabaseAuth.login.mockRejectedValueOnce(new Error('Invalid credentials'));
 
-      await expect(authService.login('test@example.com', 'wrong')).rejects.toThrow();
+      await expect(authService.login('test@example.com', 'wrong')).rejects.toThrow('Invalid credentials');
     });
   });
 
   describe('register', () => {
-    it('should register successfully', async () => {
+    it('should register through Supabase Auth', async () => {
       const mockResponse = {
-        user: { id: '1', email: 'new@example.com', role: 'customer' },
-        access_token: 'token456',
+        user: {
+          id: '1',
+          email: 'new@example.com',
+          full_name: 'John Doe',
+          role: 'customer',
+          roles: [{ role: 'customer' }],
+          restaurant_ids: [],
+        },
+        needsEmailConfirmation: true,
       };
-      mockedAxios.post.mockResolvedValueOnce({ data: mockResponse });
+      mockedSupabaseAuth.register.mockResolvedValueOnce(mockResponse);
 
       const result = await authService.register('new@example.com', 'password123', 'John Doe');
 
       expect(result).toEqual(mockResponse);
-      expect(mockedAxios.post).toHaveBeenCalledWith('/auth/register', {
-        email: 'new@example.com',
-        password: 'password123',
-        full_name: 'John Doe',
-      });
+      expect(mockedSupabaseAuth.register).toHaveBeenCalledWith('new@example.com', 'password123', 'John Doe');
     });
   });
 
@@ -150,7 +160,8 @@ describe('AuthService', () => {
     it('should logout successfully', async () => {
       await authService.logout();
 
-      expect(secureStorage.clearAll).toHaveBeenCalled();
+      expect(mockedSupabaseAuth.logout).toHaveBeenCalled();
+      expect(mockedSecureStorage.clearAuth).toHaveBeenCalled();
     });
   });
 });

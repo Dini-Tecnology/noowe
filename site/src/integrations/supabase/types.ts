@@ -92,6 +92,243 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          biometric_enabled: boolean
+          birth_date: string | null
+          created_at: string
+          default_address: string | null
+          deletion_requested_at: string | null
+          deletion_scheduled_for: string | null
+          deleted_at: string | null
+          dietary_restrictions: string[] | null
+          email: string | null
+          favorite_cuisines: string[] | null
+          fcm_token: string | null
+          full_name: string | null
+          google_id: string | null
+          id: string
+          is_active: boolean
+          last_login_at: string | null
+          marketing_consent: boolean
+          phone: string | null
+          phone_verified: boolean
+          preferences: Json | null
+          provider: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          biometric_enabled?: boolean
+          birth_date?: string | null
+          created_at?: string
+          default_address?: string | null
+          deletion_requested_at?: string | null
+          deletion_scheduled_for?: string | null
+          deleted_at?: string | null
+          dietary_restrictions?: string[] | null
+          email?: string | null
+          favorite_cuisines?: string[] | null
+          fcm_token?: string | null
+          full_name?: string | null
+          google_id?: string | null
+          id: string
+          is_active?: boolean
+          last_login_at?: string | null
+          marketing_consent?: boolean
+          phone?: string | null
+          phone_verified?: boolean
+          preferences?: Json | null
+          provider?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          biometric_enabled?: boolean
+          birth_date?: string | null
+          created_at?: string
+          default_address?: string | null
+          deletion_requested_at?: string | null
+          deletion_scheduled_for?: string | null
+          deleted_at?: string | null
+          dietary_restrictions?: string[] | null
+          email?: string | null
+          favorite_cuisines?: string[] | null
+          fcm_token?: string | null
+          full_name?: string | null
+          google_id?: string | null
+          id?: string
+          is_active?: boolean
+          last_login_at?: string | null
+          marketing_consent?: boolean
+          phone?: string | null
+          phone_verified?: boolean
+          preferences?: Json | null
+          provider?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profile_roles: {
+        Row: {
+          assigned_by: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          restaurant_id: string | null
+          role_key: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          restaurant_id?: string | null
+          role_key: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          restaurant_id?: string | null
+          role_key?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      roles: {
+        Row: {
+          created_at: string
+          description: string | null
+          is_system: boolean
+          key: string
+          label: string
+          privilege_level: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          is_system?: boolean
+          key: string
+          label: string
+          privilege_level?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          is_system?: boolean
+          key?: string
+          label?: string
+          privilege_level?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      simulation_leads: {
+        Row: {
+          acts_completed: number | null
+          completed: boolean | null
+          created_at: string
+          cta_clicked: string | null
+          id: string
+          language: string | null
+          model: string
+          pain_points: string[] | null
+          pillar: string | null
+          profile: string
+          time_per_act: Json | null
+          total_time_seconds: number | null
+        }
+        Insert: {
+          acts_completed?: number | null
+          completed?: boolean | null
+          created_at?: string
+          cta_clicked?: string | null
+          id?: string
+          language?: string | null
+          model: string
+          pain_points?: string[] | null
+          pillar?: string | null
+          profile: string
+          time_per_act?: Json | null
+          total_time_seconds?: number | null
+        }
+        Update: {
+          acts_completed?: number | null
+          completed?: boolean | null
+          created_at?: string
+          cta_clicked?: string | null
+          id?: string
+          language?: string | null
+          model?: string
+          pain_points?: string[] | null
+          pillar?: string | null
+          profile?: string
+          time_per_act?: Json | null
+          total_time_seconds?: number | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          restaurant_id: string
+          role: Database["public"]["Enums"]["user_roles_role_enum"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          restaurant_id: string
+          role: Database["public"]["Enums"]["user_roles_role_enum"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          restaurant_id?: string
+          role?: Database["public"]["Enums"]["user_roles_role_enum"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      users: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       waitlist: {
         Row: {
           city: string | null
@@ -130,7 +367,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      user_roles_role_enum: "customer" | "owner" | "manager" | "chef" | "cook" | "waiter" | "barman" | "maitre"
     }
     CompositeTypes: {
       [_ in never]: never

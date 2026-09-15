@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, RefreshControl } from 'react-native';
 import { Text, Card, Button, RadioButton, TextInput, Divider, IconButton, ActivityIndicator, Portal, Modal } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import ApiService from '@/shared/services/api';
@@ -8,6 +8,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { t } from '@okinawa/shared/i18n';
 import logger from '@okinawa/shared/utils/logger';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 import {
   validateCardNumber,
   validateExpiry,
@@ -119,6 +120,8 @@ export default function PaymentScreen() {
       setInitialLoading(false);
     }
   };
+
+  const pullToRefresh = usePullToRefresh(loadData);
 
   const validateNewCard = () => {
     const cleanedNumber = cardNumber.replace(/\s/g, '');
@@ -437,7 +440,10 @@ export default function PaymentScreen() {
   return (
     <ScreenContainer hasKeyboard>
     <>
-      <ScrollView style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={pullToRefresh.refreshing} onRefresh={() => { void pullToRefresh.onRefresh(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+      >
         <Text variant="headlineSmall" style={styles.title}>
           {t('payment.title')}
         </Text>

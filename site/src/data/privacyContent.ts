@@ -343,9 +343,9 @@ export const privacySections: LegalSection[] = [
     id: 'seguranca',
     title: { pt: 'Segurança dos Dados', en: 'Data Security', es: 'Seguridad de los Datos' },
     keyPoint: {
-      pt: 'Proteção em 7 camadas: WAF, TLS 1.3, rate limiting, CSRF, JWT com blacklisting, validação, auditoria. Senhas em bcrypt, dados em AES-256.',
-      en: '7-layer protection: WAF, TLS 1.3, rate limiting, CSRF, JWT with blacklisting, validation, audit. Passwords in bcrypt, data in AES-256.',
-      es: 'Protección en 7 capas: WAF, TLS 1.3, rate limiting, CSRF, JWT con blacklisting, validación, auditoría. Contraseñas en bcrypt, datos en AES-256.',
+      pt: 'Proteção em 7 camadas: WAF, TLS 1.3, rate limiting, CSRF, Supabase Auth, validação, auditoria. Senhas gerenciadas pelo Supabase, dados em AES-256.',
+      en: '7-layer protection: WAF, TLS 1.3, rate limiting, CSRF, Supabase Auth, validation, audit. Passwords managed by Supabase, data in AES-256.',
+      es: 'Protección en 7 capas: WAF, TLS 1.3, rate limiting, CSRF, Supabase Auth, validación, auditoría. Contraseñas gestionadas por Supabase, datos en AES-256.',
     },
     content: {
       pt: `<table><thead><tr><th>Camada</th><th>Medida</th></tr></thead><tbody>
@@ -353,8 +353,8 @@ export const privacySections: LegalSection[] = [
 <tr><td>2: Transporte</td><td>TLS 1.3 obrigatório, HSTS, Certificate Pinning</td></tr>
 <tr><td>3: Rate Limiting</td><td>5 req/15min (auth), 100 req/min (API geral)</td></tr>
 <tr><td>4: CSRF</td><td>Double-submit cookie, SameSite=Strict</td></tr>
-<tr><td>5: Autenticação</td><td>JWT com JTI blacklisting, RBAC 6 níveis, MFA (TOTP)</td></tr>
-<tr><td>6: Validação</td><td>Whitelist, queries parametrizadas, CSP via Helmet.js</td></tr>
+<tr><td>5: Autenticação</td><td>Supabase Auth, refresh token seguro, RLS, RBAC e MFA quando habilitado</td></tr>
+<tr><td>6: Validação</td><td>Whitelist, queries parametrizadas, policies RLS e CSP</td></tr>
 <tr><td>7: Auditoria</td><td>Logs JSON com correlation IDs, Sentry, tracing 10%</td></tr>
 <tr><td>Banco de Dados</td><td>AES-256, backups criptografados, subnet privada</td></tr>
 </tbody></table>
@@ -364,8 +364,8 @@ export const privacySections: LegalSection[] = [
 <tr><td>2: Transport</td><td>Mandatory TLS 1.3, HSTS, Certificate Pinning</td></tr>
 <tr><td>3: Rate Limiting</td><td>5 req/15min (auth), 100 req/min (general API)</td></tr>
 <tr><td>4: CSRF</td><td>Double-submit cookie, SameSite=Strict</td></tr>
-<tr><td>5: Authentication</td><td>JWT with JTI blacklisting, 6-level RBAC, MFA (TOTP)</td></tr>
-<tr><td>6: Validation</td><td>Whitelist, parameterized queries, CSP via Helmet.js</td></tr>
+<tr><td>5: Authentication</td><td>Supabase Auth, secure refresh tokens, RLS, RBAC, and MFA when enabled</td></tr>
+<tr><td>6: Validation</td><td>Whitelist, parameterized queries, RLS policies, and CSP</td></tr>
 <tr><td>7: Audit</td><td>JSON logs with correlation IDs, Sentry, 10% tracing</td></tr>
 <tr><td>Database</td><td>AES-256, encrypted backups, private subnet</td></tr>
 </tbody></table>
@@ -373,7 +373,7 @@ export const privacySections: LegalSection[] = [
       es: `<table><thead><tr><th>Capa</th><th>Medida</th></tr></thead><tbody>
 <tr><td>1: Perímetro</td><td>WAF y protección DDoS</td></tr>
 <tr><td>2: Transporte</td><td>TLS 1.3 obligatorio</td></tr>
-<tr><td>5: Autenticación</td><td>JWT con blacklisting, RBAC 6 niveles, MFA</td></tr>
+<tr><td>5: Autenticación</td><td>Supabase Auth, refresh tokens seguros, RLS, RBAC y MFA cuando esté habilitado</td></tr>
 <tr><td>Base de Datos</td><td>AES-256, backups cifrados, subnet privada</td></tr>
 </tbody></table>`,
     },

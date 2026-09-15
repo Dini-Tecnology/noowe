@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "install:all": "npm run install:mobile && npm run install:site",
+    "install:mobile": "npm install --prefix platform/mobile",
+    "install:site": "npm install --prefix site --legacy-peer-deps",
     "dev": "cd site && npm install --legacy-peer-deps && npm run dev",
     "build": "cd site && npm install --legacy-peer-deps && npm run build && cp -r dist ../dist",
     "build:dev": "cd site && npm install --legacy-peer-deps && npm run build:dev && cp -r dist ../dist",

@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { secureStorage } from './secure-storage';
-import { supabaseAuthAdapter } from './supabase-auth';
+import { authService } from './auth';
+import { getOptionalSupabaseSessionUser, supabaseAuthAdapter } from './supabase-auth';
 import {
   supabaseApiAdapter,
   type SupabaseCreateOrderInput,
@@ -91,7 +92,14 @@ class ApiService {
     // Request interceptor - attach token
     this.api.interceptors.request.use(
       async (config) => {
-        const token = await secureStorage.getAccessToken();
+        // Read the token from the Supabase client's own session so the axios
+        // client always uses the same, auto-refreshed token as supabase-js —
+        // the old secureStorage copy was only updated on explicit login and
+        // went stale after every silent token refresh.
+        const {
+          data: { session },
+        } = await getSupabaseClient().auth.getSession();
+        const token = session?.access_token;
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -174,7 +182,9 @@ class ApiService {
 
             if (this.refreshRetryCount > MAX_REFRESH_RETRIES) {
               logger.warn('Max token refresh retries exceeded, forcing logout');
-              await secureStorage.clearAll();
+              await getSupabaseClient().auth.signOut().catch(() => undefined);
+              await authService.clearAuthData();
+              authService.notifyAuthStateChange(false);
               this.processQueue(new Error('Session expired'));
               this.refreshing = false;
               throw new Error('Session expired - too many refresh attempts');
@@ -208,8 +218,9 @@ class ApiService {
             this.processQueue(refreshError instanceof Error ? refreshError : new Error(String(refreshError)));
             this.refreshing = false;
 
-            // Clear tokens and redirect to login
-            await secureStorage.clearAll();
+            await getSupabaseClient().auth.signOut().catch(() => undefined);
+            await authService.clearAuthData();
+            authService.notifyAuthStateChange(false);
 
             throw refreshError;
           }
@@ -272,14 +283,12 @@ class ApiService {
   }
 
   async register(data: { email: string; password: string; full_name: string }) {
+    // Email/password registration always requires email confirmation; Supabase
+    // never returns an active session here (see supabaseAuthAdapter.register).
     const authData = await supabaseAuthAdapter.register(data.email, data.password, data.full_name);
-    const { access_token, refresh_token, user } = authData;
-
-    await Promise.all([
-      access_token ? secureStorage.setAccessToken(access_token) : Promise.resolve(),
-      refresh_token ? secureStorage.setRefreshToken(refresh_token) : Promise.resolve(),
-      user ? secureStorage.setUser(user) : Promise.resolve(),
-    ]);
+    if (authData.user) {
+      await secureStorage.setUser(authData.user);
+    }
 
     return authData;
   }
@@ -308,9 +317,8 @@ class ApiService {
 
   async deleteAccount() {
     const supabase = getSupabaseClient();
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError) throw userError;
-    if (!userData.user) throw new Error('Not authenticated');
+    const { user } = await getOptionalSupabaseSessionUser();
+    if (!user) throw new Error('Not authenticated');
 
     const { error } = await supabase
       .from('profiles')
@@ -318,7 +326,7 @@ class ApiService {
         deletion_requested_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', userData.user.id);
+      .eq('id', user.id);
     if (error) throw error;
 
     await supabaseAuthAdapter.logout();
@@ -330,26 +338,21 @@ class ApiService {
   // RESTAURANT ENDPOINTS (Customer Side)
   // ======================
 
-  async getRestaurants(params?: { lat?: number; lng?: number; search?: string }) {
-    const response = await this.api.get('/restaurants', { params });
-    return response.data;
+  async getRestaurants(params?: { lat?: number; lng?: number; search?: string; cuisine_type?: string }) {
+    return supabaseApiAdapter.getRestaurantsList(params);
   }
 
   async getNearbyRestaurants(latitude: number, longitude: number, radius: number = 5000) {
-    const response = await this.api.get('/restaurants', {
-      params: { lat: latitude, lng: longitude, radius },
-    });
-    return response.data;
+    // TODO: filter/sort by real distance once device geolocation is wired here.
+    return supabaseApiAdapter.getRestaurantsList();
   }
 
   async getRestaurant(id: string) {
-    const response = await this.api.get(`/restaurants/${id}`);
-    return response.data;
+    return supabaseApiAdapter.getRestaurantDetail(id);
   }
 
   async getRestaurantMenu(restaurantId: string) {
-    const response = await this.api.get(`/menu-items/restaurant/${restaurantId}`);
-    return response.data;
+    return supabaseApiAdapter.getPublicMenu(restaurantId);
   }
 
   // ======================
@@ -370,13 +373,14 @@ class ApiService {
   }
 
   async getMyRestaurant() {
-    const response = await this.api.get('/restaurants/my-restaurant');
-    return response.data;
+    return supabaseApiAdapter.getRestaurantProfile();
   }
 
   async updateRestaurant(data: Record<string, unknown>) {
-    const response = await this.api.patch('/restaurants/my-restaurant', data);
-    return response.data;
+    const profile = await supabaseApiAdapter.getRestaurantProfile();
+    const restaurantId: string = profile?.id;
+    if (!restaurantId) throw new Error('No restaurant found for current user');
+    return supabaseApiAdapter.updateRestaurantProfile(restaurantId, data);
   }
 
   async getMyRestaurants() {
@@ -465,10 +469,7 @@ class ApiService {
   // ======================
 
   async getActiveKitchenOrders() {
-    const response = await this.api.get('/orders/restaurant', {
-      params: { status: 'confirmed,preparing' }
-    });
-    return response.data;
+    return supabaseApiAdapter.getRestaurantOrders({ status: 'confirmed,preparing' });
   }
 
   /**
@@ -479,28 +480,16 @@ class ApiService {
    * @param itemId - The specific item ID to mark as ready
    * @returns Updated item data
    */
-  async markItemPrepared(orderId: string, itemId: string) {
-    const response = await this.api.patch(`/order-items/${itemId}/status`, {
-      status: 'ready'
-    });
-    return response.data;
+  async markItemPrepared(_orderId: string, itemId: string) {
+    return supabaseApiAdapter.updateOrderItemStatus(itemId, 'ready');
   }
 
-  /**
-   * Cancels a bar item from an order.
-   * Used by Bar KDS to remove items that cannot be prepared.
-   * 
-   * @param orderId - The order ID containing the item
-   * @param itemId - The specific item ID to cancel
-   * @param reason - Optional cancellation reason
-   * @returns Updated item data with cancelled status
-   */
-  async cancelBarItem(orderId: string, itemId: string, reason?: string) {
-    const response = await this.api.patch(`/order-items/${itemId}/status`, {
-      status: 'cancelled',
-      cancellation_reason: reason,
-    });
-    return response.data;
+  async cancelBarItem(_orderId: string, itemId: string, _reason?: string) {
+    return supabaseApiAdapter.updateOrderItemStatus(itemId, 'cancelled');
+  }
+
+  async getDashboardSnapshot(restaurantId?: string) {
+    return supabaseApiAdapter.getDashboardSnapshot(restaurantId);
   }
 
   /**
@@ -519,6 +508,35 @@ class ApiService {
 
   async createReservation(data: SupabaseCreateReservationInput) {
     return supabaseApiAdapter.createReservation(data);
+  }
+
+  async createCustomerReservation(
+    restaurantId: string,
+    reservationTime: string,
+    partySize: number,
+    specialRequests?: string,
+  ) {
+    return supabaseApiAdapter.createCustomerReservation(restaurantId, reservationTime, partySize, specialRequests);
+  }
+
+  async openTableSessionByQR(qrData: string) {
+    return supabaseApiAdapter.openTableSessionByQR(qrData);
+  }
+
+  async joinWaitlist(restaurantId: string, partySize: number, preference?: string, hasKids?: boolean) {
+    return supabaseApiAdapter.joinWaitlist(restaurantId, partySize, preference, hasKids);
+  }
+
+  async updateWaitlist(entryId: string, action: 'cancel' | 'arrive') {
+    return supabaseApiAdapter.updateWaitlist(entryId, action);
+  }
+
+  async callWaiterForTable(restaurantId: string, tableId: string, message?: string) {
+    return supabaseApiAdapter.callWaiterForTable(restaurantId, tableId, message);
+  }
+
+  async acceptReservationInviteByToken(token: string) {
+    return supabaseApiAdapter.acceptReservationInviteByToken(token);
   }
 
   async getMyReservations() {
@@ -617,25 +635,19 @@ class ApiService {
   // ======================
 
   async getTables() {
-    const response = await this.api.get('/tables/restaurant');
-    return response.data;
+    return supabaseApiAdapter.getRestaurantTables();
   }
 
   async getTable(tableId: string) {
-    const response = await this.api.get(`/tables/${tableId}`);
-    return response.data;
+    return supabaseApiAdapter.getRestaurantTable(tableId);
   }
 
   async updateTableStatus(tableId: string, status: string) {
-    const response = await this.api.patch(`/tables/${tableId}/status`, {
-      status,
-    });
-    return response.data;
+    return supabaseApiAdapter.updateTableStatus(tableId, status);
   }
 
   async updateTableNotes(tableId: string, notes: string) {
-    const response = await this.api.patch(`/tables/${tableId}/notes`, { notes });
-    return response.data;
+    return supabaseApiAdapter.updateTableNotes(tableId, notes);
   }
 
   async assignOrderToTable(orderId: string, tableId: string) {
@@ -1653,23 +1665,20 @@ class ApiService {
   // ======================
 
   async getKitchenOrders(params?: { status?: string; restaurant_id?: string; station?: string }) {
-    const response = await this.api.get('/orders/kds/kitchen', { params });
-    return response.data;
+    const stationId = params?.station && /^[0-9a-f-]{36}$/i.test(params.station) ? params.station : undefined;
+    return supabaseApiAdapter.getKdsQueue(params?.restaurant_id, stationId);
   }
 
   async getBarOrders(params?: { status?: string; restaurant_id?: string }) {
-    const response = await this.api.get('/orders/kds/bar', { params });
-    return response.data;
+    return supabaseApiAdapter.getBarQueue(params?.restaurant_id);
   }
 
   async getWaiterTables() {
-    const response = await this.api.get('/orders/waiter/my-tables');
-    return response.data;
+    return supabaseApiAdapter.getMyTables();
   }
 
-  async getWaiterStats(params?: { start_date?: string; end_date?: string }) {
-    const response = await this.api.get('/orders/waiter/stats', { params });
-    return response.data;
+  async getWaiterStats(_params?: { start_date?: string; end_date?: string }) {
+    return supabaseApiAdapter.getCallStats();
   }
 
   async getMaitreOverview(restaurant_id: string) {

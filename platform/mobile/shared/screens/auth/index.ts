@@ -9,3 +9,5 @@ export { WelcomeScreen } from './WelcomeScreen';
 export { PhoneAuthScreen } from './PhoneAuthScreen';
 export { PhoneRegisterScreen } from './PhoneRegisterScreen';
 export { BiometricEnrollmentScreen } from './BiometricEnrollmentScreen';
+export { AuthCallbackScreen } from './AuthCallbackScreen';
+export { ResetPasswordScreen } from './ResetPasswordScreen';

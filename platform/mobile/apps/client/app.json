@@ -1,21 +1,22 @@
 {
   "expo": {
-    "name": "Noowe Cliente",
+    "name": "Noowe",
     "slug": "okinawa-client",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
-    "scheme": "okinawa-client",
+    "userInterfaceStyle": "light",
+    "scheme": "noowe",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/logo-completa-client.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FF6B35"
+      "backgroundColor": "#FFFFFF"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.noowe.client",
+      "usesAppleSignIn": true,
       "associatedDomains": ["applinks:noowebr.com", "applinks:*.noowebr.com"],
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -48,7 +49,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FF6B35"
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.noowe.client",
       "intentFilters": [
@@ -81,18 +82,11 @@
       "bundler": "metro"
     },
     "plugins": [
+      "expo-apple-authentication",
       [
-        "expo-build-properties",
+        "expo-local-authentication",
         {
-          "ios": {
-            "deploymentTarget": "15.1",
-            "newArchEnabled": true
-          },
-          "android": {
-            "minSdkVersion": 24,
-            "targetSdkVersion": 34,
-            "newArchEnabled": true
-          }
+          "faceIDPermission": "Permite login rápido com biometria"
         }
       ],
       "expo-router",

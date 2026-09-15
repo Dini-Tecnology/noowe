@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabaseClient } from './supabase';
+import { getOptionalSupabaseSessionUser } from './supabase-auth';
 
 interface Notification {
   id: string;
@@ -23,11 +24,15 @@ class NotificationsSocketService {
       return;
     }
 
-    const supabase = getSupabaseClient();
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError) throw userError;
-    this.userId = userData.user?.id ?? null;
+    const { user } = await getOptionalSupabaseSessionUser();
+    if (!user) {
+      this.userId = null;
+      this.connected = false;
+      return;
+    }
 
+    const supabase = getSupabaseClient();
+    this.userId = user.id;
     this.channel = supabase
       .channel('notifications-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, (payload) => {

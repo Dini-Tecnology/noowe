@@ -10,7 +10,7 @@
 
 import React, { useMemo } from 'react';
 import { Chip } from 'react-native-paper';
-import { useColors } from '../theme';
+import { useColors } from '../contexts/ThemeContext';
 
 interface StatusBadgeProps {
   /** Status key to display */

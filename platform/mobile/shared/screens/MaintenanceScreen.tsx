@@ -6,7 +6,7 @@
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { Text, Button, ActivityIndicator } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '../components/ScreenContainer';
@@ -45,7 +45,12 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
 
   return (
     <ScreenContainer>
-    <View style={styles.container}>
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={styles.container}
+      alwaysBounceVertical
+      refreshControl={<RefreshControl refreshing={isChecking} onRefresh={() => { void handleRetry(); }} tintColor={colors.primary} colors={[colors.primary]} />}
+    >
       <View style={styles.content}>
         {/* Maintenance Icon */}
         <View style={styles.iconContainer}>
@@ -78,7 +83,7 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
           {isChecking ? t('common.loading') : t('maintenance.retry')}
         </Button>
       </View>
-    </View>
+    </ScrollView>
     </ScreenContainer>
   );
 };

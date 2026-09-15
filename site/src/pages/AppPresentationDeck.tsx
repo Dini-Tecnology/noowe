@@ -210,7 +210,7 @@ const EcosystemSlide = () => (
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center mb-6 shadow-lg" style={{ boxShadow: '0 10px 30px -10px hsl(var(--primary) / 0.4)' }}>
             <Smartphone className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h3 className="text-2xl font-bold mb-3 text-foreground">Okinawa Cliente</h3>
+          <h3 className="text-2xl font-bold mb-3 text-foreground">Noowe</h3>
           <p className="text-muted-foreground mb-6 leading-relaxed">
             App para consumidores descobrirem restaurantes, fazerem pedidos, reservas e vivenciarem experiências gastronômicas memoráveis.
           </p>
@@ -708,8 +708,8 @@ const TechExcellenceSlide = () => (
         <div className="space-y-3">
           {[
             { label: 'Mobile', value: 'React Native + Expo 51 + TypeScript' },
-            { label: 'Backend', value: 'NestJS + TypeORM + PostgreSQL + Redis' },
-            { label: 'Real-time', value: 'Socket.IO + WebSocket' },
+            { label: 'Backend', value: 'Supabase Auth + Postgres + RLS' },
+            { label: 'Real-time', value: 'Supabase Realtime + WebSocket' },
             { label: 'Design', value: 'Modern Chic + Glassmorphism + Haptics' },
           ].map((item, i) => (
             <div key={i} className="flex items-center gap-4 p-3 rounded-xl bg-muted/50">

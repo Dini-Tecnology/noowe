@@ -10,6 +10,13 @@ export interface CartItem {
   special_instructions?: string;
   image_url?: string;
   category?: string;
+  /**
+   * Casual dining group ordering: which diner at the table the item is for.
+   * Undefined for solo/counter ordering, where the order belongs to whoever
+   * placed it.
+   */
+  diner_id?: string;
+  diner_name?: string;
 }
 
 export interface CartContextData {
@@ -73,9 +80,15 @@ export function CartProvider({ children }: CartProviderProps) {
   };
 
   const addItem = (newItem: Omit<CartItem, 'id'>) => {
-    // Check if item already exists
+    // Two lines only merge when they are the same dish, for the same diner,
+    // with the same note — a family table ordering one lasanha for Maria and
+    // another for João must keep them apart so the comanda can bill each
+    // person and the kitchen knows who gets what.
     const existingItemIndex = items.findIndex(
-      (item) => item.menu_item_id === newItem.menu_item_id
+      (item) =>
+        item.menu_item_id === newItem.menu_item_id &&
+        (item.diner_id ?? null) === (newItem.diner_id ?? null) &&
+        (item.special_instructions ?? '') === (newItem.special_instructions ?? '')
     );
 
     if (existingItemIndex !== -1) {
@@ -87,7 +100,7 @@ export function CartProvider({ children }: CartProviderProps) {
       // Add new item
       const item: CartItem = {
         ...newItem,
-        id: `${newItem.menu_item_id}-${Date.now()}`,
+        id: `${newItem.menu_item_id}-${newItem.diner_id ?? 'me'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       };
       setItems([...items, item]);
     }

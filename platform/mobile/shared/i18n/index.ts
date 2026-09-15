@@ -1,6 +1,32 @@
 import { ptBR, TranslationKeys } from './pt-BR';
 import { enUS } from './en-US';
 import { esES } from './es-ES';
+import { ptBRSupplement } from './pt-BR-supplement';
+import { enUSSupplement } from './en-US-supplement';
+import { esESSupplement } from './es-ES-supplement';
+
+function mergeTranslations<T extends Record<string, unknown>>(
+  base: T,
+  extra: Record<string, unknown>
+): T {
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(extra)) {
+    const baseVal = out[key];
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      baseVal &&
+      typeof baseVal === 'object' &&
+      !Array.isArray(baseVal)
+    ) {
+      out[key] = mergeTranslations(baseVal as Record<string, unknown>, value as Record<string, unknown>);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out as T;
+}
 
 // Supported languages
 export type SupportedLanguage = 'pt-BR' | 'en-US' | 'es-ES';
@@ -10,9 +36,9 @@ const defaultLanguage: SupportedLanguage = 'pt-BR';
 
 // Available translations
 const translations: Record<SupportedLanguage, TranslationKeys> = {
-  'pt-BR': ptBR,
-  'en-US': enUS as TranslationKeys,
-  'es-ES': esES as TranslationKeys,
+  'pt-BR': mergeTranslations(ptBR as unknown as Record<string, unknown>, ptBRSupplement as unknown as Record<string, unknown>) as TranslationKeys,
+  'en-US': mergeTranslations(enUS as unknown as Record<string, unknown>, enUSSupplement as unknown as Record<string, unknown>) as TranslationKeys,
+  'es-ES': mergeTranslations(esES as unknown as Record<string, unknown>, esESSupplement as unknown as Record<string, unknown>) as TranslationKeys,
 };
 
 // Language display names

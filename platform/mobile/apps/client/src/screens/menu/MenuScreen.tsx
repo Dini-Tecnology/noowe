@@ -12,6 +12,7 @@ import logger from '@okinawa/shared/utils/logger';
 import MenuItemCard from './MenuItemCard';
 import { useScreenTracking, useAnalytics } from '@/shared/hooks/useAnalytics';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { usePullToRefresh } from '@okinawa/shared/hooks/usePullToRefresh';
 
 /**
  * MenuItem interface defines the structure of menu items
@@ -51,14 +52,10 @@ export default function MenuScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [categories, setCategories] = useState<string[]>([]);
 
-  useEffect(() => {
-    loadMenuItems();
-  }, []);
-
   /**
    * Loads menu items from API and extracts unique categories
    */
-  const loadMenuItems = async () => {
+  const loadMenuItems = useCallback(async () => {
     setLoading(true);
     try {
       const items = await ApiService.getRestaurantMenu(restaurantId);
@@ -75,7 +72,13 @@ export default function MenuScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [analytics, restaurantId, t]);
+
+  const pullToRefresh = usePullToRefresh(loadMenuItems);
+
+  useEffect(() => {
+    void loadMenuItems();
+  }, [loadMenuItems]);
 
   // Set restaurant context when component mounts
   useEffect(() => {
@@ -255,6 +258,8 @@ export default function MenuScreen() {
         renderItem={renderMenuItem}
         keyExtractor={(item) => item.id}
         estimatedItemSize={120}
+        refreshing={pullToRefresh.refreshing}
+        onRefresh={() => { void pullToRefresh.onRefresh(); }}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text variant="bodyLarge" style={styles.emptyText}>{t('empty.menuItems')}</Text>

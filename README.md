@@ -30,7 +30,7 @@ The platform is NOT a restaurant-focused tool, but rather centers on creating **
 |-----------|------------|-------|
 | **Client Mobile App** | React Native 0.74 / Expo 51 | 61 screens — discovery, ordering, reservations, payments, loyalty |
 | **Restaurant Mobile App** | React Native 0.74 / Expo 51 | 81 screens — KDS, floor management, analytics, CRM, fiscal |
-| **Backend API** | NestJS 10.4 | 54 modules, 539 endpoints, 9 WebSocket gateways, 96 entities |
+| **Backend/Data Platform** | Supabase Auth + Postgres + RLS | Auth, profiles, roles, policies, realtime-ready data |
 | **Site (Web)** | React + Vite + Tailwind | Institutional landing page + interactive demo |
 
 ### Platform Numbers
@@ -38,8 +38,8 @@ The platform is NOT a restaurant-focused tool, but rather centers on creating **
 | Metric | Count |
 |--------|------:|
 | Total mobile screens | **142** |
-| Backend modules | **54** |
-| REST API endpoints | **539** |
+| Supabase migrations | **46+** |
+| RLS-protected data domains | **Core profiles, roles, restaurants, leads, generated tables** |
 | WebSocket gateways | **9** |
 | Database entities | **96** |
 | Database migrations | **45** |
@@ -193,14 +193,14 @@ The platform dynamically adapts to **11 distinct service types** via a feature r
 - **Chef's Table**: Chef approval workflow for reservations
 - **Club**: Door management, queue management, VIP table management, promoter dashboard
 
-### Backend API (54 Modules)
+### Data Platform Modules
 
 **Core Services (Modules 1-20):**
 
 | # | Module | Description |
 |---|--------|-------------|
-| 1 | **Auth** | JWT (15min access + 7d refresh), OAuth (Google/Apple), token rotation, JTI blacklisting |
-| 2 | **Identity** | Credentials, MFA (TOTP), AES-256-GCM encryption, password policy |
+| 1 | **Auth** | Supabase Auth, email confirmation, recovery, refresh sessions, OAuth-ready providers |
+| 2 | **Identity** | Profiles, MFA-ready metadata, AES-256-GCM encryption, password policy via Supabase |
 | 3 | **Users** | Profile management, preferences, data export, data retention, account deletion |
 | 4 | **User Roles** | RBAC implementation (7 roles, restaurant-scoped) |
 | 5 | **Restaurants** | Restaurant CRUD, service configuration |
@@ -280,19 +280,18 @@ The platform dynamically adapts to **11 distinct service types** via a feature r
 
 ## Technology Stack
 
-### Backend
+### Backend / Data Platform
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| Node.js | 20.x | Runtime environment |
-| NestJS | 10.4.x | Application framework |
+| Supabase Auth | Managed | Email/password auth, confirmation, recovery, refresh sessions |
 | TypeScript | 5.x | Programming language |
 | PostgreSQL | 16.x | Primary database (+ PostGIS for spatial data) |
-| Redis | 7.x | Caching, queues, JTI blacklisting, Socket.IO adapter |
-| TypeORM | 0.3.x | Database ORM (96 entities, 45 migrations) |
-| Socket.IO | 4.8.x | Real-time communication (9 gateways) |
+| Row Level Security | PostgreSQL | Per-user and per-role data access policies |
+| Supabase Realtime | Managed | Real-time data updates where enabled |
+| Redis | 7.x | Optional caching and queues for non-auth workloads |
+| SQL migrations | Supabase CLI | Schema, triggers, roles, claims hook, RLS policies |
 | Bull | 4.x | Job queue processing |
-| Passport | 0.7.x | Authentication strategies |
 | Swagger | 8.x | API documentation (conditional via env) |
 | Helmet | latest | Security headers (CSP, HSTS, X-Frame) |
 
@@ -341,16 +340,16 @@ The platform dynamically adapts to **11 distinct service types** via a feature r
             └───────────────────────┼──────────────────────┘
                                     │ HTTPS + WSS
                      ┌──────────────▼──────────────┐
-                     │        NestJS Backend        │
-                     │  54 Modules · 539 Endpoints  │
-                     │  9 WS Gateways · 96 Entities │
-                     │  RBAC · JWT · CSRF · Helmet  │
+                     │      Supabase Platform       │
+                     │  Auth · Postgres · Realtime  │
+                     │  RLS Policies · SQL Hooks    │
+                     │  RBAC Claims · Edge-ready    │
                      └──────┬──────────┬────────────┘
                             │          │
                ┌────────────▼┐   ┌────▼─────────┐   ┌───────────────┐
                │ PostgreSQL  │   │    Redis      │   │  External     │
                │  + PostGIS  │   │ Cache+Queue   │   │  Services     │
-               │  96 entities│   │ JTI+Socket.IO │   │ Asaas, OpenAI │
+               │  RLS enabled│   │ Realtime fanout│  │ Asaas, OpenAI │
                │  45 migrations│  │ Bull Queues  │   │ FCM, Twilio   │
                └─────────────┘   └──────────────┘   └───────────────┘
 ```
@@ -367,9 +366,9 @@ The platform dynamically adapts to **11 distinct service types** via a feature r
 ├──────────────────────────────────────────────────────────────────┤
 │  Helmet CSP │ CSRF (double-submit) │ CORS (explicit, creds=off)  │
 ├──────────────────────────────────────────────────────────────────┤
-│  JWT + JTI  │  RBAC (7 roles)      │  Input Validation (DTO)     │
+│ Supabase Auth│ RBAC claims + RLS   │  Input validation            │
 ├──────────────────────────────────────────────────────────────────┤
-│  AES-256-GCM (PII) │ bcrypt 12    │  Constant-time auth         │
+│  AES-256-GCM (PII) │ Managed passwords │ Service role server-only  │
 ├──────────────────────────────────────────────────────────────────┤
 │  Account enum fix   │ Fraud detection │ Incident response        │
 ├──────────────────────────────────────────────────────────────────┤
@@ -395,44 +394,8 @@ The platform dynamically adapts to **11 distinct service types** via a feature r
 ```
 project_okinawa/
 ├── platform/
-│   ├── backend/                         # NestJS Backend API
-│   │   ├── src/
-│   │   │   ├── common/                  # Shared infrastructure
-│   │   │   │   ├── config/              # Environment & feature configs
-│   │   │   │   ├── decorators/          # Custom decorators (@CurrentUser, @Roles)
-│   │   │   │   ├── dto/                 # Shared DTOs (pagination, etc.)
-│   │   │   │   ├── filters/             # Exception filters (Sentry, global)
-│   │   │   │   ├── guards/             # Auth guards (JWT, RBAC, CSRF, rate limit)
-│   │   │   │   ├── middleware/          # CSRF, terms-version, maintenance
-│   │   │   │   └── utils/              # Utilities (circuit breaker, crypto)
-│   │   │   ├── config/                  # Swagger, DB, JWT, Redis, Socket configs
-│   │   │   ├── database/
-│   │   │   │   ├── migrations/          # 45 ordered migration files
-│   │   │   │   └── seeds/               # Seed data
-│   │   │   └── modules/                 # 54 Feature modules
-│   │   │       ├── auth/                # JWT, OAuth, session, token rotation
-│   │   │       ├── identity/            # Credentials, MFA, consent
-│   │   │       ├── users/               # Profiles, data export, retention, deletion
-│   │   │       ├── orders/              # Order lifecycle, pickup codes, automation
-│   │   │       ├── payments/            # Wallet, split, transactions, refunds
-│   │   │       ├── payment-gateway/     # Asaas, Stripe Terminal, webhook
-│   │   │       ├── kds-brain/           # Auto-fire, routing, sync, self-learning
-│   │   │       ├── financial/           # Reports, transactions, export
-│   │   │       ├── financial-brain/     # Forecast, accounting export
-│   │   │       ├── cash-register/       # Sessions, movements, cash count
-│   │   │       ├── cost-control/        # Ingredients, recipes, COGS, margins
-│   │   │       ├── fiscal/              # NFC-e, Focus NFe, SEFAZ
-│   │   │       ├── stock/               # Stock items, alerts, movements
-│   │   │       ├── integrations/        # iFood, Rappi, UberEats adapters
-│   │   │       ├── customer-crm/        # Customer profiles, visit tracking
-│   │   │       ├── reconciliation/      # Delivery settlements
-│   │   │       ├── accounts-payable/    # Bills management
-│   │   │       ├── fraud-detection/     # Fraud rules engine
-│   │   │       ├── incident-response/   # Security incident workflow
-│   │   │       ├── legal/               # Privacy, terms, consent (i18n)
-│   │   │       └── ...                  # 30+ additional modules
-│   │   ├── Dockerfile                   # Multi-stage (4 stages, non-root)
-│   │   └── docker-compose.yml           # Local infrastructure
+│   ├── supabase/                        # Supabase schema and migrations
+│   │   └── migrations/                  # Profiles, roles, hooks, RLS policies
 │   │
 │   └── mobile/
 │       ├── apps/
@@ -458,7 +421,6 @@ project_okinawa/
 │
 ├── .github/workflows/                  # 6 CI/CD pipelines
 │   ├── ci.yml                          # Main CI
-│   ├── backend-ci.yml                  # Backend lint, test, coverage
 │   ├── mobile-ci.yml                   # Mobile lint, typecheck, test, bundle size
 │   ├── security-audit.yml              # npm audit, dependency check
 │   ├── deploy.yml                      # CD pipeline (build → staging → prod)
@@ -473,18 +435,19 @@ The platform has undergone **5 rounds of security audit** (PRR Sprints) with com
 
 | Remediation | Status | Details |
 |-------------|:------:|---------|
-| JWT JTI Blacklisting | ✅ | Redis + PostgreSQL dual-layer token revocation |
+| Supabase Auth | ✅ | Email confirmation, recovery, refresh sessions, PKCE clients |
+| RLS Policies | ✅ | Per-user and per-role access policies in Postgres |
+| Role Claims | ✅ | Roles exposed through Supabase custom access-token hook |
 | AES-256-GCM Field Encryption | ✅ | MFA secrets, PIX keys, card data encrypted at rest |
 | Account Enumeration Fix | ✅ | Generic message on registration (no "email exists" leak) |
-| Constant-Time Auth | ✅ | Hash executed even when user not found |
-| CSRF Protection | ✅ | Double-submit cookie, explicit CSRF_SECRET required |
+| Service Role Isolation | ✅ | `service_role` restricted to trusted server-side jobs only |
 | CORS Credentials | ✅ | Default `false` (opt-in only) |
-| CSP Hardening | ✅ | Helmet with strict CSP, HSTS 1yr + preload |
+| CSP Hardening | ✅ | Strict CSP, HSTS 1yr + preload |
 | Trusted Proxy Validation | ✅ | X-Forwarded-For validated before rate limiting |
 | Query Timeout | ✅ | `statement_timeout=30s`, `idle_in_transaction=60s` |
 | Swagger in Production | ✅ | Disabled by default (`SWAGGER_ENABLED=false`) |
 | Log Data Masking | ✅ | Payment data removed from logs |
-| Docker Non-Root | ✅ | User `nestjs` (UID 1001), dumb-init signal handling |
+| Docker Non-Root | ✅ | Non-root containers where custom services are used |
 | Fraud Detection | ✅ | Rule engine for suspicious activity |
 | Incident Response | ✅ | Security incident workflow module |
 
@@ -505,35 +468,33 @@ The platform has undergone **5 rounds of security audit** (PRR Sprints) with com
 git clone https://github.com/dinipedro/project_okinawa.git
 cd project_okinawa
 
-# Install backend dependencies
-cd platform/backend && npm install
+# Install site dependencies
+cd site && npm install
 
 # Install mobile dependencies
-cd ../mobile && npm install
+cd ../platform/mobile && npm install
 ```
 
 ### Start Infrastructure
 
 ```bash
-# Start PostgreSQL and Redis
-cd platform/backend
-docker-compose up -d
+# Start local Supabase (requires Supabase CLI)
+supabase start
 
-# Run database migrations
-npm run migration:run
+# Run database migrations (migrations are in platform/supabase/migrations)
+cd platform
+supabase db push
 
-# (Optional) Seed database with sample data
-npm run seed
+# Configure the Supabase Auth custom access token hook:
+# public.custom_access_token_hook
 ```
 
 ### Run Applications
 
 ```bash
-# Terminal 1 — Backend API
-cd platform/backend
-npm run start:dev
-# API available at http://localhost:3000/api/v1
-# Swagger docs at http://localhost:3000/docs (set SWAGGER_ENABLED=true)
+# Terminal 1 — Site
+cd site
+npm run dev
 
 # Terminal 2 — Client Mobile App
 cd platform/mobile/apps/client
@@ -547,17 +508,15 @@ npx expo start
 ### Environment Variables
 
 ```bash
-# Required backend environment variables
-DATABASE_HOST=localhost
-DATABASE_PORT=5432
-DATABASE_USER=postgres
-DATABASE_PASSWORD=<your-password>
-DATABASE_NAME=okinawa
-REDIS_HOST=localhost
-REDIS_PORT=6379
-JWT_SECRET=<min-32-chars>
-JWT_REFRESH_SECRET=<min-32-chars>
-CSRF_SECRET=<min-32-chars>
+# Required Supabase client variables
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<supabase-publishable-or-anon-key>
+EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
+
+# Server-only variables when running trusted jobs or admin scripts
+DATABASE_URL=postgresql://postgres:<password>@<host>:5432/postgres
+SUPABASE_SERVICE_ROLE_KEY=<server-only-never-public>
 FIELD_ENCRYPTION_KEY=<min-32-chars-for-AES-256>
 
 # Optional (required for specific features)
@@ -565,10 +524,8 @@ OPENAI_API_KEY=<for-AI-features>
 ASAAS_API_KEY=<for-payment-gateway>
 FCM_SERVER_KEY=<for-push-notifications>
 SENDGRID_API_KEY=<for-transactional-emails>
-TWILIO_ACCOUNT_SID=<for-OTP-SMS>
-TWILIO_AUTH_TOKEN=<for-OTP-SMS>
-GOOGLE_CLIENT_ID=<for-OAuth>
-APPLE_CLIENT_ID=<for-OAuth>
+TWILIO_ACCOUNT_SID=<for-SMS-if-enabled>
+TWILIO_AUTH_TOKEN=<for-SMS-if-enabled>
 ```
 
 ## API Reference
@@ -576,17 +533,17 @@ APPLE_CLIENT_ID=<for-OAuth>
 ### Authentication
 
 ```bash
-POST /api/v1/auth/login              # Email/password login
-POST /api/v1/auth/register           # New user registration
-POST /api/v1/auth/refresh            # Refresh access token (JTI rotation)
-POST /api/v1/auth/logout             # Invalidate session (JTI blacklist)
-GET  /api/v1/auth/google             # Google OAuth 2.0
-GET  /api/v1/auth/apple              # Apple Sign In (RSA-SHA256 verified)
-POST /api/v1/auth/otp/send           # Send OTP via SMS/WhatsApp
-POST /api/v1/auth/otp/verify         # Verify OTP code
-POST /api/v1/auth/biometric/register # Register biometric credential
-POST /api/v1/auth/biometric/verify   # Verify biometric token
+supabase.auth.signUp()               # Email/password signup + email confirmation
+supabase.auth.signInWithPassword()    # Email/password login
+supabase.auth.signOut()               # Logout
+supabase.auth.resetPasswordForEmail() # Password recovery
+supabase.auth.updateUser()            # Password reset after recovery session
+supabase.auth.refreshSession()        # Refresh token/session rotation
+supabase.auth.onAuthStateChange()     # Client session persistence and listeners
 ```
+
+Roles and route authorization are enforced by Supabase Auth claims plus Postgres RLS.
+See `docs/SUPABASE_AUTH_FLOW.md` for the migrations, trigger, claims hook, and client flow.
 
 ### Core Endpoints (539 total)
 
@@ -759,7 +716,7 @@ A plataforma NÃO é uma ferramenta focada em restaurantes, mas sim centrada em 
 |------------|------------|--------|
 | **App Mobile Cliente** | React Native 0.74 / Expo 51 | 61 telas — descoberta, pedidos, reservas, pagamentos, fidelidade |
 | **App Mobile Restaurante** | React Native 0.74 / Expo 51 | 81 telas — KDS, salão, analytics, CRM, fiscal |
-| **API Backend** | NestJS 10.4 | 54 módulos, 539 endpoints, 9 gateways WebSocket, 96 entidades |
+| **Plataforma de Dados** | Supabase Auth + Postgres + RLS | Autenticação, perfis, roles, policies e realtime |
 | **Site (Web)** | React + Vite + Tailwind | Landing page institucional + demo interativo |
 
 ### Números da Plataforma
@@ -909,14 +866,14 @@ A plataforma se adapta dinamicamente a **11 tipos distintos de serviço** via re
 - **Chef's Table**: Aprovação do chef para reservas
 - **Club**: Porta, fila, mesas VIP, promoter
 
-### API Backend (54 Módulos)
+### Módulos da Plataforma de Dados
 
 **Módulos Core (1-20):**
 
 | # | Módulo | Descrição |
 |---|--------|-----------|
-| 1 | **Auth** | JWT (15min + 7d refresh), OAuth, rotação de tokens, blacklist JTI |
-| 2 | **Identity** | Credenciais, MFA (TOTP), criptografia AES-256-GCM |
+| 1 | **Auth** | Supabase Auth, confirmação de e-mail, recuperação, refresh de sessão e OAuth |
+| 2 | **Identity** | Perfis, metadados MFA-ready, criptografia AES-256-GCM e política de senha via Supabase |
 | 3 | **Users** | Perfis, preferências, exportação de dados, retenção, exclusão |
 | 4 | **User Roles** | RBAC (7 cargos, escopo por restaurante) |
 | 5 | **Restaurants** | CRUD, configuração de serviço |

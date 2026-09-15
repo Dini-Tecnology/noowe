@@ -17,13 +17,23 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PaperProvider } from 'react-native-paper';
-import { AppState, AppStateStatus } from 'react-native';
+import { Appearance, AppState, AppStateStatus, View } from 'react-native';
+import { useFonts } from 'expo-font';
 import Navigation from './navigation';
 import { theme } from './theme';
 import socketService from './services/socket';
 import { authService } from '@/shared/services/auth';
 import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import { RestaurantProvider } from '@/shared/contexts/RestaurantContext';
+import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
+import { initDeepLinking } from '@/shared/utils/deep-linking';
+import { initSentry } from '@/shared/config/sentry';
+import { appFonts, applyDefaultFonts } from '@/shared/theme/fonts';
+
+// Capture crashes/errors in production as early as possible, before the
+// provider tree mounts. No-ops with a console warning if EXPO_PUBLIC_SENTRY_DSN
+// isn't set (see shared/config/sentry.ts).
+initSentry();
 
 // Configure React Query with sensible defaults for restaurant operations
 const queryClient = new QueryClient({
@@ -35,6 +45,26 @@ const queryClient = new QueryClient({
   },
 });
 
+let webSocketDebugListenersBound = false;
+
+function bindWebSocketDebugListeners() {
+  if (webSocketDebugListenersBound) return;
+
+  socketService.on('connect', () => {
+    console.log('[WebSocket] Connected successfully');
+  });
+
+  socketService.on('disconnect', () => {
+    console.log('[WebSocket] Disconnected');
+  });
+
+  socketService.on('error', (error: any) => {
+    console.warn('[WebSocket] Error:', error);
+  });
+
+  webSocketDebugListenersBound = true;
+}
+
 /**
  * AppContent component
  * 
@@ -43,6 +73,12 @@ const queryClient = new QueryClient({
  */
 function AppContent() {
   useEffect(() => {
+    Appearance.setColorScheme('light');
+    const appearanceSubscription = Appearance.addChangeListener(() => {
+      Appearance.setColorScheme('light');
+    });
+    const cleanupDeepLinking = initDeepLinking();
+
     // Initialize WebSocket connection when app starts
     initializeWebSocket();
 
@@ -51,6 +87,8 @@ function AppContent() {
 
     // Cleanup on unmount
     return () => {
+      appearanceSubscription.remove();
+      cleanupDeepLinking();
       subscription.remove();
       socketService.disconnect();
     };
@@ -62,30 +100,27 @@ function AppContent() {
    */
   const initializeWebSocket = async () => {
     try {
-      const user = await authService.getStoredUser();
-      if (user) {
-        socketService.connect();
+      const user = await authService.getCurrentUser();
+      if (!user) return;
 
-        // Setup global socket event handlers for debugging
-        socketService.on('connect', () => {
-          console.log('[WebSocket] Connected successfully');
-        });
+      bindWebSocketDebugListeners();
+      const connected = await socketService.connect();
+      if (!connected) return;
 
-        socketService.on('disconnect', () => {
-          console.log('[WebSocket] Disconnected');
-        });
+      const legacyRestaurantId = (user as { restaurant_id?: unknown }).restaurant_id;
+      const restaurantIds = (user as { restaurant_ids?: unknown }).restaurant_ids;
+      const restaurantId =
+        typeof legacyRestaurantId === 'string'
+          ? legacyRestaurantId
+          : Array.isArray(restaurantIds) && typeof restaurantIds[0] === 'string'
+            ? restaurantIds[0]
+            : null;
 
-        socketService.on('error', (error: any) => {
-          console.error('[WebSocket] Error:', error);
-        });
-
-        // Join restaurant room for real-time updates
-        if (user.restaurant_id) {
-          socketService.joinRestaurantRoom(user.restaurant_id);
-        }
+      if (restaurantId) {
+        socketService.joinRestaurantRoom(restaurantId);
       }
     } catch (error) {
-      console.error('[WebSocket] Failed to initialize:', error);
+      console.warn('[WebSocket] Failed to initialize:', error);
     }
   };
 
@@ -110,7 +145,7 @@ function AppContent() {
   return (
     <>
       <Navigation />
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
     </>
   );
 }
@@ -126,17 +161,26 @@ function AppContent() {
  * 5. PaperProvider - React Native Paper UI components
  */
 export default function App() {
+  const [fontsLoaded] = useFonts(appFonts);
+
+  if (!fontsLoaded) {
+    return <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />;
+  }
+  applyDefaultFonts();
+
   return (
-    <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <RestaurantProvider>
-            <PaperProvider theme={theme}>
-              <AppContent />
-            </PaperProvider>
-          </RestaurantProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider defaultMode="light">
+            <RestaurantProvider>
+              <PaperProvider theme={theme}>
+                <AppContent />
+              </PaperProvider>
+            </RestaurantProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

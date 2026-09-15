@@ -10,7 +10,7 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button } from 'react-native-paper';
-import { useColors } from '../theme';
+import { useColors } from '../contexts/ThemeContext';
 
 interface ErrorMessageProps {
   /** Error message to display */

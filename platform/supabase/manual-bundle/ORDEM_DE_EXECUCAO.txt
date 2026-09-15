@@ -1,0 +1,27 @@
+Migração manual Supabase — ordem obrigatória dos arquivos
+==========================================================
+
+Local das migrações individuais:
+  platform/supabase/migrations/
+
+Ordem de execução no SQL Editor do Dashboard Supabase (copiar/colar cada arquivo nesta sequência):
+
+  1. 20260318004427_5dd946ed-cdff-49d1-b420-e4d2ef008066.sql          (waitlist marketing)
+  2. 20260318011542_dade4b94-74c2-4f70-8506-d62464f17374.sql          (demo_leads)
+  3. 20260323021545_c4df10e1-4031-4a34-8a0d-b965ffd0a49c.sql          (demo_feedback)
+  4. 20260323023154_63a50d9b-2c0b-4766-8d65-39db7d5aba5e.sql          (alter waitlist +phone/state)
+  5. 20260427101000_create_core_bootstrap_tables.sql                   (núcleo: profiles, restaurants, orders…)
+  6. 20260427115000_public_users_auth_sync.sql                       (public.users espelho auth.users)
+  7. 20260427122300_okinawa_bigbang_bootstrap.sql                    (schema private + RLS + realtime)
+  8. 20260429120000_menu_categories_and_menu_items.sql               (menu + FK order_items → menu_items)
+  9. 20260430180000_generated_rest_platform_tables.sql               (~88 tabelas — arquivo grande)
+ 10. 20260430180100_orders_order_items_expand.sql                   (expande enums + colunas orders/order_items)
+
+Arquivo único (tudo concatenado na mesma ordem):
+  platform/supabase/manual-bundle/supabase_migrations_concat.sql
+
+Observações:
+- Projeto novo/vazio: pode colar o concat inteiro ou executar arquivo por arquivo.
+- Banco já parcialmente migrado: rode só o que falta; CREATE IF NOT EXISTS protege tabelas novas; ALTER pode erro se coluna já existir — nesse caso edite ou omita trechos já aplicados.
+- Regenerar as ~88 tabelas após atualizar o inventário:
+    node platform/supabase/scripts/generate-backend-parity-schema.mjs

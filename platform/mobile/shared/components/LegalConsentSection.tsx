@@ -19,7 +19,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Linking,
-  Platform,
 } from 'react-native';
 import { Text, Switch } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -183,17 +182,6 @@ const createStyles = (colors: any, hasError: boolean) =>
       borderWidth: 1.5,
       borderColor: colors.border,
       backgroundColor: colors.card,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.05,
-          shadowRadius: 3,
-        },
-        android: {
-          elevation: 1,
-        },
-      }),
     },
     legalCardAccepted: {
       borderColor: colors.success,

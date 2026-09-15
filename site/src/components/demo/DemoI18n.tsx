@@ -993,7 +993,6 @@ const EXACT_TEXT_TRANSLATIONS: Record<Exclude<DemoLang, 'pt'>, Record<string, st
     'Divida a conta da noite.': 'Split the night\'s bill.',
 
     // ── Restaurant demo screens ──
-    'Resumo executivo otimizado para leitura rápida no celular.': 'Executive summary optimized for quick mobile reading.',
     'Ações rápidas': 'Quick actions',
     'Atalhos para o que importa agora': 'Shortcuts to what matters right now',
     'Pedidos recentes': 'Recent orders',

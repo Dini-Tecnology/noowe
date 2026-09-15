@@ -8,7 +8,7 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { ActivityIndicator, Text } from 'react-native-paper';
-import { useColors } from '../theme';
+import { useColors } from '../contexts/ThemeContext';
 
 interface LoadingSpinnerProps {
   message?: string;

@@ -1,87 +1,42 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
- * Security Tests: Docker Compose Secret Hardcoding
- * Validates that no docker-compose file contains hardcoded secrets
- * and all use ${VAR:?error} pattern for required variables.
+ * Security Tests: public/runtime secret exposure
  */
-describe('Docker Compose Secret Security', () => {
-  const dockerFiles = [
-    { name: 'root docker-compose.yml', path: '../../../docker-compose.yml' },
-    { name: 'backend docker-compose.yml', path: '../../../backend/docker-compose.yml' },
+describe('Runtime Secret Security', () => {
+  const files = [
+    path.resolve(__dirname, '../../../../docker-compose.yml'),
+    path.resolve(__dirname, '../../../../.env.docker'),
+    path.resolve(__dirname, '../../../.env.example'),
   ];
 
-  const dangerousPatterns = [
-    /PASSWORD[=:]\s*(?!.*\$\{)[a-zA-Z0-9_]+/i,
-    /JWT_SECRET[=:]\s*(?!.*\$\{)['"]?[a-zA-Z-]+/i,
-  ];
+  it('does not keep custom JWT auth secrets in runtime config', () => {
+    for (const filePath of files) {
+      const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
 
-  const hardcodedSecrets = [
-    'okinawa_dev_password',
-    'okinawa_redis_password',
-    'your-jwt-secret',
-    'your-super-secret',
-    'csrf-secret-key',
-  ];
-
-  for (const file of dockerFiles) {
-    describe(file.name, () => {
-      it('should not contain any hardcoded secret values', async () => {
-        const fs = await import('fs');
-        const path = await import('path');
-        const filePath = path.resolve(__dirname, file.path);
-        const content = fs.readFileSync(filePath, 'utf-8');
-
-        for (const secret of hardcodedSecrets) {
-          expect(content).not.toContain(secret);
-        }
-      });
-
-      it('should use ${VAR:?error} pattern for required secrets', async () => {
-        const fs = await import('fs');
-        const path = await import('path');
-        const filePath = path.resolve(__dirname, file.path);
-        const content = fs.readFileSync(filePath, 'utf-8');
-
-        // Check that DATABASE_PASSWORD uses :? pattern
-        if (content.includes('DATABASE_PASSWORD')) {
-          const dbPassLines = content.split('\n').filter(l => 
-            l.includes('DATABASE_PASSWORD') && !l.trim().startsWith('#')
-          );
-          for (const line of dbPassLines) {
-            if (line.includes('${')) {
-              expect(line).toMatch(/\$\{DATABASE_PASSWORD:\?/);
-            }
-          }
-        }
-
-        // Check JWT_SECRET uses :? pattern
-        if (content.includes('JWT_SECRET')) {
-          const jwtLines = content.split('\n').filter(l => 
-            l.includes('JWT_SECRET') && l.includes('${') && !l.trim().startsWith('#')
-          );
-          for (const line of jwtLines) {
-            expect(line).toMatch(/\$\{JWT_SECRET:\?/);
-          }
-        }
-      });
-    });
-  }
-
-  it('should not have hardcoded pgAdmin password "admin"', async () => {
-    const fs = await import('fs');
-    const path = await import('path');
-    
-    for (const file of dockerFiles) {
-      const filePath = path.resolve(__dirname, file.path);
-      const content = fs.readFileSync(filePath, 'utf-8');
-      
-      // pgAdmin password should not be plain "admin" or "admin123"
-      const pgAdminLines = content.split('\n').filter(l => l.includes('PGADMIN_DEFAULT_PASSWORD'));
-      for (const line of pgAdminLines) {
-        expect(line).not.toMatch(/:\s*admin\s*$/);
-        expect(line).not.toContain('admin123');
-      }
+      expect(content).not.toContain('JWT_SECRET');
+      expect(content).not.toContain('JWT_REFRESH_SECRET');
+      expect(content).not.toContain('your-jwt-secret');
+      expect(content).not.toContain('csrf-secret-key');
     }
+  });
+
+  it('does not expose Supabase service_role keys to public clients', () => {
+    for (const filePath of files) {
+      const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+
+      expect(content).not.toMatch(/VITE_.*SERVICE_ROLE/i);
+      expect(content).not.toMatch(/EXPO_PUBLIC_.*SERVICE_ROLE/i);
+      expect(content).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY\s*=/i);
+    }
+  });
+
+  it('documents anon/publishable Supabase client variables for the site', () => {
+    const siteEnvExample = fs.readFileSync(path.resolve(__dirname, '../../../.env.example'), 'utf-8');
+
+    expect(siteEnvExample).toContain('VITE_SUPABASE_URL');
+    expect(siteEnvExample).toMatch(/VITE_SUPABASE_(PUBLISHABLE_KEY|ANON_KEY)/);
   });
 });

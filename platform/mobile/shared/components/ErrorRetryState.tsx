@@ -12,7 +12,7 @@ import React, { useMemo, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useColors } from '../theme';
+import { useColors } from '../contexts/ThemeContext';
 import { t } from '../i18n';
 import { trigger } from '../utils/haptics';
 

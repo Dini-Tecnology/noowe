@@ -1,7 +1,7 @@
 /**
  * Okinawa Design System - Theme Entry Point
  * Modern Chic aesthetic with Warm Orange primary color
- * 
+ *
  * This design system provides:
  * - Semantic color tokens with light/dark mode support
  * - Typography scale with consistent hierarchy
@@ -16,15 +16,20 @@ export * from './typography';
 export * from './spacing';
 export * from './shadows';
 export * from './animations';
+export * from './fonts';
 
+// Unified theme objects (definidos em módulo dedicado para ThemeContext sem ciclo)
 export {
   OkinawaLightTheme,
   OkinawaDarkTheme,
   type OkinawaTheme,
-  default,
-} from './okinawa-presets';
+} from './okinawaThemes';
 
-export { useColors, useTheme, useOkinawaTheme } from './theme-hooks';
+export { default } from './okinawaThemes';
+
+// Re-exported here (not just from ThemeContext) so code that imports
+// useColors/useTheme/useOkinawaTheme via `shared/theme` keeps working.
+export { useColors, useTheme, useOkinawaTheme } from '../contexts/ThemeContext';
 
 // Migration helper: Convert old theme to new theme
 // This helps existing components transition to the new design system
@@ -35,27 +40,27 @@ export const legacyThemeMapping = {
   primaryDark: 'colors.primaryDark',
   secondary: 'colors.secondary',
   accent: 'colors.accent',
-  
+
   // Text colors
   text: 'colors.foreground',
   textSecondary: 'colors.foregroundSecondary',
   textMuted: 'colors.foregroundMuted',
-  
+
   // Background colors
   white: 'colors.background',
   gray50: 'colors.backgroundSecondary',
   gray100: 'colors.backgroundTertiary',
-  
+
   // Status colors
   success: 'colors.success',
   warning: 'colors.warning',
   error: 'colors.error',
   info: 'colors.info',
-  
+
   // Border colors
   border: 'colors.border',
   divider: 'colors.borderLight',
-  
+
   // Surface colors
   cardBackground: 'colors.card',
   inputBackground: 'colors.input',

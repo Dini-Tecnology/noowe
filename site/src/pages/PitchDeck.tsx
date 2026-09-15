@@ -418,8 +418,8 @@ const TechSlide = () => (
         <div className="space-y-4">
           {[
             { category: "Mobile", tech: "React Native + Expo 51 + TypeScript", color: "primary" },
-            { category: "Backend", tech: "NestJS + TypeORM + PostgreSQL + Redis", color: "secondary" },
-            { category: "Real-time", tech: "Socket.IO + WebSocket", color: "accent" },
+            { category: "Backend", tech: "Supabase Auth + Postgres + RLS", color: "secondary" },
+            { category: "Real-time", tech: "Supabase Realtime + WebSocket", color: "accent" },
             { category: "Design System", tech: "Modern Chic + Glassmorphism + Haptics", color: "primary" },
             { category: "Testing", tech: "Vitest + MSW + 850+ testes (95% coverage)", color: "secondary" },
           ].map((item, i) => (

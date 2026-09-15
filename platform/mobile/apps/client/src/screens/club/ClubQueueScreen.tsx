@@ -16,6 +16,7 @@ import {
   Alert,
   Animated,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import {
   Text,
@@ -122,7 +123,7 @@ export default function ClubQueueScreen({ route }: ClubQueueScreenProps) {
   }, [queueEntry?.status, pulseAnim]);
 
   // Fetch current position
-  const { isLoading } = useQuery({
+  const { isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['club-queue-position', restaurantId],
     queryFn: async () => {
       const response = await ApiService.get(
@@ -326,6 +327,7 @@ export default function ClubQueueScreen({ route }: ClubQueueScreenProps) {
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { void refetch(); }} tintColor={colors.primary} colors={[colors.primary]} />}
     >
       {/* Event Name */}
       <Text
@@ -397,7 +399,7 @@ export default function ClubQueueScreen({ route }: ClubQueueScreenProps) {
             <View
               style={[
                 styles.qrPlaceholder,
-                { borderColor: colors.border },
+                { backgroundColor: colors.card, borderColor: colors.border },
               ]}
             >
               <Text style={{ fontSize: 48 }}>📱</Text>
@@ -419,7 +421,7 @@ export default function ClubQueueScreen({ route }: ClubQueueScreenProps) {
           onPress={handleAtDoor}
           style={[styles.atDoorBtn, { backgroundColor: colors.success }]}
           contentStyle={styles.atDoorBtnContent}
-          labelStyle={styles.atDoorBtnLabel}
+          labelStyle={[styles.atDoorBtnLabel, { color: colors.premiumCardForeground }]}
           accessibilityLabel={t('club.queueSection.atDoor')}
         >
           {t('club.queueSection.atDoor')}
@@ -515,7 +517,6 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 12,
     borderWidth: 2,
-    backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -529,7 +530,6 @@ const styles = StyleSheet.create({
   atDoorBtnLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.premiumCardForeground,
   },
   leaveBtn: {
     borderRadius: 12,

@@ -36,7 +36,7 @@ import ApiService from '@/shared/services/api';
 import { useI18n } from '@/shared/hooks/useI18n';
 import { useWebSocket } from '@/shared/hooks/useWebSocket';
 import { useScreenTracking } from '@/shared/hooks/useAnalytics';
-import { useColors } from '@/shared/theme';
+import { useColors } from '@/shared/contexts/ThemeContext';
 import logger from '@okinawa/shared/utils/logger';
 import type { RootStackParamList } from '../../types';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';

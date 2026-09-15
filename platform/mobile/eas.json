@@ -38,7 +38,7 @@
         "appleTeamId": "APPLE_TEAM_ID_PLACEHOLDER"
       },
       "android": {
-        "serviceAccountKeyPath": "./google-services.json",
+        "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "internal"
       }
     }

@@ -3,13 +3,19 @@ import { reservationsSocketService } from './reservations-socket';
 import { notificationsSocketService } from './notifications-socket';
 import { waitlistSocketService } from './waitlist-socket';
 import { isSupabaseConfigured } from './supabase';
+import { getOptionalSupabaseSessionUser } from './supabase-auth';
 
 class SocketManager {
-  async connectAll() {
+  async connectAll(): Promise<boolean> {
     try {
       if (!isSupabaseConfigured()) {
         console.warn('Supabase realtime is not configured; skipping socket connection');
-        return;
+        return false;
+      }
+
+      const { user } = await getOptionalSupabaseSessionUser();
+      if (!user) {
+        return false;
       }
 
       const connections = [
@@ -19,10 +25,29 @@ class SocketManager {
         waitlistSocketService.connect(),
       ];
 
-      await Promise.all(connections);
+      const failures = (
+        await Promise.all(
+          connections.map(async (connection) => {
+            try {
+              await connection;
+              return null;
+            } catch (error) {
+              return error;
+            }
+          })
+        )
+      ).filter(Boolean);
+
+      if (failures.length > 0) {
+        console.warn('Some realtime sockets failed to connect:', failures);
+        return false;
+      }
+
       console.log('All sockets connected');
+      return true;
     } catch (error) {
-      console.error('Failed to connect all sockets:', error);
+      console.warn('Unable to prepare realtime sockets:', error);
+      return false;
     }
   }
 

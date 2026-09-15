@@ -33,14 +33,21 @@ export function validateBrazilianPhone(phone: string): boolean {
  * @returns Formatted phone string
  */
 export function formatBrazilianPhone(phone: string): string {
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length === 11) {
-    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
-  }
-  if (cleaned.length === 10) {
-    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
-  }
-  return phone;
+  const cleaned = phone.replace(/\D/g, '').slice(0, 11);
+  if (!cleaned) return '';
+  if (cleaned.length < 3) return `(${cleaned}`;
+
+  const areaCode = cleaned.slice(0, 2);
+  const local = cleaned.slice(2);
+  if (local.length <= 4) return `(${areaCode}) ${local}`;
+
+  const prefixLength = cleaned.length === 11 ? 5 : 4;
+  return `(${areaCode}) ${local.slice(0, prefixLength)}-${local.slice(prefixLength)}`;
+}
+
+export function formatBrazilianPostalCode(postalCode: string): string {
+  const digits = postalCode.replace(/\D/g, '').slice(0, 8);
+  return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
 }
 
 /**

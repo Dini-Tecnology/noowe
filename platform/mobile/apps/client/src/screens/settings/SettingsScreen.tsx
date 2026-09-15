@@ -96,6 +96,23 @@ export default function SettingsScreen() {
     setThemeDialogVisible(false);
   };
 
+  const handleLogout = () => {
+    Alert.alert(
+      t('auth.logout') || 'Sair da conta',
+      t('auth.logoutConfirm') || 'Deseja encerrar sua sessão neste dispositivo?',
+      [
+        { text: t('common.cancel') || 'Cancelar', style: 'cancel' },
+        {
+          text: t('common.confirm') || 'Sair',
+          style: 'destructive',
+          onPress: () => {
+            void authService.logout();
+          },
+        },
+      ]
+    );
+  };
+
   const handleClearCache = () => {
     Alert.alert(
       t('settings.clearCache') || 'Limpar Cache',
@@ -328,6 +345,23 @@ export default function SettingsScreen() {
           left={(props) => <List.Icon {...props} icon="shield-check" color={colors.foregroundMuted} />}
           right={(props) => <List.Icon {...props} icon="chevron-right" color={colors.foregroundMuted} />}
           onPress={() => Linking.openURL('https://noowebr.com/privacidade')}
+        />
+      </List.Section>
+
+      <Divider style={styles.sectionDivider} />
+
+      <List.Section>
+        <List.Subheader style={{ color: colors.foregroundMuted }}>{t('settings.account') || 'Conta'}</List.Subheader>
+        <List.Item
+          title={t('settings.disconnect') || 'Sair da conta'}
+          description={t('settings.disconnectDesc') || 'Encerrar sessão neste dispositivo'}
+          titleStyle={{ color: colors.foreground }}
+          descriptionStyle={{ color: colors.foregroundMuted }}
+          left={(props) => <List.Icon {...props} icon="logout" color={colors.foregroundMuted} />}
+          right={(props) => <List.Icon {...props} icon="chevron-right" color={colors.foregroundMuted} />}
+          onPress={handleLogout}
+          accessibilityRole="button"
+          accessibilityLabel={t('settings.disconnect') || 'Sair da conta'}
         />
       </List.Section>
 

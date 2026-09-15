@@ -6,7 +6,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, ViewStyle, TextStyle, ImageStyle } from 'react-native';
 import { useOkinawaTheme } from './ThemeContext';
-import { OkinawaTheme } from '../theme';
+import type { OkinawaTheme } from '../theme/okinawaThemes';
 
 type NamedStyles<T> = { [P in keyof T]: ViewStyle | TextStyle | ImageStyle };
 

@@ -1,12 +1,12 @@
 import { FC } from 'react';
-import { ChevronLeft, Calendar, Users, Clock, Check, X } from "lucide-react";
+import { ChevronLeft, Calendar, Users, Clock, Check, MapPin, Phone, X } from "lucide-react";
 
 interface RestaurantReservationsScreenV2Props { onNavigate: (screen: string) => void; }
 
 const reservations = [
-  { id: 1, name: 'Silva', guests: 4, time: '19:00', status: 'confirmed' },
-  { id: 2, name: 'Santos', guests: 2, time: '20:00', status: 'pending' },
-  { id: 3, name: 'Costa', guests: 6, time: '21:00', status: 'confirmed' },
+  { id: 1, name: 'Silva', guests: 4, time: '19:00', table: '05', phone: '(11) 99999-1234', status: 'confirmed' },
+  { id: 2, name: 'Santos', guests: 2, time: '20:00', table: 'A definir', phone: '(11) 98888-5678', status: 'pending' },
+  { id: 3, name: 'Costa', guests: 6, time: '21:00', table: '09', phone: '(11) 97777-9012', status: 'confirmed' },
 ];
 
 const RestaurantReservationsScreenV2: FC<RestaurantReservationsScreenV2Props> = ({ onNavigate }) => (
@@ -26,9 +26,11 @@ const RestaurantReservationsScreenV2: FC<RestaurantReservationsScreenV2Props> = 
               {res.status === 'confirmed' ? 'Confirmada' : 'Pendente'}
             </span>
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-            <span className="flex items-center gap-1"><Users className="w-4 h-4" />{res.guests}</span>
-            <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{res.time}</span>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-muted-foreground mb-3">
+            <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />Hora: {res.time}</span>
+            <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />Mesa: {res.table}</span>
+            <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{res.guests} pessoas</span>
+            <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{res.phone}</span>
           </div>
           {res.status === 'pending' && (
             <div className="flex gap-2">

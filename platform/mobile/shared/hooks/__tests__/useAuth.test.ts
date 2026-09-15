@@ -6,7 +6,10 @@
  * @module shared/hooks/__tests__/useAuth.test
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+const vi = {
+  fn: jest.fn,
+  mock: jest.mock,
+};
 
 // Mock AsyncStorage
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -35,7 +38,7 @@ interface User {
   id: string;
   email: string;
   full_name: string;
-  avatar_url?: string;
+  avatar_url?: string | null;
 }
 
 interface AuthState {
@@ -53,18 +56,20 @@ interface AuthActions {
 
 type UseAuthReturn = AuthState & AuthActions;
 
+type MockFn = any;
+
 // Simulated auth hook for testing logic
 function createAuthHook(
   mockAuthService: {
-    login: ReturnType<typeof vi.fn>;
-    register: ReturnType<typeof vi.fn>;
-    logout: ReturnType<typeof vi.fn>;
-    getCurrentUser: ReturnType<typeof vi.fn>;
+    login: MockFn;
+    register: MockFn;
+    logout: MockFn;
+    getCurrentUser: MockFn;
   },
   mockStorage: {
-    getItem: ReturnType<typeof vi.fn>;
-    setItem: ReturnType<typeof vi.fn>;
-    removeItem: ReturnType<typeof vi.fn>;
+    getItem: MockFn;
+    setItem: MockFn;
+    removeItem: MockFn;
   }
 ): UseAuthReturn {
   let state: AuthState = {
@@ -151,18 +156,18 @@ function createAuthHook(
 // ============================================================
 
 describe('useAuth Hook', () => {
-  let mockAuthService: {
-    login: ReturnType<typeof vi.fn>;
-    register: ReturnType<typeof vi.fn>;
-    logout: ReturnType<typeof vi.fn>;
-    getCurrentUser: ReturnType<typeof vi.fn>;
-  };
-
-  let mockStorage: {
-    getItem: ReturnType<typeof vi.fn>;
-    setItem: ReturnType<typeof vi.fn>;
-    removeItem: ReturnType<typeof vi.fn>;
-  };
+	  let mockAuthService: {
+	    login: MockFn;
+	    register: MockFn;
+	    logout: MockFn;
+	    getCurrentUser: MockFn;
+	  };
+	
+	  let mockStorage: {
+	    getItem: MockFn;
+	    setItem: MockFn;
+	    removeItem: MockFn;
+	  };
 
   beforeEach(() => {
     mockAuthService = {

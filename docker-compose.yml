@@ -63,8 +63,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (min 32 chars)}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required (min 32 chars)}
     volumes:
       - ./platform/backend:/app
       - /app/node_modules
@@ -101,8 +99,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
     ports:
@@ -142,8 +138,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
     depends_on:
       postgres:
         condition: service_healthy
@@ -178,8 +172,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (min 32 chars)}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required (min 32 chars)}
     volumes:
       - ./platform/backend:/app
       - /app/node_modules

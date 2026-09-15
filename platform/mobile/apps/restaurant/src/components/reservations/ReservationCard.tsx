@@ -170,7 +170,9 @@ export default function ReservationCard({
     <Card.Content>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text variant="titleLarge" style={styles.customerName}>{reservation.customer?.full_name || 'Guest'}</Text>
+          <Text variant="titleLarge" style={styles.customerName}>
+            {reservation.customer?.full_name || reservation.customer?.email || 'Cliente'}
+          </Text>
           <View style={styles.timeInfo}>
             <IconButton icon="clock-outline" size={16} style={styles.icon} iconColor={colors.foregroundMuted} />
             <Text variant="bodySmall" style={styles.timeText}>

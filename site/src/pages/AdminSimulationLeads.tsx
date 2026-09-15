@@ -2,17 +2,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Lock, Download, BarChart3, Users, Target, Clock, ArrowUpDown,
-  CheckCircle, XCircle, TrendingUp, Activity, Eye, Calendar,
+  Download, Users, Target, Clock, ArrowUpDown,
+  CheckCircle, XCircle, TrendingUp,
 } from 'lucide-react';
 import { format, subDays, isAfter } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import NooweLogo from '@/components/site/NooweLogo';
-
-const ADMIN_CODE = 'noowe2026';
+import RequireAuth from '@/components/auth/RequireAuth';
 
 const PROFILE_LABELS: Record<string, { label: string; color: string }> = {
   owner: { label: 'Dono', color: 'bg-primary/10 text-primary' },
@@ -53,9 +51,7 @@ const StatCard = ({ icon: Icon, label, value, accent }: {
   </div>
 );
 
-export default function AdminSimulationLeads() {
-  const [auth, setAuth] = useState(false);
-  const [code, setCode] = useState('');
+function AdminSimulationLeadsContent() {
   const [data, setData] = useState<LeadRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [days, setDays] = useState(30);
@@ -64,13 +60,7 @@ export default function AdminSimulationLeads() {
   const [sortField, setSortField] = useState<'created_at' | 'acts_completed'>('created_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (code === ADMIN_CODE) setAuth(true);
-  };
-
   useEffect(() => {
-    if (!auth) return;
     setLoading(true);
     supabase
       .from('simulation_leads')
@@ -81,7 +71,7 @@ export default function AdminSimulationLeads() {
         setData((rows as LeadRow[]) || []);
         setLoading(false);
       });
-  }, [auth]);
+  }, []);
 
   const cutoff = useMemo(() => subDays(new Date(), days), [days]);
 
@@ -144,30 +134,6 @@ export default function AdminSimulationLeads() {
     a.href = url; a.download = `simulation-leads-${format(new Date(), 'yyyy-MM-dd')}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
-
-  if (!auth) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <form onSubmit={handleLogin} className="w-full max-w-xs space-y-4">
-          <div className="flex justify-center mb-6">
-            <NooweLogo />
-          </div>
-          <p className="text-center text-sm text-muted-foreground">Painel de Leads — Simulação</p>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-            <Input
-              type="password"
-              placeholder="Código de acesso"
-              value={code}
-              onChange={e => setCode(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Button type="submit" className="w-full">Entrar</Button>
-        </form>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -307,5 +273,17 @@ export default function AdminSimulationLeads() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function AdminSimulationLeads() {
+  return (
+    <RequireAuth
+      allowedRoles={['admin', 'owner', 'manager']}
+      title="Painel de Leads"
+      description="Entre com Supabase Auth para consultar os leads de simulação."
+    >
+      <AdminSimulationLeadsContent />
+    </RequireAuth>
   );
 }

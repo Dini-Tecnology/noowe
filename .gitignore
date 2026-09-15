@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.expo/
 dist
 dist-ssr
 *.local
@@ -33,3 +34,6 @@ dist-ssr
 # Expo / Metro local state
 .expo/
 **/.expo/
+
+# Estado local do Supabase CLI (project-ref, pooler, versões)
+.temp/

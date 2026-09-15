@@ -1,41 +1,31 @@
 /**
- * Okinawa Design System - Restaurant Liquid Glass Navigation
- * 
- * A premium glassmorphism bottom navigation bar for the Restaurant app.
- * Customized icons and labels for restaurant staff operations.
- * Full semantic token support for dark/light modes.
+ * Restaurant app — Liquid Glass bottom navigation (role-aware)
  */
 
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
-  View,
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-  Animated,
-  Platform,
-} from 'react-native';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useOkinawaTheme, useColors } from '../contexts/ThemeContext';
-
-// Icons
-import { 
   LayoutDashboard,
   ClipboardList,
   ChefHat,
   Users,
   Settings,
+  CalendarDays,
+  LayoutGrid,
+  Shield,
+  TrendingUp,
+  DollarSign,
+  BookOpen,
+  Package,
+  Wine,
+  Beer,
+  Flame,
+  Star,
+  Smartphone,
+  Radio,
 } from 'lucide-react-native';
+import LiquidGlassBottomNav, { type LiquidGlassNavItem } from './LiquidGlassBottomNav';
 
-interface NavItem {
-  id: string;
-  icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
-  label: string;
-}
-
-const navItems: NavItem[] = [
+const defaultNavItems: LiquidGlassNavItem[] = [
   { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { id: 'orders', icon: ClipboardList, label: 'Pedidos' },
   { id: 'kitchen-kds', icon: ChefHat, label: 'Cozinha' },
@@ -43,274 +33,102 @@ const navItems: NavItem[] = [
   { id: 'settings', icon: Settings, label: 'Config' },
 ];
 
+const managerNavItems: LiquidGlassNavItem[] = [
+  { id: 'manager-ops', icon: LayoutDashboard, label: 'Operação' },
+  { id: 'manager-orders', icon: ClipboardList, label: 'Pedidos' },
+  { id: 'manager-approvals', icon: Shield, label: 'Aprovações' },
+  { id: 'manager-cash', icon: DollarSign, label: 'Caixa' },
+  { id: 'manager-tables', icon: LayoutGrid, label: 'Mesas' },
+  { id: 'manager-staff', icon: Users, label: 'Equipe' },
+  { id: 'manager-report', icon: TrendingUp, label: 'Relatório' },
+  { id: 'manager-stock', icon: Package, label: 'Estoque' },
+  { id: 'manager-promotions', icon: Star, label: 'Promoções' },
+  { id: 'manager-qr', icon: Smartphone, label: 'QR Codes' },
+  { id: 'manager-settings', icon: Settings, label: 'Config' },
+];
+
+const maitreNavItems: LiquidGlassNavItem[] = [
+  { id: 'maitre-reservations', icon: CalendarDays, label: 'Reservas' },
+  { id: 'maitre-flow', icon: Users, label: 'Fluxo' },
+  { id: 'maitre-tables', icon: LayoutGrid, label: 'Mesas' },
+  { id: 'maitre-management', icon: ClipboardList, label: 'Gestão' },
+  { id: 'maitre-settings', icon: Settings, label: 'Config' },
+];
+
+const chefNavItems: LiquidGlassNavItem[] = [
+  { id: 'chef-kds', icon: ChefHat, label: 'KDS' },
+  { id: 'chef-approvals', icon: Shield, label: 'Aprovações' },
+  { id: 'chef-analytics', icon: TrendingUp, label: 'Analytics' },
+  { id: 'chef-cost', icon: DollarSign, label: 'Custo' },
+  { id: 'chef-menu', icon: BookOpen, label: 'Cardápio' },
+  { id: 'chef-stock', icon: Package, label: 'Estoque' },
+  { id: 'chef-settings', icon: Settings, label: 'Config' },
+];
+
+const barmanNavItems: LiquidGlassNavItem[] = [
+  { id: 'barman-station', icon: Beer, label: 'Estação' },
+  { id: 'bar-kds', icon: Wine, label: 'KDS Bar' },
+  { id: 'bar-recipes', icon: BookOpen, label: 'Receitas' },
+  { id: 'bar-stock', icon: Package, label: 'Estoque' },
+  { id: 'barman-settings', icon: Settings, label: 'Config' },
+];
+
+const cookNavItems: LiquidGlassNavItem[] = [
+  { id: 'cook-station', icon: Flame, label: 'Minha Estação' },
+  { id: 'cook-kds', icon: ChefHat, label: 'KDS Cozinha' },
+  { id: 'cook-settings', icon: Settings, label: 'Config' },
+];
+
+const waiterNavItems: LiquidGlassNavItem[] = [
+  { id: 'waiter', icon: Radio, label: 'Ao Vivo' },
+  { id: 'waiter-table-actions', icon: LayoutGrid, label: 'Mesas' },
+  { id: 'waiter-order-management', icon: ClipboardList, label: 'Pedidos' },
+  { id: 'waiter-kitchen', icon: ChefHat, label: 'Cozinha' },
+  { id: 'waiter-assistance', icon: Star, label: 'Assistência' },
+  { id: 'waiter-table-charge', icon: DollarSign, label: 'Cobrar' },
+  { id: 'waiter-settings', icon: Settings, label: 'Config' },
+];
+
+const NAV_BY_VARIANT: Record<string, LiquidGlassNavItem[]> = {
+  default: defaultNavItems,
+  manager: managerNavItems,
+  maitre: maitreNavItems,
+  chef: chefNavItems,
+  barman: barmanNavItems,
+  cook: cookNavItems,
+  waiter: waiterNavItems,
+};
+
+export type RestaurantNavVariant =
+  | 'default'
+  | 'manager'
+  | 'maitre'
+  | 'chef'
+  | 'barman'
+  | 'cook'
+  | 'waiter';
+
 interface RestaurantLiquidGlassNavProps {
+  variant?: string;
   activeTab: string;
   onNavigate: (screen: string) => void;
+  hiddenItemIds?: string[];
 }
 
 const RestaurantLiquidGlassNav: React.FC<RestaurantLiquidGlassNavProps> = ({
+  variant = 'default',
   activeTab,
   onNavigate,
+  hiddenItemIds = [],
 }) => {
-  const { theme, isDark } = useOkinawaTheme();
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const scaleValues = useRef(navItems.map(() => new Animated.Value(1))).current;
-  const glowValues = useRef(navItems.map(() => new Animated.Value(0))).current;
-
-  // Animate active item glow
-  useEffect(() => {
-    navItems.forEach((item, index) => {
-      const isActive = item.id === activeTab;
-      Animated.timing(glowValues[index], {
-        toValue: isActive ? 1 : 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    });
-  }, [activeTab]);
-
-  const handlePressIn = (index: number) => {
-    Animated.spring(scaleValues[index], {
-      toValue: 0.9,
-      useNativeDriver: true,
-      damping: 15,
-      stiffness: 200,
-    }).start();
-  };
-
-  const handlePressOut = (index: number) => {
-    Animated.spring(scaleValues[index], {
-      toValue: 1,
-      useNativeDriver: true,
-      damping: 15,
-      stiffness: 200,
-    }).start();
-  };
-
-  // Dynamic styles using semantic tokens
-  const styles = useMemo(() => StyleSheet.create({
-    container: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      paddingHorizontal: 16,
-    },
-    navWrapper: {
-      position: 'relative',
-      borderRadius: 28,
-      overflow: 'hidden',
-      ...Platform.select({
-        ios: {
-          shadowColor: colors.foreground,
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.12,
-          shadowRadius: 32,
-        },
-        android: {
-          elevation: 8,
-        },
-      }),
-    },
-    glassBackground: {
-      ...StyleSheet.absoluteFillObject,
-      borderRadius: 28,
-    },
-    topReflection: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      height: '50%',
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
-    },
-    glassBorder: {
-      ...StyleSheet.absoluteFillObject,
-      borderRadius: 28,
-      borderWidth: 1,
-    },
-    navItems: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-around',
-      paddingVertical: 10,
-      paddingHorizontal: 4,
-    },
-    navItem: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 4,
-      paddingHorizontal: 8,
-      borderRadius: 16,
-    },
-    iconContainer: {
-      width: 40,
-      height: 40,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 12,
-      overflow: 'hidden',
-    },
-    activeGradient: {
-      ...StyleSheet.absoluteFillObject,
-      borderRadius: 12,
-    },
-    glowEffect: {
-      position: 'absolute',
-      top: -8,
-      left: -8,
-      right: -8,
-      bottom: -8,
-      backgroundColor: colors.primary,
-      borderRadius: 20,
-      opacity: 0.4,
-      transform: [{ scale: 1.3 }],
-    },
-    navLabel: {
-      marginTop: 2,
-      fontSize: 9,
-      fontWeight: '500',
-      letterSpacing: 0.5,
-    },
-    homeIndicatorContainer: {
-      alignItems: 'center',
-      marginTop: 8,
-    },
-    homeIndicator: {
-      width: 112,
-      height: 4,
-      borderRadius: 2,
-    },
-  }), [colors]);
-
-  // Dynamic colors based on theme
-  const glassBackgroundColor = isDark 
-    ? 'rgba(17, 24, 39, 0.6)' 
-    : 'rgba(255, 255, 255, 0.6)';
-  const glassBackgroundColorAndroid = isDark 
-    ? 'rgba(17, 24, 39, 0.85)' 
-    : 'rgba(255, 255, 255, 0.85)';
-  const glassBorderColor = isDark 
-    ? colors.border 
-    : 'rgba(255, 255, 255, 0.8)';
-  const inactiveIconColor = colors.foregroundMuted;
-  const homeIndicatorColor = isDark 
-    ? 'rgba(255,255,255,0.2)' 
-    : 'rgba(0,0,0,0.2)';
+  const items = useMemo(
+    () => (NAV_BY_VARIANT[variant] ?? defaultNavItems)
+      .filter((item) => !hiddenItemIds.includes(item.id)),
+    [hiddenItemIds, variant],
+  );
 
   return (
-    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      <View style={styles.navWrapper}>
-        {/* Glass Background */}
-        {Platform.OS === 'ios' ? (
-          <BlurView
-            intensity={80}
-            tint={isDark ? 'dark' : 'light'}
-            style={[
-              styles.glassBackground,
-              { backgroundColor: glassBackgroundColor },
-            ]}
-          />
-        ) : (
-          <View
-            style={[
-              styles.glassBackground,
-              { backgroundColor: glassBackgroundColorAndroid },
-            ]}
-          />
-        )}
-
-        {/* Top Gradient Reflection */}
-        <LinearGradient
-          colors={['rgba(255, 255, 255, 0.4)', 'transparent', 'transparent']}
-          style={styles.topReflection}
-        />
-
-        {/* Border */}
-        <View style={[
-          styles.glassBorder,
-          { borderColor: glassBorderColor },
-        ]} />
-
-        {/* Nav Items */}
-        <View style={styles.navItems}>
-          {navItems.map((item, index) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-
-            return (
-              <TouchableOpacity
-                key={item.id}
-                onPress={() => onNavigate(item.id)}
-                onPressIn={() => handlePressIn(index)}
-                onPressOut={() => handlePressOut(index)}
-                activeOpacity={0.9}
-                style={styles.navItem}
-              >
-                <Animated.View
-                  style={[
-                    styles.iconContainer,
-                    { transform: [{ scale: scaleValues[index] }] },
-                  ]}
-                >
-                  {/* Active Gradient Background */}
-                  {isActive && (
-                    <LinearGradient
-                      colors={theme.gradients.primary}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.activeGradient}
-                    />
-                  )}
-
-                  {/* Glow Effect */}
-                  {isActive && (
-                    <Animated.View
-                      style={[
-                        styles.glowEffect,
-                        { opacity: glowValues[index].interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0, 0.4],
-                        }) },
-                      ]}
-                    />
-                  )}
-
-                  <Icon
-                    size={20}
-                    color={isActive ? colors.primaryForeground : inactiveIconColor}
-                    strokeWidth={isActive ? 2 : 1.5}
-                  />
-                </Animated.View>
-
-                <Text
-                  style={[
-                    styles.navLabel,
-                    {
-                      color: isActive ? colors.primary : inactiveIconColor,
-                    },
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Home Indicator */}
-      <View style={styles.homeIndicatorContainer}>
-        <View
-          style={[
-            styles.homeIndicator,
-            { backgroundColor: homeIndicatorColor },
-          ]}
-        />
-      </View>
-    </View>
+    <LiquidGlassBottomNav items={items} activeTab={activeTab} onNavigate={onNavigate} />
   );
 };
 

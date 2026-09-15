@@ -1,0 +1,23 @@
+[
+  {
+    "date": "2026-08-14",
+    "macrostructure": "Stat-Led",
+    "theme": "existing Noowe design system",
+    "enrichment": "none",
+    "brief": "Functional customer wallet with balance, benefits, payment methods and transaction ledger"
+  },
+  {
+    "date": "2026-08-14",
+    "macrostructure": "Long Document",
+    "theme": "existing Noowe design system",
+    "enrichment": "restaurant photography",
+    "brief": "Fine-dining restaurant detail and minimal native back navigation"
+  },
+  {
+    "date": "2026-08-14",
+    "macrostructure": "Photographic",
+    "theme": "existing Noowe design system",
+    "enrichment": "restaurant photography",
+    "brief": "Client app home featured restaurant, quick actions, favorites, and service-type icons"
+  }
+]

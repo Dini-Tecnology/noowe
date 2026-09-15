@@ -1,7 +1,7 @@
 /**
  * API Integration Tests with MSW
  * 
- * These tests use MSW to intercept HTTP requests and validate:
+ * These tests use MSW to intercept business HTTP requests and validate:
  * 1. Request structure (correct payloads sent)
  * 2. Response handling (correct data returned)
  * 3. Error handling (proper error responses)
@@ -46,11 +46,6 @@ interface ApiClient {
   clearToken(): void;
   
   request<T>(method: string, endpoint: string, data?: any): Promise<{ status: number; data: T }>;
-  
-  // Auth
-  login(email: string, password: string): Promise<any>;
-  register(email: string, password: string, fullName: string): Promise<any>;
-  getMe(): Promise<any>;
   
   // Reservations
   createReservation(data: any): Promise<any>;
@@ -97,19 +92,6 @@ const apiClient: ApiClient = {
     return { status: response.status, data: responseData };
   },
   
-  // Auth methods
-  async login(email: string, password: string) {
-    return this.request('POST', '/auth/login', { email, password });
-  },
-  
-  async register(email: string, password: string, fullName: string) {
-    return this.request('POST', '/auth/register', { email, password, full_name: fullName });
-  },
-  
-  async getMe() {
-    return this.request('GET', '/auth/me');
-  },
-  
   // Reservation methods
   async createReservation(data: any) {
     return this.request('POST', '/reservations', data);
@@ -147,92 +129,27 @@ const apiClient: ApiClient = {
 };
 
 // ============================================================
-// AUTH TESTS
+// SUPABASE AUTH BOUNDARY TESTS
 // ============================================================
 
-describe('API Integration: Authentication', () => {
-  afterEach(() => {
+describe('API Integration: Supabase Auth boundary', () => {
+  it('keeps email/password authentication outside the business API client', () => {
+    expect(apiClient).not.toHaveProperty('login');
+    expect(apiClient).not.toHaveProperty('register');
+    expect(apiClient).not.toHaveProperty('getMe');
+  });
+
+  it('still injects Supabase access tokens into business API requests when present', async () => {
+    apiClient.setToken('supabase-access-token');
+    const { data } = await apiClient.createReservation({
+      restaurant_id: 'rest-1',
+      date: '2026-06-22',
+      time: '19:00',
+      party_size: 2,
+    });
+
+    expect(data).toHaveProperty('status', 'confirmed');
     apiClient.clearToken();
-  });
-
-  describe('POST /auth/login', () => {
-    it('should login successfully with valid credentials', async () => {
-      const { status, data } = await apiClient.login('test@example.com', 'password123');
-      
-      expect(status).toBe(200);
-      expect(data).toHaveProperty('access_token');
-      expect(data).toHaveProperty('refresh_token');
-      expect(data).toHaveProperty('user');
-      expect(data.user.email).toBe('test@example.com');
-    });
-
-    it('should reject invalid credentials', async () => {
-      const { status, data } = await apiClient.login('test@example.com', 'wrongpassword');
-      
-      expect(status).toBe(401);
-      expect(data.message).toBe('Invalid credentials');
-    });
-
-    it('should require email and password', async () => {
-      const { status, data } = await apiClient.login('', '');
-      
-      expect(status).toBe(400);
-      expect(data.message).toContain('required');
-    });
-  });
-
-  describe('POST /auth/register', () => {
-    it('should register successfully with valid data', async () => {
-      const { status, data } = await apiClient.register(
-        'newuser@example.com',
-        'password123',
-        'New User'
-      );
-      
-      expect(status).toBe(200);
-      expect(data).toHaveProperty('id');
-      expect(data.email).toBe('newuser@example.com');
-    });
-
-    it('should reject invalid email format', async () => {
-      const { status, data } = await apiClient.register(
-        'invalid-email',
-        'password123',
-        'Test User'
-      );
-      
-      expect(status).toBe(400);
-      expect(data.message).toContain('email');
-    });
-
-    it('should reject short passwords', async () => {
-      const { status, data } = await apiClient.register(
-        'test@example.com',
-        '123',
-        'Test User'
-      );
-      
-      expect(status).toBe(400);
-      expect(data.message).toContain('8 characters');
-    });
-  });
-
-  describe('GET /auth/me', () => {
-    it('should return user when authenticated', async () => {
-      apiClient.setToken('valid_token');
-      const { status, data } = await apiClient.getMe();
-      
-      expect(status).toBe(200);
-      expect(data).toHaveProperty('id');
-      expect(data).toHaveProperty('email');
-    });
-
-    it('should reject unauthenticated requests', async () => {
-      const { status, data } = await apiClient.getMe();
-      
-      expect(status).toBe(401);
-      expect(data.message).toBe('Unauthorized');
-    });
   });
 });
 

@@ -4,6 +4,7 @@
 
 // Error handling
 export * from './error-handler';
+export * from './auth-errors';
 
 // Deep linking
 export * from './deep-linking';

@@ -10,7 +10,13 @@
  * @module shared/config/analytics
  */
 
+import { NativeModules } from 'react-native';
+
 import { ENV, isDevelopment } from './env';
+
+function isReactNativeFirebaseNativeAvailable(): boolean {
+  return NativeModules.RNFBAppModule != null;
+}
 
 // ============================================================
 // ANALYTICS CONSENT (LGPD Compliance)
@@ -308,11 +314,17 @@ class AnalyticsService {
     // --- end consent gate ---
 
     try {
-      try {
-        const firebaseAnalytics = require('@react-native-firebase/analytics').default;
-        await firebaseAnalytics().setAnalyticsCollectionEnabled(true);
-      } catch {
-        // Firebase Analytics not available — continue with local-only analytics
+      if (isReactNativeFirebaseNativeAvailable()) {
+        try {
+          const firebaseAnalytics = require('@react-native-firebase/analytics').default;
+          await firebaseAnalytics().setAnalyticsCollectionEnabled(true);
+        } catch {
+          // Firebase Analytics JS/native error — continue with local-only analytics
+        }
+      } else if (isDevelopment) {
+        console.warn(
+          '[Analytics] Firebase nativo indisponível (ex.: Expo Go). Métricas nativas desativadas até dev build.',
+        );
       }
 
       this.initialized = true;
@@ -329,11 +341,13 @@ class AnalyticsService {
   disable(): void {
     this.disabled = true;
     this.initialized = false;
-    try {
-      const firebaseAnalytics = require('@react-native-firebase/analytics').default;
-      firebaseAnalytics().setAnalyticsCollectionEnabled(false);
-    } catch {
-      // Firebase not available
+    if (isReactNativeFirebaseNativeAvailable()) {
+      try {
+        const firebaseAnalytics = require('@react-native-firebase/analytics').default;
+        firebaseAnalytics().setAnalyticsCollectionEnabled(false);
+      } catch {
+        // Firebase not available
+      }
     }
     console.log('[Analytics] Disabled — user revoked analytics consent');
   }

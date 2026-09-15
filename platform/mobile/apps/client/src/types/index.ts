@@ -335,6 +335,7 @@ export type RootStackParamList = {
   // Restaurant
   RestaurantDetail: { restaurantId: string };
   Menu: { restaurantId: string };
+  MenuItemDetail: { itemId: string };
   Cart: { restaurantId: string };
 
   // Payment Flow
@@ -367,7 +368,6 @@ export type RootStackParamList = {
   PaymentMethods: undefined;
   AddPaymentMethod: undefined;
   Wallet: undefined;
-  Notifications: undefined;
   Settings: undefined;
 
   // Service screens
@@ -380,6 +380,9 @@ export type RootStackParamList = {
   TabPayment: { tabId?: string };
   Reservation: { restaurantId: string };
   Restaurant: { restaurantId: string };
+  RestaurantVirtualQueue: { restaurantId?: string };
+  RestaurantCallTeam: { restaurantId?: string; tableNumber?: number };
+  RestaurantReserve: { restaurantId?: string };
 };
 
 // Component Props Types

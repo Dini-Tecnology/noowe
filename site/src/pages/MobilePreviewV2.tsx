@@ -46,7 +46,7 @@ const TrackLocationScreenV2 = lazy(() => import("@/components/mobile-preview-v2/
 // Restaurant V2 screens (lazy loaded)
 const RestaurantLoginScreenV2 = lazy(() => import("@/components/mobile-preview-v2/screens/restaurant/RestaurantLoginScreenV2"));
 const RestaurantPhoneAuthScreenV2 = lazy(() => import("@/components/mobile-preview-v2/screens/restaurant/RestaurantPhoneAuthScreenV2"));
-const RestaurantDashboardScreenV2 = lazy(() => import("@/components/mobile-preview-v2/screens/restaurant/RestaurantDashboardScreenV2"));
+const OwnerPreviewScreenV2 = lazy(() => import("@/components/mobile-preview-v2/screens/restaurant/OwnerPreviewScreenV2"));
 const RestaurantOrdersScreenV2 = lazy(() => import("@/components/mobile-preview-v2/screens/restaurant/RestaurantOrdersScreenV2"));
 const OrderPaymentTrackingScreenV2 = lazy(() => import("@/components/mobile-preview-v2/screens/restaurant/OrderPaymentTrackingScreenV2"));
 const KitchenDisplayScreenV2 = lazy(() => import("@/components/mobile-preview-v2/screens/restaurant/KitchenDisplayScreenV2"));
@@ -125,7 +125,7 @@ const restaurantScreens: ScreenConfig[] = [
   { id: "login", name: "Login", component: RestaurantLoginScreenV2 },
   { id: "phone-auth", name: "Phone Auth", component: RestaurantPhoneAuthScreenV2 },
   { id: "restaurant-selector", name: "Selecionar Restaurante", component: RestaurantSelectorScreenV2 },
-  { id: "dashboard", name: "Dashboard", component: RestaurantDashboardScreenV2 },
+  { id: "dashboard", name: "Dono", component: OwnerPreviewScreenV2 },
   { id: "orders", name: "Pedidos", component: RestaurantOrdersScreenV2 },
   { id: "order-payment", name: "Pagamentos", component: OrderPaymentTrackingScreenV2 },
   { id: "kitchen-kds", name: "KDS Cozinha", component: KitchenDisplayScreenV2 },

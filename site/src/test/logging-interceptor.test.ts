@@ -10,8 +10,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// We test the sanitizeBody logic and interceptor behavior by importing
-// and exercising the class directly (no NestJS DI needed for unit tests)
+// We test the sanitizeBody logic directly so sensitive auth/session payloads
+// remain redacted regardless of the transport layer.
 
 describe('LoggingInterceptor - Sanitization', () => {
   // Replicate the sanitization logic for testing

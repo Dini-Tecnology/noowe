@@ -484,7 +484,7 @@ export default function OrderStatusScreen() {
     return (
       <ScreenContainer>
       <View style={styles.loadingContainer}>
-        <IconButton icon="receipt-text-remove" size={64} iconColor={colors.foregroundMuted} accessibilityLabel={t('orders.notFound')} />
+        <IconButton icon="clipboard-off-outline" size={64} iconColor={colors.foregroundMuted} accessibilityLabel={t('orders.notFound')} />
         <Text variant="titleLarge" style={{ color: colors.foreground }}>{t('orders.notFound')}</Text>
       </View>
     

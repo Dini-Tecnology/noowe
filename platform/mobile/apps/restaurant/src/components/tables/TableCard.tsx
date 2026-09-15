@@ -135,7 +135,7 @@ export default function TableCard({ table, onPress, compact = false }: TableCard
 
           {table.current_order_id && table.status === 'occupied' && (
             <View style={styles.detailRow}>
-              <IconButton icon="receipt-text" size={16} style={styles.icon} iconColor={colors.foregroundMuted} />
+              <IconButton icon="receipt" size={16} style={styles.icon} iconColor={colors.foregroundMuted} />
               <Text variant="bodySmall" style={styles.detailText}>
                 Pedido #{table.current_order_id.slice(0, 8)}
               </Text>

@@ -12,18 +12,23 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { authService } from '@/shared/services/auth';
 import { socialAuthService } from '@/shared/services/social-auth';
-import { biometricAuthService } from '@/shared/services/biometric-auth';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { logger } from '@/shared/utils/logger';
+import {
+  isAppleAuthProviderConfigured,
+  isBiometricAuthConfigured,
+  isGoogleAuthProviderConfigured,
+} from '@/shared/config/auth-providers';
 import { captureException } from '@/shared/config/sentry';
-import { useColors } from '@/shared/contexts/ThemeContext';
+import { showErrorToast } from '@/shared/utils/error-handler';
+import { ClientTabBar } from '../components/navigation/ClientTabBar';
+import { liquidGlassTabNavigatorScreenOptions } from '@okinawa/shared/components/LiquidGlassBottomNav';
 import {
   defaultScreenOptions,
   fadeScreenOptions,
@@ -39,17 +44,33 @@ import {
   PhoneAuthScreen,
   PhoneRegisterScreen,
   BiometricEnrollmentScreen,
+  AuthCallbackScreen,
+  ResetPasswordScreen,
 } from '@/shared/screens/auth';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
+import { CLIENT_BRANDING } from '../constants/branding';
 
 // ============================================
 // MAIN SCREENS (Bottom Tab Navigation)
 // ============================================
 import HomeScreen from '../screens/home/HomeScreen';
 import ExploreScreen from '../screens/home/ExploreScreen';
+import MenuTabScreen from '../screens/menu/MenuTabScreen';
+import MenuItemDetailScreen from '../screens/menu/MenuItemDetailScreen';
 import OrdersScreen from '../screens/orders/OrdersScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import {
+  LoyaltyProgramScreen,
+  ProfileFavoritesScreen,
+  ProfileNotificationsScreen,
+  ProfilePaymentMethodsScreen,
+  ProfileReservationsScreen,
+  ProfileSettingsScreen,
+  ProfileSupportScreen,
+  VisitHistoryScreen,
+} from '../screens/profile/ProfileSubscreens';
+import WalletScreen from '../screens/wallet/WalletScreen';
 
 // ============================================
 // SECONDARY SCREENS (Stack Navigation)
@@ -57,6 +78,9 @@ import ProfileScreen from '../screens/profile/ProfileScreen';
 import MenuScreen from '../screens/menu/MenuScreen';
 import CartScreen from '../screens/cart/CartScreen';
 import RestaurantScreen from '../screens/restaurant/RestaurantScreen';
+import RestaurantVirtualQueueScreen from '../screens/restaurant/RestaurantVirtualQueueScreen';
+import RestaurantCallTeamScreen from '../screens/restaurant/RestaurantCallTeamScreen';
+import RestaurantReserveScreen from '../screens/restaurant/RestaurantReserveScreen';
 import UnifiedPaymentScreen from '../screens/payment/UnifiedPaymentScreen';
 import CheckoutScreen from '../screens/payment/CheckoutScreen';
 import PaymentSuccessScreen from '../screens/payment/PaymentSuccessScreen';
@@ -65,7 +89,6 @@ import SplitPaymentScreen from '../screens/payment/SplitPaymentScreen';
 // ============================================
 // EPIC 3 — Missing Screens
 // ============================================
-import NotificationsScreen from '../screens/notifications/NotificationsScreen';
 import AddressesScreen from '../screens/profile/AddressesScreen';
 import LoyaltyDetailScreen from '../screens/loyalty/LoyaltyDetailScreen';
 import CouponsScreen from '../screens/promotions/CouponsScreen';
@@ -80,7 +103,7 @@ import TabPaymentScreen from '../screens/pub-bar/TabPaymentScreen';
 // MISSING SCREENS — Navigation Registration
 // ============================================
 import OrderStatusScreen from '../screens/orders/OrderStatusScreen';
-import WalletScreen from '../screens/wallet/WalletScreen';
+import OrderTrackingScreen from '../screens/orders/OrderTrackingScreen';
 import ReservationsScreen from '../screens/reservations/ReservationsScreen';
 import ReservationDetailScreen from '../screens/reservations/ReservationDetailScreen';
 import CreateReservationScreen from '../screens/reservations/CreateReservationScreen';
@@ -133,79 +156,119 @@ WebBrowser.maybeCompleteAuthSession();
 // ============================================
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+const ProfileStackNavigator = createStackNavigator();
+
+function BootFallback() {
+  return (
+    <View style={bootStyles.container}>
+      <ActivityIndicator size="large" color="#FF6B35" />
+      <Text style={bootStyles.label}>Carregando Noowe...</Text>
+    </View>
+  );
+}
+
+const bootStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+  },
+  label: {
+    marginTop: 16,
+    color: '#1A1A1A',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
 
 // ============================================
 // AUTH STACK (Passwordless-First)
 // ============================================
 
-/**
- * Modern authentication navigation stack.
- * Prioritizes Social Login and Phone OTP with biometric quick-login.
- */
-function AuthStack() {
+interface AuthStackBodyProps {
+  googleLoginAvailable: boolean;
+  appleLoginAvailable: boolean;
+  biometricLoginAvailable: boolean;
+}
+
+function AuthStackBody({
+  googleLoginAvailable,
+  appleLoginAvailable,
+  biometricLoginAvailable,
+}: AuthStackBodyProps) {
   const [authLoading, setAuthLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
 
-  // Google OAuth configuration
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
-    // These would be configured in app.json / app.config.js
-    expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    scopes: ['openid', 'profile', 'email'],
-  });
-
   const handleAppleLogin = useCallback(async () => {
+    if (!appleLoginAvailable) return;
+
     setAuthLoading(true);
     try {
       const result = await socialAuthService.signInWithApple();
       if (result.success && result.idToken) {
-        // Send to backend for JWT generation
-        await authService.socialLogin('apple', result.idToken);
+        // Supabase validates the provider ID token and creates the session.
+        const authResult = await authService.socialLogin('apple', result.idToken);
+        if (!authResult.success) {
+          showErrorToast(new Error(authResult.error || 'Não foi possível entrar com Apple.'));
+        }
+      } else if (!result.success) {
+        showErrorToast(new Error(result.error || 'Não foi possível entrar com Apple.'));
+      } else {
+        showErrorToast(new Error('A Apple não retornou uma credencial de acesso.'));
       }
     } catch (error) {
       logger.error('Apple login failed:', error);
+      showErrorToast(error, 'Não foi possível entrar com Apple.');
     } finally {
       setAuthLoading(false);
     }
-  }, []);
+  }, [appleLoginAvailable]);
 
   const handleGoogleLogin = useCallback(async () => {
+    if (!googleLoginAvailable) return;
+
     setAuthLoading(true);
     try {
-      const result = await socialAuthService.signInWithGoogle(
-        googleRequest,
-        googleResponse,
-        googlePromptAsync,
-      );
-      if (result.success && result.idToken) {
-        await authService.socialLogin('google', result.idToken);
+      const result = await socialAuthService.signInWithGoogleOAuth();
+      if (result.success && result.callbackUrl) {
+        await authService.recoverSessionFromUrl(result.callbackUrl);
+      } else if (!result.success) {
+        showErrorToast(new Error(result.error || 'Não foi possível entrar com Google.'));
+      } else {
+        showErrorToast(new Error('O Google não retornou ao aplicativo.'));
       }
     } catch (error) {
       logger.error('Google login failed:', error);
+      showErrorToast(error, 'Não foi possível entrar com Google.');
     } finally {
       setAuthLoading(false);
     }
-  }, [googleRequest, googleResponse, googlePromptAsync]);
+  }, [googleLoginAvailable]);
 
   const handlePhoneLogin = useCallback((navigation: any) => {
     navigation.navigate('PhoneAuth');
   }, []);
 
   const handleBiometricLogin = useCallback(async () => {
+    if (!biometricLoginAvailable) return;
+
     setBiometricLoading(true);
     try {
-      const result = await biometricAuthService.authenticate();
+      const result = await authService.biometricLogin('supabase-session');
       if (!result.success) {
         logger.warn('Biometric login failed:', result.error);
+        showErrorToast(new Error(result.error || 'Não foi possível entrar com biometria.'));
       }
       // If successful, auth state will update and switch to MainStack
     } catch (error) {
       logger.error('Biometric login error:', error);
+      showErrorToast(error, 'Não foi possível entrar com biometria.');
     } finally {
       setBiometricLoading(false);
     }
-  }, []);
+  }, [biometricLoginAvailable]);
 
   const handleAuthSuccess = useCallback((result: any) => {
     // Auth state will be updated by authService, triggering navigation change
@@ -213,7 +276,10 @@ function AuthStack() {
   }, []);
 
   const handleBiometricPrompt = useCallback((enrollmentToken: string, navigation: any) => {
-    navigation.navigate('BiometricEnrollment', { enrollmentToken });
+    navigation.navigate('BiometricEnrollment', {
+      enrollmentToken,
+      userId: enrollmentToken,
+    });
   }, []);
 
   const handleBiometricComplete = useCallback((navigation: any) => {
@@ -227,12 +293,42 @@ function AuthStack() {
   }, []);
 
   return (
-    <Stack.Navigator screenOptions={fadeScreenOptions}>
-      {/* Welcome Screen - Entry Point */}
+    <Stack.Navigator screenOptions={fadeScreenOptions} initialRouteName="Login">
+      {/* Email / social login — entry point */}
+      <Stack.Screen name="Login" options={{ headerShown: false }}>
+        {(props) => (
+          <LoginScreen
+            {...props}
+            onAppleLogin={handleAppleLogin}
+            onGoogleLogin={handleGoogleLogin}
+            onBiometricLogin={handleBiometricLogin}
+            googleLoginAvailable={googleLoginAvailable}
+            appleLoginAvailable={appleLoginAvailable}
+            loading={authLoading}
+            biometricLoading={biometricLoading}
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen name="AuthCallback" options={{ headerShown: false }}>
+        {(props) => <AuthCallbackScreen {...props} />}
+      </Stack.Screen>
+
+      <Stack.Screen name="ResetPassword" options={{ headerShown: false }}>
+        {(props) => <ResetPasswordScreen {...props} />}
+      </Stack.Screen>
+
+      {/* Passwordless welcome (phone OTP, etc.) */}
       <Stack.Screen name="Welcome" options={{ headerShown: false }}>
         {(props) => (
           <WelcomeScreen
             {...props}
+            logoIconSource={CLIENT_BRANDING.icon}
+            logoFullSource={CLIENT_BRANDING.logoFull}
+            brandTitle="NOOWE"
+            googleLoginAvailable={googleLoginAvailable}
+            appleLoginAvailable={appleLoginAvailable}
+            biometricLoginAvailable={biometricLoginAvailable}
             onAppleLogin={handleAppleLogin}
             onGoogleLogin={handleGoogleLogin}
             onPhoneLogin={() => handlePhoneLogin(props.navigation)}
@@ -284,18 +380,33 @@ function AuthStack() {
         )}
       </Stack.Screen>
 
-      {/* Legacy Email/Password (Fallback) */}
-      <Stack.Screen 
-        name="Login" 
-        component={LoginScreen} 
-        options={{ title: 'Login with Email' }}
-      />
-      <Stack.Screen 
-        name="Register" 
-        component={RegisterScreen} 
-        options={{ title: 'Create Account' }}
-      />
+      <Stack.Screen name="Register" options={{ headerShown: false }}>
+        {(props) => (
+          <RegisterScreen
+            {...props}
+            onAppleLogin={handleAppleLogin}
+            onGoogleLogin={handleGoogleLogin}
+            onBiometricLogin={handleBiometricLogin}
+            googleLoginAvailable={googleLoginAvailable}
+            appleLoginAvailable={appleLoginAvailable}
+            loading={authLoading}
+            biometricLoading={biometricLoading}
+          />
+        )}
+      </Stack.Screen>
     </Stack.Navigator>
+  );
+}
+
+function AuthStack() {
+  const appleLoginAvailable = isAppleAuthProviderConfigured();
+  const biometricLoginAvailable = isBiometricAuthConfigured();
+  return (
+    <AuthStackBody
+      googleLoginAvailable={isGoogleAuthProviderConfigured()}
+      appleLoginAvailable={appleLoginAvailable}
+      biometricLoginAvailable={biometricLoginAvailable}
+    />
   );
 }
 
@@ -305,45 +416,49 @@ function AuthStack() {
 
 /**
  * Main bottom tab navigation for authenticated users.
- * Provides access to Home, Explore, Orders, and Profile screens.
- * Uses semantic theme colors for consistent styling.
+ * Início, Cardápio, Pedidos, Carteira e Perfil.
  */
 function MainTabs() {
-  const colors = useColors();
-  
   return (
     <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.foregroundMuted,
-        tabBarStyle: {
-          backgroundColor: colors.background,
-          borderTopColor: colors.border,
-        },
-      }}
+      tabBar={(props) => <ClientTabBar {...props} />}
+      screenOptions={liquidGlassTabNavigatorScreenOptions}
     >
+      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Início' }} />
+      <Tab.Screen name="MenuTab" component={MenuTabScreen} options={{ title: 'Cardápio' }} />
+      <Tab.Screen name="Orders" component={OrdersScreen} options={{ title: 'Pedidos' }} />
       <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ tabBarLabel: 'Home' }}
+        name="WalletTab"
+        component={WalletScreen}
+        options={{ title: 'Carteira' }}
       />
-      <Tab.Screen
-        name="Explore"
-        component={ExploreScreen}
-        options={{ tabBarLabel: 'Explore' }}
-      />
-      <Tab.Screen
-        name="Orders"
-        component={OrdersScreen}
-        options={{ tabBarLabel: 'Orders' }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ tabBarLabel: 'Profile' }}
-      />
+      <Tab.Screen name="Profile" component={ProfileTabStack} options={{ title: 'Perfil' }} />
     </Tab.Navigator>
+  );
+}
+
+function ProfileTabStack() {
+  return (
+    <ProfileStackNavigator.Navigator screenOptions={{ headerShown: false }}>
+      <ProfileStackNavigator.Screen name="ProfileHome" component={ProfileScreen} />
+      <ProfileStackNavigator.Screen
+        name="ProfileNotifications"
+        component={ProfileNotificationsScreen}
+      />
+      <ProfileStackNavigator.Screen name="VisitHistory" component={VisitHistoryScreen} />
+      <ProfileStackNavigator.Screen
+        name="ProfileReservations"
+        component={ProfileReservationsScreen}
+      />
+      <ProfileStackNavigator.Screen name="LoyaltyProgram" component={LoyaltyProgramScreen} />
+      <ProfileStackNavigator.Screen
+        name="ProfilePaymentMethods"
+        component={ProfilePaymentMethodsScreen}
+      />
+      <ProfileStackNavigator.Screen name="ProfileFavorites" component={ProfileFavoritesScreen} />
+      <ProfileStackNavigator.Screen name="ProfileSettings" component={ProfileSettingsScreen} />
+      <ProfileStackNavigator.Screen name="ProfileSupport" component={ProfileSupportScreen} />
+    </ProfileStackNavigator.Navigator>
   );
 }
 
@@ -364,14 +479,39 @@ function MainStack() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="Explore"
+        component={ExploreScreen}
+        options={scaleFadeScreenOptions}
+      />
+      <Stack.Screen
         name="Restaurant"
         component={RestaurantScreen}
-        options={{ title: 'Restaurant Details', ...scaleFadeScreenOptions }}
+        options={{ headerShown: false, ...scaleFadeScreenOptions }}
+      />
+      <Stack.Screen
+        name="RestaurantVirtualQueue"
+        component={RestaurantVirtualQueueScreen}
+        options={{ headerShown: false, ...scaleFadeScreenOptions }}
+      />
+      <Stack.Screen
+        name="RestaurantCallTeam"
+        component={RestaurantCallTeamScreen}
+        options={{ headerShown: false, ...scaleFadeScreenOptions }}
+      />
+      <Stack.Screen
+        name="RestaurantReserve"
+        component={RestaurantReserveScreen}
+        options={{ headerShown: false, ...scaleFadeScreenOptions }}
       />
       <Stack.Screen
         name="Menu"
         component={MenuScreen}
         options={{ title: 'Menu' }}
+      />
+      <Stack.Screen
+        name="MenuItemDetail"
+        component={MenuItemDetailScreen}
+        options={{ headerShown: false, ...scaleFadeScreenOptions }}
       />
       <Stack.Screen
         name="Cart"
@@ -406,11 +546,6 @@ function MainStack() {
 
       {/* EPIC 3 — Missing Screens */}
       <Stack.Screen
-        name="Notifications"
-        component={NotificationsScreen}
-        options={{ title: 'Notifications', headerShown: false }}
-      />
-      <Stack.Screen
         name="Addresses"
         component={AddressesScreen}
         options={{ title: 'Addresses', ...scaleFadeScreenOptions }}
@@ -443,6 +578,11 @@ function MainStack() {
         name="OrderStatus"
         component={OrderStatusScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="OrderTracking"
+        component={OrderTrackingScreen}
+        options={{ headerShown: false, ...scaleFadeScreenOptions }}
       />
       <Stack.Screen
         name="SharedOrder"
@@ -712,7 +852,7 @@ export default function Navigation() {
    */
   const checkAuth = async () => {
     try {
-      const user = await authService.getStoredUser();
+      const user = await authService.restoreSession();
       setIsAuthenticated(!!user);
     } catch (error) {
       logger.error('Auth check failed:', error);
@@ -738,7 +878,7 @@ export default function Navigation() {
 
   // Show nothing while checking auth (splash screen should be visible)
   if (isLoading) {
-    return null;
+    return <BootFallback />;
   }
 
   // LGPD Sprint 2: Show re-consent screen when terms/privacy version changed (HTTP 451)
@@ -769,9 +909,8 @@ export default function Navigation() {
 
   return (
     <ErrorBoundary onError={handleNavigationError}>
-      <NavigationContainer>
-        {isAuthenticated ? <MainStack /> : <AuthStack />}
-      </NavigationContainer>
+      {/* Expo Router já fornece NavigationContainer na raiz; outro aqui aninhava e quebrava o runtime. */}
+      {isAuthenticated ? <MainStack /> : <AuthStack />}
     </ErrorBoundary>
   );
 }

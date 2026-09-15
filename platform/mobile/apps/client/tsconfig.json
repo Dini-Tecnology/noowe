@@ -9,6 +9,12 @@
       "@okinawa/shared/*": ["../../shared/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", "../../shared/**/*"],
+  "files": [
+    "src/App.tsx",
+    "app/auth/callback.tsx",
+    "app/auth/reset-password.tsx",
+    "app/t/[code].tsx",
+    "../../shared/types/expo-modules.d.ts"
+  ],
   "exclude": ["node_modules"]
 }

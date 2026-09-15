@@ -80,7 +80,7 @@ export function AnalyticsProvider({ children }: AnalyticsProviderProps) {
 export const useAnalyticsContext = () => {
   const context = useContext(AnalyticsContext);
 
-  if (!context) {
+  if (!context?.setUser) {
     throw new Error('useAnalyticsContext must be used within AnalyticsProvider');
   }
 

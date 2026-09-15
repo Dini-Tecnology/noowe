@@ -1,10 +1,11 @@
 /**
  * Okinawa Integration Tests with Backend API
  * 
- * These tests validate the integration between mobile apps and the backend API.
+ * These tests validate the integration between mobile apps, Supabase Auth,
+ * and the business API.
  * They test real API contracts, response formats, and error handling.
  * 
- * Note: These tests require a running backend instance.
+ * Note: Business API tests require a running API instance.
  * Set TEST_API_URL environment variable to point to your test server.
  * 
  * @module shared/__tests__/integration
@@ -60,23 +61,29 @@ const mockApiClient = {
 };
 
 // ============================================================
-// AUTHENTICATION INTEGRATION TESTS
+// SUPABASE AUTH INTEGRATION CONTRACT TESTS
 // ============================================================
 
-describe('Integration: Authentication API', () => {
-  describe('POST /auth/register', () => {
-    it('should register a new user with valid data', async () => {
+describe('Integration: Supabase Authentication', () => {
+  describe('signUp', () => {
+    it('should send valid signup attributes to Supabase Auth', async () => {
       const timestamp = Date.now();
       const userData = {
         email: `test${timestamp}@example.com`,
         password: 'Password123!',
-        full_name: 'Test User',
+        options: {
+          data: {
+            full_name: 'Test User',
+          },
+          emailRedirectTo: 'noowe://auth/callback',
+        },
       };
       
       // Validate request structure
       expect(userData).toHaveProperty('email');
       expect(userData).toHaveProperty('password');
-      expect(userData).toHaveProperty('full_name');
+      expect(userData.options.data).toHaveProperty('full_name');
+      expect(userData.options).toHaveProperty('emailRedirectTo');
       expect(userData.password.length).toBeGreaterThanOrEqual(8);
     });
 
@@ -84,7 +91,7 @@ describe('Integration: Authentication API', () => {
       const userData = {
         email: 'invalid-email',
         password: 'Password123!',
-        full_name: 'Test User',
+        options: { data: { full_name: 'Test User' } },
       };
       
       const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email);
@@ -95,15 +102,15 @@ describe('Integration: Authentication API', () => {
       const userData = {
         email: 'test@example.com',
         password: '123',
-        full_name: 'Test User',
+        options: { data: { full_name: 'Test User' } },
       };
       
       expect(userData.password.length).toBeLessThan(8);
     });
   });
 
-  describe('POST /auth/login', () => {
-    it('should login with valid credentials', async () => {
+  describe('signInWithPassword', () => {
+    it('should login with valid credentials through Supabase Auth', async () => {
       const credentials = {
         email: 'owner@okinawa.com',
         password: 'password123',
@@ -113,14 +120,15 @@ describe('Integration: Authentication API', () => {
       expect(credentials.password).toBeTruthy();
     });
 
-    it('should return tokens on successful login', async () => {
+    it('should expose Supabase session data on successful login', async () => {
       const expectedResponse = {
-        access_token: 'jwt_token_here',
+        access_token: 'supabase_access_token_here',
         refresh_token: 'refresh_token_here',
         user: {
           id: 'user-id',
           email: 'test@example.com',
           full_name: 'Test User',
+          roles: ['customer'],
         },
       };
       
@@ -140,8 +148,8 @@ describe('Integration: Authentication API', () => {
     });
   });
 
-  describe('GET /auth/me', () => {
-    it('should return current user with valid token', async () => {
+  describe('getUser', () => {
+    it('should return current user with a valid Supabase session', async () => {
       const expectedUser = {
         id: 'user-id',
         email: 'test@example.com',
@@ -159,8 +167,8 @@ describe('Integration: Authentication API', () => {
     });
   });
 
-  describe('POST /auth/refresh', () => {
-    it('should refresh tokens with valid refresh token', async () => {
+  describe('refreshSession', () => {
+    it('should refresh tokens with a valid Supabase refresh token', async () => {
       const refreshRequest = {
         refresh_token: 'valid_refresh_token',
       };

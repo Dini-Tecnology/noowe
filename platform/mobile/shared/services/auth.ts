@@ -7,52 +7,43 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import ApiService from './api';
 import { secureStorage } from './secure-storage';
-import { supabaseAuthAdapter } from './supabase-auth';
-import { getSupabaseClient } from './supabase';
+import { isMissingAuthSessionError, supabaseAuthAdapter } from './supabase-auth';
+import { biometricAuthService } from './biometric-auth';
 import logger from '../utils/logger';
 
 // Auth state change listeners
 type AuthStateListener = (authenticated: boolean) => void;
 const authStateListeners: AuthStateListener[] = [];
-let authSubscriptionInitialized = false;
+let supabaseAuthUnsubscribe: (() => void) | null = null;
+
+function ensureSupabaseAuthSubscription() {
+  if (supabaseAuthUnsubscribe) return;
+
+  try {
+    supabaseAuthUnsubscribe = supabaseAuthAdapter.onAuthStateChange(async (authenticated, user) => {
+      if (authenticated && user) {
+        await authService.storeAuthData({ user });
+      }
+      if (!authenticated) {
+        await authService.clearAuthData();
+      }
+      authService.notifyAuthStateChange(authenticated);
+    });
+  } catch (error) {
+    logger.warn('[Auth] Supabase auth listener not started:', error);
+  }
+}
 
 export const authService = {
-  initialize() {
-    if (authSubscriptionInitialized) return;
-    authSubscriptionInitialized = true;
-
-    getSupabaseClient().auth.onAuthStateChange((event, session) => {
-      void (async () => {
-        try {
-          if (event === 'SIGNED_OUT') {
-            await this.clearAuthData();
-            this.notifyAuthStateChange(false);
-            return;
-          }
-
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-            await this.storeAuthData({
-              access_token: session?.access_token,
-              refresh_token: session?.refresh_token,
-              user: session?.user as unknown as Record<string, unknown> | undefined,
-            });
-            this.notifyAuthStateChange(Boolean(session?.access_token));
-          }
-        } catch (error) {
-          logger.error('Failed to sync Supabase auth state:', error);
-        }
-      })();
-    });
-  },
-
   /**
    * Traditional email/password login
    */
   async login(email: string, password: string) {
-    this.initialize();
     const data = await supabaseAuthAdapter.login(email, password);
+    if (!data.access_token || !data.user) {
+      throw new Error('Supabase did not return an authenticated session');
+    }
     await this.storeAuthData(data);
     this.notifyAuthStateChange(true);
     return data;
@@ -62,8 +53,25 @@ export const authService = {
    * User registration with email/password
    */
   async register(email: string, password: string, full_name: string) {
-    this.initialize();
+    // Email/password registration always requires email confirmation; Supabase
+    // never returns an active session here (see supabaseAuthAdapter.register).
     const data = await supabaseAuthAdapter.register(email, password, full_name);
+    return data;
+  },
+
+  async resendSignupConfirmation(email: string) {
+    return supabaseAuthAdapter.resendSignupConfirmation(email);
+  },
+
+  async checkEmailAvailability(email: string) {
+    return supabaseAuthAdapter.checkEmailAvailability(email);
+  },
+
+  async verifyEmailTokenHash(tokenHash: string, type?: 'email' | 'recovery' | 'signup' | 'invite' | 'magiclink' | 'email_change') {
+    const data = await supabaseAuthAdapter.verifyEmailTokenHash(tokenHash, type ?? 'email');
+    if (!data.access_token || !data.user) {
+      throw new Error('Supabase did not return an authenticated session');
+    }
     await this.storeAuthData(data);
     this.notifyAuthStateChange(true);
     return data;
@@ -160,25 +168,27 @@ export const authService = {
    */
   async biometricLogin(biometricToken: string, deviceInfo?: Record<string, string>) {
     try {
-      const response = await ApiService.post('/auth/biometric/authenticate', {
-        biometric_token: biometricToken,
-        device_info: deviceInfo,
-      });
+      void biometricToken;
+      void deviceInfo;
 
-      const data = response.data;
+      const biometricResult = await biometricAuthService.authenticateAndGetUserId();
+      if (!biometricResult.success) {
+        return { success: false, error: biometricResult.error };
+      }
 
-      await this.storeAuthData({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-        user: data.user,
-      });
+      const data = await supabaseAuthAdapter.getSession();
+      if (!data.access_token || data.user?.id !== biometricResult.userId) {
+        return { success: false, error: 'No valid Supabase session for this biometric profile' };
+      }
+
+      await this.storeAuthData(data);
 
       this.notifyAuthStateChange(true);
 
       return {
         success: true,
         user: data.user,
-        trustLevel: data.trust_level,
+        trustLevel: 'device_biometric',
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -196,6 +206,7 @@ export const authService = {
     } catch (error) {
       logger.warn('Logout API call failed:', error);
     } finally {
+      await biometricAuthService.disable().catch((error) => logger.warn('[Auth] Failed to disable biometric login:', error));
       await this.clearAuthData();
       this.notifyAuthStateChange(false);
     }
@@ -205,21 +216,69 @@ export const authService = {
    * Get current user from Supabase
    */
   async getCurrentUser() {
-    this.initialize();
     try {
       return await supabaseAuthAdapter.getCurrentUser();
     } catch (error) {
+      if (isMissingAuthSessionError(error)) {
+        await this.clearAuthData();
+        this.notifyAuthStateChange(false);
+        return null;
+      }
+
       await this.logout();
       return null;
     }
   },
 
   /**
-   * Get stored user from local storage
+   * Restore persisted Supabase session on app startup.
    */
-  async getStoredUser() {
-    const userStr = await AsyncStorage.getItem('user');
-    return userStr ? JSON.parse(userStr) : null;
+  async restoreSession() {
+    try {
+      const data = await supabaseAuthAdapter.getSession();
+      if (!data.access_token || !data.user) {
+        await this.clearAuthData();
+        this.notifyAuthStateChange(false);
+        return null;
+      }
+
+      await this.storeAuthData(data);
+      this.notifyAuthStateChange(true);
+      return data.user;
+    } catch (error) {
+      logger.warn('[Auth] Session restore failed:', error);
+      await this.clearAuthData();
+      this.notifyAuthStateChange(false);
+      return null;
+    }
+  },
+
+  async sendPasswordReset(email: string) {
+    return supabaseAuthAdapter.sendPasswordReset(email);
+  },
+
+  async exchangeCodeForSession(code: string) {
+    const data = await supabaseAuthAdapter.exchangeCodeForSession(code);
+    if (!data.access_token || !data.user) {
+      throw new Error('Supabase did not return an authenticated session');
+    }
+    await this.storeAuthData(data);
+    this.notifyAuthStateChange(true);
+    return data;
+  },
+
+  async recoverSessionFromUrl(url: string) {
+    const data = await supabaseAuthAdapter.recoverSessionFromUrl(url);
+    if (!data.access_token || !data.user) {
+      throw new Error('Supabase did not return an authenticated session');
+    }
+    await this.storeAuthData(data);
+    this.notifyAuthStateChange(true);
+    return data;
+  },
+
+  async updatePassword(password: string) {
+    return supabaseAuthAdapter.updatePassword(password);
   },
 
   /**
@@ -228,40 +287,22 @@ export const authService = {
   async storeAuthData(data: {
     access_token?: string;
     refresh_token?: string;
-    user?: Record<string, unknown>;
+    user?: object;
     biometric_enrollment_token?: string;
   }) {
     const promises: Promise<void>[] = [];
 
     if (data.access_token) {
       promises.push(secureStorage.setAccessToken(data.access_token));
-      promises.push(AsyncStorage.setItem('access_token', data.access_token));
     }
 
     if (data.refresh_token) {
       promises.push(secureStorage.setRefreshToken(data.refresh_token));
-      promises.push(AsyncStorage.setItem('refresh_token', data.refresh_token));
     }
 
     if (data.user) {
-      let userForStorage = data.user;
-
-      try {
-        const userId = typeof data.user.id === 'string' ? data.user.id : undefined;
-        const context = await supabaseAuthAdapter.fetchUserContext(userId);
-        userForStorage = {
-          ...data.user,
-          account_type: context.account_type,
-          roles: context.roles,
-          restaurant_ids: context.restaurant_ids,
-        };
-        promises.push(AsyncStorage.setItem('user_context', JSON.stringify(context)));
-      } catch (error) {
-        logger.warn('Failed to fetch Supabase user context:', error);
-      }
-
-      promises.push(AsyncStorage.setItem('user', JSON.stringify(userForStorage)));
-      promises.push(secureStorage.setUser(userForStorage));
+      promises.push(AsyncStorage.setItem('user', JSON.stringify(data.user)));
+      promises.push(secureStorage.setUser(data.user));
     }
 
     await Promise.all(promises);
@@ -272,7 +313,7 @@ export const authService = {
    */
   async clearAuthData() {
     await Promise.all([
-      AsyncStorage.multiRemove(['access_token', 'refresh_token', 'user', 'user_context']),
+      AsyncStorage.multiRemove(['access_token', 'refresh_token', 'user']),
       secureStorage.clearAuth(),
     ]);
   },
@@ -281,6 +322,7 @@ export const authService = {
    * Subscribe to auth state changes
    */
   onAuthStateChange(listener: AuthStateListener): () => void {
+    ensureSupabaseAuthSubscription();
     authStateListeners.push(listener);
     return () => {
       const index = authStateListeners.indexOf(listener);
@@ -301,7 +343,6 @@ export const authService = {
    * Check if user is authenticated
    */
   async isAuthenticated(): Promise<boolean> {
-    this.initialize();
     return supabaseAuthAdapter.isAuthenticated();
   },
 

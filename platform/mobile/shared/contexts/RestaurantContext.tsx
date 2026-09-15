@@ -21,67 +21,17 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { secureStorage } from '../services/secure-storage';
-import { getSupabaseClient } from '../services/supabase';
+import { authService } from '../services/auth';
+import {
+  fetchMyRestaurantRolesGrouped,
+  fetchRestaurantFromSupabase,
+  fetchStaffMemberForCurrentUser,
+  resolveInitialRestaurantId,
+} from '../services/restaurant-data-supabase';
+import { isSupabaseConfigured } from '../services/supabase';
+import type { Restaurant, StaffMember, UserRestaurantRole } from '../types/restaurant-domain';
 
-// ============================================================
-// TYPE DEFINITIONS
-// ============================================================
-
-/**
- * Restaurant entity representing the authenticated restaurant
- */
-type RestaurantRole = 'owner' | 'manager' | 'chef' | 'waiter' | 'barman' | 'maitre' | 'cashier' | 'host';
-
-export interface Restaurant {
-  id: string;
-  owner_id?: string;
-  name: string;
-  description?: string;
-  cuisine_type?: string[];
-  address?: string;
-  city?: string;
-  state?: string;
-  postal_code?: string;
-  phone?: string;
-  email?: string;
-  logo_url?: string;
-  cover_image_url?: string;
-  is_active: boolean;
-  service_type?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-/**
- * Staff member with role information
- * Updated to support multiple roles per restaurant
- */
-export interface StaffMember {
-  id: string;
-  user_id: string;
-  restaurant_id: string;
-  /** Primary role (highest priority) */
-  role: RestaurantRole;
-  /** All roles the user has in this restaurant */
-  roles: RestaurantRole[];
-  status: 'active' | 'inactive' | 'on_break';
-  permissions?: string[];
-}
-
-/**
- * Restaurant role assignment for multi-restaurant support
- */
-export interface UserRestaurantRole {
-  restaurant: {
-    id: string;
-    name: string;
-    logo_url?: string;
-    service_type?: string;
-  };
-  roles: RestaurantRole[];
-  is_primary: boolean;
-  last_accessed?: Date;
-}
+export type { Restaurant, StaffMember, UserRestaurantRole, StaffRole } from '../types/restaurant-domain';
 
 /**
  * Context value interface for restaurant state
@@ -124,60 +74,6 @@ const RestaurantContext = createContext<RestaurantContextValue | undefined>(unde
 // Storage key for persisting restaurant selection
 const STORAGE_KEY_RESTAURANT_ID = 'current_restaurant_id';
 
-const ROLE_PRIORITY: RestaurantRole[] = ['owner', 'manager', 'chef', 'maitre', 'cashier', 'host', 'waiter', 'barman'];
-
-type UserRoleRow = {
-  id: string;
-  user_id: string;
-  restaurant_id: string;
-  role: string;
-  is_active: boolean;
-  restaurants?: Restaurant | Restaurant[] | null;
-};
-
-function normalizeRole(role: string): RestaurantRole {
-  return role.toLowerCase() as RestaurantRole;
-}
-
-function getHighestRole(roles: RestaurantRole[]): RestaurantRole {
-  return [...roles].sort((a, b) => ROLE_PRIORITY.indexOf(a) - ROLE_PRIORITY.indexOf(b))[0] ?? 'waiter';
-}
-
-function getRestaurantFromRole(row: UserRoleRow): Restaurant | null {
-  if (!row.restaurants) return null;
-  return Array.isArray(row.restaurants) ? row.restaurants[0] ?? null : row.restaurants;
-}
-
-function groupRolesByRestaurant(rows: UserRoleRow[]): UserRestaurantRole[] {
-  const grouped = new Map<string, UserRestaurantRole>();
-
-  rows.forEach((row) => {
-    const restaurant = getRestaurantFromRole(row);
-    if (!restaurant) return;
-
-    const existing = grouped.get(row.restaurant_id);
-    const role = normalizeRole(row.role);
-
-    if (existing) {
-      if (!existing.roles.includes(role)) existing.roles.push(role);
-      return;
-    }
-
-    grouped.set(row.restaurant_id, {
-      restaurant: {
-        id: restaurant.id,
-        name: restaurant.name,
-        logo_url: restaurant.logo_url,
-        service_type: restaurant.service_type,
-      },
-      roles: [role],
-      is_primary: restaurant.owner_id === row.user_id || role === 'owner',
-    });
-  });
-
-  return Array.from(grouped.values());
-}
-
 // ============================================================
 // PROVIDER COMPONENT
 // ============================================================
@@ -217,8 +113,18 @@ export const RestaurantProvider: React.FC<RestaurantProviderProps> = ({ children
       setIsLoading(true);
       setError(null);
 
+      if (!isSupabaseConfigured()) {
+        console.warn('[RestaurantContext] Supabase not configured; restaurant bootstrap skipped');
+        return;
+      }
+
       const storedId = await secureStorage.getItem(STORAGE_KEY_RESTAURANT_ID);
-      await loadFromUserRoles(storedId);
+
+      if (storedId) {
+        await loadRestaurantData(storedId);
+      } else {
+        await loadFromUserProfile();
+      }
     } catch (err) {
       console.error('[RestaurantContext] Initialization error:', err);
       setError('Failed to initialize restaurant context');
@@ -231,69 +137,39 @@ export const RestaurantProvider: React.FC<RestaurantProviderProps> = ({ children
    * Load restaurant data from user's staff profile
    * Used when no restaurant ID is stored
    */
-  const loadFromUserRoles = async (preferredRestaurantId?: string | null) => {
-    const assignments = await fetchActiveRoleRows();
-    const restaurants = groupRolesByRestaurant(assignments);
-    setUserRestaurants(restaurants);
-
-    if (restaurants.length === 0) {
-      clearRestaurant();
-      setError('No active restaurant access');
-      return;
+  const loadFromUserProfile = async () => {
+    try {
+      const initialId = await resolveInitialRestaurantId();
+      if (initialId) {
+        await loadRestaurantData(initialId);
+      }
+    } catch (err) {
+      console.warn('[RestaurantContext] Could not resolve restaurant from Supabase profile:', err);
     }
-
-    const selected =
-      restaurants.find((item) => item.restaurant.id === preferredRestaurantId) ??
-      restaurants.find((item) => item.is_primary) ??
-      restaurants[0];
-
-    await loadRestaurantData(selected.restaurant.id, assignments);
   };
 
   /**
    * Load restaurant details and staff member info
    * @param id - Restaurant ID to load
    */
-  const fetchActiveRoleRows = async (): Promise<UserRoleRow[]> => {
-    const supabase = getSupabaseClient();
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError) throw userError;
-    if (!userData.user) return [];
-
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('id, user_id, restaurant_id, role, is_active, restaurants(*)')
-      .eq('user_id', userData.user.id)
-      .eq('is_active', true);
-
-    if (error) throw error;
-    return (data ?? []) as UserRoleRow[];
-  };
-
-  const loadRestaurantData = async (id: string, roleRows?: UserRoleRow[]) => {
+  const loadRestaurantData = async (id: string) => {
     try {
-      const assignments = roleRows ?? await fetchActiveRoleRows();
-      const restaurantRows = assignments.filter((row) => row.restaurant_id === id);
-      const restaurantData = restaurantRows.map(getRestaurantFromRole).find(Boolean);
-
-      if (!restaurantRows.length || !restaurantData) {
-        await secureStorage.removeItem(STORAGE_KEY_RESTAURANT_ID);
-        throw new Error('No active role for selected restaurant');
+      const restaurantData = await fetchRestaurantFromSupabase(id);
+      if (!restaurantData) {
+        throw new Error(`Restaurant not found: ${id}`);
       }
-
-      const roles = restaurantRows.map((row) => normalizeRole(row.role));
       setRestaurant(restaurantData);
       setRestaurantIdState(id);
-      setStaffMember({
-        id: restaurantRows[0].id,
-        user_id: restaurantRows[0].user_id,
-        restaurant_id: id,
-        role: getHighestRole(roles),
-        roles,
-        status: 'active',
-      });
 
       await secureStorage.setItem(STORAGE_KEY_RESTAURANT_ID, id);
+
+      try {
+        const staffData = await fetchStaffMemberForCurrentUser(id);
+        setStaffMember(staffData);
+      } catch (staffErr) {
+        console.warn('[RestaurantContext] Could not load staff member:', staffErr);
+        setStaffMember(null);
+      }
     } catch (err) {
       console.error('[RestaurantContext] Failed to load restaurant:', err);
       throw err;
@@ -329,12 +205,26 @@ export const RestaurantProvider: React.FC<RestaurantProviderProps> = ({ children
   }, []);
 
   /**
+   * Clear restaurant/staff state whenever the user logs out, so it doesn't
+   * survive into the next session on a shared device (e.g. a counter tablet
+   * switching operators).
+   */
+  useEffect(() => {
+    const unsubscribe = authService.onAuthStateChange((authenticated) => {
+      if (!authenticated) {
+        clearRestaurant();
+      }
+    });
+    return unsubscribe;
+  }, [clearRestaurant]);
+
+  /**
    * Fetch all restaurants for the current user
    * Used to populate the restaurant selector screen
    */
   const fetchUserRestaurants = useCallback(async (): Promise<UserRestaurantRole[]> => {
     try {
-      const restaurants = groupRolesByRestaurant(await fetchActiveRoleRows());
+      const restaurants = await fetchMyRestaurantRolesGrouped();
       setUserRestaurants(restaurants);
       return restaurants;
     } catch (err) {
@@ -478,7 +368,7 @@ export const useRestaurantRole = () => {
     /** Is Manager or higher */
     isManager: hasAnyRole(['owner', 'manager']),
     /** Has kitchen access */
-    isKitchenStaff: hasAnyRole(['chef', 'owner', 'manager']),
+    isKitchenStaff: hasAnyRole(['chef', 'cook', 'owner', 'manager']),
     /** Has front-of-house access */
     isFrontOfHouse: hasAnyRole(['waiter', 'maitre', 'host', 'owner', 'manager']),
     /** Has bar access */
