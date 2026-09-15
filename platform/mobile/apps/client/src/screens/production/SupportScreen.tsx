@@ -21,7 +21,6 @@ export default function SupportScreen() {
       StyleSheet.create({
         scroll: { flex: 1, backgroundColor: colors.background },
         content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 12 },
-        title: { fontSize: 26, fontWeight: '700', color: colors.foreground, marginBottom: 4 },
         card: { padding: 16, borderRadius: 16, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, gap: 6 },
         question: { fontSize: 15, fontWeight: '700', color: colors.foreground },
         answer: { fontSize: 13, color: colors.foregroundSecondary, lineHeight: 19 },
@@ -38,8 +37,6 @@ export default function SupportScreen() {
   return (
     <ScreenContainer edges={['top']}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Ajuda</Text>
-
         {FAQ.map((item) => (
           <View key={item.q} style={styles.card}>
             <Text style={styles.question}>{item.q}</Text>

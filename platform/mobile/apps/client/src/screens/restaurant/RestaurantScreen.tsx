@@ -29,19 +29,41 @@ const WEEKDAY_LABELS: Record<string, string> = {
   sunday: 'Dom',
 };
 
+const WEEKDAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+/**
+ * Agrupa dias consecutivos com o mesmo horário (ex.: "Ter–Sex 12:00–23:00")
+ * em vez de listar cada dia individualmente — evita um rótulo longo demais
+ * para caber em uma linha em telas estreitas.
+ */
 function formatOpeningHours(openingHours: unknown): string | null {
   if (!openingHours || typeof openingHours !== 'object') return null;
   const entries = Object.entries(openingHours as Record<string, { open?: string; close?: string; closed?: boolean }>);
-  const openDays = entries.filter(([, v]) => v && !v.closed && v.open && v.close);
+  const openDays = entries
+    .filter(([, v]) => v && !v.closed && v.open && v.close)
+    .sort(([a], [b]) => WEEKDAY_ORDER.indexOf(a) - WEEKDAY_ORDER.indexOf(b));
   if (openDays.length === 0) return null;
-  const [, sample] = openDays[0];
-  const allSame = openDays.every(([, v]) => v.open === sample.open && v.close === sample.close);
-  if (allSame) {
-    const days = openDays.map(([day]) => WEEKDAY_LABELS[day] ?? day).join(', ');
-    return `${days} · ${sample.open}–${sample.close}`;
+
+  const groups: { days: string[]; open: string; close: string }[] = [];
+  for (const [day, v] of openDays) {
+    const last = groups[groups.length - 1];
+    const lastDayIndex = last ? WEEKDAY_ORDER.indexOf(last.days[last.days.length - 1]) : -1;
+    const isConsecutive = last && WEEKDAY_ORDER.indexOf(day) === lastDayIndex + 1;
+    if (last && isConsecutive && last.open === v.open && last.close === v.close) {
+      last.days.push(day);
+    } else {
+      groups.push({ days: [day], open: v.open!, close: v.close! });
+    }
   }
-  return openDays
-    .map(([day, v]) => `${WEEKDAY_LABELS[day] ?? day} ${v.open}–${v.close}`)
+
+  return groups
+    .map(({ days, open, close }) => {
+      const label =
+        days.length > 1
+          ? `${WEEKDAY_LABELS[days[0]] ?? days[0]}–${WEEKDAY_LABELS[days[days.length - 1]] ?? days[days.length - 1]}`
+          : WEEKDAY_LABELS[days[0]] ?? days[0];
+      return `${label} ${open}–${close}`;
+    })
     .join(' · ');
 }
 
@@ -117,12 +139,17 @@ export default function RestaurantScreen() {
         },
         hoursRow: {
           flexDirection: 'row',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: 6,
           marginBottom: 16,
         },
+        hoursIcon: {
+          marginTop: 2,
+        },
         hoursText: {
+          flex: 1,
           fontSize: 14,
+          lineHeight: 20,
           color: colors.foregroundSecondary,
         },
         tagsWrap: {
@@ -339,7 +366,7 @@ export default function RestaurantScreen() {
 
           {hoursLabel ? (
             <View style={styles.hoursRow}>
-              <Ionicons name="time-outline" size={16} color={colors.foregroundMuted} />
+              <Ionicons name="time-outline" size={16} color={colors.foregroundMuted} style={styles.hoursIcon} />
               <Text style={styles.hoursText}>{hoursLabel}</Text>
             </View>
           ) : null}

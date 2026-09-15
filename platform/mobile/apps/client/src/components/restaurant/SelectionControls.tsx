@@ -27,9 +27,9 @@ export function SelectChip({
         chip: {
           paddingHorizontal: variant === 'circle' ? 0 : 16,
           paddingVertical: variant === 'circle' ? 0 : 11,
-          minWidth: variant === 'circle' ? 44 : undefined,
-          height: variant === 'circle' ? 44 : undefined,
-          borderRadius: variant === 'circle' ? 22 : 14,
+          minWidth: variant === 'circle' ? 40 : undefined,
+          height: variant === 'circle' ? 40 : undefined,
+          borderRadius: variant === 'circle' ? 20 : 14,
           alignItems: 'center',
           justifyContent: 'center',
           borderWidth: 1.5,
@@ -125,12 +125,14 @@ type ObservationsProps = {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  compact?: boolean;
 };
 
 export function ObservationsField({
   value,
   onChangeText,
   placeholder = 'Aniversário de casamento...',
+  compact = false,
 }: ObservationsProps) {
   const colors = useColors();
   return (
@@ -142,7 +144,8 @@ export function ObservationsField({
         placeholderTextColor={colors.foregroundMuted}
         multiline
         style={{
-          minHeight: 100,
+          minHeight: compact ? 48 : 100,
+          maxHeight: compact ? 72 : undefined,
           borderWidth: 1,
           borderColor: colors.border,
           borderRadius: 14,

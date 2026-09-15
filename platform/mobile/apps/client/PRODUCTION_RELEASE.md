@@ -17,17 +17,18 @@ Analytics must remain disabled until a real analytics project and consent flow a
 
 ## Supabase promotion
 
-1. Apply the exact migrations to staging, including `20260803170000_client_production_backend.sql`.
+1. Apply the exact migrations to staging, including `20260815123000_customer_notification_feed_and_reservation_confirmation.sql`.
 2. Run `supabase db lint` and `supabase test db`.
 3. Validate customer A/customer B isolation, QR, order idempotency and loyalty idempotency.
-4. Deploy `send-push-notification` and configure a Database Webhook from `notifications` inserts to that function, authenticated with the service-role secret.
-5. Promote the same migration files and Edge Function revision to production.
+4. Deploy `send-push-notification` with `FIREBASE_PROJECT_ID` and `FIREBASE_SERVICE_ACCOUNT_JSON` as Edge Function secrets.
+5. Add `project_url` and `service_role_key` to Supabase Vault. The migration trigger dispatches `notifications` inserts automatically; do not create a second Database Webhook for the same table.
+6. Promote the same migration files and Edge Function revision to production.
 
 ## Provider configuration
 
 - Configure Apple and Google providers in Supabase for both environments.
 - Register `noowe://auth/callback`, `noowe://auth/reset-password` and the matching `https://noowebr.com` universal links.
-- Configure APNs/FCM credentials in EAS and the Expo project.
+- Configure FCM credentials in EAS for Android. iOS currently keeps the Expo/APNs delivery provider while sharing the same persisted notification feed.
 - Configure Sentry release/environment upload credentials without exposing them as public app values, except for the public DSN.
 
 ## Release validation
@@ -39,7 +40,6 @@ cd platform/mobile
 npm ci
 npm run lint:client -- --max-warnings=0
 npm run typecheck:client
-npm run test:client -- --ci
 
 cd apps/client
 npx expo-doctor

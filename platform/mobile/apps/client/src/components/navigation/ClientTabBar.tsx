@@ -6,15 +6,14 @@ import ClientLiquidGlassNav from '@okinawa/shared/components/ClientLiquidGlassNa
 
 const ROUTE_TO_TAB: Record<string, string> = {
   Home: 'home',
-  MenuTab: 'menu',
   Orders: 'orders',
   WalletTab: 'wallet',
+  Wallet: 'wallet',
   Profile: 'profile',
 };
 
 const TAB_TO_ROUTE: Record<string, string> = {
   home: 'Home',
-  menu: 'MenuTab',
   orders: 'Orders',
   wallet: 'WalletTab',
   profile: 'Profile',
@@ -34,7 +33,12 @@ export function ClientTabBar({ state, navigation }: BottomTabBarProps) {
       <ClientLiquidGlassNav
         activeTab={activeTab}
         onNavigate={(tab) => {
-          const route = TAB_TO_ROUTE[tab];
+          const preferredRoute = TAB_TO_ROUTE[tab];
+          const route = state.routes.some((candidate) => candidate.name === preferredRoute)
+            ? preferredRoute
+            : tab === 'wallet'
+              ? 'Wallet'
+              : preferredRoute;
           if (route) navigation.navigate(route);
         }}
       />

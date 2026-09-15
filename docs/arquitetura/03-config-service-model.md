@@ -27,6 +27,8 @@ export type Capabilities = {
   prepaidRequired: boolean;
   pickupCode: boolean;
   loyaltyMode: 'points' | 'tiers' | 'stamps' | 'mixed';
+  consumptionUnit: 'table_with_guests' | 'per_person' | 'individual_cart'; // §6 unidade de consumo
+  orderTracking: 'item_with_preparer' | 'table_order' | 'pickup_steps';     // §6 acompanhamento
 };
 
 export function capabilitiesFor(config: EstablishmentConfig, model: ServiceModel): Capabilities

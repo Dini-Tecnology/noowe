@@ -4,6 +4,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type ColorValue,
   View,
   TouchableOpacity,
   Text,
@@ -14,6 +15,7 @@ import {
   Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { MoreHorizontal, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOkinawaTheme, useColors } from '../contexts/ThemeContext';
@@ -71,9 +73,19 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
     );
   }, [hasOverflow, items]);
 
-  const shellBackground = colors.card;
-  const shellBorder = isDark ? colors.border : colors.border;
+  const shellBackground = isDark
+    ? 'rgba(17, 24, 39, 0.72)'
+    : 'rgba(255, 255, 255, 0.68)';
+  const fallbackBackground = isDark
+    ? 'rgba(17, 24, 39, 0.92)'
+    : 'rgba(255, 255, 255, 0.92)';
+  const shellBorder = isDark ? colors.border : 'rgba(255, 255, 255, 0.82)';
   const inactiveIconColor = colors.foregroundMuted;
+  const primaryGradient: readonly [ColorValue, ColorValue, ...ColorValue[]] = [
+    theme.gradients.primary[0] ?? colors.primary,
+    theme.gradients.primary[1] ?? colors.primary,
+    ...theme.gradients.primary.slice(2),
+  ];
 
   const handlePressIn = (index: number) => {
     const value = scaleValues.current[index];
@@ -106,6 +118,7 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
           backgroundColor: 'transparent',
         },
         navShell: {
+          position: 'relative',
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-around',
@@ -113,6 +126,7 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
           borderWidth: StyleSheet.hairlineWidth,
           paddingVertical: 6,
           paddingHorizontal: 2,
+          overflow: 'hidden',
           ...Platform.select({
             ios: {
               shadowColor: colors.foreground,
@@ -122,6 +136,17 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
             },
             android: {},
           }),
+        },
+        glassBackground: {
+          ...StyleSheet.absoluteFillObject,
+          borderRadius: 22,
+        },
+        topReflection: {
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '48%',
         },
         navItem: {
           flex: 1,
@@ -223,7 +248,7 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
           <Animated.View style={[styles.iconContainer, { transform: [{ scale }] }]}>
             {isActive && (
               <LinearGradient
-                colors={theme.gradients.primary}
+                colors={primaryGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.activeGradient}
@@ -256,9 +281,23 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
       <View
         style={[
           styles.navShell,
-          { backgroundColor: shellBackground, borderColor: shellBorder },
+          { borderColor: shellBorder },
         ]}
       >
+        {Platform.OS === 'ios' ? (
+          <BlurView
+            intensity={80}
+            tint={isDark ? 'dark' : 'light'}
+            style={[styles.glassBackground, { backgroundColor: shellBackground }]}
+          />
+        ) : (
+          <View style={[styles.glassBackground, { backgroundColor: fallbackBackground }]} />
+        )}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(255, 255, 255, 0.38)', 'rgba(255, 255, 255, 0)'] as const}
+          style={styles.topReflection}
+        />
         {renderItems(primaryItems)}
         {hasOverflow ? (
           <TouchableOpacity
@@ -274,7 +313,7 @@ const LiquidGlassBottomNav: React.FC<LiquidGlassBottomNavProps> = ({
             <Animated.View style={[styles.iconContainer, { transform: [{ scale: moreScale }] }]}>
               {activeInOverflow ? (
                 <LinearGradient
-                  colors={theme.gradients.primary}
+                  colors={primaryGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.activeGradient}

@@ -28,16 +28,17 @@ module.exports = {
   // File extensions to process
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 
-  // TypeScript transformation
+  // Expo's Babel preset transforms both React Native's ESM setup files and
+  // TypeScript. Restricting the transform to ts-jest left RN's .js files
+  // untransformed and made Jest fail before collecting any tests.
   transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest',
+    '^.+\\.[jt]sx?$': 'babel-jest',
   },
 
-  // Same allow-list as the root jest.config.js: these packages ship
-  // untranspiled ESM and must be run back through Babel/ts-jest.
-  transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|@react-navigation|expo|@expo|react-native-paper|react-native-vector-icons|@shopify/flash-list|@react-native-firebase|@sentry/react-native|expo-.*|@tanstack/react-query)/)',
-  ],
+  // pnpm nests React Native under node_modules/.pnpm before the package's own
+  // node_modules directory. Transform dependencies so the ESM setup shipped
+  // by RN/Expo is compiled in both npm and pnpm layouts.
+  transformIgnorePatterns: [],
   
   // Module path aliases matching tsconfig. More specific patterns must come
   // before the generic '^@/(.*)$' one, otherwise it wins first and resolves
@@ -80,14 +81,4 @@ module.exports = {
   // Enable verbose output for debugging
   verbose: true,
 
-  // Without this, ts-jest compiles .tsx with the default 'preserve' JSX
-  // mode, which leaves raw JSX in the output and crashes at require-time
-  // with "Unexpected token '<'".
-  globals: {
-    'ts-jest': {
-      tsconfig: {
-        jsx: 'react',
-      },
-    },
-  },
 };

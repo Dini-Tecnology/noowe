@@ -19,11 +19,8 @@ import {
   Wine,
   Beer,
   Flame,
-  Bell,
-  HandPlatter,
   Star,
   Smartphone,
-  UtensilsCrossed,
   Radio,
 } from 'lucide-react-native';
 import LiquidGlassBottomNav, { type LiquidGlassNavItem } from './LiquidGlassBottomNav';
@@ -115,16 +112,19 @@ interface RestaurantLiquidGlassNavProps {
   variant?: string;
   activeTab: string;
   onNavigate: (screen: string) => void;
+  hiddenItemIds?: string[];
 }
 
 const RestaurantLiquidGlassNav: React.FC<RestaurantLiquidGlassNavProps> = ({
   variant = 'default',
   activeTab,
   onNavigate,
+  hiddenItemIds = [],
 }) => {
   const items = useMemo(
-    () => NAV_BY_VARIANT[variant] ?? defaultNavItems,
-    [variant],
+    () => (NAV_BY_VARIANT[variant] ?? defaultNavItems)
+      .filter((item) => !hiddenItemIds.includes(item.id)),
+    [hiddenItemIds, variant],
   );
 
   return (

@@ -8,7 +8,9 @@ type VisitSessionContextValue = {
   session: VisitSession | null;
   restoring: boolean;
   openFromQr: (qrData: string) => Promise<VisitSession>;
+  joinFromInvite: (token: string) => Promise<VisitSession>;
   selectRestaurant: (restaurantId: string) => Promise<void>;
+  leaveTable: () => Promise<void>;
   clearSession: () => Promise<void>;
 };
 
@@ -41,14 +43,30 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
     return next;
   }, [persist]);
 
-  const selectRestaurant = useCallback(async (restaurantId: string) => {
-    await persist({ restaurantId, tableId: '', tableSessionId: '', tableNumber: '' });
+  const joinFromInvite = useCallback(async (token: string) => {
+    const next = await customerBackend.joinTableInvite(token);
+    await persist(next);
+    return next;
   }, [persist]);
+
+  const selectRestaurant = useCallback(async (restaurantId: string) => {
+    // Already browsing/seated at this restaurant: keep whatever table
+    // session is active instead of wiping it out from under the user.
+    if (session?.restaurantId === restaurantId) return;
+    await persist({ restaurantId, tableId: '', tableSessionId: '', tableNumber: '' });
+  }, [persist, session]);
 
   const clearSession = useCallback(() => persist(null), [persist]);
 
-  const value = useMemo(() => ({ session, restoring, openFromQr, selectRestaurant, clearSession }), [
-    session, restoring, openFromQr, selectRestaurant, clearSession,
+  const leaveTable = useCallback(async () => {
+    if (session?.tableSessionId) {
+      await customerBackend.leaveTableSession(session.tableSessionId);
+    }
+    await persist(null);
+  }, [persist, session]);
+
+  const value = useMemo(() => ({ session, restoring, openFromQr, joinFromInvite, selectRestaurant, leaveTable, clearSession }), [
+    session, restoring, openFromQr, joinFromInvite, selectRestaurant, leaveTable, clearSession,
   ]);
 
   return <VisitSessionContext.Provider value={value}>{children}</VisitSessionContext.Provider>;

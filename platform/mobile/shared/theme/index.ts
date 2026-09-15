@@ -16,6 +16,7 @@ export * from './typography';
 export * from './spacing';
 export * from './shadows';
 export * from './animations';
+export * from './fonts';
 
 // Unified theme objects (definidos em módulo dedicado para ThemeContext sem ciclo)
 export {

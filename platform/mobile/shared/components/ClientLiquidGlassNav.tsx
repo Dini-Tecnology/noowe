@@ -3,12 +3,11 @@
  */
 
 import React from 'react';
-import { Home, UtensilsCrossed, ClipboardList, Wallet, User } from 'lucide-react-native';
+import { Home, ClipboardList, Wallet, User } from 'lucide-react-native';
 import LiquidGlassBottomNav, { type LiquidGlassNavItem } from './LiquidGlassBottomNav';
 
 const navItems: LiquidGlassNavItem[] = [
   { id: 'home', icon: Home, label: 'Início' },
-  { id: 'menu', icon: UtensilsCrossed, label: 'Cardápio' },
   { id: 'orders', icon: ClipboardList, label: 'Pedidos' },
   { id: 'wallet', icon: Wallet, label: 'Carteira' },
   { id: 'profile', icon: User, label: 'Perfil' },

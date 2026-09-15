@@ -43,3 +43,8 @@ verify_jwt = false
 # function. Disabling the gateway's legacy JWT check also supports projects
 # using asymmetric signing keys.
 verify_jwt = false
+
+[functions.send-push-notification]
+# The function additionally requires the service_role claim, but gateway JWT
+# verification must remain enabled so that claim cannot be forged.
+verify_jwt = true

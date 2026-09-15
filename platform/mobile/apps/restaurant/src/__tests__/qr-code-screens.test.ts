@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { exportTableQrPdf } from '../screens/v2/shared/tableQrExport';
 
 // Mock dependencies
 vi.mock('expo-file-system', () => ({
@@ -8,9 +11,18 @@ vi.mock('expo-file-system', () => ({
   EncodingType: { Base64: 'base64' },
 }));
 
-vi.mock('expo-sharing', () => ({
-  isAvailableAsync: vi.fn().mockResolvedValue(true),
-  shareAsync: vi.fn(),
+jest.mock('expo-sharing', () => ({
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+  shareAsync: jest.fn(),
+}));
+
+jest.mock('expo-print', () => ({
+  printToFileAsync: jest.fn().mockResolvedValue({ uri: 'file:///mock/mesas.pdf' }),
+}));
+
+jest.mock('qrcode', () => ({
+  __esModule: true,
+  default: { toString: jest.fn().mockResolvedValue('<svg><path d="M0 0" /></svg>') },
 }));
 
 vi.mock('expo-haptics', () => ({
@@ -69,6 +81,36 @@ describe('QRCodeGeneratorScreen', () => {
       expect(options.color_primary).toMatch(/^#[0-9A-Fa-f]{6}$/);
       expect(options.color_secondary).toMatch(/^#[0-9A-Fa-f]{6}$/);
     });
+  });
+});
+
+describe('Printable table QR material', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (Sharing.isAvailableAsync as jest.Mock).mockResolvedValue(true);
+    (Print.printToFileAsync as jest.Mock).mockResolvedValue({ uri: 'file:///mock/mesas.pdf' });
+  });
+
+  it('renders the actual payload and table identity into a shared PDF', async () => {
+    await exportTableQrPdf([{
+      id: 'qr-1',
+      table_id: 'table-1',
+      table_number: '12',
+      section: 'Varanda',
+      qr_code_data: 'noowe://t/secure-random-token',
+      is_active: true,
+      expires_at: '2026-12-31T23:59:59Z',
+      created_at: '2026-08-15T12:00:00Z',
+    }]);
+
+    const printCall = (Print.printToFileAsync as jest.Mock).mock.calls[0][0];
+    expect(printCall.html).toContain('Mesa 12');
+    expect(printCall.html).toContain('Varanda');
+    expect(printCall.html).toContain('<svg>');
+    expect(Sharing.shareAsync).toHaveBeenCalledWith(
+      'file:///mock/mesas.pdf',
+      expect.objectContaining({ mimeType: 'application/pdf' }),
+    );
   });
 });
 

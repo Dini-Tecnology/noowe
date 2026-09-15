@@ -27,6 +27,9 @@ const DEFAULT_REDIRECT_ALLOW_LIST = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const CHECK_EMAIL_RATE_LIMIT = 20;
+const CHECK_EMAIL_RATE_WINDOW_SECONDS = 15 * 60;
+
 /**
  * Shared NOOWE brand palette — mirrors the real app theme rendered by both apps
  * (platform/mobile/shared/theme/colors.ts, "Warm Sophisticated Orange").
@@ -530,7 +533,9 @@ serve(async (req) => {
         ? "resend"
         : payload?.action === "password-reset"
           ? "password-reset"
-          : "register";
+          : payload?.action === "check-email"
+            ? "check-email"
+            : "register";
     const email = normalizeEmail(payload?.email);
     const password = typeof payload?.password === "string" ? payload.password : "";
     const fullName = sanitizeText(payload?.fullName ?? payload?.full_name, 120);
@@ -538,13 +543,35 @@ serve(async (req) => {
 
     if (
       !EMAIL_REGEX.test(email) ||
-      !isAllowedRedirect(emailRedirectTo) ||
+      (action !== "check-email" && !isAllowedRedirect(emailRedirectTo)) ||
       (action === "register" && (password.length < 6 || !fullName))
     ) {
       return jsonResponse(req, { error: "Invalid registration payload" }, 400);
     }
 
     const supabase = createSupabaseAdmin();
+
+    if (action === "check-email") {
+      // Keyed by IP only (constant identity) so probing many different emails is throttled.
+      const checkAllowed = await enforceRateLimit(
+        supabase,
+        req,
+        "register-with-resend:check-email",
+        "any-email",
+        CHECK_EMAIL_RATE_LIMIT,
+        CHECK_EMAIL_RATE_WINDOW_SECONDS,
+      );
+      if (!checkAllowed) {
+        return jsonResponse(req, { error: "Too many requests" }, 429);
+      }
+
+      const existingUser = await findAuthUserByEmail(supabase, email);
+      return jsonResponse(req, {
+        exists: Boolean(existingUser),
+        confirmed: Boolean(existingUser?.email_confirmed_at),
+      });
+    }
+
     const allowed = await enforceRateLimit(supabase, req, `register-with-resend:${action}`, email, 3, 15 * 60);
     if (!allowed) {
       return jsonResponse(req, { error: "Too many requests" }, 429);

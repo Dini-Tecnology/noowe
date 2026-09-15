@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
-import { Button, Text, TextInput } from 'react-native-paper';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Button, Text } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
 import { getSupabaseClient } from '@/shared/services/supabase';
 
@@ -17,12 +17,6 @@ export function AuthCallbackScreen() {
     complete().catch((reason) => setError(reason instanceof Error ? reason.message : 'Link inválido ou expirado.'));
   }, [params.code, params.token_hash, params.type]);
   return <View style={styles.page}>{error ? <><Text variant="titleMedium">Não foi possível confirmar</Text><Text>{error}</Text><Button onPress={() => router.replace('/')}>Voltar</Button></> : <><ActivityIndicator /><Text>Confirmando sua conta…</Text></>}</View>;
-}
-
-export function ResetPasswordScreen() {
-  const [password, setPassword] = useState(''); const [confirmation, setConfirmation] = useState(''); const [busy, setBusy] = useState(false);
-  const save = async () => { setBusy(true); try { if (password.length < 8 || password !== confirmation) throw new Error('Use ao menos 8 caracteres e confirme a mesma senha.'); const { error } = await getSupabaseClient().auth.updateUser({ password }); if (error) throw error; Alert.alert('Senha atualizada'); router.replace('/'); } catch (error) { Alert.alert('Não foi possível atualizar', error instanceof Error ? error.message : 'Tente novamente.'); } finally { setBusy(false); } };
-  return <View style={styles.page}><Text variant="headlineSmall">Definir nova senha</Text><TextInput secureTextEntry label="Nova senha" value={password} onChangeText={setPassword} /><TextInput secureTextEntry label="Confirmar senha" value={confirmation} onChangeText={setConfirmation} /><Button mode="contained" loading={busy} onPress={save}>Salvar senha</Button></View>;
 }
 
 const styles = StyleSheet.create({ page: { flex: 1, justifyContent: 'center', padding: 28, gap: 16, backgroundColor: '#fff' } });

@@ -27,7 +27,6 @@ export default function PrivacyScreen() {
       StyleSheet.create({
         scroll: { flex: 1, backgroundColor: colors.background },
         content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 12 },
-        title: { fontSize: 26, fontWeight: '700', color: colors.foreground },
         subtitle: { fontSize: 14, color: colors.foregroundSecondary, marginBottom: 8 },
         row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
         rowText: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.foreground },
@@ -41,7 +40,6 @@ export default function PrivacyScreen() {
   return (
     <ScreenContainer edges={['top']}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Privacidade e LGPD</Text>
         <Text style={styles.subtitle}>Consulte, exporte ou solicite a exclusão dos seus dados.</Text>
 
         <TouchableOpacity style={[styles.row, !policy && styles.rowDisabled]} onPress={() => policy && Linking.openURL(policy)} disabled={!policy} accessibilityRole="button">

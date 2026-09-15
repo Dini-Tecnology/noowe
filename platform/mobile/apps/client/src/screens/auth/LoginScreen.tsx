@@ -34,6 +34,7 @@ import {
 
 interface LoginScreenProps {
   navigation: any;
+  route?: { params?: { email?: string } };
   onAppleLogin?: () => void;
   onGoogleLogin?: () => void;
   onBiometricLogin?: () => void;
@@ -45,6 +46,7 @@ interface LoginScreenProps {
 
 export default function LoginScreen({
   navigation,
+  route,
   onAppleLogin,
   onGoogleLogin,
   onBiometricLogin,
@@ -59,6 +61,11 @@ export default function LoginScreen({
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  const prefilledEmail = route?.params?.email;
+  useEffect(() => {
+    if (prefilledEmail) setEmail(prefilledEmail);
+  }, [prefilledEmail]);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -118,8 +125,8 @@ export default function LoginScreen({
     setError('');
 
     try {
-      await authService.resendSignupConfirmation(email.trim().toLowerCase());
-      const message = t('auth.resendConfirmationSent');
+      const { confirmationSent } = await authService.resendSignupConfirmation(email.trim().toLowerCase());
+      const message = t(confirmationSent ? 'auth.resendConfirmationSent' : 'auth.emailAlreadyConfirmed');
       setEmailDialogMessage(message);
       setEmailDialog('success');
       Haptic.successNotification();

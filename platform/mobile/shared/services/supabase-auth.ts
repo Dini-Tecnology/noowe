@@ -318,7 +318,7 @@ export const supabaseAuthAdapter = {
   },
 
   async resendSignupConfirmation(email: string) {
-    const { error } = await getSupabaseClient().functions.invoke('register-with-resend', {
+    const { data, error } = await getSupabaseClient().functions.invoke('register-with-resend', {
       body: {
         action: 'resend',
         email,
@@ -326,6 +326,18 @@ export const supabaseAuthAdapter = {
       },
     });
     if (error) await throwFunctionError(error);
+    return { confirmationSent: data?.confirmationSent !== false };
+  },
+
+  async checkEmailAvailability(email: string) {
+    const { data, error } = await getSupabaseClient().functions.invoke('register-with-resend', {
+      body: {
+        action: 'check-email',
+        email,
+      },
+    });
+    if (error) await throwFunctionError(error);
+    return { exists: data?.exists === true, confirmed: data?.confirmed === true };
   },
 
   async register(email: string, password: string, fullName: string) {

@@ -8,3 +8,9 @@ export type {
   OrderCardItem,
   OrderStatus,
 } from './OrderCard';
+export { default as OrderStatusStepper } from './OrderStatusStepper';
+export type {
+  OrderStatusStepperProps,
+  OrderStatusStep,
+  StepIconSet,
+} from './OrderStatusStepper';

@@ -217,6 +217,18 @@ export const lightTheme = {
   onboardingSlide3: colorPalette.accent[500],
   onboardingSlide4: '#8B5CF6',
 
+  // Wallet (contrast-safe data surface and semantic action colours)
+  walletSurfaceStart: colorPalette.primary[800],
+  walletSurfaceEnd: colorPalette.primary[700],
+  walletSurfaceMetric: colorPalette.primary[800],
+  walletForeground: colorPalette.neutral[0],
+  walletPositive: '#047857',
+  walletPositiveBackground: '#ECFDF5',
+  walletInfo: '#1D4ED8',
+  walletInfoBackground: '#EFF6FF',
+  walletWarning: '#B45309',
+  walletWarningBackground: '#FFFBEB',
+
   // Premium Dark Card (always dark, for elevated feature headers)
   premiumCard: colorPalette.neutral[800],
   premiumCardForeground: colorPalette.neutral[0],
@@ -354,6 +366,18 @@ export const darkTheme = {
   onboardingSlide2: colorPalette.secondary[400],
   onboardingSlide3: colorPalette.accent[400],
   onboardingSlide4: '#A78BFA',
+
+  // Wallet (contrast-safe in dark mode)
+  walletSurfaceStart: colorPalette.primary[900],
+  walletSurfaceEnd: colorPalette.primary[800],
+  walletSurfaceMetric: colorPalette.primary[900],
+  walletForeground: colorPalette.neutral[0],
+  walletPositive: '#6EE7B7',
+  walletPositiveBackground: '#064E3B',
+  walletInfo: '#93C5FD',
+  walletInfoBackground: '#1E3A8A',
+  walletWarning: '#FCD34D',
+  walletWarningBackground: '#78350F',
 
   // Premium Dark Card (always dark, for elevated feature headers)
   premiumCard: colorPalette.neutral[800],

@@ -5,24 +5,56 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import { useVisitSession } from '../../contexts/VisitSessionContext';
+import { useTableQrHandler } from '../../hooks/useTableQrHandler';
 
 export default function QrScannerScreen({ navigation }: any) {
   const colors = useColors();
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
-  const { openFromQr } = useVisitSession();
+  const { handleQrScanned } = useTableQrHandler();
 
   const scan = async ({ data }: { data: string }) => {
     if (locked) return;
     setLocked(true);
-    try {
-      const visit = await openFromQr(data);
-      navigation.replace('Menu', { restaurantId: visit.restaurantId });
-    } catch (error) {
+    const outcome = await handleQrScanned(data);
+    if (outcome.ok) {
+      navigation.replace('Menu', { restaurantId: outcome.restaurantId });
+      return;
+    }
+    if (outcome.reason === 'invalid') {
       Alert.alert(
         'QR inválido',
-        error instanceof Error ? error.message : 'Não foi possível validar este QR.',
+        'Este QR Code não é válido. Peça um novo QR na mesa.',
+        [{ text: 'Tentar novamente', onPress: () => setLocked(false) }],
+      );
+    } else if (outcome.reason === 'replaced') {
+      Alert.alert(
+        'QR substituído',
+        'Este QR Code foi substituído por um mais recente. Escaneie o código atual impresso na mesa.',
+        [{ text: 'Tentar novamente', onPress: () => setLocked(false) }],
+      );
+    } else if (outcome.reason === 'expired') {
+      Alert.alert(
+        'QR expirado',
+        'A validade deste QR Code acabou. Peça um novo QR na mesa.',
+        [{ text: 'Tentar novamente', onPress: () => setLocked(false) }],
+      );
+    } else if (outcome.reason === 'table_unavailable') {
+      Alert.alert(
+        'Mesa indisponível',
+        'Esta mesa está reservada para outro cliente ou ainda não foi liberada pela equipe.',
+        [{ text: 'Tentar outra mesa', onPress: () => setLocked(false) }],
+      );
+    } else if (outcome.reason === 'active_account') {
+      Alert.alert(
+        'Você já tem uma conta aberta',
+        'Feche a conta da mesa atual antes de entrar em outra mesa.',
+        [{ text: 'Entendi', onPress: () => setLocked(false) }],
+      );
+    } else {
+      Alert.alert(
+        'Sem conexão',
+        'Não foi possível validar o QR agora. Verifique sua internet e tente novamente.',
         [{ text: 'Tentar novamente', onPress: () => setLocked(false) }],
       );
     }

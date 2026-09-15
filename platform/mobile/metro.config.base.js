@@ -22,6 +22,11 @@ function createMetroConfig(appRoot) {
     paths: [appRoot],
   }));
   const config = getDefaultConfig(appRoot);
+  const forcedNativeModuleEntries = {
+    'expo-linear-gradient': require.resolve('expo-linear-gradient', { paths: [appRoot] }),
+    'expo-blur': require.resolve('expo-blur', { paths: [appRoot] }),
+  };
+  const defaultResolveRequest = config.resolver?.resolveRequest;
 
   // Gradle/pnpm criam e apagam pastas dentro de node_modules durante `run:android`.
   // No Windows o watcher do Metro quebra com ENOENT se tentar observar esses paths.
@@ -62,6 +67,15 @@ function createMetroConfig(appRoot) {
   config.resolver = {
     ...config.resolver,
     blockList,
+    resolveRequest: (context, moduleName, platform) => {
+      const forcedEntry = forcedNativeModuleEntries[moduleName];
+      if (forcedEntry) {
+        return context.resolveRequest(context, forcedEntry, platform);
+      }
+      return defaultResolveRequest
+        ? defaultResolveRequest(context, moduleName, platform)
+        : context.resolveRequest(context, moduleName, platform);
+    },
     nodeModulesPaths: [
       path.resolve(appRoot, 'node_modules'),
       path.resolve(mobileRoot, 'node_modules'),
@@ -73,6 +87,12 @@ function createMetroConfig(appRoot) {
       // Evita carregar duas cópias de react-native-svg no bundle (RNSVGRect duplicado).
       'react-native-svg': resolvePackageDir(appRoot, mobileRoot, 'react-native-svg'),
       'lucide-react-native': resolvePackageDir(appRoot, mobileRoot, 'lucide-react-native'),
+      // Cada app deve usar a mesma cópia que será vinculada ao respectivo binário nativo.
+      'react-native-screens': resolvePackageDir(appRoot, mobileRoot, 'react-native-screens'),
+      // Expo views registram nomes nativos globais. Se o Metro resolver uma cópia
+      // pela raiz e outra pelo app, o segundo registro derruba o bundle em runtime.
+      'expo-linear-gradient': resolvePackageDir(appRoot, mobileRoot, 'expo-linear-gradient'),
+      'expo-blur': resolvePackageDir(appRoot, mobileRoot, 'expo-blur'),
     },
   };
 

@@ -29,6 +29,10 @@ import {
   getLocalizedAuthErrorMessage,
   isEmailAlreadyRegisteredError,
 } from '@/shared/utils/auth-errors';
+import {
+  isEmailBlockedForSignup,
+  useEmailAvailability,
+} from '@/shared/hooks/useEmailAvailability';
 
 interface RegisterScreenProps {
   navigation: any;
@@ -69,8 +73,19 @@ export default function RegisterScreen({
   const [showConsentError, setShowConsentError] = useState(false);
   const [showAgeError, setShowAgeError] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [emailDialog, setEmailDialog] = useState<'sent' | 'existing' | 'success' | 'error' | null>(null);
+  const [emailDialog, setEmailDialog] = useState<
+    'sent' | 'existing' | 'confirmed' | 'success' | 'error' | null
+  >(null);
   const [emailDialogMessage, setEmailDialogMessage] = useState('');
+
+  const emailAvailability = useEmailAvailability(email);
+  const emailBlocked = isEmailBlockedForSignup(emailAvailability);
+  const emailAvailabilityError =
+    emailAvailability === 'registered'
+      ? t('auth.emailAlreadyRegisteredSignIn')
+      : emailAvailability === 'unconfirmed'
+        ? t('auth.emailPendingConfirmation')
+        : '';
 
   const analytics = useAnalytics();
   const { setUser } = useAnalyticsContext();
@@ -80,6 +95,10 @@ export default function RegisterScreen({
 
   const isBusy = loading || externalLoading || biometricLoading;
   const hasSecondaryAuth = true;
+
+  const goToLogin = useCallback(() => {
+    navigation.navigate('Login', { email: email.trim().toLowerCase() });
+  }, [navigation, email]);
 
   const clearFieldError = useCallback((field: string) => {
     if (fieldErrors[field]) {
@@ -115,10 +134,17 @@ export default function RegisterScreen({
     setError('');
 
     try {
-      await authService.resendSignupConfirmation(email.trim().toLowerCase());
-      setEmailDialogMessage(t('auth.resendConfirmationSent'));
-      setEmailDialog('success');
-      Haptic.successNotification();
+      const { confirmationSent } = await authService.resendSignupConfirmation(
+        email.trim().toLowerCase(),
+      );
+      if (confirmationSent) {
+        setEmailDialogMessage(t('auth.resendConfirmationSent'));
+        setEmailDialog('success');
+        Haptic.successNotification();
+      } else {
+        setEmailDialogMessage(t('auth.emailAlreadyConfirmed'));
+        setEmailDialog('confirmed');
+      }
     } catch (err) {
       const message = getLocalizedAuthErrorMessage(err, 'auth.resendConfirmationFailed');
       setError(message);
@@ -188,6 +214,7 @@ export default function RegisterScreen({
   };
 
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const registerDisabled = isBusy || emailBlocked;
 
   return (
     <ScreenContainer hasKeyboard>
@@ -239,7 +266,7 @@ export default function RegisterScreen({
               clearFieldError('email');
             }}
             placeholder={t('auth.emailPlaceholder')}
-            error={fieldErrors.email}
+            error={fieldErrors.email || emailAvailabilityError}
             accessibilityLabel={t('auth.a11y.email')}
             accessibilityHint={t('auth.a11y.emailHint')}
             inputProps={{
@@ -248,6 +275,34 @@ export default function RegisterScreen({
               autoCorrect: false,
             }}
           />
+
+          {emailAvailability === 'checking' ? (
+            <HelperText type="info" style={styles.emailStatus}>
+              {t('auth.emailCheckInProgress')}
+            </HelperText>
+          ) : null}
+
+          {emailAvailability === 'registered' || emailAvailability === 'unconfirmed' ? (
+            <View style={styles.emailActions}>
+              <TouchableOpacity
+                onPress={goToLogin}
+                accessibilityLabel={t('auth.a11y.goToLogin')}
+                accessibilityRole="link"
+              >
+                <Text style={styles.emailActionText}>{t('auth.a11y.goToLogin')}</Text>
+              </TouchableOpacity>
+              {emailAvailability === 'unconfirmed' ? (
+                <TouchableOpacity
+                  onPress={() => void handleResendConfirmation()}
+                  disabled={isBusy}
+                  accessibilityLabel={t('auth.resendConfirmation')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.emailActionText}>{t('auth.resendConfirmation')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
 
           <AuthTextField
             label={t('auth.password')}
@@ -315,11 +370,12 @@ export default function RegisterScreen({
           {error ? <HelperText type="error">{error}</HelperText> : null}
 
           <TouchableOpacity
-            style={[styles.primaryButton, isBusy && styles.buttonDisabled]}
+            style={[styles.primaryButton, registerDisabled && styles.buttonDisabled]}
             onPress={handleRegister}
-            disabled={isBusy}
+            disabled={registerDisabled}
             accessibilityLabel={t('auth.a11y.createAccount')}
             accessibilityRole="button"
+            accessibilityState={{ disabled: registerDisabled }}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -364,9 +420,23 @@ export default function RegisterScreen({
       </KeyboardAvoidingView>
       <NooweDialog
         visible={emailDialog !== null}
-        title={emailDialog === 'error' ? t('common.error') : t('auth.confirmEmailTitle')}
+        title={
+          emailDialog === 'error'
+            ? t('common.error')
+            : emailDialog === 'confirmed'
+              ? t('auth.emailAlreadyExists')
+              : t('auth.confirmEmailTitle')
+        }
         message={emailDialogMessage}
-        icon={emailDialog === 'success' ? 'email-check-outline' : emailDialog === 'error' ? 'alert-circle-outline' : 'email-fast-outline'}
+        icon={
+          emailDialog === 'success'
+            ? 'email-check-outline'
+            : emailDialog === 'error'
+              ? 'alert-circle-outline'
+              : emailDialog === 'confirmed'
+                ? 'account-check-outline'
+                : 'email-fast-outline'
+        }
         tone={emailDialog === 'success' ? 'success' : emailDialog === 'error' ? 'error' : 'brand'}
         dismissible={emailDialog !== 'sent'}
         onDismiss={() => setEmailDialog(null)}
@@ -380,7 +450,7 @@ export default function RegisterScreen({
               },
               {
                 label: t('auth.a11y.goToLogin'),
-                onPress: () => navigation.navigate('Login'),
+                onPress: goToLogin,
                 variant: 'secondary',
               },
               {
@@ -389,11 +459,14 @@ export default function RegisterScreen({
                 variant: 'ghost',
               },
             ]
-          : emailDialog === 'sent'
+          : emailDialog === 'sent' || emailDialog === 'confirmed'
             ? [
                 {
                   label: t('auth.a11y.goToLogin'),
-                  onPress: () => navigation.navigate('Login'),
+                  onPress: () => {
+                    setEmailDialog(null);
+                    goToLogin();
+                  },
                   variant: 'primary',
                 },
               ]
@@ -427,6 +500,24 @@ const createStyles = (colors: ReturnType<typeof useColors>) =>
       paddingHorizontal: 24,
       paddingTop: 8,
       paddingBottom: 32,
+    },
+    emailStatus: {
+      marginTop: -8,
+      marginBottom: 8,
+    },
+    emailActions: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 20,
+      marginTop: -4,
+      marginBottom: 16,
+      paddingHorizontal: 4,
+    },
+    emailActionText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.primary,
+      textDecorationLine: 'underline',
     },
     primaryButton: {
       backgroundColor: colors.primary,

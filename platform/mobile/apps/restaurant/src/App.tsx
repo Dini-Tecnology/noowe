@@ -17,7 +17,8 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PaperProvider } from 'react-native-paper';
-import { Appearance, AppState, AppStateStatus } from 'react-native';
+import { Appearance, AppState, AppStateStatus, View } from 'react-native';
+import { useFonts } from 'expo-font';
 import Navigation from './navigation';
 import { theme } from './theme';
 import socketService from './services/socket';
@@ -27,6 +28,7 @@ import { RestaurantProvider } from '@/shared/contexts/RestaurantContext';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { initDeepLinking } from '@/shared/utils/deep-linking';
 import { initSentry } from '@/shared/config/sentry';
+import { appFonts, applyDefaultFonts } from '@/shared/theme/fonts';
 
 // Capture crashes/errors in production as early as possible, before the
 // provider tree mounts. No-ops with a console warning if EXPO_PUBLIC_SENTRY_DSN
@@ -159,6 +161,13 @@ function AppContent() {
  * 5. PaperProvider - React Native Paper UI components
  */
 export default function App() {
+  const [fontsLoaded] = useFonts(appFonts);
+
+  if (!fontsLoaded) {
+    return <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />;
+  }
+  applyDefaultFonts();
+
   return (
     <ErrorBoundary>
       <SafeAreaProvider>

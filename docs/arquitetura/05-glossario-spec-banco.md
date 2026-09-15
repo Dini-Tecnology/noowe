@@ -12,8 +12,8 @@ continuam usando os nomes do documento. Esta tabela é a tradução oficial entr
 | Na spec | No banco | Observação |
 |---|---|---|
 | Establishment, estabelecimento, unidade | `restaurants` | |
-| `establishment_config` | hoje espalhada em `restaurant_configs`, `restaurant_service_configs` e `restaurants.service_config` | T-F3-01 consolida numa tabela 1:1 com `restaurants`, com prefixo `restaurant_` |
-| `service_model`, `service_models[]` | `restaurants.service_type` (escalar) | ADR-003 transforma em lista |
+| `establishment_config` | `restaurant_model_configs` | T-F3-01: contrato canônico 1:1 com `restaurants`; as estruturas legadas permanecem como ponte de migração |
+| `service_model`, `service_models[]` | `restaurant_model_configs.service_models` | enum `noowe_service_model[]`; `restaurants.service_type` permanece apenas como tipo primário legado |
 | `staff_members` | `user_roles` | papel em `user_roles_role_enum` |
 | Table | `tables` | |
 | TableSession | `table_sessions` | uma aberta por mesa: `uq_table_sessions_one_active_per_table` |

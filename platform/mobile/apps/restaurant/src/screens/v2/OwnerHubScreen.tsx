@@ -457,6 +457,7 @@ function formatApprovalCurrency(value: number): string {
 }
 
 function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void; colors: ReturnType<typeof useColors> }) {
+  const { serviceFeatures } = useRestaurantRole();
   const { data: snapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useDashboardSnapshot();
   const { data: recentOrders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useRestaurantOrders();
   const { data: serviceCalls, loading: callsLoading, error: callsError, refresh: refreshCalls } = useServiceCalls();
@@ -486,7 +487,7 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
         message: `Novo pedido na ${order.table} — ${customerDisplayName(order.customerName)}`,
         createdAt: order.createdAt,
       }));
-    const callAlerts = serviceCalls.map((call) => ({
+    const callAlerts = (serviceFeatures.callWaiter ? serviceCalls : []).map((call) => ({
       id: `call-${call.id}`,
       message: call.tableNumber
         ? `Mesa ${call.tableNumber} chamou o garçom`
@@ -496,14 +497,18 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
     return [...orderAlerts, ...callAlerts]
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
       .slice(0, 5);
-  }, [recentOrders, serviceCalls]);
+  }, [recentOrders, serviceCalls, serviceFeatures.callWaiter]);
 
   return (
     <View style={styles.section}>
       <View style={styles.metricGrid}>
         <Metric value={snapshotLoading ? '...' : formatCurrency(snapshot?.revenue_today ?? 0)} label="Receita Hoje" tone="success" />
         <Metric value={snapshotLoading ? '...' : String(snapshot?.active_orders ?? 0)} label="Pedidos Ativos" tone="danger" />
-        <Metric value={snapshotLoading ? '...' : `${occupancy}%`} label="Ocupação" tone="warning" />
+        <Metric
+          value={snapshotLoading ? '...' : serviceFeatures.tableManagement ? `${occupancy}%` : String(snapshot?.kds_queue ?? 0)}
+          label={serviceFeatures.tableManagement ? 'Ocupação' : 'Fila KDS'}
+          tone="warning"
+        />
         <Metric value={snapshotLoading ? '...' : formatCurrency(averageTicket)} label="Ticket Médio" tone="info" />
       </View>
       {snapshotError ? (
@@ -1137,6 +1142,7 @@ function ManagerDashboardTab({
   onNavigate: (s: string) => void;
   colors: ReturnType<typeof useColors>;
 }) {
+  const { serviceFeatures } = useRestaurantRole();
   const { data: snapshot, loading: snapshotLoading } = useDashboardSnapshot();
   const { data: staff, loading: staffLoading, error: staffError, refresh: refreshStaff } = useStaff();
   const { data: orders, loading: ordersLoading } = useRestaurantOrders();
@@ -1155,7 +1161,11 @@ function ManagerDashboardTab({
     <View style={styles.section}>
       <View style={styles.metricGrid}>
         <Metric value={snapshotLoading ? '—' : String(snapshot?.active_orders ?? 0)} label="Pedidos ativos" tone="danger" />
-        <Metric value={snapshotLoading ? '—' : String(snapshot?.open_calls ?? 0)} label="Chamados abertos" tone="warning" />
+        <Metric
+          value={snapshotLoading ? '—' : String(serviceFeatures.callWaiter ? snapshot?.open_calls ?? 0 : snapshot?.kds_queue ?? 0)}
+          label={serviceFeatures.callWaiter ? 'Chamados abertos' : 'Fila KDS'}
+          tone="warning"
+        />
         <Metric value={staffLoading ? '—' : String(activeStaffCount)} label="Equipe ativa" tone="info" />
         <Metric value={snapshotLoading ? '—' : formatCurrency(snapshot?.revenue_today ?? 0)} label="Receita" tone="success" />
       </View>

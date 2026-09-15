@@ -3,6 +3,14 @@ import { getSupabaseClient } from '@okinawa/shared/services/supabase';
 import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import logger from '@okinawa/shared/utils/logger';
+import {
+  DISABLED_SERVICE_TYPE_FEATURES,
+  getServiceTypeFeatures,
+  isSupportedServiceType,
+  type ServiceType,
+  type ServiceTypeFeatures,
+  type CustomerExperienceConfig,
+} from '@okinawa/shared/config/service-types';
 
 export interface RestaurantOption {
   id: string;
@@ -10,6 +18,8 @@ export interface RestaurantOption {
   city: string;
   state: string;
   serviceType: string;
+  serviceConfig: Record<string, unknown>;
+  customerExperience: CustomerExperienceConfig | null;
   logoUrl: string | null;
 }
 
@@ -80,6 +90,8 @@ interface RestaurantRoleContextValue {
   /** Real role from server — cannot be changed by the user. */
   serverRole: RestaurantRole | null;
   restaurantId: string | null;
+  serviceType: ServiceType | null;
+  serviceFeatures: ServiceTypeFeatures;
   roleLoading: boolean;
   /** Owners/managers can switch to another role view for supervision purposes. */
   setRole: (role: RestaurantRole) => void;
@@ -210,6 +222,12 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
         city: r.city,
         state: r.state,
         serviceType: r.service_type,
+        serviceConfig: r.service_config && typeof r.service_config === 'object'
+          ? r.service_config
+          : {},
+        customerExperience: r.customer_experience && typeof r.customer_experience === 'object'
+          ? r.customer_experience as CustomerExperienceConfig
+          : null,
         logoUrl: r.logo_url ?? null,
       })) : []);
     } catch (err) {
@@ -250,10 +268,22 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({
+    () => {
+      const currentRestaurant = restaurants.find((item) => item.id === restaurantId);
+      const serviceType = isSupportedServiceType(currentRestaurant?.serviceType)
+        ? currentRestaurant.serviceType
+        : null;
+      return {
       role,
       serverRole,
       restaurantId,
+      serviceType,
+      serviceFeatures: serviceType
+        ? getServiceTypeFeatures(serviceType, {
+            featureOverrides: currentRestaurant?.serviceConfig.feature_overrides,
+            customerExperience: currentRestaurant?.customerExperience,
+          })
+        : DISABLED_SERVICE_TYPE_FEATURES,
       roleLoading,
       setRole,
       reloadRole,
@@ -273,7 +303,8 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       setCookView,
       waiterView,
       setWaiterView,
-    }),
+      };
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [role, serverRole, restaurantId, roleLoading, reloadRole, restaurants, restaurantsLoading, reloadRestaurants, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView],
   );

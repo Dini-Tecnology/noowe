@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { ActivityIndicator, RefreshControl, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -24,6 +24,29 @@ export function distanceKm(
 /** Navigate on the root stack even from a screen nested inside the tab navigator. */
 export const rootNavigate = (navigation: any, name: string, params?: object) =>
   (navigation.getParent?.() ?? navigation).navigate(name, params);
+
+type RefreshableQuery = {
+  isRefetching: boolean;
+  refetch: () => Promise<unknown>;
+};
+
+/** Native pull-to-refresh wired to one or more TanStack Query results. */
+export function useQueryRefreshControl(queries: readonly RefreshableQuery[]) {
+  const colors = useColors();
+  const onRefresh = useCallback(() => {
+    void Promise.all(queries.map((query) => query.refetch()));
+  }, [queries]);
+
+  return (
+    <RefreshControl
+      refreshing={queries.some((query) => query.isRefetching)}
+      onRefresh={onRefresh}
+      tintColor={colors.primary}
+      colors={[colors.primary]}
+      progressBackgroundColor={colors.card}
+    />
+  );
+}
 
 type StateViewProps = {
   loading?: boolean;

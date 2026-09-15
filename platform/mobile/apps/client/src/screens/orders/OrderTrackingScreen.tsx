@@ -14,18 +14,21 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
-import { gradients } from '@okinawa/shared/theme/colors';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import OrderStatusStepper, { type OrderStatusStep } from '@okinawa/shared/components/orders/OrderStatusStepper';
 import { useOrder } from '@okinawa/shared/hooks/useOrdersQuery';
 
 type RouteParams = { orderId: string };
 type TrackingStep = 'received' | 'preparing' | 'ready' | 'delivered';
 
-const TRACKING_STEPS: { key: TrackingStep; label: string; icon: 'checkmark' | 'restaurant' | 'restaurant-outline' | 'checkmark-done' }[] = [
-  { key: 'received', label: 'Recebido', icon: 'checkmark' },
-  { key: 'preparing', label: 'Preparando', icon: 'restaurant' },
-  { key: 'ready', label: 'Pronto', icon: 'restaurant-outline' },
-  { key: 'delivered', label: 'Entregue', icon: 'checkmark-done' },
+/** Gradiente do header — espelha os tokens `primary → accent` do design de referência. */
+const HEADER_GRADIENT = ['#FF5724', '#F97316', '#F59E0B'] as const;
+
+const TRACKING_STEPS: (OrderStatusStep & { key: TrackingStep })[] = [
+  { key: 'received', label: 'Recebido', icon: 'checkmark-circle' },
+  { key: 'preparing', label: 'Preparando', icon: 'chef-hat', iconSet: 'material-community' },
+  { key: 'ready', label: 'Pronto', icon: 'silverware-fork-knife', iconSet: 'material-community' },
+  { key: 'delivered', label: 'Entregue', icon: 'checkmark' },
 ];
 
 const STEP_INDEX: Record<TrackingStep, number> = {
@@ -240,88 +243,41 @@ export default function OrderTrackingScreen() {
         },
         headerTop: {
           flexDirection: 'row',
-          alignItems: 'flex-start',
+          alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: 20,
+          gap: 12,
         },
         backBtn: {
           width: 40,
           height: 40,
-          borderRadius: 20,
-          backgroundColor: 'rgba(255,255,255,0.22)',
+          borderRadius: 14,
+          backgroundColor: 'rgba(255,255,255,0.20)',
           alignItems: 'center',
           justifyContent: 'center',
         },
-        headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+        headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
         headerTitle: {
-          fontSize: 20,
+          fontSize: 18,
           fontWeight: '700',
           color: '#FFFFFF',
         },
         headerSubtitle: {
-          fontSize: 14,
-          color: 'rgba(255,255,255,0.85)',
-          marginTop: 4,
+          fontSize: 13,
+          color: 'rgba(255,255,255,0.8)',
+          marginTop: 3,
         },
         orderBadge: {
           paddingHorizontal: 12,
-          paddingVertical: 8,
+          paddingVertical: 7,
           borderRadius: 12,
-          backgroundColor: 'rgba(255,255,255,0.22)',
+          backgroundColor: 'rgba(255,255,255,0.20)',
         },
         orderBadgeText: {
-          fontSize: 14,
+          fontSize: 12,
           fontWeight: '700',
+          letterSpacing: 0.6,
           color: '#FFFFFF',
-        },
-        stepperWrap: {
-          backgroundColor: 'rgba(255,255,255,0.15)',
-          borderRadius: 20,
-          paddingVertical: 18,
-          paddingHorizontal: 12,
-        },
-        stepperRow: {
-          flexDirection: 'row',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-        },
-        stepItem: {
-          flex: 1,
-          alignItems: 'center',
-        },
-        stepCircle: {
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 8,
-        },
-        stepCircleActive: {
-          backgroundColor: '#FFFFFF',
-        },
-        stepCircleInactive: {
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderColor: 'rgba(255,255,255,0.35)',
-        },
-        stepLabel: {
-          fontSize: 11,
-          textAlign: 'center',
-          color: 'rgba(255,255,255,0.45)',
-        },
-        stepLabelActive: {
-          color: '#FFFFFF',
-          fontWeight: '600',
-        },
-        connector: {
-          position: 'absolute',
-          top: 20,
-          left: '12.5%',
-          right: '12.5%',
-          height: 2,
-          backgroundColor: 'rgba(255,255,255,0.25)',
-          zIndex: 0,
         },
       }),
     [colors],
@@ -385,9 +341,9 @@ export default function OrderTrackingScreen() {
       <View style={styles.root}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
           <LinearGradient
-            colors={gradients.primary as [string, string]}
+            colors={HEADER_GRADIENT as unknown as [string, string, string]}
             start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
+            end={{ x: 1, y: 1 }}
             style={styles.gradientHeader}
           >
             <View style={styles.headerTop}>
@@ -410,34 +366,7 @@ export default function OrderTrackingScreen() {
               </View>
             </View>
 
-            <View style={styles.stepperWrap}>
-              <View style={styles.connector} />
-              <View style={styles.stepperRow}>
-                {TRACKING_STEPS.map((step, index) => {
-                  const isActive = index <= currentStepIndex;
-                  const isCurrent = index === currentStepIndex;
-                  return (
-                    <View key={step.key} style={styles.stepItem}>
-                      <View
-                        style={[
-                          styles.stepCircle,
-                          isActive ? styles.stepCircleActive : styles.stepCircleInactive,
-                        ]}
-                      >
-                        <Ionicons
-                          name={step.icon}
-                          size={isCurrent && step.key === 'received' ? 18 : 20}
-                          color={isActive ? colors.primary : 'rgba(255,255,255,0.5)'}
-                        />
-                      </View>
-                      <Text style={[styles.stepLabel, isActive && styles.stepLabelActive]}>
-                        {step.label}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
+            <OrderStatusStepper steps={TRACKING_STEPS} currentStep={currentStepIndex} />
           </LinearGradient>
 
           <View style={styles.body}>

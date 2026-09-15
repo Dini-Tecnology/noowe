@@ -8,18 +8,68 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Text } from 'react-native-paper';
-import { Check, ChevronRight, Sparkles, Utensils } from 'lucide-react-native';
+import { Check, ChevronRight, SlidersHorizontal, Sparkles, Utensils } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 import { SERVICE_TYPE_CATALOG } from './config/configTypes';
+import {
+  isSupportedServiceType,
+  type ServiceType,
+  type ServiceTypeFeatureKey,
+} from '@okinawa/shared/config/service-types';
 
 type FeatureMap = Record<string, Record<string, boolean>>;
 
+const FEATURE_KEYS: Partial<Record<ServiceType, Record<string, ServiceTypeFeatureKey>>> = {
+  fine_dining: {
+    'Reservas Online': 'reservations',
+    'Wine Pairing': 'aiPairing',
+    Sommelier: 'aiPairing',
+    'Split por item': 'splitPayment',
+    'Course-by-Course': 'menuPersonalization',
+  },
+  casual_dining: {
+    'Smart Waitlist': 'virtualQueue',
+    'Modo Família': 'guestInvitations',
+    Grupos: 'guestInvitations',
+  },
+  quick_service: {
+    'Skip the Line': 'ordering',
+    'Tracking 4 Estágios': 'orderTracking',
+  },
+};
+
+function toUiFeatureStates(typeId: string, raw: Record<string, boolean>): Record<string, boolean> {
+  const type = SERVICE_TYPE_CATALOG.find((item) => item.id === typeId);
+  if (!type || !isSupportedServiceType(typeId)) return raw;
+  const keys = FEATURE_KEYS[typeId] ?? {};
+  return Object.fromEntries(type.features.map((label) => [label, raw[keys[label] ?? label] ?? true]));
+}
+
+function toPersistedFeatureStates(typeId: string, raw: Record<string, boolean>): Record<string, boolean> {
+  if (!isSupportedServiceType(typeId)) return raw;
+  const keys = FEATURE_KEYS[typeId] ?? {};
+  const result: Record<string, boolean> = {};
+  for (const [label, enabled] of Object.entries(raw)) {
+    result[keys[label] ?? label] = enabled;
+  }
+  return result;
+}
+
+/** Service types with their own discovery sub-tag editor screen. */
+const DISCOVERY_FILTER_ROUTES: Partial<Record<string, string>> = {
+  fine_dining: 'FineDining',
+  casual_dining: 'CasualDining',
+  quick_service: 'QuickService',
+};
+
 export default function ServiceConfigScreen() {
   const colors = useColors();
-  const { restaurantId } = useRestaurantRole();
+  const navigation = useNavigation<any>();
+  const { restaurantId, reloadRestaurants } = useRestaurantRole();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeIds, setActiveIds] = useState<string[]>([]);
@@ -43,7 +93,10 @@ export default function ServiceConfigScreen() {
       for (const row of rows) {
         const meta = row.config_metadata?.features;
         if (meta && typeof meta === 'object') {
-          nextFeatures[row.service_type] = meta as Record<string, boolean>;
+          nextFeatures[row.service_type] = toUiFeatureStates(
+            row.service_type,
+            meta as Record<string, boolean>,
+          );
         }
       }
       // Seed defaults for catalog types
@@ -61,6 +114,7 @@ export default function ServiceConfigScreen() {
   }, [restaurantId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial remote load
     void load();
   }, [load]);
 
@@ -71,14 +125,20 @@ export default function ServiceConfigScreen() {
       const configs = SERVICE_TYPE_CATALOG.map((type) => ({
         service_type: type.id,
         is_active: nextActive.includes(type.id),
-        config_metadata: { features: nextFeatures[type.id] ?? {} },
+        config_metadata: {
+          features: toPersistedFeatureStates(type.id, nextFeatures[type.id] ?? {}),
+        },
       }));
       const primary =
-        nextPrimary && nextActive.includes(nextPrimary)
+        nextPrimary && isSupportedServiceType(nextPrimary) && nextActive.includes(nextPrimary)
           ? nextPrimary
-          : nextActive[0] ?? undefined;
+          : nextActive.find(isSupportedServiceType);
+      if (!primary || !isSupportedServiceType(primary)) {
+        throw new Error('Mantenha ao menos um tipo de serviço compatível ativo.');
+      }
       await supabaseApiAdapter.upsertServiceConfigs(restaurantId, configs, primary);
-      setPrimaryType(primary ?? null);
+      setPrimaryType(primary);
+      await reloadRestaurants();
     } catch (err) {
       Alert.alert('Falha ao salvar', err instanceof Error ? err.message : 'Tente novamente.');
       await load();
@@ -89,6 +149,18 @@ export default function ServiceConfigScreen() {
 
   const toggleType = (id: string) => {
     const isActive = activeIds.includes(id);
+    const type = SERVICE_TYPE_CATALOG.find((t) => t.id === id);
+    if (!isActive && !type?.mvp) {
+      Alert.alert(
+        'Em breve',
+        `${type?.name ?? 'Este tipo de serviço'} ainda não está disponível no app do cliente. Você poderá ativá-lo assim que for lançado.`,
+      );
+      return;
+    }
+    if (isActive && activeIds.length === 1) {
+      Alert.alert('Tipo obrigatório', 'Ative outro tipo compatível antes de desativar o tipo atual.');
+      return;
+    }
     const next = isActive ? activeIds.filter((x) => x !== id) : [...activeIds, id];
     let nextFeatures = featureStates;
     if (!isActive && !featureStates[id]) {
@@ -106,12 +178,18 @@ export default function ServiceConfigScreen() {
   };
 
   const toggleFeature = (typeId: string, feature: string) => {
+    const enabled = !(featureStates[typeId]?.[feature] ?? true);
+    const canonicalKey = isSupportedServiceType(typeId) ? FEATURE_KEYS[typeId]?.[feature] : undefined;
+    const linkedLabels = canonicalKey && isSupportedServiceType(typeId)
+      ? Object.entries(FEATURE_KEYS[typeId] ?? {})
+          .filter(([, key]) => key === canonicalKey)
+          .map(([label]) => label)
+      : [feature];
+    const typeFeatures = { ...(featureStates[typeId] ?? {}) };
+    for (const label of linkedLabels) typeFeatures[label] = enabled;
     const next: FeatureMap = {
       ...featureStates,
-      [typeId]: {
-        ...(featureStates[typeId] ?? {}),
-        [feature]: !(featureStates[typeId]?.[feature] ?? true),
-      },
+      [typeId]: typeFeatures,
     };
     setFeatureStates(next);
     void persist(activeIds, next, primaryType);
@@ -196,6 +274,11 @@ export default function ServiceConfigScreen() {
                           <Text style={{ color: colors.primary, fontSize: 9, fontWeight: '800' }}>PRIMÁRIO</Text>
                         </View>
                       ) : null}
+                      {!type.mvp ? (
+                        <View style={[styles.primaryPill, { backgroundColor: `${colors.foregroundSecondary}18` }]}>
+                          <Text style={{ color: colors.foregroundSecondary, fontSize: 9, fontWeight: '800' }}>EM BREVE</Text>
+                        </View>
+                      ) : null}
                     </View>
                     <Text style={{ fontSize: 11, color: colors.foregroundSecondary }}>{type.desc}</Text>
                   </View>
@@ -214,34 +297,49 @@ export default function ServiceConfigScreen() {
                       style={[
                         styles.toggleTypeBtn,
                         {
-                          backgroundColor: isActive ? `${colors.error}14` : colors.primary,
+                          backgroundColor: isActive
+                            ? `${colors.error}14`
+                            : type.mvp
+                              ? colors.primary
+                              : colors.backgroundSecondary,
                         },
                       ]}
                     >
                       <Text
                         style={{
-                          color: isActive ? colors.error : '#FFF',
+                          color: isActive ? colors.error : type.mvp ? '#FFF' : colors.foregroundSecondary,
                           fontSize: 11,
                           fontWeight: '700',
                         }}
                       >
-                        {isActive ? 'Desativar tipo' : 'Ativar tipo'}
+                        {isActive ? 'Desativar tipo' : type.mvp ? 'Ativar tipo' : 'Em breve'}
                       </Text>
                     </TouchableOpacity>
 
                     {isActive ? (
                       <>
-                        {primaryType !== type.id ? (
+                        {primaryType !== type.id && type.mvp ? (
                           <TouchableOpacity
                             onPress={() => {
                               setPrimaryType(type.id);
-                              void persist(activeIds, featureStates, type.id);
+                              void persist(activeIds, featureStates, type.id as ServiceType);
                             }}
                             style={[styles.makePrimaryBtn, { borderColor: colors.border }]}
                           >
                             <Utensils size={12} color={colors.primary} />
                             <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '700' }}>
                               Definir como primário
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {DISCOVERY_FILTER_ROUTES[type.id] ? (
+                          <TouchableOpacity
+                            onPress={() => navigation.navigate(DISCOVERY_FILTER_ROUTES[type.id]!)}
+                            style={[styles.makePrimaryBtn, { borderColor: colors.border }]}
+                          >
+                            <SlidersHorizontal size={12} color={colors.primary} />
+                            <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '700' }}>
+                              Editar filtros de descoberta
                             </Text>
                           </TouchableOpacity>
                         ) : null}

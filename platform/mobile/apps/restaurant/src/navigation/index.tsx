@@ -83,6 +83,8 @@ import ServiceConfigScreen from '../screens/v2/ServiceConfigScreen';
 import WaitlistScreen from '../screens/v2/WaitlistScreen';
 import CallsScreen from '../screens/v2/CallsScreen';
 import CasualDiningScreen from '../screens/v2/CasualDiningScreen';
+import FineDiningScreen from '../screens/v2/FineDiningScreen';
+import QuickServiceScreen from '../screens/v2/QuickServiceScreen';
 import RestaurantProfileScreen from '../screens/v2/RestaurantProfileScreen';
 import BusinessHoursScreen from '../screens/v2/BusinessHoursScreen';
 import NotificationSettingsScreen from '../screens/v2/NotificationSettingsScreen';
@@ -97,6 +99,7 @@ import ConfigPaymentsScreen from '../screens/v2/config/ConfigPaymentsScreen';
 import ConfigMarketplaceScreen from '../screens/v2/config/ConfigMarketplaceScreen';
 import UserAccountScreen from '../screens/v2/UserAccountScreen';
 import { RestaurantRoleProvider, useRestaurantRole, RestaurantRole } from '../contexts/RestaurantRoleContext';
+import type { ServiceTypeFeatureKey } from '@okinawa/shared/config/service-types';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -162,6 +165,36 @@ function withRoleGuard<P extends object>(
   };
 }
 
+/** Keeps operational screens aligned with the journey exposed to customers. */
+function withServiceGuard<P extends object>(
+  Component: React.ComponentType<P>,
+  requiredFeatures: ServiceTypeFeatureKey[],
+  unavailableMessage: string,
+): React.ComponentType<P> {
+  return function ServiceGuardedScreen(props: P) {
+    const { restaurantId, restaurantsLoading, serviceFeatures, serviceType } = useRestaurantRole();
+    if (restaurantId && restaurantsLoading) {
+      return (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+        </View>
+      );
+    }
+    const available = requiredFeatures.some((feature) => serviceFeatures[feature]);
+    if (!serviceType || !available) {
+      return (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: '#1A1A1A', marginBottom: 8 }}>
+            Recurso fora desta jornada
+          </Text>
+          <Text style={{ color: '#6B7280', textAlign: 'center' }}>{unavailableMessage}</Text>
+        </View>
+      );
+    }
+    return <Component {...props} />;
+  };
+}
+
 const GuardedFinancial = withRoleGuard(FinancialScreen, ['owner', 'manager']);
 const GuardedReports = withRoleGuard(ReportsScreen, ['owner', 'manager']);
 const GuardedStaff = withRoleGuard(StaffScreen, ['owner', 'manager']);
@@ -185,9 +218,41 @@ const GuardedTips = withRoleGuard(TipsScreen, ['owner', 'manager', 'waiter']);
 const GuardedReservations = withRoleGuard(ReservationsScreen, ['owner', 'manager', 'maitre']);
 const GuardedCalls = withRoleGuard(CallsScreen, ['owner', 'manager', 'waiter', 'maitre']);
 const GuardedTables = withRoleGuard(TablesScreen, ['owner', 'manager', 'maitre', 'waiter']);
+const GuardedQRGenerator = withRoleGuard(QRGeneratorScreen, ['owner', 'manager']);
+const GuardedQRBatch = withRoleGuard(QRBatchScreen, ['owner', 'manager']);
 const GuardedCustomers = withRoleGuard(CustomersScreen, ['owner', 'manager']);
 const GuardedShifts = withRoleGuard(ShiftsScreen, ['owner', 'manager']);
 const GuardedIntegrations = withRoleGuard(IntegrationsScreen, ['owner', 'manager']);
+const JourneyReservations = withServiceGuard(
+  GuardedReservations,
+  ['reservations'],
+  'Reservas não fazem parte do tipo de serviço configurado para este restaurante.',
+);
+const JourneyWaitlist = withServiceGuard(
+  WaitlistScreen,
+  ['virtualQueue'],
+  'Fila virtual não está habilitada para este restaurante.',
+);
+const JourneyCalls = withServiceGuard(
+  GuardedCalls,
+  ['callWaiter'],
+  'Chamados de mesa não fazem parte do atendimento configurado.',
+);
+const JourneyTables = withServiceGuard(
+  GuardedTables,
+  ['tableManagement'],
+  'Gestão de mesas não se aplica ao modelo de atendimento configurado.',
+);
+const JourneyWaiter = withServiceGuard(
+  GuardedWaiter,
+  ['callWaiter', 'tableManagement'],
+  'A jornada configurada não utiliza atendimento de garçom em mesa.',
+);
+const JourneyMaitre = withServiceGuard(
+  GuardedMaitre,
+  ['reservations', 'virtualQueue', 'tableManagement'],
+  'A jornada configurada não possui operação de salão ou recepção.',
+);
 
 interface AuthStackBodyProps {
   googleLoginAvailable: boolean;
@@ -370,6 +435,7 @@ function AuthStack() {
 }
 
 function MainTabs() {
+  const { serviceFeatures } = useRestaurantRole();
   return (
     <Tab.Navigator
       id="restaurant-main-tabs"
@@ -378,14 +444,15 @@ function MainTabs() {
       tabBar={(props) => <RestaurantTabBar {...props} />}
       screenOptions={{
         ...liquidGlassTabNavigatorScreenOptions,
-        sceneContainerStyle: { backgroundColor: '#FFFFFF' },
         sceneStyle: { backgroundColor: '#FFFFFF' },
       }}
     >
       <Tab.Screen name="Hub" component={OwnerHubScreen} options={{ title: 'Início' }} />
       <Tab.Screen name="Orders" component={OrdersScreen} options={{ title: 'Pedidos' }} />
       <Tab.Screen name="Kitchen" component={GuardedKitchen} options={{ title: 'Cozinha' }} />
-      <Tab.Screen name="Tables" component={GuardedTables} options={{ title: 'Mesas' }} />
+      {serviceFeatures.tableManagement ? (
+        <Tab.Screen name="Tables" component={JourneyTables} options={{ title: 'Mesas' }} />
+      ) : null}
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Config' }} />
     </Tab.Navigator>
   );
@@ -404,7 +471,7 @@ function MainStack() {
     >
       <Stack.Screen name="Tabs" component={MainTabs} />
       <Stack.Screen name="Menu" component={GuardedMenu} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="Reservations" component={GuardedReservations} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Reservations" component={JourneyReservations} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Staff" component={GuardedStaff} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Tips" component={GuardedTips} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Financial" component={GuardedFinancial} options={scaleFadeScreenOptions} />
@@ -413,17 +480,19 @@ function MainStack() {
       <Stack.Screen name="Promotions" component={PromotionsScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Loyalty" component={LoyaltyScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RoleDashboard" component={RoleDashboardScreen} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="Waiter" component={GuardedWaiter} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Waiter" component={JourneyWaiter} options={scaleFadeScreenOptions} />
       <Stack.Screen name="WaiterTapToPay" component={GuardedWaiterTapToPay} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="Maitre" component={GuardedMaitre} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Maitre" component={JourneyMaitre} options={scaleFadeScreenOptions} />
       <Stack.Screen name="BarKDS" component={GuardedBarKDS} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="QRGenerator" component={QRGeneratorScreen} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="QRBatch" component={QRBatchScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="QRGenerator" component={GuardedQRGenerator} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="QRBatch" component={GuardedQRBatch} options={scaleFadeScreenOptions} />
       <Stack.Screen name="OrderPayment" component={OrderPaymentScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="ServiceConfig" component={GuardedServiceConfig} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="Waitlist" component={WaitlistScreen} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="Calls" component={GuardedCalls} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Waitlist" component={JourneyWaitlist} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Calls" component={JourneyCalls} options={scaleFadeScreenOptions} />
       <Stack.Screen name="CasualDining" component={CasualDiningScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="FineDining" component={FineDiningScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="QuickService" component={QuickServiceScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RestaurantProfile" component={GuardedRestaurantProfile} options={scaleFadeScreenOptions} />
       <Stack.Screen name="UserAccount" component={UserAccountScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="BusinessHours" component={GuardedBusinessHours} options={scaleFadeScreenOptions} />
@@ -444,7 +513,7 @@ function MainStack() {
 }
 
 function AuthenticatedGate() {
-  const { serverRole, roleLoading, reloadRole } = useRestaurantRole();
+  const { serverRole, roleLoading, reloadRole, reloadRestaurants } = useRestaurantRole();
   const [roleIntent, setRoleIntentState] = useState<RoleIntent | null | undefined>(undefined);
 
   useEffect(() => {
@@ -504,6 +573,7 @@ function AuthenticatedGate() {
       <CreateRestaurantScreen
         onCreated={async () => {
           await reloadRole();
+          await reloadRestaurants();
         }}
       />
     );
@@ -541,7 +611,20 @@ export default function Navigation() {
   } | null>(null);
   const { isInMaintenance, message: maintenanceMessage, estimatedEnd, clearMaintenance } = useMaintenanceCheck();
 
+  async function checkAuth() {
+    try {
+      const user = await authService.restoreSession();
+      setIsAuthenticated(!!user);
+    } catch (error) {
+      logger.error('Auth check failed:', error);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restore persisted auth on boot
     checkAuth();
     const unsubscribe = authService.onAuthStateChange(setIsAuthenticated);
     const unsubscribeConsent = onConsentRequired((data) => {
@@ -553,18 +636,6 @@ export default function Navigation() {
       unsubscribeConsent();
     };
   }, []);
-
-  const checkAuth = async () => {
-    try {
-      const user = await authService.restoreSession();
-      setIsAuthenticated(!!user);
-    } catch (error) {
-      logger.error('Auth check failed:', error);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleNavigationError = (error: Error, errorInfo: React.ErrorInfo) => {
     logger.error('Navigation error:', { error: error.message, stack: error.stack });

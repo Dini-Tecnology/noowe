@@ -30,30 +30,17 @@ import { V2Shell } from '../shared/V2Shell';
 import type { CustomerExperiencePrefs } from '../shared/v2Types';
 import { ConfigSectionCard } from './ConfigSectionCard';
 import type { IconComponent } from './configTypes';
+import {
+  getDefaultCustomerExperience,
+  isSupportedServiceType,
+} from '@okinawa/shared/config/service-types';
+import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 
 const DEFAULT_PREFS: CustomerExperiencePrefs = {
-  onlineReservations: true,
-  waitlist: true,
-  eventReservations: true,
-  tableService: true,
-  qrOrdering: true,
-  counterService: false,
-  selfService: false,
-  smartAllocation: true,
-  postVisitFeedback: true,
+  ...getDefaultCustomerExperience('casual_dining'),
   maxAdvanceDays: 30,
   toleranceMinutes: 15,
   requireDeposit: false,
-  journeyDiscovery: true,
-  journeyReservation: true,
-  journeyArrival: true,
-  journeyMenu: true,
-  journeyOrder: true,
-  journeyTracking: true,
-  journeyConsumption: true,
-  journeyBill: true,
-  journeyPayment: true,
-  journeyPostVisit: true,
 };
 
 type ToggleKey = Exclude<
@@ -175,6 +162,7 @@ const JOURNEY_STAGES: JourneyStage[] = [
 
 export default function ConfigExperienceScreen() {
   const colors = useColors();
+  const { reloadRestaurants } = useRestaurantRole();
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<CustomerExperiencePrefs>(DEFAULT_PREFS);
   const [loading, setLoading] = useState(true);
@@ -202,11 +190,12 @@ export default function ConfigExperienceScreen() {
       await supabaseApiAdapter.updateRestaurantProfile(id, {
         settings: { ...currentSettings, customer_experience: next },
       });
+      await reloadRestaurants();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar preferências');
     }
-  }, []);
+  }, [reloadRestaurants]);
 
   const schedulePersist = useCallback(
     (next: CustomerExperiencePrefs) => {
@@ -232,8 +221,13 @@ export default function ConfigExperienceScreen() {
       if (data) {
         setRestaurantId(data.id ?? null);
         const stored = data.settings?.customer_experience;
+        const serviceDefaults = isSupportedServiceType(data.service_type)
+          ? getDefaultCustomerExperience(data.service_type)
+          : DEFAULT_PREFS;
         if (stored && typeof stored === 'object') {
-          setPrefs({ ...DEFAULT_PREFS, ...stored });
+          setPrefs({ ...DEFAULT_PREFS, ...serviceDefaults, ...stored });
+        } else {
+          setPrefs({ ...DEFAULT_PREFS, ...serviceDefaults });
         }
       }
     } catch (err) {
@@ -244,6 +238,7 @@ export default function ConfigExperienceScreen() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial remote load
     void load();
   }, [load]);
 

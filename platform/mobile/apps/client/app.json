@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "Noowe",
-    "slug": "noowe",
+    "slug": "okinawa-client",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "scheme": "noowe",
     "splash": {
       "image": "./assets/logo-completa-client.png",

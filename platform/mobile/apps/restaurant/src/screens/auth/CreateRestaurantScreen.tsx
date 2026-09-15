@@ -7,9 +7,10 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  View,
 } from 'react-native';
 import { Text, HelperText } from 'react-native-paper';
-import { LogOut } from 'lucide-react-native';
+import { Crown, LogOut, Utensils, Zap } from 'lucide-react-native';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
@@ -23,6 +24,16 @@ import {
   type BrazilianAddressValue,
 } from '../../components/forms/BrazilianAddressFields';
 import { formatBrazilianPhone, validateBrazilianPhone } from '@okinawa/shared/utils/phone-validation';
+import {
+  SERVICE_TYPE_CONFIGS,
+  type ServiceType,
+} from '@okinawa/shared/config/service-types';
+
+const SERVICE_TYPE_OPTIONS = [
+  { type: 'fine_dining' as const, Icon: Crown },
+  { type: 'casual_dining' as const, Icon: Utensils },
+  { type: 'quick_service' as const, Icon: Zap },
+];
 
 interface CreateRestaurantScreenProps {
   onCreated: () => Promise<void> | void;
@@ -35,6 +46,7 @@ export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantSc
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [serviceType, setServiceType] = useState<ServiceType | null>(null);
   const [address, setAddress] = useState<BrazilianAddressValue>({
     postalCode: '',
     city: '',
@@ -58,8 +70,10 @@ export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantSc
       && address.street.trim()
       && address.number.trim();
 
-    if (!trimmedName || !trimmedPhone || !trimmedEmail || !hasRequiredAddress) {
-      setError('Preencha os dados do restaurante e o endereço completo.');
+    if (!trimmedName || !trimmedPhone || !trimmedEmail || !hasRequiredAddress || !serviceType) {
+      setError(serviceType
+        ? 'Preencha os dados do restaurante e o endereço completo.'
+        : 'Selecione o tipo de serviço do restaurante.');
       Haptic.errorNotification();
       return;
     }
@@ -83,6 +97,7 @@ export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantSc
         addressNumber: address.number.trim(),
         addressComplement: address.complement.trim(),
         neighborhood: address.neighborhood.trim(),
+        serviceType,
       });
       Haptic.successNotification();
       await onCreated();
@@ -152,6 +167,49 @@ export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantSc
               autoCorrect: false,
             }}
           />
+
+          <View style={styles.serviceSection}>
+            <Text style={[styles.serviceTitle, { color: colors.foreground }]}>Tipo de serviço *</Text>
+            <Text style={[styles.serviceHint, { color: colors.foregroundSecondary }]}>Essa escolha define a jornada do cliente e as ferramentas disponíveis para a equipe.</Text>
+            <View style={styles.serviceOptions}>
+              {SERVICE_TYPE_OPTIONS.map(({ type, Icon }) => {
+                const config = SERVICE_TYPE_CONFIGS[type];
+                const selected = serviceType === type;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.serviceCard,
+                      {
+                        borderColor: selected ? colors.primary : colors.border,
+                        backgroundColor: selected ? `${colors.primary}0D` : colors.card,
+                      },
+                    ]}
+                    onPress={() => {
+                      setServiceType(type);
+                      setError('');
+                    }}
+                    disabled={loading}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    accessibilityLabel={`${config.name}: ${config.description}`}
+                  >
+                    <View style={[styles.serviceIcon, { backgroundColor: `${colors.primary}18` }]}>
+                      <Icon size={20} color={colors.primary} />
+                    </View>
+                    <View style={styles.serviceCopy}>
+                      <Text style={[styles.serviceName, { color: colors.foreground }]}>{config.name}</Text>
+                      <Text style={[styles.serviceDescription, { color: colors.foregroundSecondary }]}>{config.description}</Text>
+                    </View>
+                    <View style={[styles.radio, { borderColor: selected ? colors.primary : colors.border }]}>
+                      {selected ? <View style={[styles.radioDot, { backgroundColor: colors.primary }]} /> : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           <BrazilianAddressFields value={address} onChange={setAddress} disabled={loading} />
 
           {error ? <HelperText type="error">{error}</HelperText> : null}
@@ -217,6 +275,63 @@ const createStyles = (colors: ReturnType<typeof useColors>) =>
     },
     buttonDisabled: {
       opacity: 0.7,
+    },
+    serviceSection: {
+      marginBottom: 18,
+    },
+    serviceTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      marginBottom: 4,
+    },
+    serviceHint: {
+      fontSize: 12,
+      lineHeight: 17,
+      marginBottom: 10,
+    },
+    serviceOptions: {
+      gap: 8,
+    },
+    serviceCard: {
+      minHeight: 76,
+      borderWidth: 1.5,
+      borderRadius: 16,
+      padding: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    serviceIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    serviceCopy: {
+      flex: 1,
+    },
+    serviceName: {
+      fontSize: 14,
+      fontWeight: '800',
+      marginBottom: 2,
+    },
+    serviceDescription: {
+      fontSize: 11,
+      lineHeight: 15,
+    },
+    radio: {
+      width: 20,
+      height: 20,
+      borderWidth: 2,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    radioDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
     },
     logoutButton: {
       marginTop: 'auto',

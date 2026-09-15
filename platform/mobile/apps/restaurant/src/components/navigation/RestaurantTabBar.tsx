@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BottomTabBarHeightCallbackContext } from '@react-navigation/bottom-tabs';
@@ -45,6 +45,7 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
     setCookView,
     waiterView,
     setWaiterView,
+    serviceFeatures,
   } = useRestaurantRole();
   const activeRoute = state.routes[state.index]?.name ?? 'Hub';
   const variant =
@@ -75,6 +76,18 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
               : variant === 'waiter'
                 ? waiterView
             : ROUTE_TO_TAB[activeRoute] ?? 'dashboard';
+  const hiddenItemIds = useMemo(() => {
+    const hidden: string[] = [];
+    if (!serviceFeatures.tableManagement) {
+      hidden.push('tables', 'manager-tables', 'maitre-tables', 'waiter-table-actions', 'waiter-table-charge');
+    }
+    if (!serviceFeatures.reservations) hidden.push('maitre-reservations');
+    if (!serviceFeatures.virtualQueue) hidden.push('maitre-flow');
+    if (!serviceFeatures.callWaiter && !serviceFeatures.tableManagement) {
+      hidden.push('waiter', 'waiter-assistance');
+    }
+    return hidden;
+  }, [serviceFeatures]);
 
   return (
     <View
@@ -85,6 +98,7 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
       <RestaurantLiquidGlassNav
         variant={variant}
         activeTab={activeTab}
+        hiddenItemIds={hiddenItemIds}
         onNavigate={(tab) => {
           if (variant === 'manager') {
             setManagerView(tab as ManagerRoleView);

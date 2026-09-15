@@ -60,7 +60,11 @@ export const authService = {
   },
 
   async resendSignupConfirmation(email: string) {
-    await supabaseAuthAdapter.resendSignupConfirmation(email);
+    return supabaseAuthAdapter.resendSignupConfirmation(email);
+  },
+
+  async checkEmailAvailability(email: string) {
+    return supabaseAuthAdapter.checkEmailAvailability(email);
   },
 
   async verifyEmailTokenHash(tokenHash: string, type?: 'email' | 'recovery' | 'signup' | 'invite' | 'magiclink' | 'email_change') {

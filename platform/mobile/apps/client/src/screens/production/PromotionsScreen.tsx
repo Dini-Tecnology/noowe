@@ -7,13 +7,14 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import customerBackend from '../../services/customer-backend';
-import { StateView } from './shared';
+import { StateView, useQueryRefreshControl } from './shared';
 
 export default function PromotionsScreen() {
   const colors = useColors();
   const visit = useVisitSession();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ['promotions', visit.session?.restaurantId], queryFn: () => customerBackend.listPromotions(visit.session?.restaurantId) });
+  const refreshControl = useQueryRefreshControl([query]);
   const redeem = useMutation({
     mutationFn: (id: string) => customerBackend.redeemPromotion(id),
     onSuccess: () => {
@@ -27,7 +28,6 @@ export default function PromotionsScreen() {
     () =>
       StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.background },
-        title: { fontSize: 26, fontWeight: '700', color: colors.foreground, marginBottom: 16 },
         card: { padding: 16, borderRadius: 18, backgroundColor: colors.card, borderWidth: 1.5, borderColor: '#FFD4C2', marginBottom: 12, gap: 6 },
         row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
         name: { fontSize: 16, fontWeight: '700', color: colors.foreground },
@@ -41,8 +41,13 @@ export default function PromotionsScreen() {
 
   return (
     <ScreenContainer edges={['top']}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Cupons</Text>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32 }}
+        refreshControl={refreshControl}
+        alwaysBounceVertical
+        showsVerticalScrollIndicator={false}
+      >
         <StateView
           loading={query.isLoading}
           error={query.error}

@@ -1,6 +1,8 @@
 import * as Crypto from 'expo-crypto';
 import { getSupabaseClient } from './supabase';
 import { getOptionalSupabaseSessionUser } from './supabase-auth';
+import type { ServiceType } from '../config/service-types';
+import type { Json } from '../types/database.generated';
 
 export type SupabaseOrderItemInput = {
   menu_item_id: string;
@@ -10,6 +12,17 @@ export type SupabaseOrderItemInput = {
 
 export type SupabaseOrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'cancelled';
 export type SupabaseReservationStatus = 'pending' | 'confirmed' | 'seated' | 'completed' | 'cancelled' | 'no_show';
+
+export interface TableQRCode {
+  id: string | null;
+  table_id: string;
+  table_number: string;
+  section: string | null;
+  qr_code_data: string | null;
+  is_active: boolean;
+  expires_at: string | null;
+  created_at: string | null;
+}
 
 export interface SupabaseCreateOrderInput {
   restaurant_id: string;
@@ -55,12 +68,12 @@ export interface AssistanceAllergenGroup {
   name: string;
   item_count: number;
   items: string[];
-  affected_customers: Array<{
+  affected_customers: {
     table_id: string;
     table_number: string;
     customer_id: string;
     customer_name: string;
-  }>;
+  }[];
 }
 
 export interface AssistanceFeedbackCandidate {
@@ -301,15 +314,26 @@ export interface SupabaseApiAdapter {
   getServiceConfigs(restaurantId?: string): Promise<any>;
   upsertServiceConfigs(
     restaurantId: string,
-    configs: Array<{
+    configs: {
       service_type: string;
       is_active: boolean;
       config_metadata?: Record<string, unknown>;
-    }>,
-    primaryServiceType?: string,
+    }[],
+    primaryServiceType: ServiceType,
   ): Promise<any>;
+  getCasualDiningConfig(restaurantId: string): Promise<any>;
+  updateCasualDiningConfig(
+    restaurantId: string,
+    amenities: string[],
+    config: Record<string, unknown>,
+  ): Promise<any>;
+  getTableComanda(tableId: string): Promise<any>;
+  getFineDiningAmenities(restaurantId: string): Promise<any>;
+  updateFineDiningAmenities(restaurantId: string, amenities: string[]): Promise<any>;
+  getQuickServiceConfig(restaurantId: string): Promise<any>;
+  updateQuickServiceConfig(restaurantId: string, cuisineTags: string[], skipTheLineEnabled: boolean): Promise<any>;
   getActiveShiftCount(restaurantId?: string): Promise<any>;
-  getTableQRCodes(restaurantId?: string): Promise<any>;
+  getTableQRCodes(restaurantId?: string): Promise<TableQRCode[]>;
   generateTableQR(tableId: string): Promise<any>;
   getPromotions(restaurantId?: string, status?: string): Promise<any>;
   closePromotion(promotionId: string): Promise<any>;
@@ -339,7 +363,7 @@ export interface SupabaseApiAdapter {
     addressComplement?: string;
     neighborhood?: string;
     zipCode?: string;
-    serviceType?: string;
+    serviceType: ServiceType;
   }): Promise<any>;
   // ── Customer Discovery (public/authenticated read, RLS: restaurants_select_active / menu_items_select_public) ──
   getRestaurantsList(filters?: { search?: string; cuisine_type?: string }): Promise<any[]>;
@@ -486,24 +510,16 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   },
 
   async createRestaurantTable(restaurantId: string, table: Record<string, unknown>) {
-    const now = new Date().toISOString();
-    const { data, error } = await getSupabaseClient()
-      .from('tables')
-      .insert({
-        restaurant_id: restaurantId,
-        table_number: table.table_number,
-        seats: table.seats,
-        section: table.section || null,
-        notes: table.notes || null,
-        status: 'available',
-        shape: table.shape || 'rectangle',
-        width: table.width || 1,
-        height: table.height || 1,
-        created_at: now,
-        updated_at: now,
-      })
-      .select()
-      .single();
+    const { data, error } = await getSupabaseClient().rpc('restaurant_create_table', {
+      p_restaurant_id: restaurantId,
+      p_table_number: String(table.table_number ?? ''),
+      p_seats: Number(table.seats ?? 1),
+      p_section: typeof table.section === 'string' ? table.section : null,
+      p_notes: typeof table.notes === 'string' ? table.notes : null,
+      p_shape: typeof table.shape === 'string' ? table.shape : 'rectangle',
+      p_width: Number(table.width ?? 1),
+      p_height: Number(table.height ?? 1),
+    });
     if (error) throw error;
     return data;
   },
@@ -1548,66 +1564,81 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
   async upsertServiceConfigs(
     restaurantId: string,
-    configs: Array<{
+    configs: {
       service_type: string;
       is_active: boolean;
       config_metadata?: Record<string, unknown>;
-    }>,
-    primaryServiceType?: string,
+    }[],
+    primaryServiceType: ServiceType,
   ) {
-    const supabase = getSupabaseClient();
-    const { data: existing, error: existingError } = await supabase
-      .from('restaurant_service_configs')
-      .select('id, service_type')
-      .eq('restaurant_id', restaurantId);
-    if (existingError) throw existingError;
+    const { data, error } = await getSupabaseClient().rpc('restaurant_upsert_service_configs', {
+      p_restaurant_id: restaurantId,
+      p_configs: configs as unknown as Json,
+      p_primary_service_type: primaryServiceType,
+    });
+    if (error) throw error;
+    return data;
+  },
 
-    const byType = new Map<string, string>(
-      (existing ?? []).map((row: { id: string; service_type: string }) => [row.service_type, row.id]),
-    );
-    const now = new Date().toISOString();
+  async getCasualDiningConfig(restaurantId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_casual_dining_config', {
+      p_restaurant_id: restaurantId,
+    });
+    if (error) throw error;
+    return data;
+  },
 
-    for (const config of configs) {
-      const existingId = byType.get(config.service_type);
-      if (existingId) {
-        const { error } = await supabase
-          .from('restaurant_service_configs')
-          .update({
-            is_active: config.is_active,
-            config_metadata: config.config_metadata ?? {},
-            updated_at: now,
-          })
-          .eq('id', existingId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('restaurant_service_configs').insert({
-          restaurant_id: restaurantId,
-          service_type: config.service_type,
-          is_active: config.is_active,
-          config_metadata: config.config_metadata ?? {},
-          created_at: now,
-          updated_at: now,
-        });
-        if (error) throw error;
-      }
-    }
+  async updateCasualDiningConfig(restaurantId: string, amenities: string[], config: Record<string, unknown>) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_update_casual_dining_config', {
+      p_restaurant_id: restaurantId,
+      p_amenities: amenities,
+      p_config: config as unknown as Json,
+    });
+    if (error) throw error;
+    return data;
+  },
 
-    if (primaryServiceType) {
-      const { error: primaryError } = await supabase
-        .from('restaurants')
-        .update({ service_type: primaryServiceType, updated_at: now })
-        .eq('id', restaurantId);
-      if (primaryError) throw primaryError;
+  async getTableComanda(tableId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_table_bill', {
+      p_table_id: tableId,
+    });
+    if (error) throw error;
+    return data;
+  },
 
-      await supabaseApiAdapter.updateRestaurantProfile(restaurantId, {
-        service_config: {
-          primary_type: primaryServiceType,
-          active_types: configs.filter((c) => c.is_active).map((c) => c.service_type),
-        },
-      });
-    }
+  async getFineDiningAmenities(restaurantId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_fine_dining_amenities', {
+      p_restaurant_id: restaurantId,
+    });
+    if (error) throw error;
+    return data;
+  },
 
-    return supabaseApiAdapter.getServiceConfigs(restaurantId);
+  async updateFineDiningAmenities(restaurantId: string, amenities: string[]) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_update_fine_dining_amenities', {
+      p_restaurant_id: restaurantId,
+      p_amenities: amenities,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getQuickServiceConfig(restaurantId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_quick_service_config', {
+      p_restaurant_id: restaurantId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async updateQuickServiceConfig(restaurantId: string, cuisineTags: string[], skipTheLineEnabled: boolean) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_update_quick_service_config', {
+      p_restaurant_id: restaurantId,
+      p_cuisine_tags: cuisineTags,
+      p_skip_the_line_enabled: skipTheLineEnabled,
+    });
+    if (error) throw error;
+    return data;
   },
 
   async getActiveShiftCount(restaurantId?: string) {
@@ -1625,7 +1656,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_restaurant_id: resolvedId,
     });
     if (error) throw error;
-    return data;
+    return (Array.isArray(data) ? data : []) as unknown as TableQRCode[];
   },
 
   async generateTableQR(tableId: string) {
@@ -1804,7 +1835,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     addressComplement?: string;
     neighborhood?: string;
     zipCode?: string;
-    serviceType?: string;
+    serviceType: ServiceType;
   }) {
     const { data, error } = await getSupabaseClient().rpc('create_my_restaurant', {
       p_name: input.name,
@@ -1814,7 +1845,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_state: input.state ?? 'SP',
       p_address: input.address ?? 'Endereço a definir',
       p_zip_code: input.zipCode ?? '00000-000',
-      p_service_type: input.serviceType ?? 'casual_dining',
+      p_service_type: input.serviceType,
     });
     if (error) throw error;
 

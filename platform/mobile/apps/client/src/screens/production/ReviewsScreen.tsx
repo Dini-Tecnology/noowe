@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend from '../../services/customer-backend';
+import { useQueryRefreshControl } from './shared';
 
 export default function ReviewsScreen() {
   const colors = useColors();
@@ -15,6 +16,7 @@ export default function ReviewsScreen() {
 
   const reviews = useQuery({ queryKey: ['reviews'], queryFn: () => customerBackend.listMyReviews() });
   const orders = useQuery({ queryKey: ['orders', 'reviewable'], queryFn: () => customerBackend.listOrders(100) });
+  const refreshControl = useQueryRefreshControl([reviews, orders]);
   const reviewed = new Set(reviews.data?.map((review) => review.orderId));
   const reviewable = orders.data?.data.find((order) => ['completed', 'delivered'].includes(order.status) && !reviewed.has(order.id));
 
@@ -33,7 +35,6 @@ export default function ReviewsScreen() {
       StyleSheet.create({
         scroll: { flex: 1, backgroundColor: colors.background },
         content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 12 },
-        title: { fontSize: 26, fontWeight: '700', color: colors.foreground, marginBottom: 4 },
         card: { padding: 16, borderRadius: 18, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, gap: 10 },
         cardTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground },
         starsRow: { flexDirection: 'row', gap: 6 },
@@ -49,9 +50,12 @@ export default function ReviewsScreen() {
 
   return (
     <ScreenContainer edges={['top']} hasKeyboard>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Avaliações</Text>
-
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        refreshControl={refreshControl}
+        alwaysBounceVertical
+      >
         {reviewable && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Avaliar {reviewable.restaurantName}</Text>

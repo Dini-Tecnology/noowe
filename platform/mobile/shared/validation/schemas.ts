@@ -575,7 +575,7 @@ export function validateForm<T>(
 /**
  * Get first error message from Zod validation result
  */
-export function getFirstError(result: z.SafeParseError<unknown>): string {
+export function getFirstError(result: z.ZodSafeParseError<unknown>): string {
   return localizeValidationMessage(result.error.issues[0]?.message || validationMsg.validationFailed);
 }
 

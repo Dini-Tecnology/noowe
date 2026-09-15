@@ -6,6 +6,7 @@ import type { CustomerAssistanceHub, RestaurantApproval } from '@okinawa/shared/
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import type { KdsOrder, KdsStatus, OrderStatus, TabOrder } from './v2Types';
 import { useRegisterRemoteRefresh } from './remoteRefreshRegistry';
+import { saoPauloDateKey } from './calendarDate';
 
 type AsyncState<T> = {
   data: T;
@@ -795,7 +796,7 @@ export function useReservations(dateISO?: string): AsyncState<Reservation[]> {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { restaurantId } = useRestaurantRole();
-  const date = dateISO || new Date().toISOString().split('T')[0];
+  const date = dateISO || saoPauloDateKey();
 
   const refresh = useCallback(async () => {
     setError(null);

@@ -6,6 +6,12 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
+import { useReservationsRealtime } from './shared/useRealtimeSubscription';
+import {
+  RESTAURANT_TIME_ZONE,
+  saoPauloDateKey,
+  saoPauloUpcomingDateKeys,
+} from './shared/calendarDate';
 
 interface Reservation {
   id: string;
@@ -47,17 +53,29 @@ function statusTone(status: string): { bg: string; border: string; color: string
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: RESTAURANT_TIME_ZONE,
+  });
 }
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  const today = new Date();
-  const tomorrow = new Date();
-  tomorrow.setDate(today.getDate() + 1);
-  if (d.toDateString() === today.toDateString()) return 'Hoje';
-  if (d.toDateString() === tomorrow.toDateString()) return 'Amanhã';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+  const [today, tomorrow] = saoPauloUpcomingDateKeys(2);
+  const dateKey = saoPauloDateKey(d);
+  if (dateKey === today) return 'Hoje';
+  if (dateKey === tomorrow) return 'Amanhã';
+  return d.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    timeZone: RESTAURANT_TIME_ZONE,
+  });
+}
+
+function uniqueReservations(rows: Reservation[]): Reservation[] {
+  return Array.from(new Map(rows.map((row) => [row.id, row])).values())
+    .sort((left, right) => Date.parse(left.reservation_time) - Date.parse(right.reservation_time));
 }
 
 export default function ReservationsScreen() {
@@ -70,20 +88,30 @@ export default function ReservationsScreen() {
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('Todas');
   const [acting, setActing] = useState<string | null>(null);
 
-  const todayStr = new Date().toISOString().split('T')[0];
-
   const load = useCallback(async () => {
     try {
       setError(null);
+      const dateKeys = saoPauloUpcomingDateKeys(4);
+      const allowedDates = new Set(dateKeys);
       let data: Reservation[] = [];
       if (restaurantId) {
         try {
-          data = await supabaseApiAdapter.getRestaurantReservations(restaurantId, todayStr);
+          const dailyReservations = await Promise.all(
+            dateKeys.map((date) => supabaseApiAdapter.getRestaurantReservations(restaurantId, date)),
+          );
+          data = uniqueReservations(dailyReservations.flat());
         } catch {
-          data = await supabaseApiAdapter.getReservations({ date: todayStr });
+          const fallback = await supabaseApiAdapter.getReservations();
+          data = uniqueReservations((Array.isArray(fallback) ? fallback : []).filter((reservation: Reservation & { restaurant_id?: string }) =>
+            reservation.restaurant_id === restaurantId
+            && allowedDates.has(saoPauloDateKey(new Date(reservation.reservation_time))),
+          ));
         }
       } else {
-        data = await supabaseApiAdapter.getReservations({ date: todayStr });
+        const fallback = await supabaseApiAdapter.getReservations();
+        data = uniqueReservations((Array.isArray(fallback) ? fallback : []).filter((reservation: Reservation) =>
+          allowedDates.has(saoPauloDateKey(new Date(reservation.reservation_time))),
+        ));
       }
       setReservations(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -92,9 +120,12 @@ export default function ReservationsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [restaurantId, todayStr]);
+  }, [restaurantId]);
 
+  // Initial data synchronization; subsequent database changes use the realtime subscription below.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
+  useReservationsRealtime(restaurantId, load);
 
   const onRefresh = () => { setRefreshing(true); void load(); };
 

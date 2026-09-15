@@ -32,7 +32,7 @@ import analytics from '@/shared/services/analytics';
 export function trackScreenChanges(
   navigationRef: React.RefObject<NavigationContainerRef<any>>,
 ) {
-  const routeNameRef = React.useRef<string>();
+  const routeNameRef: { current: string | undefined } = { current: undefined };
 
   return {
     /**

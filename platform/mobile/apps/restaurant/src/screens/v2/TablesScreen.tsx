@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Animated, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { CheckCircle, DoorOpen, Pencil, Plus, QrCode, Receipt, Trash2, UserPlus, Users } from 'lucide-react-native';
@@ -9,6 +9,7 @@ import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2FormSheet } from './shared/V2FormSheet';
 import { V2Shell } from './shared/V2Shell';
+import { TableComandaDialog } from './shared/TableComandaDialog';
 import { useRestaurantTables, type V2Table } from './shared/useRestaurantOperations';
 
 type StatusKey = 'available' | 'occupied' | 'reserved' | 'cleaning' | 'blocked' | 'payment';
@@ -55,6 +56,7 @@ export default function TablesScreen() {
   const [deleteTable, setDeleteTable] = useState<V2Table | null>(null);
   const [seatingTable, setSeatingTable] = useState<{ table: V2Table; mode: SeatingMode } | null>(null);
   const [closeAccountTable, setCloseAccountTable] = useState<V2Table | null>(null);
+  const [comandaTable, setComandaTable] = useState<V2Table | null>(null);
   const [tableNumber, setTableNumber] = useState('');
   const [seats, setSeats] = useState('2');
   const [section, setSection] = useState('Salão');
@@ -260,7 +262,7 @@ export default function TablesScreen() {
         title="Mapa de Mesas"
         subtitle={isWaiterView ? 'Acompanhe e atenda as mesas em tempo real' : canManage ? 'Cadastre e organize o salão' : 'Acompanhe a ocupação em tempo real'}
         scroll={false}
-        headerRight={isWaiterView ? undefined : (
+        headerRight={!canManage || isWaiterView ? undefined : (
           <View style={styles.headerActions}>
             <Pressable
               accessibilityLabel="Gerar QR Codes"
@@ -455,15 +457,26 @@ export default function TablesScreen() {
                   ) : null}
 
                   {(selectedTable.status === 'occupied' || selectedTable.status === 'payment') && selectedTable.sessionId ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Fechar a conta da mesa ${selectedTable.label}`}
-                      onPress={() => setCloseAccountTable(selectedTable)}
-                      style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: '#0284C7' }, pressed && styles.primaryPressed]}
-                    >
-                      <Receipt size={17} color="#FFF" />
-                      <Text style={styles.primaryOperationText}>Fechar a conta</Text>
-                    </Pressable>
+                    <>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Ver comanda por pessoa da mesa ${selectedTable.label}`}
+                        onPress={() => setComandaTable(selectedTable)}
+                        style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: colors.backgroundSecondary, marginBottom: 10 }, pressed && styles.primaryPressed]}
+                      >
+                        <Users size={17} color={colors.foreground} />
+                        <Text style={[styles.primaryOperationText, { color: colors.foreground }]}>Ver comanda por pessoa</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Fechar a conta da mesa ${selectedTable.label}`}
+                        onPress={() => setCloseAccountTable(selectedTable)}
+                        style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: '#0284C7' }, pressed && styles.primaryPressed]}
+                      >
+                        <Receipt size={17} color="#FFF" />
+                        <Text style={styles.primaryOperationText}>Fechar a conta</Text>
+                      </Pressable>
+                    </>
                   ) : null}
 
                   {selectedTable.status === 'cleaning' && !selectedTable.sessionId ? (
@@ -505,7 +518,7 @@ export default function TablesScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Gerar QR Code da mesa ${selectedTable.label}`}
                     style={({ pressed }) => [styles.generateButton, { backgroundColor: colors.primary }, pressed && styles.primaryPressed]}
-                    onPress={() => navigation.navigate('QRGenerator')}
+                    onPress={() => navigation.navigate('QRGenerator', { tableId: selectedTable.id })}
                   >
                     <QrCode size={17} color="#FFF" />
                     <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>Gerar QR Code</Text>
@@ -617,6 +630,13 @@ export default function TablesScreen() {
         onCancel={() => setDeleteTable(null)}
         onConfirm={() => void confirmDelete()}
       />
+
+      <TableComandaDialog
+        visible={comandaTable !== null}
+        tableId={comandaTable?.id ?? null}
+        tableLabel={comandaTable?.label ?? ''}
+        onClose={() => setComandaTable(null)}
+      />
     </>
   );
 }
@@ -669,7 +689,7 @@ const TableCell = React.memo(function TableCell({
 }) {
   const colors = useColors();
   const meta = statusMeta(table.status);
-  const scale = useRef(new Animated.Value(1)).current;
+  const [scale] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     Animated.spring(scale, {

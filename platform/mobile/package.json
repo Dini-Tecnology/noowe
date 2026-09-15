@@ -26,6 +26,7 @@
     "client:android": "cd apps/client && npm run android",
     "restaurant:ios": "cd apps/restaurant && npm run ios",
     "restaurant:android": "cd apps/restaurant && npm run android",
+    "test:order-tracking:e2e": "node scripts/test-order-tracking-e2e.mjs",
     "build:client:ios": "cd apps/client && eas build --platform ios",
     "build:client:android": "cd apps/client && eas build --platform android",
     "build:restaurant:ios": "cd apps/restaurant && eas build --platform ios",
@@ -66,15 +67,17 @@
     "@react-native-community/netinfo": "^11.4.1",
     "@sentry/react-native": "~7.2.0",
     "@shopify/flash-list": "2.0.2",
+    "@supabase/supabase-js": "^2.112.3",
     "@tanstack/react-query": "^5.90.12",
+    "expo": "54.0.36",
     "expo-camera": "~17.0.10",
     "expo-device": "~8.0.10",
     "expo-linking": "~8.0.12",
     "expo-local-authentication": "~17.0.8",
     "expo-notifications": "~0.32.17",
-    "react-native-toast-message": "^2.3.3",
-    "expo": "54.0.36",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-toast-message": "^2.3.3"
   }
 }

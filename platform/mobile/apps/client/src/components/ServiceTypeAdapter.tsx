@@ -8,13 +8,11 @@ import { typography } from '@okinawa/shared/theme/typography';
 import { spacing } from '@okinawa/shared/theme/spacing';
 
 interface ConditionalFeatureProps {
-  feature: 
+  feature:
     | 'reservations'
     | 'virtualQueue'
     | 'tableManagement'
     | 'menuPersonalization'
-    | 'geolocationTracking'
-    | 'dishBuilder'
     | 'callWaiter'
     | 'splitPayment'
     | 'guestInvitations'
@@ -112,10 +110,9 @@ export const ServiceTypeBadge: React.FC<ServiceTypeBadgeProps> = ({
 }) => {
   const { config } = useServiceType();
   const colors = useColors();
+  const dynamicStyles = useMemo(() => createBadgeStyles(colors), [colors]);
 
   if (!config) return null;
-
-  const dynamicStyles = useMemo(() => createBadgeStyles(colors), [colors]);
 
   const sizeStyles = {
     small: dynamicStyles.badgeSmall,

@@ -36,6 +36,8 @@ export function useRealtimeSubscription({
 }: RealtimeOpts) {
   // Keep a stable ref so the effect closure always sees the latest callback.
   const refreshRef = useRef(onRefresh);
+  const filterColumn = filter?.column;
+  const filterValue = filter?.value;
   useEffect(() => { refreshRef.current = onRefresh; }, [onRefresh]);
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export function useRealtimeSubscription({
       event: '*',
       schema: 'public',
       table,
-      ...(filter ? { filter: `${filter.column}=eq.${filter.value}` } : {}),
+      ...(filterColumn && filterValue ? { filter: `${filterColumn}=eq.${filterValue}` } : {}),
     };
 
     channel = channel.on('postgres_changes' as any, pgChangesConfig, () => {
@@ -66,7 +68,7 @@ export function useRealtimeSubscription({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [channelName, table, filter?.column, filter?.value, enabled]);
+  }, [channelName, table, filterColumn, filterValue, enabled]);
 }
 
 // ── Convenience hooks ──────────────────────────────────────────────────────────
@@ -125,7 +127,7 @@ export function useServiceCallsRealtime(restaurantId: string | null, onRefresh: 
 }
 
 /**
- * Subscribes to INSERT on `reservations` filtered by `restaurant_id`.
+ * Subscribes to INSERT/UPDATE/DELETE on `reservations` filtered by `restaurant_id`.
  */
 export function useReservationsRealtime(restaurantId: string | null, onRefresh: RefreshFn) {
   useRealtimeSubscription({

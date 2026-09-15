@@ -44,6 +44,14 @@ export interface ServiceTypeDef {
   desc: string;
   features: string[];
   Icon: IconComponent;
+  /**
+   * Whether the client (customer-facing) app supports this service type.
+   * Only fine_dining, casual_dining and quick_service are in the MVP scope
+   * there — activating or setting any other type as primary here leaves the
+   * restaurant invisible to customers, with no in-app explanation. Owners
+   * can still browse these, but can't turn them on yet.
+   */
+  mvp?: boolean;
 }
 
 export interface ProfileContact {
@@ -67,6 +75,7 @@ export const SERVICE_TYPE_CATALOG: ServiceTypeDef[] = [
     desc: 'Reservas, sommelier, harmonização',
     features: ['Reservas Online', 'Wine Pairing', 'Sommelier', 'Split por item', 'Course-by-Course'],
     Icon: Crown,
+    mvp: true,
   },
   {
     id: 'casual_dining',
@@ -74,6 +83,7 @@ export const SERVICE_TYPE_CATALOG: ServiceTypeDef[] = [
     desc: 'Waitlist, família, grupos',
     features: ['Smart Waitlist', 'Modo Família', 'Grupos'],
     Icon: Utensils,
+    mvp: true,
   },
   {
     id: 'fast_casual',
@@ -130,6 +140,7 @@ export const SERVICE_TYPE_CATALOG: ServiceTypeDef[] = [
     desc: 'Skip the line, pickup rápido',
     features: ['Skip the Line', 'Tracking 4 Estágios'],
     Icon: Zap,
+    mvp: true,
   },
   {
     id: 'club',
