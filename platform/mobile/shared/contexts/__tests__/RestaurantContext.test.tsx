@@ -52,15 +52,15 @@ interface RestaurantContextValue {
 // ============================================================
 
 interface MockApiService {
-  getRestaurant: ReturnType<typeof vi.fn>;
-  getStaffMember: ReturnType<typeof vi.fn>;
-  getStaffProfile: ReturnType<typeof vi.fn>;
+  getRestaurant: jest.Mock;
+  getStaffMember: jest.Mock;
+  getStaffProfile: jest.Mock;
 }
 
 interface MockSecureStorage {
-  getItem: ReturnType<typeof vi.fn>;
-  setItem: ReturnType<typeof vi.fn>;
-  removeItem: ReturnType<typeof vi.fn>;
+  getItem: jest.Mock;
+  setItem: jest.Mock;
+  removeItem: jest.Mock;
 }
 
 // ============================================================

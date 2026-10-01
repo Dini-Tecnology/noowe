@@ -49,7 +49,7 @@ export default function ReviewsScreen() {
       setReviews(data);
     } catch (error) {
       logger.error('Failed to load reviews:', error);
-      Alert.alert('Error', 'Failed to load reviews');
+      Alert.alert('Erro', 'Não foi possível carregar as avaliações.');
     } finally {
       setLoading(false);
     }
@@ -72,7 +72,7 @@ export default function ReviewsScreen() {
     if (!editingReview) return;
 
     if (editRating < 1 || editRating > 5) {
-      Alert.alert('Error', 'Please select a rating between 1 and 5 stars');
+      Alert.alert('Erro', 'Escolha uma nota de 1 a 5 estrelas.');
       return;
     }
 
@@ -89,10 +89,10 @@ export default function ReviewsScreen() {
           : r
       ));
 
-      Alert.alert('Success', 'Review updated successfully');
+      Alert.alert('Pronto', 'Avaliação atualizada com sucesso.');
       setEditModalVisible(false);
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to update review');
+      Alert.alert('Erro', 'Não foi possível atualizar a avaliação. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
@@ -123,21 +123,21 @@ export default function ReviewsScreen() {
 
   const handleDeleteReview = (review: Review) => {
     Alert.alert(
-      'Delete Review',
-      'Are you sure you want to delete this review?',
+      'Excluir avaliação',
+      'Tem certeza de que deseja excluir esta avaliação?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Excluir',
           style: 'destructive',
           onPress: async () => {
             try {
               await ApiService.deleteReview(review.id);
 
               setReviews(reviews.filter(r => r.id !== review.id));
-              Alert.alert('Success', 'Review deleted successfully');
+              Alert.alert('Pronto', 'Avaliação excluída com sucesso.');
             } catch (error: any) {
-              Alert.alert('Error', error.response?.data?.message || 'Failed to delete review');
+              Alert.alert('Erro', 'Não foi possível excluir a avaliação. Tente novamente.');
             }
           },
         },
@@ -177,7 +177,7 @@ export default function ReviewsScreen() {
       <ScreenContainer>
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading reviews...</Text>
+        <Text style={styles.loadingText}>Carregando avaliações...</Text>
       </View>
     
       </ScreenContainer>

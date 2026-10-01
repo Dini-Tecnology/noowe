@@ -398,7 +398,7 @@ export const gradients = {
   glass: ['rgba(255, 255, 255, 0.4)', 'rgba(255, 255, 255, 0)'],
   glassDark: ['rgba(0, 0, 0, 0.3)', 'rgba(0, 0, 0, 0)'],
   cardShine: ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0)'],
-};
+} as const;
 
 export type ThemeColors = typeof lightTheme;
 export type ColorPalette = typeof colorPalette;

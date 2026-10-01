@@ -5,6 +5,7 @@ import { Wine } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from './shared/V2Shell';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface BarQueueItem {
   id: string;
@@ -49,7 +50,7 @@ export default function BarKDSScreen() {
       const data = await supabaseApiAdapter.getBarQueue();
       setItems(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar fila do bar');
+      setError(userErrorMessage(err, 'Erro ao carregar fila do bar'));
     } finally {
       setLoading(false);
       setRefreshing(false);

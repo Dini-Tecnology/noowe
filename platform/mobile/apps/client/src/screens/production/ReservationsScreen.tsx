@@ -1,27 +1,46 @@
 import React, { useMemo } from 'react';
-import { Alert, FlatList, RefreshControl, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Image, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend, { type CustomerReservation } from '../../services/customer-backend';
-import { rootNavigate, StateView } from './shared';
+import { rootNavigate, StateView, useQueryRefreshControl } from './shared';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Aguardando confirmação', confirmed: 'Confirmada', seated: 'Na mesa',
   completed: 'Concluída', cancelled: 'Cancelada', no_show: 'Não compareceu',
 };
 
+// Finished reservations read as history, not as something needing attention.
+const INACTIVE_STATUSES = ['cancelled', 'no_show', 'completed'];
+
 export default function ReservationsScreen({ navigation }: any) {
   const colors = useColors();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ['reservations'], queryFn: () => customerBackend.listReservations() });
+  const refreshControl = useQueryRefreshControl([query]);
   const cancel = useMutation({
     mutationFn: (id: string) => customerBackend.cancelReservation(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reservations'] }),
-    onError: (error: Error) => Alert.alert('Não foi possível cancelar', error.message),
+    onError: (error: Error) =>
+      Alert.alert(
+        'Não foi possível cancelar',
+        error.message === 'Reservation cannot be cancelled'
+          ? 'Esta reserva já passou do horário ou não está mais em um status cancelável.'
+          : error.message,
+      ),
   });
+  const confirmCancel = (reservation: CustomerReservation) =>
+    Alert.alert(
+      'Cancelar reserva',
+      `Cancelar a reserva no ${reservation.restaurantName}? Esta ação não pode ser desfeita.`,
+      [
+        { text: 'Manter reserva', style: 'cancel' },
+        { text: 'Cancelar reserva', style: 'destructive', onPress: () => cancel.mutate(reservation.id) },
+      ],
+    );
   const invite = useMutation({
     mutationFn: (id: string) => customerBackend.createReservationInvite(id),
     onSuccess: (url) => Share.share({ message: `Participe da minha reserva na Noowe: ${url}`, url }),
@@ -37,6 +56,7 @@ export default function ReservationsScreen({ navigation }: any) {
     card: { padding: 15, borderRadius: 17, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginBottom: 10 },
     cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     icon: { width: 40, height: 40, borderRadius: 13, backgroundColor: '#FFF0EA', alignItems: 'center', justifyContent: 'center' },
+    photo: { width: 40, height: 40, borderRadius: 13, backgroundColor: colors.backgroundTertiary },
     body: { flex: 1 },
     name: { fontSize: 14, fontWeight: '800', color: colors.foreground, marginBottom: 3 },
     meta: { fontSize: 11, color: colors.foregroundSecondary },
@@ -63,18 +83,24 @@ export default function ReservationsScreen({ navigation }: any) {
         accessibilityRole="button"
       >
         <View style={styles.cardTop}>
-          <View style={styles.icon}><Ionicons name="calendar-outline" size={20} color={colors.primary} /></View>
+          {item.restaurantPhoto ? (
+            <Image source={{ uri: item.restaurantPhoto }} style={styles.photo} resizeMode="cover" />
+          ) : (
+            <View style={styles.icon}><Ionicons name="calendar-outline" size={20} color={colors.primary} /></View>
+          )}
           <View style={styles.body}>
             <Text style={styles.name}>{item.restaurantName}</Text>
             <Text style={styles.meta}>{date.toLocaleDateString('pt-BR')} · {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · {item.partySize} pessoas</Text>
-            <Text style={styles.status}>{STATUS_LABELS[item.status] ?? item.status}</Text>
+            <Text style={[styles.status, INACTIVE_STATUSES.includes(item.status) && { color: colors.foregroundMuted }]}>
+              {STATUS_LABELS[item.status] ?? item.status}
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.foregroundMuted} />
         </View>
-        {['pending', 'confirmed'].includes(item.status) ? (
+        {['pending', 'confirmed'].includes(item.status) && date > new Date() ? (
           <View style={styles.actions}>
             <TouchableOpacity onPress={() => invite.mutate(item.id)} accessibilityRole="button"><Text style={styles.action}>Convidar</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => cancel.mutate(item.id)} accessibilityRole="button"><Text style={styles.danger}>Cancelar</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => confirmCancel(item)} disabled={cancel.isPending} accessibilityRole="button"><Text style={styles.danger}>Cancelar</Text></TouchableOpacity>
           </View>
         ) : null}
       </TouchableOpacity>
@@ -96,7 +122,7 @@ export default function ReservationsScreen({ navigation }: any) {
           keyExtractor={(item) => item.id}
           renderItem={renderReservation}
           contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => query.refetch()} tintColor={colors.primary} />}
+          refreshControl={refreshControl}
           ListEmptyComponent={!query.isLoading && !query.isError ? (
             <View style={styles.empty}>
               <View style={styles.emptyIcon}><Ionicons name="calendar-outline" size={34} color={colors.primary} /></View>

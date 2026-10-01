@@ -6,6 +6,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from './shared/V2Shell';
 import type { NotificationPrefs } from './shared/v2Types';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 const PREF_ITEMS: { key: keyof NotificationPrefs; label: string; subtitle: string }[] = [
   { key: 'newOrders', label: 'Novos pedidos', subtitle: 'Alerta quando um pedido chegar' },
@@ -44,7 +45,7 @@ export default function NotificationSettingsScreen() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar preferências');
+      setError(userErrorMessage(err, 'Erro ao carregar preferências'));
     } finally {
       setLoading(false);
     }
@@ -69,7 +70,7 @@ export default function NotificationSettingsScreen() {
       });
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar preferências');
+      setError(userErrorMessage(err, 'Erro ao salvar preferências'));
     } finally {
       setSaving(false);
     }

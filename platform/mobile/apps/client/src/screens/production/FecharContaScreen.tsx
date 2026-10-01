@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, ScrollView, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -8,16 +8,19 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import customerBackend from '../../services/customer-backend';
-import { money, StateView } from './shared';
+import InviteToTableSheet from '../../components/table/InviteToTableSheet';
+import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
+import { useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
+import { BILL_CALL_COOLDOWN_SECONDS, useCooldown } from '../../hooks/useCooldown';
+import { money, StateView, tableLabel } from './shared';
 
 const TIP_OPTIONS = [0, 10, 15, 20];
 
 export default function FecharContaScreen({ route, navigation }: any) {
   const colors = useColors();
-  const { session } = useVisitSession();
+  const { session, leaveTable } = useVisitSession();
   const tableSessionId: string | undefined = route?.params?.tableSessionId ?? session?.tableSessionId;
   const [tipPct, setTipPct] = useState(10);
-  const [sent, setSent] = useState(false);
 
   const bill = useQuery({
     queryKey: ['table-bill', tableSessionId],
@@ -30,21 +33,26 @@ export default function FecharContaScreen({ route, navigation }: any) {
     enabled: !!session?.restaurantId,
   });
 
-  const invite = useMutation({
-    mutationFn: () => customerBackend.createTableInvite(tableSessionId!),
-    onSuccess: (url) => {
-      Share.share({ message: `Vem pra minha mesa no ${restaurant.data?.name ?? 'restaurante'}! ${url}` });
-    },
-    onError: (error: Error) => Alert.alert('Não foi possível convidar', error.message),
-  });
+  // Inviting is a capability of the restaurant, never shown unconditionally.
+  const { capabilities, policies } = useServiceTypeFor(session?.restaurantId);
+  const canInvite = !!capabilities && (capabilities.guestLink || capabilities.userInvite);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  useTableInvitesRealtime(tableSessionId, canInvite && !!tableSessionId);
 
   const myItems = useMemo(() => bill.data?.items.filter((i) => i.placedByIsMe) ?? [], [bill.data]);
   const mySubtotal = useMemo(() => myItems.reduce((sum, i) => sum + i.totalPrice, 0), [myItems]);
   const feePct = bill.data?.serviceFeePercent ?? 10;
   const myServiceFee = mySubtotal * (feePct / 100);
-  const myTip = (mySubtotal + myServiceFee) * (tipPct / 100);
+  const myTip = mySubtotal * (tipPct / 100);
   const myTotal = mySubtotal + myServiceFee + myTip;
 
+  const finishVisit = useMutation({
+    mutationFn: leaveTable,
+    onSuccess: () => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }),
+    onError: (error: Error) => Alert.alert('Não foi possível encerrar a visita', error.message),
+  });
+
+  const billCooldown = useCooldown(tableSessionId ? `bill:${tableSessionId}` : undefined, BILL_CALL_COOLDOWN_SECONDS);
   const requestClose = useMutation({
     mutationFn: () =>
       customerBackend.callWaiter({
@@ -53,11 +61,14 @@ export default function FecharContaScreen({ route, navigation }: any) {
         type: 'bill',
         message: `Fechar conta — total da mesa ${money(bill.data?.subtotal ?? 0)}`,
       }),
-    onSuccess: () => setSent(true),
+    onSuccess: () => {
+      billCooldown.start();
+      Alert.alert('Chamado enviado', 'A equipe foi avisada e vai preparar o fechamento da sua conta.');
+    },
     onError: (error: Error) => Alert.alert('Não foi possível chamar a equipe', error.message),
   });
 
-  const openInvite = useCallback(() => invite.mutate(), [invite]);
+  const openInvite = useCallback(() => setInviteOpen(true), []);
 
   const styles = useMemo(
     () =>
@@ -135,23 +146,6 @@ export default function FecharContaScreen({ route, navigation }: any) {
     );
   }
 
-  if (sent) {
-    return (
-      <ScreenContainer edges={['top', 'bottom']}>
-        <View style={styles.successWrap}>
-          <View style={styles.successCircle}>
-            <Ionicons name="checkmark" size={36} color="#16A34A" />
-          </View>
-          <Text style={styles.successTitle}>Chamado enviado!</Text>
-          <Text style={styles.successSub}>A equipe foi avisada e vai preparar o fechamento da sua conta.</Text>
-          <TouchableOpacity style={styles.successBtn} onPress={() => navigation.goBack()} accessibilityRole="button">
-            <Text style={styles.successBtnText}>Voltar</Text>
-          </TouchableOpacity>
-        </View>
-      </ScreenContainer>
-    );
-  }
-
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <LinearGradient colors={[colors.primary, colors.primaryDark ?? colors.primary]} style={styles.gradientHeader}>
@@ -166,7 +160,7 @@ export default function FecharContaScreen({ route, navigation }: any) {
         </View>
         <Text style={styles.headerTitle}>Fechar Conta</Text>
         <Text style={styles.headerSub}>
-          Mesa {session?.tableNumber}{restaurant.data?.name ? ` · ${restaurant.data.name}` : ''}
+          {tableLabel(session?.tableNumber)}{restaurant.data?.name ? ` · ${restaurant.data.name}` : ''}
         </Text>
       </LinearGradient>
 
@@ -190,10 +184,12 @@ export default function FecharContaScreen({ route, navigation }: any) {
                     </Text>
                   </View>
                 ))}
-                <TouchableOpacity style={styles.inviteChip} onPress={openInvite} disabled={invite.isPending} accessibilityRole="button">
-                  <Ionicons name="person-add-outline" size={14} color={colors.foregroundSecondary} />
-                  <Text style={styles.inviteChipText}>{invite.isPending ? 'Gerando...' : 'Convidar'}</Text>
-                </TouchableOpacity>
+                {canInvite ? (
+                  <TouchableOpacity style={styles.inviteChip} onPress={openInvite} accessibilityRole="button" testID="fechar-conta-invite-chip">
+                    <Ionicons name="person-add-outline" size={14} color={colors.foregroundSecondary} />
+                    <Text style={styles.inviteChipText}>Convidar</Text>
+                  </TouchableOpacity>
+                ) : null}
               </ScrollView>
             </View>
 
@@ -247,16 +243,53 @@ export default function FecharContaScreen({ route, navigation }: any) {
             </View>
 
             <TouchableOpacity
-              style={[styles.cta, requestClose.isPending && styles.ctaDisabled]}
-              onPress={() => requestClose.mutate()}
-              disabled={requestClose.isPending}
+              style={styles.cta}
+              onPress={() => mySubtotal <= 0 ? finishVisit.mutate() : navigation.navigate('TipPayment', {
+                tableSessionId, restaurantName: restaurant.data?.name,
+                baseAmount: mySubtotal, serviceFeePercent: feePct, tipPercent: tipPct, splitMode: 'mine',
+              })}
+              disabled={finishVisit.isPending}
               accessibilityRole="button"
             >
-              <Text style={styles.ctaText}>{requestClose.isPending ? 'Chamando...' : 'Chamar para Fechar a Conta'}</Text>
+              <Text style={styles.ctaText}>{mySubtotal > 0 ? 'Pagar e concluir minha conta' : finishVisit.isPending ? 'Encerrando…' : 'Encerrar visita sem saldo pendente'}</Text>
+            </TouchableOpacity>
+            {bill.data.participants.length > 1 ? (
+              <TouchableOpacity onPress={() => navigation.navigate('SplitBill', {
+                tableSessionId, restaurantName: restaurant.data?.name,
+              })} accessibilityRole="button">
+                <Text style={styles.inviteLinkText}>Dividir a conta</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.cta, (requestClose.isPending || billCooldown.active) && styles.ctaDisabled]}
+              onPress={() => requestClose.mutate()}
+              disabled={requestClose.isPending || billCooldown.active}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: requestClose.isPending || billCooldown.active }}
+            >
+              <Text style={styles.ctaText}>
+                {requestClose.isPending
+                  ? 'Chamando...'
+                  : billCooldown.active
+                    ? `Chamado enviado · aguarde ${billCooldown.remaining}s`
+                    : 'Chamar para Fechar a Conta'}
+              </Text>
             </TouchableOpacity>
           </>
         )}
       </ScrollView>
+      {canInvite && tableSessionId ? (
+        <InviteToTableSheet
+          visible={inviteOpen}
+          onClose={() => setInviteOpen(false)}
+          tableSessionId={tableSessionId}
+          restaurantName={restaurant.data?.name}
+          userInviteEnabled={capabilities?.userInvite ?? false}
+          guestLinkEnabled={capabilities?.guestLink ?? false}
+          searchMinChars={policies?.userSearchMinChars ?? null}
+        />
+      ) : null}
     </ScreenContainer>
   );
 }

@@ -79,19 +79,19 @@ export default function MarginDashboardScreen() {
 
   const marginsQuery = useQuery({
     queryKey: ['margins', restaurantId, period],
-    queryFn: () => ApiService.getMargins(restaurantId, period),
+    queryFn: () => ApiService.getMargins(restaurantId!, period),
     enabled: !!restaurantId,
   });
 
   const alertsQuery = useQuery({
     queryKey: ['margin-alerts', restaurantId],
-    queryFn: () => ApiService.getMarginAlerts(restaurantId),
+    queryFn: () => ApiService.getMarginAlerts(restaurantId!),
     enabled: !!restaurantId,
   });
 
   const foodCostQuery = useQuery({
     queryKey: ['food-cost', restaurantId, period],
-    queryFn: () => ApiService.getFoodCost(restaurantId, period),
+    queryFn: () => ApiService.getFoodCost(restaurantId!, period),
     enabled: !!restaurantId,
   });
 

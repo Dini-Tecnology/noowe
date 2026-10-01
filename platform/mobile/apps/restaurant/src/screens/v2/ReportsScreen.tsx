@@ -8,6 +8,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface Reports {
   revenue?: { total?: number };
@@ -71,7 +72,7 @@ export default function ReportsScreen() {
       setSatisfaction(satisfactionData ?? {});
       setTopItems(Array.isArray(financialSummary?.top_selling_items) ? financialSummary.top_selling_items : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar relatórios');
+      setError(userErrorMessage(err, 'Erro ao carregar relatórios'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -104,7 +105,7 @@ export default function ReportsScreen() {
         await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar relatório', UTI: 'public.comma-separated-values-text' });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível exportar o CSV.');
+      setError(userErrorMessage(err, 'Não foi possível exportar o CSV.'));
     } finally {
       setExporting(false);
     }

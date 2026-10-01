@@ -12,7 +12,7 @@ const FAQ = [
   { q: 'Como reservo uma mesa?', a: 'No perfil do restaurante, toque em "Reservar" e escolha data, horário e número de convidados.' },
 ];
 
-export default function SupportScreen() {
+export default function SupportScreen({ navigation }: any) {
   const colors = useColors();
   const phone = process.env.EXPO_PUBLIC_SUPPORT_WHATSAPP;
 
@@ -20,6 +20,10 @@ export default function SupportScreen() {
     () =>
       StyleSheet.create({
         scroll: { flex: 1, backgroundColor: colors.background },
+        header: { height: 56, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        back: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.backgroundTertiary, alignItems: 'center', justifyContent: 'center' },
+        headerTitle: { fontSize: 17, fontWeight: '800', color: colors.foreground },
+        headerSpacer: { width: 32 },
         content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 12 },
         card: { padding: 16, borderRadius: 16, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, gap: 6 },
         question: { fontSize: 15, fontWeight: '700', color: colors.foreground },
@@ -36,6 +40,13 @@ export default function SupportScreen() {
 
   return (
     <ScreenContainer edges={['top']}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Voltar">
+          <Ionicons name="arrow-back" size={18} color={colors.foregroundSecondary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Ajuda</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         {FAQ.map((item) => (
           <View key={item.q} style={styles.card}>

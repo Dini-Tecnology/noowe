@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { X } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface ComandaItem {
   orderItemId: string;
@@ -65,7 +66,7 @@ export function TableComandaDialog({
         setSubtotal(Number(data?.subtotal ?? 0));
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Erro ao carregar comanda');
+        if (!cancelled) setError(userErrorMessage(err, 'Erro ao carregar comanda'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

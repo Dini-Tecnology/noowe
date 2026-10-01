@@ -20,6 +20,7 @@ import { V2Shell } from '../shared/V2Shell';
 import type { PaymentMethods } from '../shared/v2Types';
 import { ConfigSectionCard } from './ConfigSectionCard';
 import type { IconComponent } from './configTypes';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 export const DEFAULT_PAYMENT_METHODS: PaymentMethods = {
   pix: true,
@@ -101,7 +102,7 @@ export default function ConfigPaymentsScreen() {
       });
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar pagamentos');
+      setError(userErrorMessage(err, 'Erro ao salvar pagamentos'));
     }
   }, []);
 
@@ -140,7 +141,7 @@ export default function ConfigPaymentsScreen() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar pagamentos');
+      setError(userErrorMessage(err, 'Erro ao carregar pagamentos'));
     } finally {
       setLoading(false);
     }

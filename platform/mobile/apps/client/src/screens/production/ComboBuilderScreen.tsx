@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { useCart } from '@/shared/contexts/CartContext';
 import customerBackend, { type CustomerMenuItem } from '../../services/customer-backend';
 import { money, StateView } from './shared';
 
@@ -28,7 +29,7 @@ type StepKey = (typeof STEPS)[number]['key'];
 
 export default function ComboBuilderScreen({ route, navigation }: any) {
   const colors = useColors();
-  const queryClient = useQueryClient();
+  const cart = useCart();
   const restaurantId = route?.params?.restaurantId as string | undefined;
   const [stepIndex, setStepIndex] = useState(0);
   const [selection, setSelection] = useState<Record<StepKey, CustomerMenuItem | null>>({
@@ -67,20 +68,34 @@ export default function ComboBuilderScreen({ route, navigation }: any) {
   const isLastStep = stepIndex === STEPS.length - 1;
   const canAdvance = !!selection[step.key];
 
-  const place = useMutation({
-    mutationFn: () =>
-      customerBackend.orderCustomCombo({
-        restaurantId: restaurantId!,
-        lancheItemId: selection.lanche!.id,
-        acompanhamentoItemId: selection.acompanhamento!.id,
-        bebidaItemId: selection.bebida!.id,
-      }),
-    onSuccess: (order) => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      navigation.replace('OrderDetail', { orderId: order.id });
-    },
-    onError: (error: Error) => Alert.alert('Não foi possível montar o combo', error.message),
+  const restaurant = useQuery({
+    queryKey: ['restaurant', restaurantId],
+    queryFn: () => customerBackend.getRestaurant(restaurantId!),
+    enabled: !!restaurantId,
   });
+
+  const addComboToCart = useCallback(() => {
+    if (!restaurantId || !selection.lanche || !selection.acompanhamento || !selection.bebida) return;
+    cart.setRestaurant(restaurantId, restaurant.data?.name ?? 'Quick Service');
+    cart.addItem({
+      menu_item_id: selection.lanche.id,
+      name: `Combo: ${selection.lanche.name} + ${selection.acompanhamento.name} + ${selection.bebida.name}`,
+      price: total,
+      quantity: 1,
+      image_url: selection.lanche.imageUrl ?? undefined,
+      preparation_time: Math.max(
+        selection.lanche.preparationTime ?? 0,
+        selection.acompanhamento.preparationTime ?? 0,
+        selection.bebida.preparationTime ?? 0,
+      ) || null,
+      combo: {
+        lancheItemId: selection.lanche.id,
+        acompanhamentoItemId: selection.acompanhamento.id,
+        bebidaItemId: selection.bebida.id,
+      },
+    });
+    navigation.replace('Cart');
+  }, [cart, navigation, restaurant.data?.name, restaurantId, selection, total]);
 
   const selectItem = useCallback((key: StepKey, item: CustomerMenuItem) => {
     setSelection((current) => ({ ...current, [key]: item }));
@@ -89,11 +104,11 @@ export default function ComboBuilderScreen({ route, navigation }: any) {
   const goNext = useCallback(() => {
     if (!canAdvance) return;
     if (isLastStep) {
-      if (allSelected) place.mutate();
+      if (allSelected) addComboToCart();
       return;
     }
     setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
-  }, [allSelected, canAdvance, isLastStep, place]);
+  }, [addComboToCart, allSelected, canAdvance, isLastStep]);
 
   const goBackStep = useCallback(() => {
     if (stepIndex === 0) {
@@ -264,16 +279,16 @@ export default function ComboBuilderScreen({ route, navigation }: any) {
 
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.cta, (!canAdvance || place.isPending) && styles.ctaDisabled]}
+            style={[styles.cta, !canAdvance && styles.ctaDisabled]}
             onPress={goNext}
-            disabled={!canAdvance || place.isPending}
+            disabled={!canAdvance}
             activeOpacity={0.9}
             accessibilityRole="button"
           >
             <Text style={styles.ctaText}>
-              {place.isPending ? 'Confirmando...' : isLastStep ? 'Confirmar Combo' : 'Próximo'}
+              {isLastStep ? 'Adicionar à comanda' : 'Próximo'}
             </Text>
-            {!place.isPending && <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />}
+            <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />
           </TouchableOpacity>
         </View>
       </View>

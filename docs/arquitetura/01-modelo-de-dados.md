@@ -38,6 +38,12 @@ banco**, não a migration completa — a migration é gerada pela fatia correspo
 | `guest_links` | `session_id`, `token_hash`, `short_code_hash`, `expires_at`, `max_uses`, `uses`, `created_by`, `revoked_at` |
 | `session_participants` | `session_id`, `user_id` (nullable), `display_name`, `role` (host/guest), `seat_count`, `joined_at`, `status` |
 | `capacity_requests` | `session_id`, `requested_seat_count`, `status`, `decided_by`, `decision_reason`, `expires_at` |
+| `table_session_user_invites` (ADR-011) | `table_session_id`, `inviter_id`, `invitee_id`, `status` (pending/awaiting_capacity/accepted/declined/cancelled/expired/capacity_rejected), `closed_reason`, `expires_at`, `capacity_request_id`. Índice único parcial: um convite em aberto por (sessão, convidado) |
+
+> **Estado real (G2b, 2026-09-26):** `capacity_requests` existe com `table_session_id`,
+> `requested_user_id`, `source`, `seat_count`, `status`, `decision_reason`, `decided_by`,
+> `expires_at`. `table_session_participants.seat_count` existe (default 1).
+> `profiles.username` é único, normalizado e só muda pela RPC `customer_set_my_username`.
 
 ### Entrada, conta e fidelidade
 

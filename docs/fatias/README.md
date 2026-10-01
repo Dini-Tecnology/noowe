@@ -26,6 +26,7 @@ F1 Tenancy, papéis e RLS
          ├─ E2 Fila virtual ─────┴─ G1 Sessão de mesa, QR e check-in
          │                            ├─ G2 Convite por link e capacidade
          │                            │   └─ G3 Divisão de conta e pagamento parcial
+         │                            ├─ G2b Convite por @username com aceite
          │                            ├─ S1 Chamados e ações do garçom
          │                            ├─ C1 Casual: família, aniversário, festas
          │                            └─ D1 Fine: harmonização, sommelier, níveis
@@ -53,6 +54,7 @@ porta de entrada produz um check-in que a constraint do banco vai rejeitar.
 | [E2](E2-fila-virtual.md) | Fila virtual e consumo na espera | Fine, Casual | F3, N2 |
 | [G1](G1-sessao-qr-checkin.md) | Sessão de mesa, QR e check-in | Fine, Casual | E1 ou E2 |
 | [G2](G2-convite-capacidade.md) | Convite por link e capacidade | Fine, Casual | G1 |
+| [G2b](G2b-convite-por-username.md) | Convite por @username com aceite (ADR-011) | Fine, Casual | G1 |
 | [G3](G3-split-pagamento-parcial.md) | Divisão de conta e pagamento parcial | Fine, Casual | G2, N4 |
 | [S1](S1-chamados-acoes-garcom.md) | Chamados e ações do garçom na mesa | Fine, Casual | G1 |
 | [Q1](Q1-quick-service.md) | Quick Service completo | Quick | N4 |

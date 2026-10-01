@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Animated,
   ViewStyle,
+  StyleProp,
   Platform,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -24,7 +25,7 @@ interface CardProps {
   children: React.ReactNode;
   variant?: CardVariant;
   onPress?: () => void;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   padding?: number;
   borderRadius?: number;
 }
@@ -107,7 +108,7 @@ const Card: React.FC<CardProps> = ({
   };
 
   const variantStyles = getVariantStyles();
-  const combinedStyle = { ...styles.container, ...variantStyles, ...style };
+  const combinedStyle = { ...styles.container, ...variantStyles, ...StyleSheet.flatten(style) };
 
   const renderGlassCard = () => (
     <View style={[combinedStyle, { backgroundColor: 'transparent' }]}>

@@ -11,7 +11,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Text } from 'react-native-paper';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImageFromLibrary } from '@okinawa/shared/utils/pick-image';
 import {
   Store,
   Camera,
@@ -30,11 +30,26 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { formatBrazilianPhone } from '@okinawa/shared/utils/phone-validation';
 import { V2Shell } from './shared/V2Shell';
-import type { BusinessHour } from './shared/v2Types';
+import {
+  MAX_SHIFTS_PER_DAY,
+  WEEKDAY_KEYS,
+  WEEKDAY_LABEL_PT,
+  formatDaySchedule,
+  maskTimeInput,
+  parseBusinessHours,
+  parseOpeningHours,
+  serializeWeeklyHours,
+  validateDaySchedule,
+  weeklyHoursForEditor,
+  type DaySchedule,
+  type WeekdayKey,
+  type WeeklyHours,
+} from '@okinawa/shared/utils/opening-hours';
 import { ConfigSegmentedTabs } from './config/ConfigSegmentedTabs';
 import { ConfigSectionCard } from './config/ConfigSectionCard';
 import { SocialBrandIcon } from './config/SocialBrandIcon';
-import { displayPriceRange, maskPriceRange } from './config/priceRangeMask';
+import { formatCurrency } from '@okinawa/shared/utils/formatters';
+import { cnpjErrorMessage, maskCnpjInput } from '@okinawa/shared/utils/cnpj';
 import {
   DEFAULT_BUSINESS_HOURS,
   DEFAULT_SOCIALS,
@@ -44,13 +59,15 @@ import {
   type ProfileSocial,
   type ProfileTab,
 } from './config/configTypes';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface ProfileState {
   name: string;
   description: string;
   cnpj: string;
   cuisine: string;
-  priceRange: string;
+  /** Média do cardápio em centavos, calculada no servidor — somente leitura. */
+  avgMenuPriceCents: number | null;
   capacity: string;
   phone: string;
   email: string;
@@ -59,12 +76,14 @@ interface ProfileState {
   serviceType: string;
 }
 
+const DEFAULT_WEEK = parseBusinessHours(DEFAULT_BUSINESS_HOURS) as WeeklyHours;
+
 const EMPTY_PROFILE: ProfileState = {
   name: '',
   description: '',
   cnpj: '',
   cuisine: '',
-  priceRange: '',
+  avgMenuPriceCents: null,
   capacity: '',
   phone: '',
   email: '',
@@ -82,7 +101,9 @@ export default function RestaurantProfileScreen() {
   const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileState>(EMPTY_PROFILE);
-  const [hours, setHours] = useState<BusinessHour[]>(DEFAULT_BUSINESS_HOURS);
+  const [hours, setHours] = useState<WeeklyHours>(DEFAULT_WEEK);
+  // Sem horário salvo o editor mostra o padrão, mas o cliente vê o restaurante como fechado.
+  const [hoursSaved, setHoursSaved] = useState(true);
   const [contacts, setContacts] = useState<ProfileContact[]>([]);
   const [socials, setSocials] = useState<ProfileSocial[]>(DEFAULT_SOCIALS);
   const [settingsBase, setSettingsBase] = useState<Record<string, unknown>>({});
@@ -95,7 +116,8 @@ export default function RestaurantProfileScreen() {
 
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [editHourIndex, setEditHourIndex] = useState<number | null>(null);
+  const [editDay, setEditDay] = useState<WeekdayKey | null>(null);
+  const [dayDraft, setDayDraft] = useState<DaySchedule | null>(null);
   const [showAddContact, setShowAddContact] = useState(false);
   const [newContact, setNewContact] = useState<{ type: ProfileContact['type']; value: string }>({
     type: 'Telefone',
@@ -121,7 +143,7 @@ export default function RestaurantProfileScreen() {
         description: data.description ?? '',
         cnpj: typeof settings.cnpj === 'string' ? settings.cnpj : data.cnpj ?? '',
         cuisine: data.cuisine_type ?? '',
-        priceRange: displayPriceRange(data.price_range) === '—' ? '' : displayPriceRange(data.price_range),
+        avgMenuPriceCents: data.avg_menu_price_cents == null ? null : Number(data.avg_menu_price_cents),
         capacity: data.max_party_size != null ? String(data.max_party_size) : '',
         phone: data.phone ?? '',
         email: data.email ?? '',
@@ -130,9 +152,8 @@ export default function RestaurantProfileScreen() {
         serviceType: data.service_type ?? '',
       });
 
-      if (Array.isArray(data.business_hours) && data.business_hours.length > 0) {
-        setHours(data.business_hours as BusinessHour[]);
-      }
+      setHours(weeklyHoursForEditor(data.opening_hours, data.business_hours, DEFAULT_WEEK));
+      setHoursSaved(Boolean(parseOpeningHours(data.opening_hours) ?? parseBusinessHours(data.business_hours)));
 
       const storedContacts = Array.isArray(settings.contacts) ? (settings.contacts as ProfileContact[]) : [];
       if (storedContacts.length > 0) {
@@ -154,7 +175,7 @@ export default function RestaurantProfileScreen() {
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar perfil');
+      setError(userErrorMessage(err, 'Erro ao carregar perfil'));
     } finally {
       setLoading(false);
     }
@@ -178,7 +199,7 @@ export default function RestaurantProfileScreen() {
         cuisine_type: profile.cuisine,
         phone: profile.phone,
         email: profile.email,
-        business_hours: hours,
+        business_hours: WEEKDAY_KEYS.map((key) => ({ day: key, open: !hours[key].closed, start: '', end: '' })),
         settings: { cnpj: profile.cnpj, contacts, socials },
       }),
     [profile, hours, contacts, socials],
@@ -202,7 +223,7 @@ export default function RestaurantProfileScreen() {
       if (settingsPatch) setSettingsBase(nextSettings);
       setSavedMsg('Alterações salvas');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar');
+      setError(userErrorMessage(err, 'Erro ao salvar'));
     } finally {
       setSaving(false);
     }
@@ -210,22 +231,12 @@ export default function RestaurantProfileScreen() {
 
   const pickImage = async (kind: 'logo' | 'banner') => {
     if (!restaurantId || uploading) return;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permissão necessária', 'Autorize o acesso às fotos para alterar a imagem.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: kind === 'logo' ? [1, 1] : [16, 9],
-      quality: 0.85,
-    });
-    if (result.canceled || !result.assets[0]) return;
+    const picked = await pickImageFromLibrary({ aspect: kind === 'logo' ? [1, 1] : [16, 9], quality: 0.85 });
+    if (!picked) return;
 
     setUploading(kind);
     try {
-      const asset = result.assets[0];
+      const asset = picked;
       if (kind === 'logo') {
         const url = await supabaseApiAdapter.uploadRestaurantLogo(
           restaurantId,
@@ -243,7 +254,7 @@ export default function RestaurantProfileScreen() {
       }
       setSavedMsg(kind === 'logo' ? 'Logo atualizada' : 'Banner atualizado');
     } catch (err) {
-      Alert.alert('Falha no upload', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha no upload', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setUploading(null);
     }
@@ -259,9 +270,8 @@ export default function RestaurantProfileScreen() {
     const next = { ...profile };
     if (field === 'name') next.name = value;
     if (field === 'description') next.description = value;
-    if (field === 'cnpj') next.cnpj = value;
+    if (field === 'cnpj') next.cnpj = maskCnpjInput(value);
     if (field === 'cuisine') next.cuisine = value;
-    if (field === 'priceRange') next.priceRange = maskPriceRange(value);
     if (field === 'capacity') next.capacity = value.replace(/\D/g, '');
     setProfile(next);
     setEditingField(null);
@@ -271,16 +281,36 @@ export default function RestaurantProfileScreen() {
     if (field === 'name') patch.name = next.name;
     if (field === 'description') patch.description = next.description;
     if (field === 'cuisine') patch.cuisine_type = next.cuisine;
-    if (field === 'priceRange') patch.price_range = next.priceRange;
     if (field === 'capacity') patch.max_party_size = Number(next.capacity) || null;
     if (field === 'cnpj') settingsPatch.cnpj = next.cnpj;
 
     await persistPatch(patch, Object.keys(settingsPatch).length ? settingsPatch : undefined);
   };
 
-  const saveHours = async (nextHours: BusinessHour[]) => {
+  const openDayEditor = (key: WeekdayKey) => {
+    setEditDay(key);
+    setDayDraft({ closed: hours[key].closed, shifts: hours[key].shifts.map((shift) => ({ ...shift })) });
+  };
+
+  const closeDayEditor = () => {
+    setEditDay(null);
+    setDayDraft(null);
+  };
+
+  const saveDay = async () => {
+    if (!editDay || !dayDraft || validateDaySchedule(dayDraft)) return;
+    const nextDay: DaySchedule = dayDraft.closed ? { closed: true, shifts: [] } : dayDraft;
+    const nextHours = { ...hours, [editDay]: nextDay };
+    closeDayEditor();
     setHours(nextHours);
-    await persistPatch({ business_hours: nextHours });
+    // opening_hours é o que o app do cliente e o servidor leem; o servidor valida de novo.
+    await persistPatch({ opening_hours: serializeWeeklyHours(nextHours) });
+    setHoursSaved(true);
+  };
+
+  const saveAllHours = async () => {
+    await persistPatch({ opening_hours: serializeWeeklyHours(hours) });
+    setHoursSaved(true);
   };
 
   const saveContactsAndSocials = async (nextContacts: ProfileContact[], nextSocials: ProfileSocial[]) => {
@@ -300,7 +330,12 @@ export default function RestaurantProfileScreen() {
     { key: 'description', label: 'Descrição', value: profile.description || '—' },
     { key: 'cnpj', label: 'CNPJ', value: profile.cnpj || '—' },
     { key: 'cuisine', label: 'Tipo de Cozinha', value: profile.cuisine || '—' },
-    { key: 'priceRange', label: 'Faixa de Preço', value: displayPriceRange(profile.priceRange) },
+    {
+      key: 'avgMenuPrice',
+      label: 'Preço médio do cardápio',
+      value: profile.avgMenuPriceCents ? formatCurrency(profile.avgMenuPriceCents / 100) : 'Adicione itens ao cardápio',
+      readOnly: true,
+    },
     {
       key: 'capacity',
       label: 'Capacidade',
@@ -430,13 +465,14 @@ export default function RestaurantProfileScreen() {
                         </Text>
                         <TextInput
                           value={editValue}
-                          onChangeText={(text) =>
-                            setEditValue(field.key === 'priceRange' ? maskPriceRange(text) : text)
-                          }
+                          onChangeText={(text) => setEditValue(field.key === 'cnpj' ? maskCnpjInput(text) : text)}
+                          autoCapitalize={field.key === 'cnpj' ? 'characters' : 'sentences'}
+                          autoCorrect={field.key === 'cnpj' ? false : undefined}
+                          maxLength={field.key === 'cnpj' ? 18 : undefined}
                           autoFocus
                           multiline={field.key === 'description'}
-                          keyboardType={field.key === 'priceRange' || field.key === 'capacity' ? 'numeric' : 'default'}
-                          placeholder={field.key === 'priceRange' ? 'Ex.: 40-120' : undefined}
+                          keyboardType={field.key === 'capacity' ? 'numeric' : 'default'}
+                          placeholder={field.key === 'cnpj' ? '00.000.000/0000-00' : undefined}
                           placeholderTextColor={colors.foregroundSecondary}
                           style={[
                             styles.input,
@@ -447,11 +483,23 @@ export default function RestaurantProfileScreen() {
                             },
                           ]}
                         />
+                        {field.key === 'cnpj' && cnpjErrorMessage(editValue) && (
+                          <Text style={{ color: colors.error, fontSize: 11 }} accessibilityRole="alert">
+                            {cnpjErrorMessage(editValue)}
+                          </Text>
+                        )}
                         <View style={{ flexDirection: 'row', gap: 8 }}>
                           <TouchableOpacity
-                            style={[styles.primaryBtn, { backgroundColor: colors.primary, flex: 1 }]}
+                            style={[
+                              styles.primaryBtn,
+                              {
+                                backgroundColor: colors.primary,
+                                flex: 1,
+                                opacity: field.key === 'cnpj' && cnpjErrorMessage(editValue) ? 0.5 : 1,
+                              },
+                            ]}
                             onPress={() => void saveField(field.key)}
-                            disabled={saving}
+                            disabled={saving || (field.key === 'cnpj' && !!cnpjErrorMessage(editValue))}
                           >
                             <Check size={12} color="#FFF" />
                             <Text style={styles.primaryBtnText}>Salvar</Text>
@@ -466,6 +514,13 @@ export default function RestaurantProfileScreen() {
                           </TouchableOpacity>
                         </View>
                       </View>
+                    ) : 'readOnly' in field && field.readOnly ? (
+                      <View style={styles.fieldPress} accessible accessibilityLabel={`${field.label}: ${field.value}. Calculado automaticamente a partir do cardápio.`}>
+                        <Text style={[styles.fieldLabel, { color: colors.foregroundSecondary }]}>{field.label}</Text>
+                        <Text style={{ color: colors.foreground, fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
+                          {field.value}
+                        </Text>
+                      </View>
                     ) : (
                       <TouchableOpacity
                         onPress={() =>
@@ -479,9 +534,7 @@ export default function RestaurantProfileScreen() {
                                   ? profile.cnpj
                                   : field.key === 'cuisine'
                                     ? profile.cuisine
-                                    : field.key === 'priceRange'
-                                      ? profile.priceRange
-                                      : profile.name,
+                                    : profile.name,
                           )
                         }
                         style={styles.fieldPress}
@@ -508,100 +561,184 @@ export default function RestaurantProfileScreen() {
 
           {activeTab === 'hours' && (
             <ConfigSectionCard title="Horários de Funcionamento" Icon={Clock}>
-              {hours.map((day, index) => (
-                <View
-                  key={day.day}
-                  style={[
-                    styles.fieldRow,
-                    index < hours.length - 1 && {
-                      borderBottomWidth: StyleSheet.hairlineWidth,
-                      borderBottomColor: colors.border,
-                    },
-                  ]}
-                >
-                  {editHourIndex === index ? (
-                    <View style={{ gap: 8 }}>
-                      <Text style={{ fontWeight: '700', color: colors.foreground, fontSize: 12 }}>{day.day}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <TextInput
-                          value={day.start}
-                          onChangeText={(start) =>
-                            setHours((prev) => prev.map((h, i) => (i === index ? { ...h, start } : h)))
-                          }
-                          style={[
-                            styles.timeInput,
-                            { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background },
-                          ]}
-                        />
-                        <Text style={{ color: colors.foregroundSecondary }}>–</Text>
-                        <TextInput
-                          value={day.end}
-                          onChangeText={(end) =>
-                            setHours((prev) => prev.map((h, i) => (i === index ? { ...h, end } : h)))
-                          }
-                          style={[
-                            styles.timeInput,
-                            { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background },
-                          ]}
-                        />
-                      </View>
-                      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                        <TouchableOpacity
-                          style={[styles.primaryBtn, { backgroundColor: colors.primary, flex: 1 }]}
-                          onPress={() => {
-                            setEditHourIndex(null);
-                            void saveHours(hours);
-                          }}
-                        >
-                          <Check size={12} color="#FFF" />
-                          <Text style={styles.primaryBtnText}>Salvar</Text>
-                        </TouchableOpacity>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Text style={{ fontSize: 11, color: colors.foregroundSecondary }}>
-                            {day.open ? 'Aberto' : 'Fechado'}
+              {!hoursSaved ? (
+                <View style={{ padding: 12, gap: 8, backgroundColor: `${colors.warning}18` }}>
+                  <Text style={{ fontSize: 12, color: colors.foreground }}>
+                    Estes horários ainda não foram salvos. Enquanto isso, os clientes veem o restaurante como fechado.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+                    onPress={() => void saveAllHours()}
+                    disabled={saving}
+                    accessibilityRole="button"
+                  >
+                    <Check size={12} color="#FFF" />
+                    <Text style={styles.primaryBtnText}>Salvar horários exibidos</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+              {WEEKDAY_KEYS.map((key, index) => {
+                const day = hours[key];
+                const isEditing = editDay === key && dayDraft !== null;
+                const draftError = isEditing ? validateDaySchedule(dayDraft) : null;
+                return (
+                  <View
+                    key={key}
+                    style={[
+                      styles.fieldRow,
+                      index < WEEKDAY_KEYS.length - 1 && {
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: colors.border,
+                      },
+                    ]}
+                  >
+                    {isEditing ? (
+                      <View style={{ gap: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={{ fontWeight: '700', color: colors.foreground, fontSize: 12 }}>
+                            {WEEKDAY_LABEL_PT[key]}
                           </Text>
-                          <Switch
-                            value={day.open}
-                            onValueChange={(open) => {
-                              const next = hours.map((h, i) => (i === index ? { ...h, open } : h));
-                              setHours(next);
-                            }}
-                            trackColor={{ false: colors.border, true: `${colors.primary}80` }}
-                            thumbColor={day.open ? colors.primary : colors.foregroundSecondary}
-                          />
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ fontSize: 11, color: colors.foregroundSecondary }}>
+                              {dayDraft.closed ? 'Fechado' : 'Aberto'}
+                            </Text>
+                            <Switch
+                              value={!dayDraft.closed}
+                              onValueChange={(open) =>
+                                setDayDraft((draft) =>
+                                  draft
+                                    ? {
+                                        closed: !open,
+                                        shifts: open && draft.shifts.length === 0 ? [{ open: '11:00', close: '23:00' }] : draft.shifts,
+                                      }
+                                    : draft,
+                                )
+                              }
+                              trackColor={{ false: colors.border, true: `${colors.primary}80` }}
+                              thumbColor={dayDraft.closed ? colors.foregroundSecondary : colors.primary}
+                            />
+                          </View>
+                        </View>
+                        {!dayDraft.closed &&
+                          dayDraft.shifts.map((shift, shiftIndex) => (
+                            <View key={shiftIndex} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <Text style={{ fontSize: 10, color: colors.foregroundSecondary, width: 44 }}>
+                                Turno {shiftIndex + 1}
+                              </Text>
+                              {(['open', 'close'] as const).map((field, fieldIndex) => (
+                                <React.Fragment key={field}>
+                                  {fieldIndex === 1 && <Text style={{ color: colors.foregroundSecondary }}>–</Text>}
+                                  <TextInput
+                                    value={shift[field]}
+                                    onChangeText={(text) =>
+                                      setDayDraft((draft) =>
+                                        draft
+                                          ? {
+                                              ...draft,
+                                              shifts: draft.shifts.map((item, i) =>
+                                                i === shiftIndex ? { ...item, [field]: maskTimeInput(text) } : item,
+                                              ),
+                                            }
+                                          : draft,
+                                      )
+                                    }
+                                    keyboardType="number-pad"
+                                    maxLength={5}
+                                    placeholder="00:00"
+                                    placeholderTextColor={colors.foregroundSecondary}
+                                    accessibilityLabel={`${field === 'open' ? 'Abertura' : 'Fechamento'} do turno ${shiftIndex + 1}`}
+                                    style={[
+                                      styles.timeInput,
+                                      { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background },
+                                    ]}
+                                  />
+                                </React.Fragment>
+                              ))}
+                              <TouchableOpacity
+                                onPress={() =>
+                                  setDayDraft((draft) =>
+                                    draft ? { ...draft, shifts: draft.shifts.filter((_, i) => i !== shiftIndex) } : draft,
+                                  )
+                                }
+                                accessibilityRole="button"
+                                accessibilityLabel={`Remover turno ${shiftIndex + 1}`}
+                                hitSlop={8}
+                              >
+                                <Trash2 size={14} color={colors.foregroundSecondary} />
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+                        {!dayDraft.closed && dayDraft.shifts.length < MAX_SHIFTS_PER_DAY && (
+                          <TouchableOpacity
+                            onPress={() =>
+                              setDayDraft((draft) =>
+                                draft ? { ...draft, shifts: [...draft.shifts, { open: '', close: '' }] } : draft,
+                              )
+                            }
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                            accessibilityRole="button"
+                          >
+                            <Plus size={12} color={colors.primary} />
+                            <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '700' }}>Adicionar turno</Text>
+                          </TouchableOpacity>
+                        )}
+                        {draftError && (
+                          <Text style={{ color: colors.error, fontSize: 11 }} accessibilityRole="alert">
+                            {draftError}
+                          </Text>
+                        )}
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                          <TouchableOpacity
+                            style={[styles.primaryBtn, { backgroundColor: colors.primary, flex: 1, opacity: draftError ? 0.5 : 1 }]}
+                            disabled={!!draftError}
+                            onPress={() => void saveDay()}
+                          >
+                            <Check size={12} color="#FFF" />
+                            <Text style={styles.primaryBtnText}>Salvar</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.primaryBtn, { backgroundColor: colors.border }]}
+                            onPress={closeDayEditor}
+                          >
+                            <X size={12} color={colors.foreground} />
+                            <Text style={[styles.primaryBtnText, { color: colors.foreground }]}>Cancelar</Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
-                    </View>
-                  ) : (
-                    <TouchableOpacity onPress={() => setEditHourIndex(index)} style={styles.fieldPress}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <View
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: day.open ? colors.success : colors.border,
-                          }}
-                        />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.foreground }}>{day.day}</Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: '700',
-                            color: day.open ? colors.primary : colors.foregroundSecondary,
-                            textDecorationLine: day.open ? 'none' : 'line-through',
-                          }}
-                        >
-                          {day.open ? `${day.start} - ${day.end}` : 'Fechado'}
-                        </Text>
-                        <Edit3 size={12} color={`${colors.primary}99`} />
-                      </View>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))}
+                    ) : (
+                      <TouchableOpacity onPress={() => openDayEditor(key)} style={styles.fieldPress}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <View
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: day.closed ? colors.border : colors.success,
+                            }}
+                          />
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.foreground }}>
+                            {WEEKDAY_LABEL_PT[key]}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontWeight: '700',
+                              flexShrink: 1,
+                              color: day.closed ? colors.foregroundSecondary : colors.primary,
+                              textDecorationLine: day.closed ? 'line-through' : 'none',
+                            }}
+                          >
+                            {formatDaySchedule(day)}
+                          </Text>
+                          <Edit3 size={12} color={`${colors.primary}99`} />
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
             </ConfigSectionCard>
           )}
 

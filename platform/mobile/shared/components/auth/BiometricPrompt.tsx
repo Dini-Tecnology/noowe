@@ -35,7 +35,7 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
       case 'Fingerprint':
         return { icon: '👆', title: 'Touch ID' };
       default:
-        return { icon: '🔐', title: 'Biometrics' };
+        return { icon: '🔐', title: 'a biometria' };
     }
   };
 
@@ -59,27 +59,27 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
         </View>
 
         <Text style={styles.title}>
-          Enable {illustration.title}
+          Ativar {illustration.title}
         </Text>
 
         <Text style={styles.subtitle}>
-          Sign in faster and more securely with just a glance or touch.
+          Entre mais rápido e com mais segurança, só com um olhar ou um toque.
         </Text>
 
         <View style={styles.benefitsList}>
           <BenefitItem
             icon="⚡"
-            text="Login in less than 1 second"
+            text="Login em menos de 1 segundo"
             colors={colors}
           />
           <BenefitItem
             icon="🔒"
-            text="More secure than passwords"
+            text="Mais seguro que senhas"
             colors={colors}
           />
           <BenefitItem
             icon="✨"
-            text="No codes to remember"
+            text="Sem senhas para lembrar"
             colors={colors}
           />
         </View>
@@ -95,7 +95,7 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
           contentStyle={styles.buttonContent}
           icon={biometricType === 'FaceID' ? 'face-recognition' : 'fingerprint'}
         >
-          Enable {getBiometricDisplayName()}
+          Ativar {getBiometricDisplayName()}
         </Button>
 
         <Button
@@ -105,7 +105,7 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
           style={styles.secondaryButton}
           textColor={colors.mutedForeground}
         >
-          Maybe later
+          Agora não
         </Button>
       </View>
     </View>

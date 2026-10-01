@@ -7,6 +7,7 @@ import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { useServiceCallsRealtime, useTablesRealtime } from './shared/useRealtimeSubscription';
 import { V2Shell } from './shared/V2Shell';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface TableRow {
   id: string;
@@ -95,7 +96,7 @@ export default function WaiterScreen() {
 
       setTables(rows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar mesas');
+      setError(userErrorMessage(err, 'Erro ao carregar mesas'));
     } finally {
       setLoading(false);
       setRefreshing(false);

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Check, Flame, IceCream, Leaf, Pizza, Zap } from 'lucide-react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import { getSupabaseClient } from '@okinawa/shared/services/supabase';
 import {
   QUICK_SERVICE_CUISINE_PRESENTATION,
   QUICK_SERVICE_CUISINE_TAGS,
@@ -12,12 +14,20 @@ import {
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 import { ConfigSectionCard } from './config/ConfigSectionCard';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 const CUISINE_ICONS: Record<QuickServiceCuisineTag, typeof Zap> = {
   burgers: Flame,
   pizza: Pizza,
   acai: IceCream,
   saudavel: Leaf,
+};
+
+type QuickOperationalOrder = {
+  id: string;
+  pickup_code: string | null;
+  fulfillment_status: 'checking' | 'ready';
+  created_at: string;
 };
 
 /**
@@ -33,6 +43,8 @@ export default function QuickServiceScreen() {
   const [error, setError] = useState<string | null>(null);
   const [cuisineTags, setCuisineTags] = useState<QuickServiceCuisineTag[]>([]);
   const [skipTheLineEnabled, setSkipTheLineEnabled] = useState(false);
+  const [operationalOrders, setOperationalOrders] = useState<QuickOperationalOrder[]>([]);
+  const [counterQr, setCounterQr] = useState<{ qrData: string; label: string } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cuisineTagsRef = useRef(cuisineTags);
   const skipTheLineRef = useRef(skipTheLineEnabled);
@@ -45,6 +57,16 @@ export default function QuickServiceScreen() {
     try {
       setError(null);
       const data = await supabaseApiAdapter.getQuickServiceConfig(restaurantId);
+      const { data: operations, error: operationsError } = await (getSupabaseClient() as any)
+        .from('orders')
+        .select('id,pickup_code,fulfillment_status,created_at')
+        .eq('restaurant_id', restaurantId)
+        .eq('service_model', 'quick_service')
+        .eq('payment_status', 'confirmed')
+        .in('fulfillment_status', ['checking', 'ready'])
+        .order('created_at', { ascending: true });
+      if (operationsError) throw operationsError;
+      setOperationalOrders((operations ?? []) as QuickOperationalOrder[]);
       const raw = Array.isArray(data?.cuisineTags) ? data.cuisineTags : [];
       setCuisineTags(
         raw.filter((key: unknown): key is QuickServiceCuisineTag =>
@@ -53,7 +75,7 @@ export default function QuickServiceScreen() {
       );
       setSkipTheLineEnabled(Boolean(data?.skipTheLineEnabled));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar configuração');
+      setError(userErrorMessage(err, 'Erro ao carregar configuração'));
     } finally {
       setLoading(false);
     }
@@ -76,7 +98,7 @@ export default function QuickServiceScreen() {
       );
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar configuração');
+      setError(userErrorMessage(err, 'Erro ao salvar configuração'));
     }
   }, [restaurantId]);
 
@@ -94,6 +116,38 @@ export default function QuickServiceScreen() {
     setSkipTheLineEnabled((current) => !current);
     schedulePersist();
   }, [schedulePersist]);
+
+  const approveQuality = useCallback(async (orderId: string) => {
+    try {
+      await supabaseApiAdapter.completeQuickQualityCheck(orderId, true, {
+        items: true,
+        packaging: true,
+        pickupCode: true,
+      });
+      await load();
+    } catch (err) {
+      Alert.alert('Não foi possível concluir a conferência', userErrorMessage(err, 'Tente novamente.'));
+    }
+  }, [load]);
+
+  const confirmPickup = useCallback(async (order: QuickOperationalOrder) => {
+    if (!order.pickup_code) return;
+    try {
+      await supabaseApiAdapter.confirmQuickPickup(order.id, order.pickup_code);
+      await load();
+    } catch (err) {
+      Alert.alert('Retirada não confirmada', userErrorMessage(err, 'Confira o código.'));
+    }
+  }, [load]);
+
+  const generateCounterQr = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      setCounterQr(await supabaseApiAdapter.generateCounterQR(restaurantId));
+    } catch (err) {
+      Alert.alert('QR não gerado', userErrorMessage(err, 'Tente novamente.'));
+    }
+  }, [restaurantId]);
 
   return (
     <V2Shell
@@ -159,6 +213,56 @@ export default function QuickServiceScreen() {
             </View>
           </ConfigSectionCard>
 
+          <ConfigSectionCard title="QR do balcão" Icon={Zap}>
+            <View style={styles.qrSection}>
+              {counterQr ? (
+                <>
+                  <View style={styles.qrCanvas}><QRCode value={counterQr.qrData} size={180} ecl="H" /></View>
+                  <Text style={[styles.rowSub, { color: colors.foregroundSecondary }]}>Ao gerar outro código para este balcão, o anterior é revogado.</Text>
+                </>
+              ) : null}
+              <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary }]} onPress={() => void generateCounterQr()}>
+                <Text style={styles.actionText}>{counterQr ? 'Gerar novo QR' : 'Gerar QR do balcão'}</Text>
+              </TouchableOpacity>
+            </View>
+          </ConfigSectionCard>
+
+          <ConfigSectionCard title="Conferência" Icon={Check}>
+            {operationalOrders.filter((order) => order.fulfillment_status === 'checking').length === 0 ? (
+              <Text style={[styles.emptyText, { color: colors.foregroundSecondary }]}>Nenhum pedido aguardando conferência.</Text>
+            ) : operationalOrders.filter((order) => order.fulfillment_status === 'checking').map((order) => (
+              <View key={order.id} style={[styles.operationRow, { borderColor: colors.border }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>Pedido #{order.id.slice(0, 6).toUpperCase()}</Text>
+                  <Text style={[styles.rowSub, { color: colors.foregroundSecondary }]}>Itens, embalagem e código devem ser conferidos</Text>
+                </View>
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary }]} onPress={() => void approveQuality(order.id)}>
+                  <Text style={styles.actionText}>Aprovar</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </ConfigSectionCard>
+
+          <ConfigSectionCard title="Retirada" Icon={Zap}>
+            {operationalOrders.filter((order) => order.fulfillment_status === 'ready').length === 0 ? (
+              <Text style={[styles.emptyText, { color: colors.foregroundSecondary }]}>Nenhum pedido pronto para retirada.</Text>
+            ) : operationalOrders.filter((order) => order.fulfillment_status === 'ready').map((order) => (
+              <View key={order.id} style={[styles.operationRow, { borderColor: colors.border }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>Código {order.pickup_code ?? 'indisponível'}</Text>
+                  <Text style={[styles.rowSub, { color: colors.foregroundSecondary }]}>Confirme somente após validar o código do cliente</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: '#16A34A', opacity: order.pickup_code ? 1 : 0.5 }]}
+                  disabled={!order.pickup_code}
+                  onPress={() => void confirmPickup(order)}
+                >
+                  <Text style={styles.actionText}>Retirado</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </ConfigSectionCard>
+
           {error ? (
             <Text style={{ textAlign: 'center', color: '#EF4444', marginTop: 8 }}>{error}</Text>
           ) : null}
@@ -179,4 +283,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
   rowTitle: { fontSize: 13, fontWeight: '700' },
   rowSub: { fontSize: 11, marginTop: 2 },
+  operationRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderTopWidth: StyleSheet.hairlineWidth },
+  actionButton: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  actionText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  emptyText: { padding: 14, fontSize: 12 },
+  qrSection: { alignItems: 'center', gap: 12, padding: 16 },
+  qrCanvas: { padding: 14, borderRadius: 16, backgroundColor: '#FFFFFF' },
 });

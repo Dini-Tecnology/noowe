@@ -12,7 +12,7 @@ import {
   Modal,
   Share,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImageFromLibrary } from '@okinawa/shared/utils/pick-image';
 import { Text } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import {
@@ -98,6 +98,7 @@ import {
   WaiterRoleView,
   useRestaurantRole,
 } from '../../contexts/RestaurantRoleContext';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 const OWNER_ROLES = [
   { id: 'owner', label: 'Dono', title: 'Dashboard Executivo', hint: 'Visão completa do restaurante' },
@@ -191,23 +192,12 @@ export default function OwnerHubScreen() {
 
   const handlePickRestaurantLogo = async () => {
     if (!restaurantId || logoUploading || !canEditRestaurantLogo) return;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permissão necessária', 'Autorize o acesso às fotos para escolher a imagem do restaurante.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.82,
-    });
-    if (result.canceled || !result.assets[0]) return;
+    const picked = await pickImageFromLibrary({ aspect: [1, 1], quality: 0.82 });
+    if (!picked) return;
 
     setLogoUploading(true);
     try {
-      const asset = result.assets[0];
+      const asset = picked;
       const logoUrl = await supabaseApiAdapter.uploadRestaurantLogo(
         restaurantId,
         asset.uri,
@@ -215,7 +205,7 @@ export default function OwnerHubScreen() {
       );
       setRestaurantProfile((current) => ({ ...current, logo_url: logoUrl }));
     } catch (error) {
-      Alert.alert('Não foi possível atualizar a foto', error instanceof Error ? error.message : 'Tente novamente.');
+      Alert.alert('Não foi possível atualizar a foto', userErrorMessage(error, 'Tente novamente.'));
     } finally {
       setLogoUploading(false);
     }
@@ -970,7 +960,7 @@ function MaitreReservationsView({ colors }: { colors: ReturnType<typeof useColor
       await supabaseApiAdapter.updateRestaurantReservationStatus(id, status);
       await refresh();
     } catch (err) {
-      Alert.alert('Falha ao atualizar reserva', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha ao atualizar reserva', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setActing(null);
     }
@@ -1248,7 +1238,7 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
       await ApiService.updateOrderStatus(orderId, nextStatus);
       await refresh();
     } catch (err) {
-      Alert.alert('Falha ao atualizar pedido', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha ao atualizar pedido', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setAdvancing(null);
     }
@@ -1324,7 +1314,7 @@ function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors>
     } catch (err) {
       Alert.alert(
         status === 'approved' ? 'Não foi possível aprovar' : 'Não foi possível recusar',
-        err instanceof Error ? err.message : 'Tente novamente.',
+        userErrorMessage(err, 'Tente novamente.'),
       );
     } finally {
       setResolvingId(null);
@@ -1413,7 +1403,7 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
       setAmount(0);
       await Promise.all([refreshSession(), refreshMovements()]);
     } catch (err) {
-      Alert.alert(`Falha em ${label}`, err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert(`Falha em ${label}`, userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setSubmitting(false);
     }
@@ -1900,7 +1890,7 @@ function WaiterLiveBody({
       await action();
       onRefresh();
     } catch (err) {
-      Alert.alert('Falha na ação', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha na ação', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setActing(null);
     }
@@ -2084,7 +2074,7 @@ function WaiterKitchenBody({
       await ApiService.updateOrderStatus(orderId, 'delivered');
       onChanged();
     } catch (err) {
-      Alert.alert('Falha ao retirar', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha ao retirar', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setActing(null);
     }
@@ -2264,7 +2254,7 @@ function WaiterAssistanceView({ colors }: { colors: ReturnType<typeof useColors>
       setFeedbackDraft(null);
       await refresh();
     } catch (err) {
-      Alert.alert('Não foi possível salvar o feedback', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Não foi possível salvar o feedback', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setSavingFeedback(false);
     }
@@ -2280,7 +2270,7 @@ function WaiterAssistanceView({ colors }: { colors: ReturnType<typeof useColors>
       );
       await refresh();
     } catch (err) {
-      Alert.alert('Não foi possível atualizar o pedido', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Não foi possível atualizar o pedido', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setUpdatingRequestId(null);
     }
@@ -2747,7 +2737,7 @@ function WaiterChargeBody({
       setCharging(null);
       await onRefresh();
     } catch (err) {
-      Alert.alert('Falha ao cobrar', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha ao cobrar', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setSubmitting(false);
     }
@@ -2947,7 +2937,7 @@ function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) 
       await ApiService.updateOrderStatus(orderId, next);
       await refresh();
     } catch (err) {
-      Alert.alert('Falha ao atualizar pedido', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha ao atualizar pedido', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setActing(null);
     }
@@ -2976,7 +2966,7 @@ function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) 
               });
               Alert.alert('Solicitação enviada', 'O pedido permanecerá ativo até a aprovação do gerente.');
             } catch (err) {
-              Alert.alert('Falha ao solicitar cancelamento', err instanceof Error ? err.message : 'Tente novamente.');
+              Alert.alert('Falha ao solicitar cancelamento', userErrorMessage(err, 'Tente novamente.'));
             } finally {
               setActing(null);
             }
@@ -3079,7 +3069,7 @@ function WaiterTipsView({ colors }: { colors: ReturnType<typeof useColors> }) {
     supabaseApiAdapter
       .getTipsSummary(restaurantId)
       .then((summary: any) => { if (!cancelled) setTotalTips(Number(summary?.total_tips ?? 0)); })
-      .catch((err: unknown) => { if (!cancelled) setTipsError(err instanceof Error ? err.message : 'Erro ao carregar gorjetas'); });
+      .catch((err: unknown) => { if (!cancelled) setTipsError(userErrorMessage(err, 'Erro ao carregar gorjetas')); });
     return () => { cancelled = true; };
   }, [restaurantId]);
 

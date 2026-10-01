@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
+import Toast from 'react-native-toast-message';
 import { useQuery } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -81,7 +82,8 @@ export default function MenuScreen({ route, navigation }: any) {
     (item: CustomerMenuItem, quantity = 1) => {
       if (!features.ordering) return;
       cart.setRestaurant(restaurantId, restaurant.data?.name ?? 'Restaurante');
-      cart.addItem({ menu_item_id: item.id, name: item.name, price: item.price, quantity, image_url: item.imageUrl ?? undefined });
+      cart.addItem({ menu_item_id: item.id, name: item.name, price: item.price, quantity, image_url: item.imageUrl ?? undefined, preparation_time: item.preparationTime });
+      Toast.show({ type: 'success', text1: 'Adicionado à comanda', text2: `${quantity}x ${item.name}`, visibilityTime: 1800 });
     },
     [cart, features.ordering, restaurant.data, restaurantId],
   );
@@ -104,7 +106,9 @@ export default function MenuScreen({ route, navigation }: any) {
         special_instructions: notes || undefined,
         diner_id: diner && diner.dinerId !== 'me' ? diner.dinerId : undefined,
         diner_name: diner && !diner.isMe ? diner.displayName : undefined,
+        preparation_time: item.preparationTime,
       });
+      Toast.show({ type: 'success', text1: 'Adicionado à comanda', text2: `${quantity}x ${item.name}`, visibilityTime: 1800 });
     },
     [cart, features.ordering, restaurant.data, restaurantId],
   );
@@ -144,16 +148,16 @@ export default function MenuScreen({ route, navigation }: any) {
         listContent: { paddingHorizontal: 16, paddingBottom: 32, gap: 14 },
         menuItem: { flexDirection: 'row', gap: 14 },
         menuImage: { width: 88, height: 88, borderRadius: 14, backgroundColor: colors.backgroundTertiary },
-        menuContent: { flex: 1, justifyContent: 'center' },
-        menuNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-        menuName: { fontSize: 16, fontWeight: '700', color: colors.foreground },
-        popularBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: colors.primaryLight },
-        popularBadgeText: { fontSize: 10, fontWeight: '700', color: colors.primary },
+        menuContent: { flex: 1, minWidth: 0, justifyContent: 'center' },
+        menuNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
+        menuName: { flexShrink: 1, fontSize: 16, fontWeight: '700', color: colors.foreground },
+        popularBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: colors.primary },
+        popularBadgeText: { fontSize: 10, fontWeight: '700', color: '#FFFFFF' },
         kidsBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: colors.successBackground },
         kidsBadgeText: { fontSize: 10, fontWeight: '700', color: colors.success },
         menuDescription: { fontSize: 13, color: colors.foregroundSecondary, lineHeight: 18, marginBottom: 8 },
-        menuFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+        menuFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
+        priceRow: { flexDirection: 'row', alignItems: 'baseline', flexShrink: 1, flexWrap: 'wrap', gap: 6 },
         menuPrice: { fontSize: 16, fontWeight: '700', color: colors.foreground },
         menuOriginalPrice: { fontSize: 13, color: colors.foregroundMuted, textDecorationLine: 'line-through' },
         discountBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: colors.warningBackground },
@@ -215,7 +219,7 @@ export default function MenuScreen({ route, navigation }: any) {
                 </View>
               )}
             </TouchableOpacity>
-          ) : <View style={styles.headerBtn} />}
+          ) : <View style={{ width: 40, height: 40 }} />}
         </View>
 
         {(features.callWaiter || (capabilities?.familyMode && casualConfig.familyMode && tableSessionId)) && (
@@ -426,8 +430,8 @@ function MenuItemDetailModal({
         body: { padding: 20 },
         nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
         name: { flex: 1, fontSize: 20, fontWeight: '800', color: colors.foreground },
-        popularBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: colors.primaryLight },
-        popularBadgeText: { fontSize: 11, fontWeight: '700', color: colors.primary },
+        popularBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: colors.primary },
+        popularBadgeText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
         description: { fontSize: 14, lineHeight: 20, color: colors.foregroundSecondary, marginBottom: 12 },
         tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
         tag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.backgroundTertiary },

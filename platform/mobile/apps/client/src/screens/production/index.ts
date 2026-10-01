@@ -7,7 +7,6 @@ export { default as QuickServiceCheckoutScreen } from './QuickServiceCheckoutScr
 export { default as OrdersScreen } from './OrdersScreen';
 export { default as OrderDetailScreen } from './OrderDetailScreen';
 export { default as OrderReadyScreen } from './OrderReadyScreen';
-export { default as QuickServiceRatingScreen } from './QuickServiceRatingScreen';
 export { default as QrScannerScreen } from './QrScannerScreen';
 export { default as CallWaiterScreen } from './CallWaiterScreen';
 export { default as HarmonizacaoScreen } from './HarmonizacaoScreen';

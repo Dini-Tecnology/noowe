@@ -10,5 +10,9 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", "../../shared/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "src/screens/config",
+    "src/screens/waiter"
+  ]
 }

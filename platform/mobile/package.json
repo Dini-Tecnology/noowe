@@ -33,7 +33,7 @@
     "build:restaurant:android": "cd apps/restaurant && eas build --platform android",
     "test": "jest",
     "lint": "npm run lint:client && npm run lint:restaurant",
-    "lint:client": "eslint apps/client/src/App.tsx apps/client/src/navigation/production.tsx apps/client/src/screens/production apps/client/src/services/customer-backend.ts apps/client/src/services/customer-push.ts apps/client/src/contexts/VisitSessionContext.tsx",
+    "lint:client": "eslint apps/client/src/App.tsx apps/client/src/navigation/production.tsx apps/client/src/screens/production apps/client/src/services/customer-backend.ts apps/client/src/services/customer-push.ts apps/client/src/contexts/VisitSessionContext.tsx apps/client/src/components/table apps/client/src/hooks/useTableUserInvites.ts apps/client/src/hooks/useRespondToTableInvite.ts apps/client/src/hooks/useTableInviteHandler.ts apps/client/src/utils/username.ts",
     "lint:restaurant": "eslint apps/restaurant/src --ext .ts,.tsx",
     "typecheck": "npm run typecheck:client && npm run typecheck:restaurant",
     "typecheck:client": "tsc --noEmit -p apps/client/tsconfig.json",

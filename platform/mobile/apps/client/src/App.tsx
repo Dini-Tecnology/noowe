@@ -19,6 +19,7 @@ import { initSentry } from '@/shared/config/sentry';
 import { VisitSessionProvider } from './contexts/VisitSessionContext';
 import { ServiceTypeProvider } from './contexts/ServiceTypeContext';
 import { ServiceTypeSync } from './components/ServiceTypeSync';
+import { SessionCartSync } from './components/SessionCartSync';
 import { Notifications, registerCustomerPushToken, subscribeCustomerPushTokenChanges } from './services/customer-push';
 import { getSupabaseClient, isSupabaseConfigured } from '@/shared/services/supabase';
 
@@ -49,6 +50,7 @@ export default function App() {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       void queryClient.invalidateQueries({ queryKey: ['notification-count'] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['incoming-table-invites'] });
     });
     if (!isSupabaseConfigured()) {
       return () => {
@@ -90,6 +92,7 @@ export default function App() {
                 <ServiceTypeProvider>
                   <ServiceTypeSync />
                   <CartProvider>
+                    <SessionCartSync />
                     <PaperProvider theme={theme}>
                       <Navigation />
                       <StatusBar style="auto" />

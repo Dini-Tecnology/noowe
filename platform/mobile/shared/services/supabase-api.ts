@@ -1,3 +1,4 @@
+import { getActiveRestaurantId } from './active-restaurant';
 import * as Crypto from 'expo-crypto';
 import { getSupabaseClient } from './supabase';
 import { getOptionalSupabaseSessionUser } from './supabase-auth';
@@ -172,6 +173,40 @@ export interface RestaurantApproval {
   resolved_at: string | null;
 }
 
+/** ADR-007 / G2b — entrada acima da lotação aguardando a recepção. */
+export type CapacityRequestStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
+export type CapacityApprovalReason = 'cadeira_extra' | 'crianca_colo';
+
+export interface CapacityRequestUserCard {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface CapacityRequest {
+  id: string;
+  restaurantId: string;
+  tableSessionId: string;
+  tableId: string;
+  tableNumber: string;
+  seats: number;
+  occupiedSeats: number;
+  occupiedSeatsAtRequest: number;
+  capacityAtRequest: number;
+  seatCount: number;
+  status: CapacityRequestStatus;
+  decisionReason: string | null;
+  decisionNote: string | null;
+  decidedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+  requestedUser: CapacityRequestUserCard;
+  invitedBy: CapacityRequestUserCard | null;
+  /** Server-computed from capacity_override_roles: the waiter sees but cannot decide. */
+  canDecide: boolean;
+}
+
 export interface SupabaseReservationsParams {
   date?: string;
   status?: SupabaseReservationStatus | string;
@@ -201,6 +236,8 @@ export interface SupabaseApiAdapter {
   getKdsQueue(restaurantId?: string, stationId?: string): Promise<any>;
   getBarQueue(restaurantId?: string): Promise<any>;
   updateOrderItemStatus(itemId: string, status: string): Promise<any>;
+  completeQuickQualityCheck(orderId: string, passed: boolean, checklist: Record<string, boolean>, reason?: string): Promise<any>;
+  confirmQuickPickup(orderId: string, pickupCode: string): Promise<any>;
   fireCourse(orderId: string, course: string): Promise<any>;
   getCookStations(restaurantId?: string): Promise<any>;
   createCookStation(restaurantId: string, data: Record<string, unknown>): Promise<any>;
@@ -220,12 +257,18 @@ export interface SupabaseApiAdapter {
   getRestaurantReservations(restaurantId: string, date?: string, status?: string[]): Promise<any>;
   updateRestaurantReservationStatus(reservationId: string, status: string, tableId?: string, notes?: string): Promise<any>;
   getWaitlist(restaurantId?: string): Promise<any>;
+  updateWaitlistEntry(entryId: string, action: 'call' | 'seat' | 'no_show'): Promise<any>;
   getTableBills(restaurantId?: string): Promise<any>;
   getMyRestaurants(): Promise<any>;
   // ── Service Calls ─────────────────────────────────────────────────────────────
   getServiceCalls(restaurantId?: string, status?: string[]): Promise<any>;
   acknowledgeServiceCall(callId: string): Promise<any>;
   resolveServiceCall(callId: string): Promise<any>;
+  getCapacityRequests(restaurantId: string, status?: CapacityRequestStatus | null): Promise<CapacityRequest[]>;
+  resolveCapacityRequest(
+    requestId: string,
+    decision: { approve: true; reason: CapacityApprovalReason; note?: string } | { approve: false; note?: string },
+  ): Promise<CapacityRequest>;
   createServiceCall(restaurantId: string, tableId?: string, callType?: string, message?: string): Promise<any>;
   getCallStats(restaurantId?: string): Promise<any>;
   // ── Customer Assistance ───────────────────────────────────────────────────
@@ -335,6 +378,7 @@ export interface SupabaseApiAdapter {
   getActiveShiftCount(restaurantId?: string): Promise<any>;
   getTableQRCodes(restaurantId?: string): Promise<TableQRCode[]>;
   generateTableQR(tableId: string): Promise<any>;
+  generateCounterQR(restaurantId: string, label?: string): Promise<{ id: string; restaurantId: string; label: string; qrData: string; createdAt: string }>;
   getPromotions(restaurantId?: string, status?: string): Promise<any>;
   closePromotion(promotionId: string): Promise<any>;
   getReviews(restaurantId?: string, limit?: number): Promise<any>;
@@ -380,6 +424,9 @@ export interface SupabaseApiAdapter {
 
 async function resolveRestaurantId(restaurantId?: string): Promise<string> {
   if (restaurantId) return restaurantId;
+  // Quem trabalha em mais de um restaurante escolhe qual está usando.
+  const active = getActiveRestaurantId();
+  if (active) return active;
 
   const supabase = getSupabaseClient();
   const { user } = await getOptionalSupabaseSessionUser();
@@ -390,6 +437,7 @@ async function resolveRestaurantId(restaurantId?: string): Promise<string> {
     .select('restaurant_id')
     .eq('user_id', user.id)
     .eq('is_active', true)
+    .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
 
@@ -474,6 +522,26 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_order_id: orderId,
       p_status: status,
       p_estimated_time: estimated_time || null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async completeQuickQualityCheck(orderId: string, passed: boolean, checklist: Record<string, boolean>, reason?: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_complete_quality_check', {
+      p_order_id: orderId,
+      p_passed: passed,
+      p_checklist: checklist,
+      p_reason: reason ?? null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async confirmQuickPickup(orderId: string, pickupCode: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_confirm_pickup', {
+      p_order_id: orderId,
+      p_pickup_code: pickupCode,
     });
     if (error) throw error;
     return data;
@@ -713,6 +781,15 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
+  async updateWaitlistEntry(entryId: string, action: 'call' | 'seat' | 'no_show') {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_update_waitlist_entry', {
+      p_entry_id: entryId,
+      p_action: action,
+    });
+    if (error) throw error;
+    return data;
+  },
+
   async getTableBills(restaurantId?: string) {
     const resolvedId = await resolveRestaurantId(restaurantId);
     const { data, error } = await getSupabaseClient().rpc('restaurant_get_table_bills', {
@@ -873,6 +950,26 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     });
     if (error) throw error;
     return data;
+  },
+
+  async getCapacityRequests(restaurantId, status = 'pending') {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_list_capacity_requests', {
+      p_restaurant_id: restaurantId,
+      p_status: status,
+    });
+    if (error) throw error;
+    return (Array.isArray(data) ? data : []) as CapacityRequest[];
+  },
+
+  async resolveCapacityRequest(requestId, decision) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_resolve_capacity_request', {
+      p_request_id: requestId,
+      p_decision: decision.approve ? 'approve' : 'reject',
+      p_reason: decision.approve ? decision.reason : 'recusado',
+      p_note: decision.note?.trim() || null,
+    });
+    if (error) throw error;
+    return data as CapacityRequest;
   },
 
   async createServiceCall(restaurantId: string, tableId?: string, callType?: string, message?: string) {
@@ -1662,6 +1759,15 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   async generateTableQR(tableId: string) {
     const { data, error } = await getSupabaseClient().rpc('restaurant_generate_table_qr', {
       p_table_id: tableId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async generateCounterQR(restaurantId: string, label = 'Balcão') {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_generate_counter_qr', {
+      p_restaurant_id: restaurantId,
+      p_label: label,
     });
     if (error) throw error;
     return data;

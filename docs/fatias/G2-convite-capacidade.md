@@ -6,6 +6,18 @@ alguém entra, e até quantos cabem.
 **Spec:** §2.6 inteira (entidades, como o convite funciona, regras de capacidade, eventos, UC-01..06)
 **ADRs:** 006 (convidado sem conta), 007 (assentos e exceção)
 
+> **Já entregue pela fatia [G2b](G2b-convite-por-username.md) (ADR-011):**
+> - `capacity_requests` mínima, com `source = 'user_invite'`;
+> - `table_session_participants.seat_count`;
+> - a regra única `private.table_session_capacity_check`;
+> - a tela "Lotação" no app da equipe, com aprovação por cadeira extra ou criança de colo e recusa.
+>
+> **Ainda falta aqui:**
+> - passar o link e o QR por essa mesma checagem (hoje entram sem checar lotação, divergência
+>   registrada no ADR-011);
+> - ampliar `source`;
+> - resolver por troca ou junção de mesa.
+
 ## Entregáveis
 
 **Banco**

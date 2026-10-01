@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
-import { Alert, Platform, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -10,8 +11,9 @@ import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import OrderStatusStepper, { type OrderStatusStep } from '@okinawa/shared/components/orders/OrderStatusStepper';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
-import customerBackend, { type CustomerOrderStatus } from '../../services/customer-backend';
-import { money, rootNavigate, StateView, useQueryRefreshControl } from './shared';
+import { DevSkipPrepButton } from '../../components/dev/DevSkipPrepButton';
+import customerBackend, { type CustomerFulfillmentStatus, type CustomerOrderStatus } from '../../services/customer-backend';
+import { money, rootNavigate, StateView, useQueryRefreshControl, tableLabel } from './shared';
 
 type TrackingStep = 'received' | 'preparing' | 'ready' | 'delivered';
 type QuickServiceStep = 'received' | 'preparing' | 'checking' | 'ready';
@@ -37,13 +39,10 @@ const QUICK_TRACKING_STEPS: (OrderStatusStep & { key: QuickServiceStep })[] = [
 
 const QUICK_STEP_INDEX: Record<QuickServiceStep, number> = { received: 0, preparing: 1, checking: 2, ready: 3 };
 
-// No backend status maps to "Conferência" — it's a purely visual midpoint
-// between preparing and ready. Jumping from index 1 straight to index 3 still
-// marks it done (`index < currentStep` in OrderStatusStepper) without
-// fabricating a status that doesn't exist server-side.
-function quickStepFromStatus(status: CustomerOrderStatus): QuickServiceStep {
+function quickStepFromStatus(status: CustomerFulfillmentStatus): QuickServiceStep {
   if (status === 'preparing') return 'preparing';
-  if (status === 'ready' || status === 'delivered' || status === 'completed') return 'ready';
+  if (status === 'checking') return 'checking';
+  if (status === 'ready' || status === 'picked_up' || status === 'delivered') return 'ready';
   return 'received';
 }
 
@@ -79,22 +78,28 @@ function minutesUntil(iso: string | null): number | null {
   return Math.max(1, Math.round(diffMs / 60_000));
 }
 
-function estimatedRangeLabel(estimatedTime: number | null): string {
-  if (!estimatedTime) return '—';
+function estimatedRangeLabel(estimatedTime: number | null, status: CustomerOrderStatus): string {
+  if (['ready', 'delivered', 'completed'].includes(status)) return 'Pronto';
+  if (!estimatedTime) {
+    // Orders placed before the restaurant filled in prep times have no estimate;
+    // say so instead of showing a bare dash.
+    return 'Calculando…';
+  }
   const low = Math.max(1, estimatedTime - 2);
   return `${low}-${estimatedTime} min`;
 }
 
-const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight ?? 24;
+const PREP_SKIPPABLE = new Set(['pending', 'confirmed', 'preparing', 'open_for_additions']);
 
 export default function OrderDetailScreen({ route, navigation }: any) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { session } = useVisitSession();
   const orderId = route.params.orderId as string;
   const query = useQuery({ queryKey: ['orders', orderId], queryFn: () => customerBackend.getOrder(orderId) });
   const refreshControl = useQueryRefreshControl([query]);
-  const { capabilities } = useServiceTypeFor(query.data?.restaurantId);
+  const { capabilities } = useServiceTypeFor(query.data?.restaurantId, query.data?.serviceModel);
   // Pickup journeys follow the four counter steps and close on a pickup screen;
   // table journeys follow the kitchen status of the order.
   const pickupSteps = capabilities?.orderTracking === 'pickup_steps';
@@ -103,15 +108,29 @@ export default function OrderDetailScreen({ route, navigation }: any) {
   // Skip the Line has no "Entregue" step of its own — once the kitchen marks
   // it ready, the customer moves on to the "Pedido Pronto" close-out screen.
   useEffect(() => {
-    if (pickupSteps && query.data && (query.data.status === 'ready' || query.data.status === 'completed')) {
+    if (pickupSteps && query.data && ['ready', 'picked_up'].includes(query.data.fulfillmentStatus)) {
       navigation.replace('OrderReady', { orderId });
     }
   }, [pickupSteps, query.data, orderId, navigation]);
   const cancel = useMutation({
     mutationFn: () => customerBackend.cancelOrder(route.params.orderId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['orders'] }),
-    onError: (error: Error) => Alert.alert('Não foi possível cancelar', error.message),
+    onError: (error: Error) => {
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      Alert.alert('Não foi possível cancelar', error.message);
+    },
   });
+
+  const confirmCancel = () => {
+    Alert.alert(
+      'Cancelar pedido?',
+      'Esta ação não pode ser desfeita. O pedido só pode ser cancelado enquanto a cozinha ainda não iniciou o preparo.',
+      [
+        { text: 'Manter pedido', style: 'cancel' },
+        { text: 'Cancelar pedido', style: 'destructive', onPress: () => cancel.mutate() },
+      ],
+    );
+  };
 
   useEffect(() => {
     let channel: Awaited<ReturnType<typeof customerBackend.subscribeToOrderChanges>> | undefined;
@@ -141,7 +160,7 @@ export default function OrderDetailScreen({ route, navigation }: any) {
       StyleSheet.create({
         root: { flex: 1, backgroundColor: colors.background },
         scrollContent: { paddingBottom: 32 },
-        gradientHeader: { paddingTop: STATUS_BAR_HEIGHT + 8, paddingBottom: 36, paddingHorizontal: 16 },
+        gradientHeader: { paddingBottom: 36, paddingHorizontal: 16 },
         headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12 },
         backBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' },
         headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
@@ -159,7 +178,8 @@ export default function OrderDetailScreen({ route, navigation }: any) {
         progressFill: { height: '100%', borderRadius: 2, backgroundColor: colors.primary },
         sectionTitle: { fontSize: 12, fontWeight: '700', letterSpacing: 1, color: colors.foregroundSecondary, marginBottom: 10 },
         itemCard: { backgroundColor: colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.border },
-        itemTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+        itemTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+        itemPhoto: { width: 48, height: 48, borderRadius: 12, backgroundColor: colors.backgroundTertiary },
         itemName: { fontSize: 15, fontWeight: '600', color: colors.foreground },
         itemMeta: { fontSize: 13, color: colors.foregroundSecondary, marginTop: 2 },
         itemChefRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
@@ -184,6 +204,13 @@ export default function OrderDetailScreen({ route, navigation }: any) {
         helpSubtitle: { fontSize: 12, color: colors.background, opacity: 0.65, marginTop: 1 },
         cancelBtn: { paddingVertical: 14, borderRadius: 16, borderWidth: 1.5, borderColor: '#DC2626', alignItems: 'center' },
         cancelBtnText: { color: '#DC2626', fontSize: 15, fontWeight: '700' },
+        payCta: {
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+          paddingVertical: 16, borderRadius: 18, backgroundColor: colors.primary,
+          shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4,
+        },
+        payCtaText: { color: colors.primaryForeground, fontSize: 16, fontWeight: '800' },
+        payCtaHint: { fontSize: 12, color: colors.foregroundSecondary, textAlign: 'center', marginTop: -6 },
         pickupCard: {
           alignItems: 'center', backgroundColor: colors.card, borderRadius: 20, paddingVertical: 20,
           shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4,
@@ -204,13 +231,26 @@ export default function OrderDetailScreen({ route, navigation }: any) {
 
   const order = query.data;
   const currentStepIndex = pickupSteps
-    ? QUICK_STEP_INDEX[quickStepFromStatus(order.status)]
+    ? QUICK_STEP_INDEX[quickStepFromStatus(order.fulfillmentStatus)]
     : STEP_INDEX[stepFromStatus(order.status)];
   const progress = progressFromStatus(order.status);
-  const canCancel = ['pending', 'confirmed'].includes(order.status);
+  // Cancel is only possible before the kitchen starts: the order is still pending
+  // AND no item has moved past the queue (the server enforces the same rule).
+  const canCancel = ['pending', 'confirmed'].includes(order.status)
+    && !order.items.some((item) => ['preparing', 'ready', 'delivered'].includes(item.status));
   const isActiveVisit = !!session && session.tableSessionId === order.tableSessionId;
   const showHelpBar = (isActiveVisit || pickupSteps) && !['delivered', 'completed', 'cancelled', 'ready'].includes(order.status);
-  const tableLabel = order.tableNumber ? `Mesa ${order.tableNumber}` : null;
+  // RLS on `tables` is staff-only, so the embedded table name comes back null
+  // for customers; the active visit already carries it.
+  const tableNumber = order.tableNumber ?? (isActiveVisit ? session.tableNumber : null);
+  const tableName = tableNumber ? tableLabel(tableNumber) : null;
+  // Depois que a cozinha marca o pedido como pronto/entregue, a próxima ação
+  // esperada é pagar — quick service já cai em OrderReady (useEffect acima), aqui
+  // tratamos as jornadas de mesa (fine/casual dining) para que o cliente não
+  // fique procurando o caminho até o checkout.
+  const showPayCta = !pickupSteps && isActiveVisit && !!order.tableSessionId
+    && ['ready', 'delivered', 'completed'].includes(order.status);
+  const openCheckout = () => rootNavigate(navigation, 'FecharConta', { tableSessionId: order.tableSessionId });
 
   return (
     <ScreenContainer edges={[]}>
@@ -225,7 +265,7 @@ export default function OrderDetailScreen({ route, navigation }: any) {
             colors={HEADER_GRADIENT as unknown as [string, string, string]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.gradientHeader}
+            style={[styles.gradientHeader, { paddingTop: insets.top + 8 }]}
           >
             <View style={styles.headerTop}>
               <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Voltar">
@@ -233,7 +273,7 @@ export default function OrderDetailScreen({ route, navigation }: any) {
               </TouchableOpacity>
               <View style={styles.headerCenter}>
                 <Text style={styles.headerTitle}>Status do Pedido</Text>
-                <Text style={styles.headerSubtitle}>{tableLabel ? `${tableLabel} · ${order.restaurantName}` : order.restaurantName}</Text>
+                <Text style={styles.headerSubtitle}>{tableName ? `${tableName} · ${order.restaurantName}` : order.restaurantName}</Text>
               </View>
               <View style={styles.orderChip}>
                 <Text style={styles.orderChipText}>{order.orderNumber}</Text>
@@ -249,7 +289,7 @@ export default function OrderDetailScreen({ route, navigation }: any) {
                 <Text style={styles.timeCardLabel}>
                   {order.status === 'cancelled' ? 'Pedido cancelado' : 'Tempo estimado'}
                 </Text>
-                {order.status !== 'cancelled' && <Text style={styles.timeCardValue}>{estimatedRangeLabel(order.estimatedTime)}</Text>}
+                {order.status !== 'cancelled' && <Text style={styles.timeCardValue}>{estimatedRangeLabel(order.estimatedTime, order.status)}</Text>}
                 <View style={styles.progressTrack}>
                   <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
                 </View>
@@ -259,10 +299,20 @@ export default function OrderDetailScreen({ route, navigation }: any) {
               </View>
             </View>
 
+            {PREP_SKIPPABLE.has(order.status) && (
+              <DevSkipPrepButton
+                orderId={order.id}
+                onSkipped={() => {
+                  void queryClient.invalidateQueries({ queryKey: ['orders', orderId] });
+                  void queryClient.invalidateQueries({ queryKey: ['orders'], exact: true });
+                }}
+              />
+            )}
+
             {showPickupCode && (
               <View style={styles.pickupCard}>
                 <Text style={styles.pickupLabel}>Código de retirada</Text>
-                <Text style={styles.pickupCode}>{order.orderNumber}</Text>
+                <Text style={styles.pickupCode}>{order.pickupCode ?? order.orderNumber}</Text>
               </View>
             )}
 
@@ -274,6 +324,7 @@ export default function OrderDetailScreen({ route, navigation }: any) {
                   return (
                     <View key={item.id} style={styles.itemCard}>
                       <View style={styles.itemTopRow}>
+                        {item.imageUrl && <Image source={{ uri: item.imageUrl }} style={styles.itemPhoto} resizeMode="cover" />}
                         <View style={{ flex: 1 }}>
                           <Text style={styles.itemName}>{item.name}</Text>
                           <Text style={styles.itemMeta}>{item.quantity}x</Text>
@@ -305,13 +356,13 @@ export default function OrderDetailScreen({ route, navigation }: any) {
               <Text style={styles.totalValue}>{money(order.total)}</Text>
             </View>
 
-            {tableLabel && (
+            {tableName && (
               <View style={styles.tableCard}>
                 <View style={styles.tableIcon}>
                   <Ionicons name="location-outline" size={18} color={colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.tableTitle}>{tableLabel} · {order.partySize} {order.partySize === 1 ? 'pessoa' : 'pessoas'}</Text>
+                  <Text style={styles.tableTitle}>{tableName} · {order.partySize} {order.partySize === 1 ? 'pessoa' : 'pessoas'}</Text>
                   <Text style={styles.tableSubtitle}>Você</Text>
                 </View>
                 {isActiveVisit && (
@@ -343,8 +394,18 @@ export default function OrderDetailScreen({ route, navigation }: any) {
               </TouchableOpacity>
             )}
 
+            {showPayCta && (
+              <>
+                <TouchableOpacity style={styles.payCta} onPress={openCheckout} accessibilityRole="button" accessibilityLabel="Ir para pagamento">
+                  <Ionicons name="card-outline" size={20} color={colors.primaryForeground} />
+                  <Text style={styles.payCtaText}>Pagar & Fechar Conta · {money(order.total)}</Text>
+                </TouchableOpacity>
+                <Text style={styles.payCtaHint}>Pagamento simulado — nenhum valor é cobrado</Text>
+              </>
+            )}
+
             {canCancel && (
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => cancel.mutate()} disabled={cancel.isPending} accessibilityRole="button">
+              <TouchableOpacity style={styles.cancelBtn} onPress={confirmCancel} disabled={cancel.isPending} accessibilityRole="button">
                 <Text style={styles.cancelBtnText}>{cancel.isPending ? 'Cancelando...' : 'Cancelar Pedido'}</Text>
               </TouchableOpacity>
             )}

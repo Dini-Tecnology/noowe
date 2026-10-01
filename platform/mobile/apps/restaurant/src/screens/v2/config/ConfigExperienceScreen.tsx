@@ -35,6 +35,7 @@ import {
   isSupportedServiceType,
 } from '@okinawa/shared/config/service-types';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 const DEFAULT_PREFS: CustomerExperiencePrefs = {
   ...getDefaultCustomerExperience('casual_dining'),
@@ -193,7 +194,7 @@ export default function ConfigExperienceScreen() {
       await reloadRestaurants();
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar preferências');
+      setError(userErrorMessage(err, 'Erro ao salvar preferências'));
     }
   }, [reloadRestaurants]);
 
@@ -231,7 +232,7 @@ export default function ConfigExperienceScreen() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar preferências');
+      setError(userErrorMessage(err, 'Erro ao carregar preferências'));
     } finally {
       setLoading(false);
     }

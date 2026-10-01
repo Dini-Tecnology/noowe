@@ -165,7 +165,7 @@ class BiometricAuthService {
       if (!isBiometricAuthConfigured()) {
         return {
           success: false,
-          error: 'Biometric login is not configured for this app',
+          error: 'Login por biometria não está habilitado neste app.',
           errorCode: 'not_configured',
         };
       }
@@ -174,13 +174,13 @@ class BiometricAuthService {
       if (!user || user.id !== userId) {
         return {
           success: false,
-          error: 'A valid Supabase session is required to enable biometric login',
+          error: 'É preciso estar autenticado para ativar a biometria.',
           errorCode: 'session_required',
         };
       }
 
       const authResult = await this.authenticate(
-        'Confirm your identity to enable biometric login'
+        'Confirme sua identidade para ativar a biometria',
       );
 
       if (!authResult.success) {
@@ -198,7 +198,7 @@ class BiometricAuthService {
       logger.error('[BiometricAuth] Failed to enable:', error);
       return {
         success: false,
-        error: error.message || 'Failed to enable biometric login',
+        error: error.message || 'Não foi possível ativar a biometria.',
       };
     }
   }
@@ -230,7 +230,7 @@ class BiometricAuthService {
       if (!status.isHardwareAvailable) {
         return {
           success: false,
-          error: 'Biometric authentication is not available on this device',
+          error: 'Este dispositivo não oferece autenticação biométrica.',
           errorCode: 'not_available',
         };
       }
@@ -238,16 +238,16 @@ class BiometricAuthService {
       if (!status.isEnrolled) {
         return {
           success: false,
-          error: 'No biometric data enrolled. Please set up biometric authentication in device settings.',
+          error: 'Nenhuma biometria cadastrada. Cadastre uma em Ajustes do sistema.',
           errorCode: 'not_enrolled',
         };
       }
 
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: promptMessage || this.getDefaultPromptMessage(status.biometricType),
-        fallbackLabel: 'Use Passcode',
+        fallbackLabel: 'Usar senha do aparelho',
         disableDeviceFallback: false,
-        cancelLabel: 'Cancel',
+        cancelLabel: 'Cancelar',
       });
 
       if (result.success) {
@@ -266,7 +266,7 @@ class BiometricAuthService {
       logger.error('[BiometricAuth] Authentication error:', error);
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: error.message || 'Falha na autenticação biométrica.',
         errorCode: 'unknown',
       };
     }
@@ -281,7 +281,7 @@ class BiometricAuthService {
       if (!isBiometricAuthConfigured()) {
         return {
           success: false,
-          error: 'Biometric login is not configured',
+          error: 'Login por biometria não está habilitado neste app.',
         };
       }
 
@@ -289,7 +289,7 @@ class BiometricAuthService {
       if (!isEnabled) {
         return {
           success: false,
-          error: 'Biometric login is not enabled',
+          error: 'Login por biometria não está ativado.',
         };
       }
 
@@ -297,7 +297,7 @@ class BiometricAuthService {
       if (!userId) {
         return {
           success: false,
-          error: 'No user associated with biometric login',
+          error: 'Nenhum usuário vinculado à biometria neste aparelho.',
         };
       }
 
@@ -305,11 +305,11 @@ class BiometricAuthService {
       if (!user || user.id !== userId) {
         return {
           success: false,
-          error: 'No valid Supabase session associated with biometric login',
+          error: 'Não há sessão válida vinculada à biometria. Entre com sua conta e ative a biometria novamente.',
         };
       }
 
-      const authResult = await this.authenticate('Login with biometrics');
+      const authResult = await this.authenticate('Entrar com biometria');
       if (!authResult.success) {
         return {
           success: false,
@@ -324,7 +324,7 @@ class BiometricAuthService {
     } catch (error: any) {
       return {
         success: false,
-        error: error.message || 'Biometric login failed',
+        error: error.message || 'Falha ao entrar com biometria.',
       };
     }
   }
@@ -345,11 +345,11 @@ class BiometricAuthService {
    */
   private getDefaultPromptMessage(type: BiometricType): string {
     const messages: Record<BiometricType, string> = {
-      FaceID: 'Authenticate with Face ID',
-      TouchID: 'Authenticate with Touch ID',
-      Fingerprint: 'Authenticate with Fingerprint',
-      Iris: 'Authenticate with Iris',
-      None: 'Authenticate',
+      FaceID: 'Entrar com Face ID',
+      TouchID: 'Entrar com Touch ID',
+      Fingerprint: 'Entrar com impressão digital',
+      Iris: 'Entrar com leitura de íris',
+      None: 'Autenticar',
     };
     return messages[type];
   }
@@ -359,16 +359,16 @@ class BiometricAuthService {
    */
   private getErrorMessage(errorCode?: string): string {
     const messages: Record<string, string> = {
-      user_cancel: 'Authentication cancelled',
-      system_cancel: 'Authentication was cancelled by the system',
-      lockout: 'Too many failed attempts. Please try again later.',
-      lockout_permanent: 'Biometric authentication is locked. Please use your passcode.',
-      not_enrolled: 'No biometric data found. Please set up biometrics in settings.',
-      not_available: 'Biometric authentication is not available',
-      passcode_not_set: 'Please set up a passcode on your device first',
-      authentication_failed: 'Authentication failed. Please try again.',
+      user_cancel: 'Autenticação cancelada.',
+      system_cancel: 'Autenticação cancelada pelo sistema.',
+      lockout: 'Muitas tentativas. Tente novamente em instantes.',
+      lockout_permanent: 'Biometria bloqueada. Use a senha do aparelho.',
+      not_enrolled: 'Nenhuma biometria cadastrada. Cadastre uma em Ajustes.',
+      not_available: 'Biometria indisponível neste dispositivo.',
+      passcode_not_set: 'Cadastre uma senha no aparelho antes de usar biometria.',
+      authentication_failed: 'Não reconhecemos sua biometria. Tente novamente.',
     };
-    return messages[errorCode || ''] || 'Authentication failed. Please try again.';
+    return messages[errorCode || ''] || 'Falha na autenticação biométrica.';
   }
 
   /**

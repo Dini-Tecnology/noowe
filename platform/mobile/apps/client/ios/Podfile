@@ -23,6 +23,12 @@ prepare_react_native_project!
 target 'Noowe' do
   use_expo_modules!
 
+  # Firebase's Swift pods (FirebaseCoreInternal -> GoogleUtilities) don't
+  # define Clang modules, which CocoaPods needs when integrating as static
+  # libraries (no use_frameworks! here). Without this, `pod install` fails
+  # on RNFB's Firebase dependency chain.
+  use_modular_headers!
+
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
   else

@@ -47,7 +47,7 @@ export const BiometricEnrollmentScreen: React.FC<BiometricEnrollmentScreenProps>
 
   const handleEnable = async () => {
     if (!enrollmentToken || !userId) {
-      showErrorToast(new Error('Enrollment session expired'));
+      showErrorToast(new Error('A sessão de cadastro expirou. Tente novamente.'));
       onSkip();
       return;
     }
@@ -60,7 +60,7 @@ export const BiometricEnrollmentScreen: React.FC<BiometricEnrollmentScreenProps>
 
       if (result.success) {
         Haptic.successNotification();
-        showSuccessToast(t('auth.biometricEnabled') || 'Biometric login enabled!');
+        showSuccessToast(t('auth.biometricEnabled') || 'Login por biometria ativado!');
         onComplete();
       } else {
         Haptic.errorNotification();

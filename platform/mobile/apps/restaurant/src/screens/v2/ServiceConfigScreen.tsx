@@ -20,6 +20,7 @@ import {
   type ServiceType,
   type ServiceTypeFeatureKey,
 } from '@okinawa/shared/config/service-types';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 type FeatureMap = Record<string, Record<string, boolean>>;
 
@@ -107,7 +108,7 @@ export default function ServiceConfigScreen() {
       }
       setFeatureStates(nextFeatures);
     } catch (err) {
-      Alert.alert('Erro', err instanceof Error ? err.message : 'Não foi possível carregar tipos de serviço.');
+      Alert.alert('Erro', userErrorMessage(err, 'Não foi possível carregar tipos de serviço.'));
     } finally {
       setLoading(false);
     }
@@ -140,7 +141,7 @@ export default function ServiceConfigScreen() {
       setPrimaryType(primary);
       await reloadRestaurants();
     } catch (err) {
-      Alert.alert('Falha ao salvar', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha ao salvar', userErrorMessage(err, 'Tente novamente.'));
       await load();
     } finally {
       setSaving(false);

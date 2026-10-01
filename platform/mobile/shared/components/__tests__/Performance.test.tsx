@@ -516,7 +516,7 @@ describe('Performance: Bundle Size', () => {
 describe('Performance: Debounce and Throttle', () => {
   it('should debounce rapid function calls', async () => {
     const fn = vi.fn();
-    let timeoutId: NodeJS.Timeout | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | number | null = null;
     
     function debounced() {
       if (timeoutId) clearTimeout(timeoutId);

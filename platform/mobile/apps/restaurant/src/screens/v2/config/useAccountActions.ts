@@ -1,6 +1,7 @@
 import { Alert, Share } from 'react-native';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { authService } from '@/shared/services/auth';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 /**
  * Personal-account actions shared by every settings surface (owner/manager
@@ -27,7 +28,7 @@ export function useAccountActions() {
       const data = await supabaseApiAdapter.exportUserData();
       await Share.share({ message: JSON.stringify(data, null, 2), title: 'Meus dados' });
     } catch (err) {
-      Alert.alert('Falha ao exportar', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha ao exportar', userErrorMessage(err, 'Tente novamente.'));
     }
   };
 
@@ -53,7 +54,7 @@ export function useAccountActions() {
                   } catch (err) {
                     Alert.alert(
                       'Falha ao excluir conta',
-                      err instanceof Error ? err.message : 'Tente novamente.',
+                      userErrorMessage(err, 'Tente novamente.'),
                     );
                   }
                 },

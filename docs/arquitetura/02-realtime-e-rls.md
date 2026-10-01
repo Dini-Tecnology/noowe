@@ -56,6 +56,16 @@ user:{id}                        -> notificações pessoais
 O cliente assina `session:{id}` e `user:{id}` e nada mais. Ele **não** assina o canal do
 estabelecimento.
 
+**Convite por @username (ADR-011).** `table_session_user_invites` está publicada no Realtime.
+- A política `table_session_user_invites_select_involved` libera a linha para o convidado, para
+  quem convidou e para os participantes da sessão.
+- O cliente assina com dois filtros: `invitee_id=eq.{me}` (os convites que recebo) e
+  `table_session_id=eq.{sessão}` (os convites da minha mesa).
+- `capacity_requests` também está publicada. A política
+  `capacity_requests_select_staff_or_requester` libera a equipe da unidade e quem pediu para entrar;
+  o painel filtra por `restaurant_id`.
+- Nenhuma das duas tabelas aceita escrita direta: tudo passa por RPC `security definer`.
+
 ## Eventos (spec §2.5 e §2.6)
 
 | Evento | Origem | Efeito |
@@ -74,6 +84,8 @@ estabelecimento.
 | `participant.join_blocked` | motor de capacidade | solicitação na tela do maitre |
 | `participant.left` | convidado ou garçom | reatribui itens, recalcula divisão |
 | `session.closed` | pagamento total | mesa `available`, convite revogado, fiscal, fidelidade |
+| `table_user_invite.*` (ADR-011) | anfitrião, convidado ou trigger | notificação + push ao convidado; banner e Notificações; lista de convites da mesa |
+| `capacity_request.*` (ADR-007) | aceite acima da lotação | tela "Lotação" do maitre; decisão auditada |
 
 ## Segurança do convite (spec §7.2)
 
@@ -85,6 +97,14 @@ O código curto de 6 dígitos é o ponto fraco óbvio: 10⁶ combinações são 
 - Guardar `token_hash` e `short_code_hash`, não os valores em claro.
 - `expires_at` verificado no servidor. Código expirado abre tela explicativa, **nunca** cria
   sessão nova (spec §2.6).
+
+**Busca por @ (ADR-011).**
+- A busca só aceita prefixo do username, validado contra `[a-z0-9-]`, então não há curinga.
+- Só busca quem é participante de uma sessão ativa com `userInvite` ligado.
+- Devolve apenas @, nome curto e avatar, e exclui contas inativas, em exclusão ou sem papel
+  `customer`.
+- Para quem não pode receber convite, o erro é sempre o mesmo `P0002` genérico, para não revelar se
+  a conta existe.
 
 ## Resiliência (spec §7.3)
 

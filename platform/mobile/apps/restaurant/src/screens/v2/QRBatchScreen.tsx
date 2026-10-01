@@ -8,6 +8,7 @@ import { supabaseApiAdapter, type TableQRCode } from '@okinawa/shared/services/s
 import { V2Shell } from './shared/V2Shell';
 import { useRestaurantTables } from './shared/useRestaurantOperations';
 import { exportTableQrPdf } from './shared/tableQrExport';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 export default function QRBatchScreen() {
   const colors = useColors();
@@ -23,7 +24,7 @@ export default function QRBatchScreen() {
     try {
       setCodes(await supabaseApiAdapter.getTableQRCodes());
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível carregar os QR Codes.');
+      setError(userErrorMessage(reason, 'Não foi possível carregar os QR Codes.'));
     } finally {
       setLoading(false);
     }
@@ -34,7 +35,7 @@ export default function QRBatchScreen() {
     supabaseApiAdapter.getTableQRCodes()
       .then((rows) => { if (!cancelled) setCodes(rows); })
       .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Não foi possível carregar os QR Codes.');
+        if (!cancelled) setError(userErrorMessage(reason, 'Não foi possível carregar os QR Codes.'));
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -82,7 +83,7 @@ export default function QRBatchScreen() {
       setProgress('Preparando PDF…');
       await exportTableQrPdf(printable, 'qrcodes-de-todas-as-mesas');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível exportar os QR Codes.');
+      setError(userErrorMessage(reason, 'Não foi possível exportar os QR Codes.'));
     } finally {
       setProgress('');
       setBusy(false);
@@ -93,7 +94,7 @@ export default function QRBatchScreen() {
     try {
       await generateMissing();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível gerar todos os QR Codes.');
+      setError(userErrorMessage(reason, 'Não foi possível gerar todos os QR Codes.'));
     }
   };
 

@@ -17,6 +17,18 @@ export interface CartItem {
    */
   diner_id?: string;
   diner_name?: string;
+  /**
+   * Preparation time in minutes. Captured when the item is added so the cart
+   * can preview an ETA before placing the order. Optional for backwards
+   * compatibility with carts persisted before this field existed.
+   */
+  preparation_time?: number | null;
+  /** Quick-service combo kept locally until checkout confirms the order. */
+  combo?: {
+    lancheItemId: string;
+    acompanhamentoItemId: string;
+    bebidaItemId: string;
+  };
 }
 
 export interface CartContextData {
@@ -43,16 +55,18 @@ export function CartProvider({ children }: CartProviderProps) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
-  // Load cart from storage on mount
   useEffect(() => {
-    loadCart();
+    void loadCart();
   }, []);
 
-  // Save cart to storage whenever it changes
+  // Only persist after the stored cart has been read, otherwise the initial
+  // empty state can overwrite a saved cart.
   useEffect(() => {
-    saveCart();
-  }, [items, restaurantId, restaurantName]);
+    if (!hydrated) return;
+    void saveCart();
+  }, [items, restaurantId, restaurantName, hydrated]);
 
   const loadCart = async () => {
     try {
@@ -64,6 +78,8 @@ export function CartProvider({ children }: CartProviderProps) {
       }
     } catch (error) {
       console.error('Error loading cart:', error);
+    } finally {
+      setHydrated(true);
     }
   };
 
@@ -79,35 +95,42 @@ export function CartProvider({ children }: CartProviderProps) {
     }
   };
 
+  // All mutations use functional updates: MenuScreen calls setRestaurant() and
+  // addItem() back to back in one tick, and closing over `items` made the second
+  // call overwrite the first (stale items survived a restaurant switch, or the
+  // new item was lost).
   const addItem = (newItem: Omit<CartItem, 'id'>) => {
     // Two lines only merge when they are the same dish, for the same diner,
     // with the same note — a family table ordering one lasanha for Maria and
     // another for João must keep them apart so the comanda can bill each
     // person and the kitchen knows who gets what.
-    const existingItemIndex = items.findIndex(
-      (item) =>
-        item.menu_item_id === newItem.menu_item_id &&
-        (item.diner_id ?? null) === (newItem.diner_id ?? null) &&
-        (item.special_instructions ?? '') === (newItem.special_instructions ?? '')
-    );
+    setItems((current) => {
+      const existingItemIndex = current.findIndex(
+        (item) =>
+          item.menu_item_id === newItem.menu_item_id &&
+          JSON.stringify(item.combo ?? null) === JSON.stringify(newItem.combo ?? null) &&
+          (item.diner_id ?? null) === (newItem.diner_id ?? null) &&
+          (item.special_instructions ?? '') === (newItem.special_instructions ?? '')
+      );
 
-    if (existingItemIndex !== -1) {
-      // Update quantity if item exists
-      const updatedItems = [...items];
-      updatedItems[existingItemIndex].quantity += newItem.quantity;
-      setItems(updatedItems);
-    } else {
-      // Add new item
-      const item: CartItem = {
-        ...newItem,
-        id: `${newItem.menu_item_id}-${newItem.diner_id ?? 'me'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      };
-      setItems([...items, item]);
-    }
+      if (existingItemIndex !== -1) {
+        return current.map((item, index) =>
+          index === existingItemIndex ? { ...item, quantity: item.quantity + newItem.quantity } : item
+        );
+      }
+
+      return [
+        ...current,
+        {
+          ...newItem,
+          id: `${newItem.menu_item_id}-${newItem.diner_id ?? 'me'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        },
+      ];
+    });
   };
 
   const removeItem = (itemId: string) => {
-    setItems(items.filter((item) => item.id !== itemId));
+    setItems((current) => current.filter((item) => item.id !== itemId));
   };
 
   const updateQuantity = (itemId: string, quantity: number) => {
@@ -116,10 +139,9 @@ export function CartProvider({ children }: CartProviderProps) {
       return;
     }
 
-    const updatedItems = items.map((item) =>
-      item.id === itemId ? { ...item, quantity } : item
+    setItems((current) =>
+      current.map((item) => (item.id === itemId ? { ...item, quantity } : item))
     );
-    setItems(updatedItems);
   };
 
   const clearCart = () => {
@@ -129,11 +151,11 @@ export function CartProvider({ children }: CartProviderProps) {
   };
 
   const setRestaurant = (id: string, name: string) => {
-    // If changing restaurant, clear cart
-    if (restaurantId && restaurantId !== id) {
-      clearCart();
-    }
-    setRestaurantId(id);
+    // Switching restaurant drops items that belong to the previous one.
+    setRestaurantId((current) => {
+      if (current && current !== id) setItems([]);
+      return id;
+    });
     setRestaurantName(name);
   };
 

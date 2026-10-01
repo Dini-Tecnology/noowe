@@ -18,5 +18,5 @@ export default function RestaurantSelectorScreen() {
           onPress: restaurant.id === restaurantId ? undefined : () => { void switchRestaurant(restaurant.id); },
         }));
 
-  return <V2ListScreen title="Selecionar Restaurante" subtitle="Multi-unidade" showBack items={items} onRefresh={reloadRestaurants} />;
+  return <V2ListScreen title="Selecionar restaurante" subtitle="Restaurantes em que você trabalha" showBack items={items} onRefresh={reloadRestaurants} />;
 }

@@ -10,7 +10,7 @@ import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { FeatureUnavailableMessage } from '../../components/ServiceTypeAdapter';
 import customerBackend from '../../services/customer-backend';
 import { CALL_TEAM_REASONS } from './home-restaurant-ui';
-import { rootNavigate } from './shared';
+import { rootNavigate, tableLabel } from './shared';
 
 type CallType = (typeof CALL_TEAM_REASONS)[number]['callType'];
 
@@ -48,6 +48,10 @@ export default function CallWaiterScreen({ navigation }: any) {
     () =>
       StyleSheet.create({
         scroll: { flex: 1, backgroundColor: colors.background },
+        header: { height: 56, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        back: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.backgroundTertiary, alignItems: 'center', justifyContent: 'center' },
+        headerTitle: { fontSize: 17, fontWeight: '800', color: colors.foreground },
+        headerSpacer: { width: 32 },
         content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 12 },
         subtitle: { fontSize: 14, color: colors.foregroundSecondary, marginBottom: 16 },
         card: {
@@ -76,9 +80,20 @@ export default function CallWaiterScreen({ navigation }: any) {
     [colors],
   );
 
+  const header = (
+    <View style={styles.header}>
+      <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Voltar">
+        <Ionicons name="arrow-back" size={18} color={colors.foregroundSecondary} />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>Atendimento</Text>
+      <View style={styles.headerSpacer} />
+    </View>
+  );
+
   if (!session?.tableId) {
     return (
       <ScreenContainer edges={['top', 'bottom']}>
+        {header}
         <View style={styles.emptyState}>
           <Ionicons name="qr-code-outline" size={40} color={colors.foregroundMuted} />
           <Text style={styles.emptyStateText}>Leia o QR Code da mesa para poder chamar a equipe.</Text>
@@ -93,6 +108,7 @@ export default function CallWaiterScreen({ navigation }: any) {
   if (serviceTypeStatus === 'loading') {
     return (
       <ScreenContainer edges={['top', 'bottom']}>
+        {header}
         <View style={styles.emptyState}>
           <ActivityIndicator color={colors.primary} />
         </View>
@@ -103,6 +119,7 @@ export default function CallWaiterScreen({ navigation }: any) {
   if (!features.callWaiter) {
     return (
       <ScreenContainer edges={['top', 'bottom']}>
+        {header}
         <View style={{ padding: 16 }}>
           <FeatureUnavailableMessage feature="Chamar Equipe" message="Este restaurante não usa chamada de garçom pelo app." />
         </View>
@@ -113,6 +130,7 @@ export default function CallWaiterScreen({ navigation }: any) {
   if (sentType) {
     return (
       <ScreenContainer edges={['top', 'bottom']}>
+        {header}
         <View style={styles.successWrap}>
           <View style={styles.successCircle}>
             <Ionicons name="checkmark" size={36} color="#16A34A" />
@@ -134,9 +152,10 @@ export default function CallWaiterScreen({ navigation }: any) {
 
   return (
     <ScreenContainer edges={['top', 'bottom']}>
+      {header}
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <Text style={styles.subtitle}>
-          Mesa {session.tableNumber}{restaurant.data?.name ? ` · ${restaurant.data.name}` : ''}
+          {tableLabel(session.tableNumber)}{restaurant.data?.name ? ` · ${restaurant.data.name}` : ''}
         </Text>
 
         {CALL_TEAM_REASONS.map((reason) => (

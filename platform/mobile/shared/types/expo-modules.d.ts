@@ -228,9 +228,23 @@ declare module 'react-native-chart-kit' {
 }
 
 declare module 'msw' {
-  export function http(...args: any[]): any;
+  type HttpResolver = (info: { request: Request; params: Record<string, any> }) => any;
+  type HttpMethod = (path: string, resolver: HttpResolver) => any;
+  export const http: {
+    get: HttpMethod;
+    post: HttpMethod;
+    put: HttpMethod;
+    patch: HttpMethod;
+    delete: HttpMethod;
+    all: HttpMethod;
+  };
   export function graphql(...args: any[]): any;
-  export function HttpResponse(...args: any[]): any;
+  export class HttpResponse {
+    constructor(body?: any, init?: any);
+    static json(body?: any, init?: any): any;
+    static text(body?: any, init?: any): any;
+    static error(): any;
+  }
   export const rest: any;
   const content: any;
   export default content;

@@ -3,6 +3,27 @@ import { Alert } from 'react-native';
 import { useCart } from '@/shared/contexts/CartContext';
 import { useVisitSession } from '../contexts/VisitSessionContext';
 
+type CartLike = Pick<ReturnType<typeof useCart>, 'items' | 'restaurantId' | 'clearCart'>;
+
+/**
+ * Joining a table at another restaurant while the cart holds items from a
+ * different one: ask instead of silently mixing or dropping them. Shared by
+ * the invite link and the @username invite.
+ */
+export async function confirmCartForRestaurant(cart: CartLike, restaurantId: string): Promise<void> {
+  if (!(cart.items.length > 0 && cart.restaurantId && cart.restaurantId !== restaurantId)) return;
+  await new Promise<void>((resolve) => {
+    Alert.alert(
+      'Carrinho de outro restaurante',
+      'Seu carrinho tem itens de outro restaurante. Deseja limpar o carrinho para pedir aqui?',
+      [
+        { text: 'Manter carrinho', style: 'cancel', onPress: () => resolve() },
+        { text: 'Limpar carrinho', style: 'destructive', onPress: () => { cart.clearCart(); resolve(); } },
+      ],
+    );
+  });
+}
+
 export type InviteOutcome =
   | { ok: true; restaurantId: string }
   | { ok: false; reason: 'invalid' | 'network' };
@@ -29,18 +50,7 @@ export function useTableInviteHandler() {
       return { ok: false, reason: isInvalidInviteError(error) ? 'invalid' : 'network' };
     }
 
-    if (cart.items.length > 0 && cart.restaurantId && cart.restaurantId !== restaurantId) {
-      await new Promise<void>((resolve) => {
-        Alert.alert(
-          'Carrinho de outro restaurante',
-          'Seu carrinho tem itens de outro restaurante. Deseja limpar o carrinho para pedir aqui?',
-          [
-            { text: 'Manter carrinho', style: 'cancel', onPress: () => resolve() },
-            { text: 'Limpar carrinho', style: 'destructive', onPress: () => { cart.clearCart(); resolve(); } },
-          ],
-        );
-      });
-    }
+    await confirmCartForRestaurant(cart, restaurantId);
 
     return { ok: true, restaurantId };
   }, [joinFromInvite, cart]);

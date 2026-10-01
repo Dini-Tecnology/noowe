@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Text } from 'react-native-paper';
-import * as ImagePicker from 'expo-image-picker';
+import { pickImageFromLibrary } from '@okinawa/shared/utils/pick-image';
 import {
   Ban,
   Camera,
@@ -29,9 +29,11 @@ import {
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
+import { hasDuplicateCategoryName } from './menuCategoryName';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2FormSheet } from './shared/V2FormSheet';
 import { V2Shell } from './shared/V2Shell';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface MenuItem {
   id: string;
@@ -89,10 +91,7 @@ function priceFromInput(value: string): number {
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-  return fallback;
+  return userErrorMessage(error, fallback);
 }
 
 function normalizeMenu(raw: unknown): MenuCategory[] {
@@ -204,23 +203,12 @@ export default function MenuScreen() {
 
   const pickItemImage = async () => {
     if (!restaurantId || imageUploading) return;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permissão necessária', 'Autorize o acesso às fotos para escolher a imagem do item.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.82,
-    });
-    if (result.canceled || !result.assets[0]) return;
+    const picked = await pickImageFromLibrary({ aspect: [1, 1], quality: 0.82 });
+    if (!picked) return;
 
     setImageUploading(true);
     try {
-      const asset = result.assets[0];
+      const asset = picked;
       const uploadedUrl = await supabaseApiAdapter.uploadMenuItemImage(
         restaurantId,
         asset.uri,
@@ -245,6 +233,13 @@ export default function MenuScreen() {
     const cleanName = name.trim();
     if (!cleanName) {
       setFormError('Informe um nome.');
+      return;
+    }
+    if (
+      editor.kind === 'category'
+      && hasDuplicateCategoryName(categories, cleanName, editor.category?.id)
+    ) {
+      setFormError('Já existe uma categoria com esse nome.');
       return;
     }
 

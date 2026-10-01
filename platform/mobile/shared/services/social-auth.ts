@@ -102,7 +102,7 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'apple',
-          error: 'Apple Sign In is not available on this device',
+          error: 'Login com Apple não está disponível neste dispositivo.',
         };
       }
 
@@ -137,14 +137,14 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'apple',
-          error: 'Sign in was cancelled',
+          error: 'Login com Apple cancelado.',
         };
       }
 
       return {
         success: false,
         provider: 'apple',
-        error: error.message || 'Apple Sign In failed',
+        error: error.message || 'Não foi possível entrar com a Apple.',
       };
     }
   }
@@ -163,7 +163,7 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'google',
-          error: 'Google Sign In is not configured',
+          error: 'Login com Google não está configurado.',
         };
       }
 
@@ -174,7 +174,7 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'google',
-          error: 'Sign in was cancelled',
+          error: 'Login com Google cancelado.',
         };
       }
 
@@ -182,7 +182,7 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'google',
-          error: 'Google Sign In failed',
+          error: 'Não foi possível entrar com o Google.',
         };
       }
 
@@ -202,7 +202,7 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'google',
-          error: 'Google did not return an ID token for Supabase authentication',
+          error: 'O Google não retornou um ID token válido para autenticação.',
         };
       }
 
@@ -222,7 +222,7 @@ class SocialAuthService {
       return {
         success: false,
         provider: 'google',
-        error: error.message || 'Google Sign In failed',
+        error: error.message || 'Não foi possível entrar com o Google.',
       };
     }
   }
@@ -241,7 +241,7 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'google',
-          error: 'Google Sign In is not configured',
+          error: 'Login com Google não está configurado.',
         };
       }
 
@@ -252,7 +252,7 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'google',
-          error: 'Supabase did not return the Google authorization URL',
+          error: 'O Supabase não retornou a URL de autorização do Google.',
         };
       }
 
@@ -261,7 +261,7 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'google',
-          error: 'Sign in was cancelled',
+          error: 'Login com Google cancelado.',
         };
       }
 
@@ -269,7 +269,7 @@ class SocialAuthService {
         return {
           success: false,
           provider: 'google',
-          error: 'Google Sign In did not return to the app',
+          error: 'O Google não retornou ao aplicativo.',
         };
       }
 
@@ -283,7 +283,7 @@ class SocialAuthService {
       return {
         success: false,
         provider: 'google',
-        error: error.message || 'Google Sign In failed',
+        error: error.message || 'Não foi possível entrar com o Google.',
       };
     }
   }

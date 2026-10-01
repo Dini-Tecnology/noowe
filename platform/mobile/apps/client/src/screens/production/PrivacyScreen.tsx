@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useMutation } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -7,7 +7,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend from '../../services/customer-backend';
 
-export default function PrivacyScreen() {
+export default function PrivacyScreen({ navigation }: any) {
   const colors = useColors();
   const exportData = useMutation({
     mutationFn: () => customerBackend.exportUserData(),
@@ -26,6 +26,10 @@ export default function PrivacyScreen() {
     () =>
       StyleSheet.create({
         scroll: { flex: 1, backgroundColor: colors.background },
+        header: { height: 56, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        back: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.backgroundTertiary, alignItems: 'center', justifyContent: 'center' },
+        headerTitle: { fontSize: 17, fontWeight: '800', color: colors.foreground },
+        headerSpacer: { width: 32 },
         content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 12 },
         subtitle: { fontSize: 14, color: colors.foregroundSecondary, marginBottom: 8 },
         row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
@@ -39,6 +43,13 @@ export default function PrivacyScreen() {
 
   return (
     <ScreenContainer edges={['top']}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Voltar">
+          <Ionicons name="arrow-back" size={18} color={colors.foregroundSecondary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Privacidade</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <Text style={styles.subtitle}>Consulte, exporte ou solicite a exclusão dos seus dados.</Text>
 

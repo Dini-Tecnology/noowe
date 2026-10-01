@@ -9,6 +9,7 @@ import { supabaseApiAdapter, type TableQRCode } from '@okinawa/shared/services/s
 import { V2Shell } from './shared/V2Shell';
 import { useRestaurantTables } from './shared/useRestaurantOperations';
 import { exportTableQrPdf } from './shared/tableQrExport';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 export default function QRGeneratorScreen() {
   const colors = useColors();
@@ -27,7 +28,7 @@ export default function QRGeneratorScreen() {
       setCodes(rows);
       setSelectedId((current) => current ?? rows[0]?.table_id ?? null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível carregar os QR Codes.');
+      setError(userErrorMessage(reason, 'Não foi possível carregar os QR Codes.'));
     } finally {
       setLoading(false);
     }
@@ -42,7 +43,7 @@ export default function QRGeneratorScreen() {
         setSelectedId((current) => current ?? rows[0]?.table_id ?? null);
       })
       .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Não foi possível carregar os QR Codes.');
+        if (!cancelled) setError(userErrorMessage(reason, 'Não foi possível carregar os QR Codes.'));
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -62,7 +63,7 @@ export default function QRGeneratorScreen() {
       await supabaseApiAdapter.generateTableQR(selectedId);
       await Promise.all([loadCodes(), refreshTables()]);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível gerar o QR Code.');
+      setError(userErrorMessage(reason, 'Não foi possível gerar o QR Code.'));
     } finally {
       setBusy(false);
     }
@@ -90,7 +91,7 @@ export default function QRGeneratorScreen() {
     try {
       await exportTableQrPdf([selectedCode], `qr-mesa-${selectedCode.table_number}`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível exportar o PDF.');
+      setError(userErrorMessage(reason, 'Não foi possível exportar o PDF.'));
     } finally {
       setBusy(false);
     }

@@ -19,7 +19,7 @@ describe('useAnalytics', () => {
   it('should log custom events', async () => {
     const { result } = renderHook(() => useAnalytics());
     const mockLogEvent = jest.fn();
-    (analytics as jest.Mock).mockReturnValue({
+    (analytics as unknown as jest.Mock).mockReturnValue({
       logEvent: mockLogEvent,
     });
 
@@ -38,7 +38,7 @@ describe('useAnalytics', () => {
   it('should log login events', async () => {
     const { result } = renderHook(() => useAnalytics());
     const mockLogLogin = jest.fn();
-    (analytics as jest.Mock).mockReturnValue({
+    (analytics as unknown as jest.Mock).mockReturnValue({
       logLogin: mockLogLogin,
     });
 
@@ -57,7 +57,7 @@ describe('useAnalytics', () => {
   it('should log sign up events', async () => {
     const { result } = renderHook(() => useAnalytics());
     const mockLogSignUp = jest.fn();
-    (analytics as jest.Mock).mockReturnValue({
+    (analytics as unknown as jest.Mock).mockReturnValue({
       logSignUp: mockLogSignUp,
     });
 
@@ -76,7 +76,7 @@ describe('useAnalytics', () => {
   it('should log purchase events', async () => {
     const { result } = renderHook(() => useAnalytics());
     const mockLogPurchase = jest.fn();
-    (analytics as jest.Mock).mockReturnValue({
+    (analytics as unknown as jest.Mock).mockReturnValue({
       logPurchase: mockLogPurchase,
     });
 
@@ -99,7 +99,7 @@ describe('useAnalytics', () => {
   it('should log add to cart events', async () => {
     const { result } = renderHook(() => useAnalytics());
     const mockLogAddToCart = jest.fn();
-    (analytics as jest.Mock).mockReturnValue({
+    (analytics as unknown as jest.Mock).mockReturnValue({
       logAddToCart: mockLogAddToCart,
     });
 
@@ -123,7 +123,7 @@ describe('useAnalytics', () => {
   it('should log search events', async () => {
     const { result} = renderHook(() => useAnalytics());
     const mockLogSearch = jest.fn();
-    (analytics as jest.Mock).mockReturnValue({
+    (analytics as unknown as jest.Mock).mockReturnValue({
       logSearch: mockLogSearch,
     });
 
@@ -145,7 +145,7 @@ describe('useAnalytics', () => {
   it('should log error events', async () => {
     const { result } = renderHook(() => useAnalytics());
     const mockLogEvent = jest.fn();
-    (analytics as jest.Mock).mockReturnValue({
+    (analytics as unknown as jest.Mock).mockReturnValue({
       logEvent: mockLogEvent,
     });
 

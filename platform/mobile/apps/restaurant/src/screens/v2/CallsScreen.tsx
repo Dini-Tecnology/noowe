@@ -7,6 +7,7 @@ import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { useServiceCallsRealtime } from './shared/useRealtimeSubscription';
 import { V2Shell } from './shared/V2Shell';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface ServiceCall {
   id: string;
@@ -58,7 +59,7 @@ export default function CallsScreen() {
       const data = await supabaseApiAdapter.getServiceCalls(undefined, ['open', 'acknowledged']);
       setCalls(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar chamados');
+      setError(userErrorMessage(err, 'Erro ao carregar chamados'));
     } finally {
       setLoading(false);
       setRefreshing(false);

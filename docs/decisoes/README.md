@@ -1,7 +1,7 @@
 # Decisões de arquitetura (ADRs)
 
 As oito decisões que a spec (§8.1) deixou em aberto, mais duas que o plano de aderência precisou
-registrar (009 e 010).
+registrar (009 e 010) e uma adição de produto à spec (011).
 
 > **Estado em 14/09/2026: nove aceitas, uma provisória.** O ADR-006 e o ADR-010 foram escolhidos
 > explicitamente pelo responsável do produto. Os ADRs 001, 002, 003, 005, 007 e 008 foram aceitos
@@ -22,6 +22,8 @@ registrar (009 e 010).
 | [008](ADR-008-fine-dining-sem-reserva.md) | Política com janela; origem da sessão é a trava | Aceito | Consumo sem registro de entrada |
 | [009](ADR-009-fila-virtual-waitlist-entries.md) | `waitlist_entries` é a fila; `queue_entries` fica congelada | Aceito | Duas filas divergindo |
 | [010](ADR-010-regras-de-fechamento-por-unidade.md) | Valor fixo e destino da gorjeta viram política da unidade | Aceito | Fine ou Casual fora da spec |
+| [011](ADR-011-convite-por-username.md) | Convite por @username com aceite, convivendo com link e QR | Aceito | Convidado entra sem consentir; mesa lota em silêncio |
+| [012](ADR-012-preco-medio-e-horario-com-turnos.md) | Preço médio do cardápio no lugar de "por pessoa"; horário com turnos em `opening_hours`; check-in exige restaurante aberto | Aceito | Cliente vê "Fechado" com o restaurante aberto; mesa aberta fora do horário |
 
 **Vocabulário:** os ADRs usam os nomes da spec. A tradução para o banco está em
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).

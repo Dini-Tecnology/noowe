@@ -1,19 +1,41 @@
-import React, { useCallback, useMemo } from 'react';
-import { Alert, Image, ScrollView, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import { useCart } from '@/shared/contexts/CartContext';
+import { type CartItem, useCart } from '@/shared/contexts/CartContext';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import customerBackend from '../../services/customer-backend';
+import InviteToTableSheet from '../../components/table/InviteToTableSheet';
+import { useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
 import CasualDiningComandaScreen from './CasualDiningComandaScreen';
-import { money } from './shared';
+import { money, tableLabel, translateOrderError } from './shared';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&q=80';
+
+/**
+ * Soma o tempo de preparo dos itens no carrinho — a soma total que o cliente
+ * pediu como ETA na spec. Itens sem `preparation_time` (carrinhos persistidos
+ * antes desse campo existir) contribuem 0, então a soma segue estável mesmo
+ * durante o rollout. Retorna null quando *nenhum* item tem tempo de preparo,
+ * para o UI poder ocultar o card em vez de mostrar "0 min".
+ */
+function estimatedTimeFromCartItems(items: CartItem[]): number | null {
+  let total = 0;
+  let hasAny = false;
+  for (const item of items) {
+    const prep = item.preparation_time;
+    if (prep != null && prep > 0) {
+      total += prep * Math.max(1, item.quantity);
+      hasAny = true;
+    }
+  }
+  return hasAny ? total : null;
+}
 
 export default function CartScreen({ navigation, route }: any) {
   const colors = useColors();
@@ -22,7 +44,10 @@ export default function CartScreen({ navigation, route }: any) {
   const queryClient = useQueryClient();
   // The comanda belongs to whichever restaurant the customer is seated at —
   // that's the session, not the (possibly empty) draft cart.
-  const { capabilities, policies } = useServiceTypeFor(cart.restaurantId ?? session?.restaurantId);
+  const { capabilities, policies, type: serviceModel } = useServiceTypeFor(
+    cart.restaurantId ?? session?.restaurantId,
+    session?.serviceModel,
+  );
   // Every journey decision below reads the restaurant's server capabilities,
   // never the service model name (CLAUDE.md, regra estrutural).
   const tableWithGuests = capabilities?.consumptionUnit === 'table_with_guests';
@@ -37,7 +62,11 @@ export default function CartScreen({ navigation, route }: any) {
   // session alone isn't enough, it has to be *this* cart's restaurant.
   const tableMismatch = !!session?.tableSessionId && session.restaurantId !== cart.restaurantId;
   const hasUsableSession = !!session?.tableSessionId && !tableMismatch;
-  const canSubmit = !!cart.items.length && (!needsTableSession || hasUsableSession);
+  const hasWaitlistOrigin = !!session?.waitlistEntryId && session.restaurantId === cart.restaurantId;
+  const canOrderWhileWaiting = capabilities?.orderWhileWaiting === true && hasWaitlistOrigin;
+  const canSubmit = !!cart.items.length && (!needsTableSession || hasUsableSession || canOrderWhileWaiting);
+  const ctaDisabled = prepaidCheckout ? !cart.items.length : !canSubmit;
+  const estimatedMinutes = useMemo(() => estimatedTimeFromCartItems(cart.items), [cart.items]);
 
   const restaurant = useQuery({
     queryKey: ['restaurant', cart.restaurantId],
@@ -51,19 +80,18 @@ export default function CartScreen({ navigation, route }: any) {
   });
   const participants = bill.data?.participants ?? [];
 
-  const invite = useMutation({
-    mutationFn: () => customerBackend.createTableInvite(session!.tableSessionId),
-    onSuccess: (url) => {
-      Share.share({ message: `Vem pra minha mesa no ${restaurant.data?.name ?? 'restaurante'}! ${url}` });
-    },
-    onError: (error: Error) => Alert.alert('Não foi possível convidar', error.message),
-  });
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const canInvite = !!capabilities && (capabilities.guestLink || capabilities.userInvite);
+  // Someone accepting an invite shows up in "Na mesa" without a manual refresh.
+  useTableInvitesRealtime(session?.tableSessionId, tableWithGuests && hasUsableSession && canInvite);
 
   const place = useMutation({
     mutationFn: () =>
       customerBackend.placeOrder({
         restaurantId: cart.restaurantId!,
-        tableSessionId: needsTableSession ? session!.tableSessionId : undefined,
+        tableSessionId: needsTableSession && hasUsableSession ? session!.tableSessionId : undefined,
+        waitlistEntryId: canOrderWhileWaiting ? session?.waitlistEntryId : undefined,
+        serviceModel: serviceModel ?? undefined,
         items: cart.items.map((i) => ({ menuItemId: i.menu_item_id, quantity: i.quantity, specialInstructions: i.special_instructions })),
       }),
     onSuccess: (order) => {
@@ -72,21 +100,25 @@ export default function CartScreen({ navigation, route }: any) {
       queryClient.invalidateQueries({ queryKey: ['table-bill'] });
       navigation.replace('OrderDetail', { orderId: order.id });
     },
-    onError: (error: Error) => Alert.alert('Pedido não enviado', error.message),
+    onError: (error: Error) => Alert.alert('Pedido não enviado', translateOrderError(error)),
   });
 
   const decrement = useCallback((id: string, quantity: number) => cart.updateQuantity(id, quantity - 1), [cart]);
   const increment = useCallback((id: string, quantity: number) => cart.updateQuantity(id, quantity + 1), [cart]);
+  const clearCart = useCallback(() => {
+    Alert.alert(
+      'Limpar comanda',
+      'Remover todos os itens ainda não enviados?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Limpar', style: 'destructive', onPress: () => cart.clearCart() },
+      ],
+    );
+  }, [cart]);
   const openFecharConta = useCallback(
     () => navigation.navigate('FecharConta', { tableSessionId: session?.tableSessionId }),
     [navigation, session],
   );
-
-  // Display estimate from the configured rate; the server recalculates the fee
-  // when the bill is closed.
-  const serviceFeeBps = capabilities?.serviceFee ? policies?.serviceFeeBps ?? 0 : 0;
-  const serviceFee = tableWithGuests ? (cart.total * serviceFeeBps) / 10_000 : 0;
-  const totalWithFee = cart.total + serviceFee;
 
   const styles = useMemo(
     () =>
@@ -103,6 +135,7 @@ export default function CartScreen({ navigation, route }: any) {
           backgroundColor: colors.backgroundTertiary, marginBottom: 4,
         },
         restaurantIconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+        restaurantPhoto: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.card },
         restaurantName: { fontSize: 15, fontWeight: '700', color: colors.foreground },
         restaurantSub: { fontSize: 13, color: colors.foregroundSecondary },
         hintBanner: {
@@ -143,7 +176,6 @@ export default function CartScreen({ navigation, route }: any) {
         },
         grandTotalLabel: { fontSize: 15, color: colors.foregroundSecondary },
         grandTotalValue: { fontSize: 20, fontWeight: '800', color: colors.foreground },
-        totalNote: { fontSize: 12, color: colors.foregroundMuted, marginBottom: 8 },
         sessionBanner: {
           flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 14,
           backgroundColor: colors.backgroundSecondary, marginBottom: 16,
@@ -176,7 +208,7 @@ export default function CartScreen({ navigation, route }: any) {
     [colors],
   );
 
-  if (perPersonComanda) {
+  if (perPersonComanda && session?.tableSessionId) {
     return <CasualDiningComandaScreen navigation={navigation} route={route} />;
   }
 
@@ -188,7 +220,13 @@ export default function CartScreen({ navigation, route }: any) {
             <Ionicons name="arrow-back" size={22} color={colors.foreground} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{tableWithGuests ? 'Minha Comanda' : individualCart ? 'Meu Pedido' : 'Seu Pedido'}</Text>
-          <View style={{ width: 40 }} />
+          {cart.items.length > 0 ? (
+            <TouchableOpacity style={styles.headerBtn} onPress={clearCart} accessibilityRole="button" accessibilityLabel="Limpar comanda">
+              <Ionicons name="trash-outline" size={20} color={colors.foregroundSecondary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -201,13 +239,19 @@ export default function CartScreen({ navigation, route }: any) {
             <>
               {tableWithGuests && (
                 <View style={styles.restaurantBanner}>
-                  <View style={styles.restaurantIconBox}>
-                    <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
-                  </View>
+                  {restaurant.data?.bannerUrl || restaurant.data?.logoUrl ? (
+                    <Image source={{ uri: restaurant.data.bannerUrl || restaurant.data.logoUrl || undefined }} style={styles.restaurantPhoto} resizeMode="cover" />
+                  ) : (
+                    <View style={styles.restaurantIconBox}>
+                      <Ionicons name="restaurant-outline" size={20} color={colors.primary} />
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.restaurantName} numberOfLines={1}>{restaurant.data?.name ?? cart.restaurantName}</Text>
                     <Text style={styles.restaurantSub}>
-                      Mesa {session?.tableNumber} · {participants.length || 1} pessoa{(participants.length || 1) > 1 ? 's' : ''}
+                      {hasUsableSession && session?.tableNumber
+                        ? `${tableLabel(session.tableNumber)} · ${participants.length || 1} pessoa${(participants.length || 1) > 1 ? 's' : ''}`
+                        : 'Nenhuma mesa vinculada'}
                     </Text>
                   </View>
                 </View>
@@ -253,12 +297,12 @@ export default function CartScreen({ navigation, route }: any) {
                 </TouchableOpacity>
               )}
 
-              {individualCart && (
+              {estimatedMinutes != null && (
                 <View style={styles.estimatedTimeCard}>
                   <Ionicons name="timer-outline" size={22} color={colors.primary} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.estimatedTimeTitle}>Tempo estimado: ~5 min</Text>
-                    <Text style={styles.estimatedTimeSub}>Baseado nos itens do pedido</Text>
+                    <Text style={styles.estimatedTimeTitle}>Tempo estimado: ~{estimatedMinutes} min</Text>
+                    <Text style={styles.estimatedTimeSub}>Baseado no preparo dos itens do pedido</Text>
                   </View>
                 </View>
               )}
@@ -267,10 +311,10 @@ export default function CartScreen({ navigation, route }: any) {
                 <View style={styles.tableSection}>
                   <View style={styles.tableSectionHeader}>
                     <Text style={styles.tableSectionTitle}>Na mesa ({participants.length || 1})</Text>
-                    {capabilities?.guestLink && (
-                      <TouchableOpacity style={styles.inviteLink} onPress={() => invite.mutate()} disabled={invite.isPending} accessibilityRole="button">
+                    {canInvite && (
+                      <TouchableOpacity style={styles.inviteLink} onPress={() => setInviteOpen(true)} accessibilityRole="button" testID="cart-invite-button">
                         <Ionicons name="person-add-outline" size={14} color={colors.primary} />
-                        <Text style={styles.inviteLinkText}>{invite.isPending ? 'Gerando...' : 'Convidar'}</Text>
+                        <Text style={styles.inviteLinkText}>Convidar</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -294,17 +338,10 @@ export default function CartScreen({ navigation, route }: any) {
                 <Text style={styles.totalLabel}>Subtotal ({cart.itemCount} {cart.itemCount === 1 ? 'item' : 'itens'})</Text>
                 <Text style={styles.totalValue}>{money(cart.total)}</Text>
               </View>
-              {serviceFee > 0 && (
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Taxa de serviço ({serviceFeeBps / 100}%)</Text>
-                  <Text style={styles.totalValue}>{money(serviceFee)}</Text>
-                </View>
-              )}
               <View style={styles.grandTotalRow}>
                 <Text style={styles.grandTotalLabel}>Total</Text>
-                <Text style={styles.grandTotalValue}>{money(totalWithFee)}</Text>
+                <Text style={styles.grandTotalValue}>{money(cart.total)}</Text>
               </View>
-              <Text style={styles.totalNote}>O preço final é recalculado e validado no servidor.</Text>
 
               {needsTableSession && !hasUsableSession && (
                 <View style={styles.sessionBanner}>
@@ -324,13 +361,14 @@ export default function CartScreen({ navigation, route }: any) {
               )}
 
               <TouchableOpacity
-                style={[styles.cta, !cart.items.length && styles.ctaDisabled]}
+                style={[styles.cta, ctaDisabled && styles.ctaDisabled]}
                 onPress={() =>
                   prepaidCheckout
                     ? navigation.navigate('QuickServiceCheckout', { restaurantId: cart.restaurantId })
                     : place.mutate()
                 }
-                disabled={prepaidCheckout ? !cart.items.length : !canSubmit || place.isPending}
+                disabled={ctaDisabled || place.isPending}
+                accessibilityState={{ disabled: ctaDisabled }}
                 accessibilityRole="button"
               >
                 {tableWithGuests && !place.isPending && <Ionicons name="time-outline" size={18} color={colors.primaryForeground} />}
@@ -354,6 +392,17 @@ export default function CartScreen({ navigation, route }: any) {
           )}
         </ScrollView>
       </View>
+      {canInvite && hasUsableSession && session ? (
+        <InviteToTableSheet
+          visible={inviteOpen}
+          onClose={() => setInviteOpen(false)}
+          tableSessionId={session.tableSessionId}
+          restaurantName={restaurant.data?.name}
+          userInviteEnabled={capabilities?.userInvite ?? false}
+          guestLinkEnabled={capabilities?.guestLink ?? false}
+          searchMinChars={policies?.userSearchMinChars ?? null}
+        />
+      ) : null}
     </ScreenContainer>
   );
 }

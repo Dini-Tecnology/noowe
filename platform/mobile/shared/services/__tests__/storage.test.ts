@@ -1,4 +1,4 @@
-import { secureStorage } from '../storage';
+import { secureStorage } from '../secure-storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 jest.mock('@react-native-async-storage/async-storage');

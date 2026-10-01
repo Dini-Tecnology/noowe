@@ -8,6 +8,8 @@ import {
   type CasualDiningAmenity,
   type CasualDiningConfig,
 } from '@okinawa/shared/config/casual-dining';
+import { FINE_DINING_AMBIANCE_PRESENTATION, isFineDiningAmbiance } from '@okinawa/shared/config/fine-dining';
+import { QUICK_SERVICE_CUISINE_PRESENTATION, isQuickServiceCuisineTag } from '@okinawa/shared/config/quick-service';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { CustomerRestaurant, RestaurantLiveStatus } from '../../services/customer-backend';
 
@@ -39,13 +41,56 @@ export function amenityChipIcon(key: string): IoniconName {
   return (CASUAL_DINING_AMENITY_PRESENTATION[key as CasualDiningAmenity]?.icon ?? 'ellipse-outline') as IoniconName;
 }
 
-/** Actions on the casual dining restaurant page, under the rating row. */
-export const CASUAL_RESTAURANT_ACTIONS: { key: string; label: string; icon: IoniconName }[] = [
+/**
+ * Amenidades cadastradas como texto livre ("Terraço", "Bar", "Café") ainda
+ * precisam de um ícone próprio; sem essa tabela caem no `ellipse-outline` e a
+ * página do restaurante vira um mural de círculos idênticos.
+ */
+const FREE_TEXT_AMENITY_ICON_RULES: { icon: IoniconName; pattern: RegExp }[] = [
+  { icon: 'wifi-outline', pattern: /\bwi[\s-]?fi\b|\binternet\b/i },
+  { icon: 'car-outline', pattern: /estacionamento|valet|garagem/i },
+  { icon: 'accessibility-outline', pattern: /acess[íi]vel|acessibilidade|rampa|cadeirante/i },
+  { icon: 'paw-outline', pattern: /\bpet\b|animais|cachorr/i },
+  { icon: 'happy-outline', pattern: /\bkids?\b|infantil|crian[çc]a/i },
+  { icon: 'body-outline', pattern: /cadeir[ãa]o/i },
+  { icon: 'people-outline', pattern: /grupos?|festas?|aniversári/i },
+  { icon: 'calendar-outline', pattern: /reserva/i },
+  { icon: 'snow-outline', pattern: /ar[\s-]?condicionado|climatizad/i },
+  { icon: 'musical-notes-outline', pattern: /m[úu]sica ao vivo|live music|dj\b/i },
+  { icon: 'wine-outline', pattern: /\bbar\b|adega|drinks?|coquet/i },
+  { icon: 'cafe-outline', pattern: /\bcaf[eé]\b|cafeteria/i },
+  { icon: 'leaf-outline', pattern: /terra[çc]o|varanda|jardim|rooftop|deck/i },
+  { icon: 'sunny-outline', pattern: /ao ar livre|outdoor|externo/i },
+  { icon: 'restaurant-outline', pattern: /gar[çc]om|table service/i },
+  { icon: 'card-outline', pattern: /cart[ãa]o|pix|pagamento/i },
+];
+
+export function amenityChipIconForFreeText(text: string): IoniconName {
+  const rule = FREE_TEXT_AMENITY_ICON_RULES.find((entry) => entry.pattern.test(text));
+  return rule?.icon ?? ('ellipse-outline' as IoniconName);
+}
+
+/** Actions on the restaurant page, under the rating row. */
+export const RESTAURANT_PAGE_ACTIONS: { key: string; label: string; icon: IoniconName }[] = [
   { key: 'menu', label: 'Cardápio', icon: 'restaurant-outline' },
-  { key: 'photos', label: 'Fotos', icon: 'heart-outline' },
+  { key: 'photos', label: 'Fotos', icon: 'images-outline' },
   { key: 'reviews', label: 'Avaliações', icon: 'star-outline' },
   { key: 'directions', label: 'Como ir', icon: 'location-outline' },
 ];
+
+/** Hard ceiling of amenity chips shown inline on the restaurant page. */
+export const MAX_AMENITY_CHIPS = 6;
+
+/**
+ * How many amenity chips fit inline before the "…" chip takes over. Narrow
+ * phones show fewer so the block never pushes the page content down; no
+ * device shows more than `MAX_AMENITY_CHIPS`.
+ */
+export function amenityChipLimitForWidth(width: number): number {
+  if (width < 340) return 4;
+  if (width < 380) return 5;
+  return MAX_AMENITY_CHIPS;
+}
 
 /** "Jantar em família" — the casual dining home greets by meal, not by luxury. */
 export function casualDiningHeadline(date = new Date()): string {
@@ -124,11 +169,41 @@ export function casualDiningConfigOf(restaurant: CustomerRestaurant | undefined 
   );
 }
 
-/** Chips shown on the restaurant page: configured amenities, then free text. */
-export function restaurantAmenityChips(restaurant: CustomerRestaurant): { key: string; label: string; icon: IoniconName }[] {
+export interface RestaurantChip {
+  key: string;
+  label: string;
+  icon: IoniconName;
+}
+
+/**
+ * Chips shown on the restaurant page. `service_config.amenities` holds two
+ * different vocabularies — casual dining's amenities and fine dining's
+ * ambiance tags — so both are resolved here; anything else is kept as free
+ * text. A restaurant with no amenities at all falls back to its cuisine
+ * tags, which is what quick service carries instead. Which vocabulary a row
+ * uses is a property of the row, never of the service model name.
+ */
+export function restaurantAmenityChips(restaurant: CustomerRestaurant): RestaurantChip[] {
   const { keys, freeText } = parseAmenities(restaurant.serviceConfig);
-  return [
+  const chips: RestaurantChip[] = [
     ...keys.map((key) => ({ key, label: amenityChipLabel(key), icon: amenityChipIcon(key) })),
-    ...freeText.map((label) => ({ key: `free:${label}`, label, icon: 'ellipse-outline' as IoniconName })),
+    ...freeText.map((value) => {
+      const ambiance = isFineDiningAmbiance(value) ? FINE_DINING_AMBIANCE_PRESENTATION[value] : null;
+      return {
+        key: `tag:${value}`,
+        label: ambiance?.label ?? value,
+        icon: (ambiance?.icon ?? amenityChipIconForFreeText(value)) as IoniconName,
+      };
+    }),
   ];
+  if (chips.length > 0) return chips;
+
+  return restaurant.cuisineTypes.map((value) => {
+    const cuisine = isQuickServiceCuisineTag(value) ? QUICK_SERVICE_CUISINE_PRESENTATION[value] : null;
+    return {
+      key: `cuisine:${value}`,
+      label: cuisine?.label ?? value,
+      icon: (cuisine?.icon ?? 'restaurant-outline') as IoniconName,
+    };
+  });
 }

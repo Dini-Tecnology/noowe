@@ -3,7 +3,7 @@ import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Info } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
-import ApiService from '@okinawa/shared/services/api';
+import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from './shared/V2Shell';
 import { V2_TONE } from './shared/v2Theme';
 import { V2StatusBadge } from './shared/V2StatusBadge';
@@ -48,7 +48,9 @@ export default function KitchenDisplayScreen() {
     const newStatus: KdsStatus = pendingAction.action === 'start' ? 'preparing' : 'ready';
     setIsSubmitting(true);
     try {
-      await ApiService.updateOrderStatus(pendingAction.orderId, newStatus);
+      const order = orders.find((item) => item.id === pendingAction.orderId);
+      if (!order) return;
+      await Promise.all(order.itemIds.map((itemId) => supabaseApiAdapter.updateOrderItemStatus(itemId, newStatus)));
       await refresh();
       setPendingAction(null);
     } finally {

@@ -30,6 +30,7 @@ import {
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 import { ConfigSectionCard } from './config/ConfigSectionCard';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 /** lucide icon per amenity — kept local since the shared config only owns Ionicons names for the client app. */
 const AMENITY_ICONS: Partial<Record<CasualDiningAmenity, typeof Baby>> = {
@@ -69,7 +70,7 @@ export default function CasualDiningScreen() {
       );
       setConfig(parseCasualDiningConfig(data?.config));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar configuração');
+      setError(userErrorMessage(err, 'Erro ao carregar configuração'));
     } finally {
       setLoading(false);
     }
@@ -92,7 +93,7 @@ export default function CasualDiningScreen() {
       );
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar configuração');
+      setError(userErrorMessage(err, 'Erro ao salvar configuração'));
     }
   }, [restaurantId]);
 

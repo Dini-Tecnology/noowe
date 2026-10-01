@@ -1,6 +1,6 @@
 /* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V5 */
 /* Hallmark · macrostructure: Long Document · tone: warm utilitarian · anchor hue: orange */
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,8 +9,11 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useCart } from '@/shared/contexts/CartContext';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
+import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import customerBackend, { type TableBillItem } from '../../services/customer-backend';
-import { money, StateView, useQueryRefreshControl } from './shared';
+import InviteToTableSheet from '../../components/table/InviteToTableSheet';
+import { useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
+import { money, StateView, useQueryRefreshControl, tableLabel, translateOrderError } from './shared';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&q=80';
@@ -37,6 +40,12 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
   const colors = useColors();
   const cart = useCart();
   const { session } = useVisitSession();
+  // Chamar garçom é ação de quem já está em atendimento — aqui, sentado com a
+  // comanda aberta. Continua saindo de capability, nunca do modelo de serviço.
+  const { features, capabilities, policies } = useServiceTypeFor(session?.restaurantId);
+  const canInvite = !!capabilities && (capabilities.guestLink || capabilities.userInvite);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  useTableInvitesRealtime(session?.tableSessionId, canInvite && !!session?.tableSessionId);
   const queryClient = useQueryClient();
 
   const restaurant = useQuery({
@@ -99,13 +108,27 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
           dinerId: i.diner_id,
         })),
       }),
-    onSuccess: () => {
+    onSuccess: (order) => {
       cart.clearCart();
       void queryClient.invalidateQueries({ queryKey: ['table-bill'] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      // Same hand-off as CartScreen; `navigate` keeps the comanda underneath
+      // so "voltar" returns to the table bill.
+      navigation.navigate('OrderDetail', { orderId: order.id });
     },
-    onError: (error: Error) => Alert.alert('Pedido não enviado', error.message),
+    onError: (error: Error) => Alert.alert('Pedido não enviado', translateOrderError(error)),
   });
+
+  const clearCart = useCallback(() => {
+    Alert.alert(
+      'Limpar comanda',
+      'Remover todos os itens ainda não enviados?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Limpar', style: 'destructive', onPress: () => cart.clearCart() },
+      ],
+    );
+  }, [cart]);
 
   const goToMenu = useCallback(
     () => navigation.navigate('Menu', { restaurantId: session?.restaurantId }),
@@ -170,7 +193,9 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
           borderRadius: 16, borderWidth: 1.5, borderColor: colors.primaryLight, borderStyle: 'dashed',
           padding: 14, gap: 10, backgroundColor: colors.backgroundSecondary,
         },
+        pendingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
         pendingTitle: { fontSize: 13, fontWeight: '700', color: colors.primary },
+        pendingClear: { fontSize: 12, fontWeight: '600', color: colors.foregroundSecondary, textDecorationLine: 'underline' },
         pendingRow: { flexDirection: 'row', justifyContent: 'space-between' },
         pendingItemName: { fontSize: 13, color: colors.foreground },
         pendingItemPrice: { fontSize: 13, fontWeight: '600', color: colors.foreground },
@@ -183,6 +208,12 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
           paddingVertical: 14, borderRadius: 16, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center',
         },
         addMoreText: { fontSize: 15, fontWeight: '700', color: colors.foreground },
+        callWaiterBtn: {
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+          paddingVertical: 14, borderRadius: 16, marginTop: 10,
+          backgroundColor: colors.backgroundTertiary,
+        },
+        callWaiterText: { fontSize: 15, fontWeight: '700', color: colors.foreground },
         splitBtn: {
           flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
           paddingVertical: 14, borderRadius: 16, backgroundColor: colors.primary, marginTop: 10,
@@ -228,9 +259,20 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
             <View style={{ flex: 1 }}>
               <Text style={styles.restaurantName} numberOfLines={1}>{restaurant.data?.name ?? 'Restaurante'}</Text>
               <Text style={styles.restaurantSub}>
-                Mesa {session.tableNumber} · {Math.max(bill.data?.participants.length ?? 1, 1)} pessoa{Math.max(bill.data?.participants.length ?? 1, 1) > 1 ? 's' : ''}
+                {tableLabel(session.tableNumber)} · {Math.max(bill.data?.participants.length ?? 1, 1)} pessoa{Math.max(bill.data?.participants.length ?? 1, 1) > 1 ? 's' : ''}
               </Text>
             </View>
+            {canInvite ? (
+              <TouchableOpacity
+                style={[styles.bellBtn, { marginRight: 8 }]}
+                onPress={() => setInviteOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Convidar para a mesa"
+                testID="comanda-invite-button"
+              >
+                <Ionicons name="person-add-outline" size={19} color={colors.primary} />
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               style={styles.bellBtn}
               onPress={() => callWaiter.mutate()}
@@ -287,7 +329,12 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
 
           {cart.items.length > 0 && (
             <View style={styles.pendingCard}>
-              <Text style={styles.pendingTitle}>Ainda não enviado</Text>
+              <View style={styles.pendingHeader}>
+                <Text style={styles.pendingTitle}>Ainda não enviado</Text>
+                <TouchableOpacity onPress={clearCart} accessibilityRole="button" accessibilityLabel="Limpar comanda">
+                  <Text style={styles.pendingClear}>Limpar</Text>
+                </TouchableOpacity>
+              </View>
               {cart.items.map((item) => (
                 <View key={item.id} style={styles.pendingRow}>
                   <Text style={styles.pendingItemName} numberOfLines={1}>
@@ -312,7 +359,23 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
             <Text style={styles.addMoreText}>Adicionar mais itens</Text>
           </TouchableOpacity>
 
-          {groups.length > 0 && (
+          {features.callWaiter && (
+            <TouchableOpacity
+              style={styles.callWaiterBtn}
+              onPress={() => callWaiter.mutate()}
+              disabled={callWaiter.isPending}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityState={{ busy: callWaiter.isPending }}
+            >
+              <Ionicons name="hand-left-outline" size={18} color={colors.primary} />
+              <Text style={styles.callWaiterText}>
+                {callWaiter.isPending ? 'Chamando…' : 'Chamar Garçom'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {groups.length > 0 && (bill.data?.participants.length ?? 0) > 1 && (
             <TouchableOpacity style={styles.splitBtn} onPress={openSplitBill} activeOpacity={0.9} accessibilityRole="button">
               <Ionicons name="git-branch-outline" size={18} color={colors.primaryForeground} />
               <Text style={styles.splitBtnText}>Dividir Conta</Text>
@@ -320,6 +383,17 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
           )}
         </ScrollView>
       </View>
+      {canInvite ? (
+        <InviteToTableSheet
+          visible={inviteOpen}
+          onClose={() => setInviteOpen(false)}
+          tableSessionId={session.tableSessionId}
+          restaurantName={restaurant.data?.name}
+          userInviteEnabled={capabilities?.userInvite ?? false}
+          guestLinkEnabled={capabilities?.guestLink ?? false}
+          searchMinChars={policies?.userSearchMinChars ?? null}
+        />
+      ) : null}
     </ScreenContainer>
   );
 }

@@ -31,7 +31,7 @@ vi.mock('react-native', () => ({
         this.value = val;
       }
       value: number;
-      interpolate: () => 'interpolated';
+      interpolate = () => 'interpolated';
     },
     timing: () => ({ start: vi.fn() }),
     spring: () => ({ start: vi.fn() }),
@@ -497,7 +497,7 @@ describe('Card Component', () => {
     });
 
     it('should use solid background on Android', () => {
-      const platform = 'android';
+      const platform: string = 'android';
       const usesBlur = platform === 'ios';
       expect(usesBlur).toBe(false);
     });

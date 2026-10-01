@@ -377,6 +377,26 @@ e `20260815230000_table_companion_kid_details.sql` (`kid_age`, `kid_allergies`).
 6. **ADR-006 sem implementação:** não há aviso ao anfitrião sobre responsabilidade pelo saldo
    de convidado sem conta.
 
+**Atualização 2026-09-26: fatia G2b, ADR-011**
+
+O item 1 foi resolvido **para o canal por @username**:
+- `capacity_requests`, `table_session_participants.seat_count` e
+  `private.table_session_capacity_check` agora existem;
+- a tela "Lotação" do maitre está pronta, com decisão auditada.
+
+Continuam em aberto:
+- link e QR ainda entram sem checar lotação;
+- os itens 2 a 6.
+
+Achados durante a G2b:
+- **Resolvido.** O chip "Convidar" de `FecharContaScreen.tsx` aparecia sem checar capability.
+  Agora exige `guestLink || userInvite` (teste `production.inviteEntryPoints.test.tsx`).
+- **Divergência fora de escopo.** `FecharContaScreen.tsx` tem literais de regra de negócio:
+  `TIP_OPTIONS = [0, 10, 15, 20]` e `feePct ?? 10`. Deveriam vir de `tipPresetsBps` e
+  `serviceFeeBps`.
+- **Divergência fora de escopo.** Em `NotificationsScreen.tsx`, o botão "Recusar" do convite de
+  **reserva** só marca a notificação como lida; não recusa no servidor.
+
 ---
 
 ### 1.12 G3 — Divisão de conta e pagamento parcial — **DIVERGENTE**

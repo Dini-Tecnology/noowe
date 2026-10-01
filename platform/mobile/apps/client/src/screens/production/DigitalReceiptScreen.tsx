@@ -38,6 +38,7 @@ function receiptHtml(receipt: DigitalReceipt): string {
     <html>
       <head><meta charset="utf-8" /></head>
       <body style="font-family:-apple-system,Helvetica,Arial,sans-serif;color:#1a1a1a;padding:24px;">
+        ${receipt.simulated ? '<p>RECIBO DE SIMULAÇÃO — Nenhum valor foi cobrado.</p>' : ''}
         <h2 style="margin-bottom:0;">${receipt.restaurantName}</h2>
         <p style="color:#666;margin-top:4px;">
           ${receipt.restaurantCnpj ? `CNPJ: ${receipt.restaurantCnpj}<br/>` : ''}
@@ -50,17 +51,17 @@ function receiptHtml(receipt: DigitalReceipt): string {
           <tr><td>Subtotal</td><td style="text-align:right;">${money(receipt.subtotal)}</td></tr>
           <tr><td>Taxa de serviço (${receipt.serviceFeePercent}%)</td><td style="text-align:right;">${money(receipt.serviceFee)}</td></tr>
           ${receipt.discount > 0 ? `<tr><td>${receipt.discountReason ?? 'Desconto'}</td><td style="text-align:right;color:#16A34A;">-${money(receipt.discount)}</td></tr>` : ''}
-          <tr><td style="font-weight:700;padding-top:8px;">Total</td><td style="text-align:right;font-weight:700;padding-top:8px;">${money(receipt.total)}</td></tr>
+          ${receipt.tip > 0 ? `<tr><td>Gorjeta</td><td style="text-align:right;">${money(receipt.tip)}</td></tr>` : ''}
+          <tr><td style="font-weight:700;padding-top:8px;">Total</td><td style="text-align:right;font-weight:700;padding-top:8px;">${money(receipt.total + receipt.tip)}</td></tr>
         </table>
         <hr style="border:none;border-top:1px solid #eee;margin:16px 0;" />
         <p style="font-size:13px;color:#444;">
           Pagamento: ${PAYMENT_METHOD_LABELS[receipt.paymentMethod] ?? receipt.paymentMethod}<br/>
-          Gorjeta: ${money(receipt.tip)}<br/>
           ${receipt.cashback > 0 ? `Cashback ganho: +${money(receipt.cashback)}<br/>` : ''}
           ${receipt.pointsAwarded > 0 ? `Pontos ganhos: +${receipt.pointsAwarded} pts<br/>` : ''}
         </p>
         <p style="font-size:11px;color:#999;margin-top:24px;">
-          Chave de acesso: ${receipt.accessKey}
+          ${receipt.simulated ? 'Simulação sem cobrança · Sem valor fiscal' : `Comprovante: ${receipt.id}`}
         </p>
       </body>
     </html>
@@ -100,7 +101,7 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
   const shareText = useCallback(() => {
     if (!receipt) return;
     Share.share({
-      message: `Recibo · ${receipt.restaurantName}\n${formatDateTime(receipt.createdAt)}\nTotal: ${money(receipt.total)}\nChave de acesso: ${receipt.accessKey}`,
+      message: `${receipt.simulated ? 'Recibo de simulação' : 'Recibo'} · ${receipt.restaurantName}\n${formatDateTime(receipt.createdAt)}\nTotal: ${money(receipt.total + receipt.tip)}\n${receipt.simulated ? 'Simulação sem cobrança · Sem valor fiscal' : `Comprovante: ${receipt.id}`}`,
     });
   }, [receipt]);
 
@@ -109,7 +110,7 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
       StyleSheet.create({
         scroll: { flex: 1, backgroundColor: colors.background },
         content: { paddingHorizontal: 16, paddingBottom: 40 },
-        header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 12, gap: 12 },
+        header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, gap: 12 },
         headerBtn: {
           width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
           backgroundColor: colors.backgroundTertiary,
@@ -210,20 +211,24 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
                 <Text style={styles.discountValue}>-{money(receipt.discount)}</Text>
               </View>
             )}
+            {/* The tip is part of what was charged — listing it here keeps the
+                rows above adding up to the total. */}
+            {receipt.tip > 0 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Gorjeta</Text>
+                <Text style={styles.summaryValue}>{money(receipt.tip)}</Text>
+              </View>
+            )}
 
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{money(receipt.total)}</Text>
+              <Text style={styles.totalValue}>{money(receipt.total + receipt.tip)}</Text>
             </View>
 
             <View style={styles.infoBox}>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Pagamento</Text>
                 <Text style={styles.infoValue}>{PAYMENT_METHOD_LABELS[receipt.paymentMethod] ?? receipt.paymentMethod}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Gorjeta</Text>
-                <Text style={styles.infoValue}>{money(receipt.tip)}</Text>
               </View>
               {receipt.cashback > 0 && (
                 <View style={styles.infoRow}>
@@ -242,8 +247,8 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
             <View style={styles.qrBox}>
               <Ionicons name="qr-code-outline" size={44} color={colors.foregroundMuted} />
             </View>
-            <Text style={styles.nfceLabel}>NFC-e válida · Chave de acesso</Text>
-            <Text style={styles.accessKeyText}>{receipt.accessKey}</Text>
+            <Text style={styles.nfceLabel}>Comprovante da conta · Sem valor fiscal</Text>
+            <Text style={styles.accessKeyText}>{receipt.simulated ? 'Recibo de simulação · Nenhum valor foi cobrado.' : receipt.accessKey}</Text>
 
             <View style={styles.actionsRow}>
               <TouchableOpacity style={styles.actionBtn} onPress={downloadPdf} disabled={exporting} accessibilityRole="button">

@@ -11,6 +11,7 @@ import { V2FormSheet } from './shared/V2FormSheet';
 import { V2Shell } from './shared/V2Shell';
 import { TableComandaDialog } from './shared/TableComandaDialog';
 import { useRestaurantTables, type V2Table } from './shared/useRestaurantOperations';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 type StatusKey = 'available' | 'occupied' | 'reserved' | 'cleaning' | 'blocked' | 'payment';
 type SeatingMode = 'seat' | 'checkin';
@@ -101,7 +102,7 @@ export default function TablesScreen() {
       await supabaseApiAdapter.updateTableStatus(selected, status);
       await refresh();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Não foi possível alterar o status.');
+      setActionError(userErrorMessage(err, 'Não foi possível alterar o status.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -149,7 +150,7 @@ export default function TablesScreen() {
       setSeatingTable(null);
       await refresh();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Não foi possível sentar o cliente.');
+      setFormError(userErrorMessage(err, 'Não foi possível sentar o cliente.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -169,7 +170,7 @@ export default function TablesScreen() {
       await refresh();
     } catch (err) {
       setCloseAccountTable(null);
-      setActionError(err instanceof Error ? err.message : 'Não foi possível fechar a conta.');
+      setActionError(userErrorMessage(err, 'Não foi possível fechar a conta.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -225,7 +226,7 @@ export default function TablesScreen() {
       setEditorTable(undefined);
       await refresh();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Não foi possível salvar a mesa.');
+      setFormError(userErrorMessage(err, 'Não foi possível salvar a mesa.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -250,7 +251,7 @@ export default function TablesScreen() {
       await refresh();
     } catch (err) {
       setDeleteTable(null);
-      setActionError(err instanceof Error ? err.message : 'Não foi possível excluir a mesa.');
+      setActionError(userErrorMessage(err, 'Não foi possível excluir a mesa.'));
     } finally {
       setIsSubmitting(false);
     }

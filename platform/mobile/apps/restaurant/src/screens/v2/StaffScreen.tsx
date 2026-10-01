@@ -8,6 +8,7 @@ import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 import { V2FormSheet } from './shared/V2FormSheet';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface StaffMember {
   id: string;
@@ -30,7 +31,8 @@ type FoundUser = {
   email?: string;
   already_in_this_restaurant: boolean;
   existing_role?: string;
-  linked_to_other_restaurant?: string | null;
+  /** Tem vínculo ativo em outro restaurante (sem revelar qual). */
+  works_in_other_restaurant?: boolean;
 };
 
 type DeleteState =
@@ -61,10 +63,7 @@ const ROLE_COLORS: Record<string, string> = {
 const ASSIGNABLE_ROLES = ['manager', 'maitre', 'chef', 'barman', 'cook', 'waiter'];
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-  return fallback;
+  return userErrorMessage(error, fallback);
 }
 
 function formatMoney(value: number | string | null | undefined): string {
@@ -177,7 +176,8 @@ export default function StaffScreen() {
   const canSubmitInvite = editingMember
     ? true
     : inviteMode === 'link'
-      ? Boolean(foundUser && !foundUser.already_in_this_restaurant && !foundUser.linked_to_other_restaurant)
+      // Quem já trabalha em outro restaurante pode ser vinculado a este também: a conta é uma só.
+      ? Boolean(foundUser && !foundUser.already_in_this_restaurant)
       : Boolean(newFullName.trim() && email.trim() && newPassword.length >= 6);
 
   const submit = async () => {
@@ -470,13 +470,12 @@ export default function StaffScreen() {
                     <Text style={styles.infoWarn}>
                       Este usuário já faz parte da sua equipe como {ROLE_LABELS[foundUser.existing_role ?? ''] ?? foundUser.existing_role}.
                     </Text>
-                  ) : foundUser.linked_to_other_restaurant ? (
-                    <Text style={styles.infoWarn}>
-                      Este usuário já está vinculado a outro restaurante ({foundUser.linked_to_other_restaurant}) e não pode ser adicionado aqui.
-                    </Text>
                   ) : (
                     <Text style={styles.infoOk}>
                       Usuário encontrado: {foundUser.full_name ?? foundUser.email}. Ele já existe na aplicação — ao confirmar, você vai vinculá-lo à sua equipe.
+                      {foundUser.works_in_other_restaurant
+                        ? ' Ele também trabalha em outro restaurante e poderá alternar entre os dois com a mesma conta.'
+                        : ''}
                     </Text>
                   )
                 ) : null}
@@ -521,7 +520,7 @@ export default function StaffScreen() {
 
         {(editingMember
           || inviteMode === 'create'
-          || (foundUser && !foundUser.already_in_this_restaurant && !foundUser.linked_to_other_restaurant)) ? (
+          || (foundUser && !foundUser.already_in_this_restaurant)) ? (
           <Field label="Função" required>
             <View style={styles.roleOptions}>
               {ASSIGNABLE_ROLES.map((role) => {

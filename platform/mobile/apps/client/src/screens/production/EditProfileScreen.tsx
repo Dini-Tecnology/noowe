@@ -1,5 +1,5 @@
 /* Hallmark · macrostructure: Form-Led · genre: modern-minimal · theme: Noowe tokens · enrichment: none · designed-as-app · pre-emit critique: P5 H5 E5 S5 R5 V5 */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,25 +15,69 @@ import {
 import { Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
+import { pickImageFromLibrary } from '@okinawa/shared/utils/pick-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { formatBrazilianPhone, validateBrazilianPhone } from '@okinawa/shared/utils/phone-validation';
 import customerBackend, { type CustomerProfile } from '../../services/customer-backend';
+import { isUsernameFormatValid, normalizeUsernameInput, USERNAME_UNAVAILABLE_MESSAGES } from '../../utils/username';
 import { StateView } from './shared';
+
+/** Typing pause before asking the server whether the @ is free (UX only). */
+const USERNAME_CHECK_DEBOUNCE_MS = 400;
+
+type UsernameStatus = 'current' | 'invalid_format' | 'checking' | 'available' | 'reserved' | 'taken' | 'error';
+
+function useUsernameStatus(normalized: string, current: string): UsernameStatus {
+  // Only the server's answer is state; "current" and "invalid" derive from the input.
+  const [checked, setChecked] = useState<{ value: string; status: UsernameStatus } | null>(null);
+  const needsServer = normalized !== current && isUsernameFormatValid(normalized);
+  useEffect(() => {
+    if (!needsServer) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      customerBackend.checkUsernameAvailability(normalized)
+        .then((result) => {
+          if (cancelled) return;
+          const status: UsernameStatus = result.available
+            ? (result.reason === 'current' ? 'current' : 'available')
+            : (result.reason === 'reserved' || result.reason === 'taken' ? result.reason : 'invalid_format');
+          setChecked({ value: normalized, status });
+        })
+        .catch(() => { if (!cancelled) setChecked({ value: normalized, status: 'error' }); });
+    }, USERNAME_CHECK_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [needsServer, normalized]);
+
+  if (normalized === current) return 'current';
+  if (!isUsernameFormatValid(normalized)) return 'invalid_format';
+  return checked?.value === normalized ? checked.status : 'checking';
+}
 
 function EditProfileForm({ profile, navigation }: { profile: CustomerProfile; navigation: any }) {
   const colors = useColors();
   const queryClient = useQueryClient();
   const [fullName, setFullName] = useState(profile.fullName);
   const [phone, setPhone] = useState(profile.phone ? formatBrazilianPhone(profile.phone) : '');
+  const [username, setUsername] = useState(profile.username);
+  const usernameChanged = username !== profile.username;
+  const usernameStatus = useUsernameStatus(username, profile.username);
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const normalizedInitialPhone = profile.phone ? formatBrazilianPhone(profile.phone) : '';
-  const changed = fullName.trim() !== profile.fullName || phone.trim() !== normalizedInitialPhone;
+  const changed = fullName.trim() !== profile.fullName || phone.trim() !== normalizedInitialPhone || usernameChanged;
 
   const save = useMutation({
-    mutationFn: () => customerBackend.updateProfile({ fullName: fullName.trim(), phone: phone.trim() || null }),
+    mutationFn: async () => {
+      // The @ goes through its own RPC (the server guards the column); only
+      // then the regular profile fields.
+      if (usernameChanged) await customerBackend.setUsername(username);
+      return customerBackend.updateProfile({ fullName: fullName.trim(), phone: phone.trim() || null });
+    },
     onSuccess: (updated) => {
       queryClient.setQueryData(['profile'], updated);
       setSaved(true);
@@ -53,23 +97,17 @@ function EditProfileForm({ profile, navigation }: { profile: CustomerProfile; na
 
   const choosePhoto = async () => {
     if (upload.isPending) return;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permissão necessária', 'Autorize o acesso às suas fotos para escolher uma imagem de perfil.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.85,
-    });
-    if (!result.canceled && result.assets[0]) upload.mutate(result.assets[0]);
+    const asset = await pickImageFromLibrary({ aspect: [1, 1], quality: 0.85 });
+    if (asset) upload.mutate(asset);
   };
 
   const submit = () => {
     if (!fullName.trim()) {
       setFormError('Informe seu nome para continuar.');
+      return;
+    }
+    if (usernameChanged && usernameStatus !== 'available') {
+      setFormError(usernameStatus === 'checking' ? 'Aguarde a verificação do @.' : 'Escolha um @ disponível.');
       return;
     }
     if (phone.trim() && !validateBrazilianPhone(phone)) {
@@ -100,13 +138,28 @@ function EditProfileForm({ profile, navigation }: { profile: CustomerProfile; na
     input: { minHeight: 50, marginBottom: 15, paddingHorizontal: 14, borderRadius: 13, borderWidth: 1, borderColor: colors.inputBorder, backgroundColor: colors.input, color: colors.foreground, fontSize: 14 },
     inputDisabled: { marginBottom: 6, backgroundColor: colors.backgroundTertiary, color: colors.foregroundSecondary },
     emailHint: { color: colors.foregroundMuted, fontSize: 10, lineHeight: 15 },
+    usernameRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, borderRadius: 13, borderWidth: 1, borderColor: colors.inputBorder, backgroundColor: colors.input },
+    usernameAt: { color: colors.foregroundSecondary, fontSize: 14, fontWeight: '700' },
+    usernameInput: { flex: 1, minHeight: 48, paddingLeft: 2, color: colors.foreground, fontSize: 14 },
+    usernameHint: { minHeight: 30, paddingTop: 6, paddingBottom: 9, fontSize: 11, lineHeight: 15 },
     message: { minHeight: 38, paddingTop: 10, color: formError ? colors.error : colors.success, fontSize: 12, textAlign: 'center' },
     save: { minHeight: 50, borderRadius: 15, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
     saveDisabled: { opacity: 0.48 },
     saveText: { color: colors.primaryForeground, fontSize: 14, fontWeight: '800' },
   }), [colors, formError]);
 
-  const saveDisabled = save.isPending || !fullName.trim() || !changed;
+  const saveDisabled = save.isPending || !fullName.trim() || !changed
+    || (usernameChanged && usernameStatus !== 'available');
+
+  const usernameHint: { text: string; color: string } = (() => {
+    switch (usernameStatus) {
+      case 'current': return { text: 'É assim que as pessoas te encontram para pedir junto na mesa.', color: colors.foregroundMuted };
+      case 'checking': return { text: 'Verificando…', color: colors.foregroundMuted };
+      case 'available': return { text: `@${username} está disponível.`, color: colors.success };
+      case 'error': return { text: 'Não foi possível verificar agora. Tente de novo.', color: colors.error };
+      default: return { text: USERNAME_UNAVAILABLE_MESSAGES[usernameStatus], color: colors.error };
+    }
+  })();
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -144,6 +197,24 @@ function EditProfileForm({ profile, navigation }: { profile: CustomerProfile; na
             style={styles.input}
             accessibilityLabel="Nome"
           />
+          <Text style={styles.label}>Seu @</Text>
+          <View style={styles.usernameRow}>
+            <Text style={styles.usernameAt}>@</Text>
+            <TextInput
+              value={username}
+              onChangeText={(value) => { setUsername(normalizeUsernameInput(value)); setSaved(false); if (formError) setFormError(null); }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              maxLength={30}
+              placeholder="seu-nome"
+              placeholderTextColor={colors.foregroundMuted}
+              style={styles.usernameInput}
+              accessibilityLabel="Nome de usuário"
+              testID="username-input"
+            />
+          </View>
+          <Text accessibilityLiveRegion="polite" style={[styles.usernameHint, { color: usernameHint.color }]} testID="username-hint">{usernameHint.text}</Text>
           <Text style={styles.label}>Telefone</Text>
           <TextInput
             value={phone}

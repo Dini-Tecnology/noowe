@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
+import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import customerBackend from '../../services/customer-backend';
 import { money, StateView } from './shared';
 
@@ -31,6 +32,15 @@ export default function SplitBillScreen({ route, navigation }: any) {
   const [mode, setMode] = useState<SplitMode>('mine');
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [fixedAmount, setFixedAmount] = useState('');
+  const { capabilities } = useServiceTypeFor(session?.restaurantId, session?.serviceModel);
+  const enabledModes = useMemo(() => {
+    const mapping: Record<string, SplitMode> = {
+      by_owner: 'mine', equal: 'equal', by_item: 'byItem', fixed_amount: 'fixed',
+    };
+    return new Set((capabilities?.splitModes ?? []).map((item) => mapping[item]).filter(Boolean));
+  }, [capabilities?.splitModes]);
+
+  const activeMode = enabledModes.has(mode) ? mode : ([...enabledModes][0] ?? mode);
 
   const bill = useQuery({
     queryKey: ['table-bill', tableSessionId],
@@ -55,25 +65,22 @@ export default function SplitBillScreen({ route, navigation }: any) {
 
   const feePct = bill.data?.serviceFeePercent ?? 10;
   const subtotal = bill.data?.subtotal ?? 0;
-  const totalWithFee = subtotal * (1 + feePct / 100);
-  const participantCount = Math.max(perPerson.length, 1);
+  const participantCount = Math.max(bill.data?.participants.length ?? 0, new Set(bill.data?.items.map((item) => item.placedBy)).size, 1);
 
   // The raw item-level subtotal for whichever mode is selected — no service
   // fee or tip yet, both of which get decided on the next screen (Gorjeta &
   // Pagamento) and applied there against this same base amount.
   const baseAmount = useMemo(() => {
     if (!bill.data) return 0;
-    if (mode === 'mine') return perPerson.find((p) => p.isMe)?.subtotal ?? 0;
-    if (mode === 'equal') return subtotal / participantCount;
-    if (mode === 'byItem') {
+    if (activeMode === 'mine') return bill.data.items.filter((item) => item.placedByIsMe).reduce((sum, item) => sum + item.totalPrice, 0);
+    if (activeMode === 'equal') return Math.ceil(Math.round(subtotal * 100) / participantCount) / 100;
+    if (activeMode === 'byItem') {
       return bill.data.items
         .filter((item) => selectedItemIds.includes(item.orderItemId))
         .reduce((sum, item) => sum + item.totalPrice, 0);
     }
     return Number(fixedAmount.replace(',', '.')) || 0;
-  }, [mode, bill.data, perPerson, subtotal, participantCount, selectedItemIds, fixedAmount]);
-
-  const myShare = baseAmount * (1 + feePct / 100);
+  }, [activeMode, bill.data, subtotal, participantCount, selectedItemIds, fixedAmount]);
 
   const toggleItem = useCallback((id: string) => {
     setSelectedItemIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -89,9 +96,10 @@ export default function SplitBillScreen({ route, navigation }: any) {
       restaurantName,
       baseAmount,
       serviceFeePercent: feePct,
-      splitMode: mode,
+      splitMode: activeMode,
+      itemIds: activeMode === 'byItem' ? selectedItemIds : undefined,
     });
-  }, [navigation, tableSessionId, restaurantName, baseAmount, feePct, mode]);
+  }, [navigation, tableSessionId, restaurantName, baseAmount, feePct, activeMode, selectedItemIds]);
 
   const styles = useMemo(
     () =>
@@ -119,7 +127,7 @@ export default function SplitBillScreen({ route, navigation }: any) {
         },
         modeCardSelected: { borderColor: colors.primary, backgroundColor: colors.backgroundSecondary },
         modeIcon: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundTertiary },
-        modeIconSelected: { backgroundColor: colors.primaryLight },
+        modeIconSelected: { backgroundColor: colors.primary },
         modeLabel: { fontSize: 14, fontWeight: '700', color: colors.foreground },
         modeLabelSelected: { color: colors.primary },
         modeSub: { fontSize: 11, color: colors.foregroundSecondary },
@@ -170,7 +178,7 @@ export default function SplitBillScreen({ route, navigation }: any) {
           </TouchableOpacity>
           <View>
             <Text style={styles.headerTotalLabel}>Total da mesa</Text>
-            <Text style={styles.headerTotalValue}>{money(totalWithFee)}</Text>
+            <Text style={styles.headerTotalValue}>{money(subtotal)}</Text>
           </View>
         </View>
         <Text style={styles.headerTitle}>Dividir Conta</Text>
@@ -202,8 +210,8 @@ export default function SplitBillScreen({ route, navigation }: any) {
             <View>
               <Text style={styles.sectionTitle}>Como dividir?</Text>
               <View style={styles.modeGrid}>
-                {MODES.map((option) => {
-                  const selected = mode === option.id;
+                {MODES.filter((option) => enabledModes.has(option.id)).map((option) => {
+                  const selected = activeMode === option.id;
                   return (
                     <TouchableOpacity
                       key={option.id}
@@ -214,7 +222,7 @@ export default function SplitBillScreen({ route, navigation }: any) {
                       accessibilityState={{ selected }}
                     >
                       <View style={[styles.modeIcon, selected && styles.modeIconSelected]}>
-                        <Ionicons name={option.icon} size={17} color={selected ? colors.primary : colors.foregroundSecondary} />
+                        <Ionicons name={option.icon} size={17} color={selected ? '#FFFFFF' : colors.foregroundSecondary} />
                       </View>
                       <Text style={[styles.modeLabel, selected && styles.modeLabelSelected]}>{option.label}</Text>
                       <Text style={styles.modeSub}>{option.subtitle}</Text>
@@ -224,7 +232,7 @@ export default function SplitBillScreen({ route, navigation }: any) {
               </View>
             </View>
 
-            {mode === 'byItem' && (
+            {activeMode === 'byItem' && (
               <View>
                 <Text style={styles.sectionTitle}>Selecione os itens</Text>
                 {bill.data.items.map((item) => {
@@ -250,7 +258,7 @@ export default function SplitBillScreen({ route, navigation }: any) {
               </View>
             )}
 
-            {mode === 'fixed' && (
+            {activeMode === 'fixed' && (
               <View>
                 <Text style={styles.sectionTitle}>Quanto você quer pagar?</Text>
                 <View style={styles.fixedInputWrap}>
@@ -272,14 +280,10 @@ export default function SplitBillScreen({ route, navigation }: any) {
               <Text style={styles.summaryLabel}>Subtotal</Text>
               <Text style={styles.summaryValue}>{money(subtotal)}</Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Serviço ({feePct}%)</Text>
-              <Text style={styles.summaryValue}>{money(subtotal * (feePct / 100))}</Text>
-            </View>
 
             <View style={styles.payCard}>
               <Text style={styles.payLabel}>Você paga:</Text>
-              <Text style={styles.payValue}>{money(myShare)}</Text>
+              <Text style={styles.payValue}>{money(baseAmount)}</Text>
             </View>
 
             <TouchableOpacity

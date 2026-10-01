@@ -17,7 +17,7 @@ import {
 } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';

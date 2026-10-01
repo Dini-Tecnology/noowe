@@ -139,7 +139,7 @@ export default function ModoFamiliaScreen({ route, navigation }: any) {
   if (!session?.tableSessionId) {
     return (
       <ScreenContainer edges={['top', 'bottom']}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingHorizontal: 16 }]}>
           <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Voltar">
             <Ionicons name="arrow-back" size={20} color={colors.foreground} />
           </TouchableOpacity>

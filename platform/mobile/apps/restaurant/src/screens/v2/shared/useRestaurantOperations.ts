@@ -7,6 +7,7 @@ import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import type { KdsOrder, KdsStatus, OrderStatus, TabOrder } from './v2Types';
 import { useRegisterRemoteRefresh } from './remoteRefreshRegistry';
 import { saoPauloDateKey } from './calendarDate';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 type AsyncState<T> = {
   data: T;
@@ -208,12 +209,14 @@ export function mapKdsRowsToOrders(rows: RawKdsItem[]): KdsOrder[] {
 
     if (existing) {
       existing.items.push(item);
+      existing.itemIds.push(row.id);
       if (existing.status === 'queue') existing.status = mapKdsStatus(row.status, row.order_status);
       continue;
     }
 
     grouped.set(row.order_id, {
       id: row.order_id,
+      itemIds: [row.id],
       table: row.table_number ? `Mesa ${row.table_number}` : 'Sem mesa',
       meta: `${elapsedLabel(row.order_created_at || row.created_at)} na fila`,
       status: mapKdsStatus(row.status, row.order_status),
@@ -294,7 +297,7 @@ export function useRestaurantOrders(options?: { includeDelivered?: boolean }): A
       });
       setData((Array.isArray(raw) ? raw : []).map(mapOrderToTabOrder));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar pedidos');
+      setError(userErrorMessage(err, 'Erro ao carregar pedidos'));
     } finally {
       setLoading(false);
     }
@@ -318,7 +321,7 @@ export function useKdsOrders(): AsyncState<KdsOrder[]> {
       const raw = await ApiService.getKitchenOrders();
       setData(mapKdsRowsToOrders(Array.isArray(raw) ? raw : []));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar KDS');
+      setError(userErrorMessage(err, 'Erro ao carregar KDS'));
     } finally {
       setLoading(false);
     }
@@ -348,7 +351,7 @@ export function useRestaurantTables(): AsyncState<V2Table[]> {
       const raw = await supabaseApiAdapter.getRestaurantTables(restaurantId);
       setData((Array.isArray(raw) ? raw : []).map(mapTable));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar mesas');
+      setError(userErrorMessage(err, 'Erro ao carregar mesas'));
     } finally {
       setLoading(false);
     }
@@ -404,7 +407,7 @@ export function useCustomerAssistanceHub(): AsyncState<CustomerAssistanceHub> {
         },
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar assistência ao cliente');
+      setError(userErrorMessage(err, 'Erro ao carregar assistência ao cliente'));
     } finally {
       setLoading(false);
     }
@@ -424,7 +427,9 @@ export type WaitlistEntry = {
   customerName: string;
   partySize: number;
   status: string;
+  position: number | null;
   estimatedWaitMinutes: number | null;
+  calledAt: string | null;
 };
 
 function mapWaitlistEntry(raw: any): WaitlistEntry {
@@ -433,7 +438,9 @@ function mapWaitlistEntry(raw: any): WaitlistEntry {
     customerName: raw.customer_name || raw.customer?.full_name || 'Cliente',
     partySize: toNumber(raw.party_size, 1),
     status: raw.status || 'waiting',
+    position: raw.position ?? null,
     estimatedWaitMinutes: raw.estimated_wait_minutes ?? null,
+    calledAt: raw.called_at ?? null,
   };
 }
 
@@ -446,14 +453,14 @@ export function useWaitlist(): AsyncState<WaitlistEntry[]> {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const raw = await supabaseApiAdapter.getWaitlist();
+      const raw = await supabaseApiAdapter.getWaitlist(restaurantId ?? undefined);
       setData((Array.isArray(raw) ? raw : []).map(mapWaitlistEntry));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar fila de espera');
+      setError(userErrorMessage(err, 'Erro ao carregar fila de espera'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [restaurantId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('waitlist_entries', restaurantId, refresh);
@@ -493,7 +500,7 @@ export function useTableBills(): AsyncState<TableBill[]> {
       const raw = await supabaseApiAdapter.getTableBills();
       setData((Array.isArray(raw) ? raw : []).map(mapTableBill));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar pagamentos');
+      setError(userErrorMessage(err, 'Erro ao carregar pagamentos'));
     } finally {
       setLoading(false);
     }
@@ -531,7 +538,7 @@ export function useDashboardSnapshot(): AsyncState<DashboardSnapshot | null> {
         kds_queue: toNumber(raw?.kds_queue),
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar dashboard');
+      setError(userErrorMessage(err, 'Erro ao carregar dashboard'));
     } finally {
       setLoading(false);
     }
@@ -609,7 +616,7 @@ export function useStaff(): AsyncState<StaffMember[]> {
       const raw = await supabaseApiAdapter.getStaff();
       setData((Array.isArray(raw) ? raw : []).map(mapStaffMember));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar equipe');
+      setError(userErrorMessage(err, 'Erro ao carregar equipe'));
     } finally {
       setLoading(false);
     }
@@ -633,7 +640,7 @@ export function useApprovals(): AsyncState<RestaurantApproval[]> {
       const raw = await supabaseApiAdapter.getApprovals(restaurantId ?? undefined, 'pending');
       setData(raw.map((approval) => ({ ...approval, amount: toNumber(approval.amount) })));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar aprovações');
+      setError(userErrorMessage(err, 'Erro ao carregar aprovações'));
     } finally {
       setLoading(false);
     }
@@ -686,7 +693,7 @@ export function useCashRegister(): AsyncState<CashRegisterSession | null> {
       const raw = await supabaseApiAdapter.getCashRegister();
       setData(raw?.session ? mapCashRegister(raw) : null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar caixa');
+      setError(userErrorMessage(err, 'Erro ao carregar caixa'));
     } finally {
       setLoading(false);
     }
@@ -737,7 +744,7 @@ export function useCashMovements(): AsyncState<CashMovement[]> {
       const movements = raw?.session?.movements;
       setData((Array.isArray(movements) ? movements : []).map(mapCashMovement));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar movimentações');
+      setError(userErrorMessage(err, 'Erro ao carregar movimentações'));
     } finally {
       setLoading(false);
     }
@@ -813,7 +820,7 @@ export function useReservations(dateISO?: string): AsyncState<Reservation[]> {
       }
       setData((Array.isArray(raw) ? raw : []).map(mapReservation));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar reservas');
+      setError(userErrorMessage(err, 'Erro ao carregar reservas'));
     } finally {
       setLoading(false);
     }
@@ -867,7 +874,7 @@ export function useStock(): AsyncState<StockItem[]> {
       const raw = await supabaseApiAdapter.getStock();
       setData((Array.isArray(raw) ? raw : []).map(mapStockItem));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar estoque');
+      setError(userErrorMessage(err, 'Erro ao carregar estoque'));
     } finally {
       setLoading(false);
     }
@@ -919,7 +926,7 @@ export function usePromotions(): AsyncState<Promotion[]> {
       const raw = await supabaseApiAdapter.getPromotions(restaurantId, 'active');
       setData((Array.isArray(raw) ? raw : []).map(mapPromotion));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar promoções');
+      setError(userErrorMessage(err, 'Erro ao carregar promoções'));
     } finally {
       setLoading(false);
     }
@@ -969,7 +976,7 @@ export function useMenuItems(): AsyncState<MenuItemSummary[]> {
       const raw = await supabaseApiAdapter.getMenu();
       setData((Array.isArray(raw) ? raw : []).map(mapMenuItemSummary));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar cardápio');
+      setError(userErrorMessage(err, 'Erro ao carregar cardápio'));
     } finally {
       setLoading(false);
     }
@@ -1017,7 +1024,7 @@ export function useServiceCalls(): AsyncState<ServiceCall[]> {
       const raw = await supabaseApiAdapter.getServiceCalls(undefined, ['open', 'acknowledged']);
       setData((Array.isArray(raw) ? raw : []).map(mapServiceCall));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar chamados');
+      setError(userErrorMessage(err, 'Erro ao carregar chamados'));
     } finally {
       setLoading(false);
     }

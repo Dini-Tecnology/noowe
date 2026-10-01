@@ -1,12 +1,14 @@
-import React, { useMemo } from 'react';
-import { ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import customerBackend, { type CustomerNotification } from '../../services/customer-backend';
-import { StateView } from './shared';
+import customerBackend, { type CustomerNotification, type TableUserInvite } from '../../services/customer-backend';
+import { useRespondToTableInvite } from '../../hooks/useRespondToTableInvite';
+import { describeClosedInvite, tableInviteKeys, useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
+import { rootNavigate, StateView, useQueryRefreshControl } from './shared';
 
 const ORANGE = '#FF4B22';
 
@@ -18,7 +20,16 @@ const PRESENTATION: Record<string, { icon: keyof typeof Ionicons.glyphMap; color
   promotion: { icon: 'sparkles-outline', color: '#0F766E', background: '#E8F7F4' },
   payment_received: { icon: 'gift-outline', color: '#F59E0B', background: '#FFF7E6' },
   system: { icon: 'notifications-outline', color: ORANGE, background: '#FFF0EA' },
+  table_invite: { icon: 'people-outline', color: ORANGE, background: '#FFF0EA' },
+  table_invite_update: { icon: 'people-outline', color: '#2563EB', background: '#EEF4FF' },
 };
+
+/** The @username invite a notification points to, if any (ADR-011). */
+function tableUserInviteId(item: CustomerNotification): string | null {
+  return item.metadata.kind === 'table_user_invite' && typeof item.metadata.invite_id === 'string'
+    ? item.metadata.invite_id
+    : null;
+}
 
 function relativeTime(value: string) {
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
@@ -38,7 +49,8 @@ export default function NotificationsScreen({ navigation }: any) {
     queryFn: ({ pageParam }) => customerBackend.listNotifications(20, pageParam),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
-  const notifications = query.data?.pages.flatMap((page) => page.data) ?? [];
+  const notifications = useMemo(() => query.data?.pages.flatMap((page) => page.data) ?? [], [query.data]);
+  const refreshControl = useQueryRefreshControl([query]);
 
   const read = useMutation({
     mutationFn: (id: string) => customerBackend.markNotificationRead(id),
@@ -54,6 +66,19 @@ export default function NotificationsScreen({ navigation }: any) {
       void queryClient.invalidateQueries({ queryKey: ['notification-count'] });
     },
   });
+  const markAllRead = useMutation({
+    mutationFn: () => customerBackend.markAllNotificationsRead(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      void queryClient.invalidateQueries({ queryKey: ['notification-count'] });
+    },
+  });
+
+  useEffect(() => {
+    if (notifications.some((item) => !item.isRead)) markAllRead.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifications.length]);
+
   const acceptInvite = useMutation({
     mutationFn: (token: string) => customerBackend.acceptReservationInvite(token),
     onSuccess: () => {
@@ -62,6 +87,34 @@ export default function NotificationsScreen({ navigation }: any) {
     },
     onError: (error: Error) => Alert.alert('Não foi possível aceitar', error.message),
   });
+
+  // Current state of every @username invite on screen: the notification is a
+  // snapshot, the invite may since have been accepted, cancelled or expired.
+  const tableInviteIds = useMemo(
+    () => [...new Set(notifications.map(tableUserInviteId).filter((id): id is string => !!id))].sort(),
+    [notifications],
+  );
+  const tableInvites = useQuery({
+    queryKey: tableInviteKeys.byIds(tableInviteIds),
+    queryFn: () => customerBackend.getTableUserInvites(tableInviteIds),
+    enabled: tableInviteIds.length > 0,
+  });
+  useTableInvitesRealtime(null, tableInviteIds.length > 0);
+  const invitesById = useMemo(
+    () => new Map((tableInvites.data ?? []).map((invite) => [invite.id, invite] as const)),
+    [tableInvites.data],
+  );
+  const { accept: acceptTableInvite, decline: declineTableInvite } = useRespondToTableInvite();
+  const [respondingInvite, setRespondingInvite] = useState<string | null>(null);
+  const respondToTableInvite = async (invite: TableUserInvite, action: 'accept' | 'decline') => {
+    setRespondingInvite(invite.id);
+    try {
+      const outcome = action === 'accept' ? await acceptTableInvite(invite) : await declineTableInvite(invite);
+      if (outcome.kind === 'joined') rootNavigate(navigation, 'Menu', { restaurantId: outcome.visit.restaurantId });
+    } finally {
+      setRespondingInvite(null);
+    }
+  };
 
   const confirmClear = () => {
     if (!notifications.length || clear.isPending) return;
@@ -93,11 +146,14 @@ export default function NotificationsScreen({ navigation }: any) {
     decline: { minWidth: 76, height: 34, paddingHorizontal: 16, borderRadius: 11, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
     declineText: { color: colors.foregroundSecondary, fontSize: 12, fontWeight: '700' },
     footer: { paddingVertical: 18 },
+    inviteState: { marginTop: 9, color: colors.foregroundMuted, fontSize: 12, fontStyle: 'italic' },
   }), [colors]);
 
   const renderItem = ({ item }: { item: CustomerNotification }) => {
     const presentation = PRESENTATION[item.type] ?? PRESENTATION.system;
     const inviteToken = typeof item.metadata.invite_token === 'string' ? item.metadata.invite_token : null;
+    const tableInviteId = tableUserInviteId(item);
+    const tableInvite = tableInviteId ? invitesById.get(tableInviteId) : undefined;
     return (
       <TouchableOpacity
         style={[styles.card, !item.isRead && styles.unread]}
@@ -124,6 +180,36 @@ export default function NotificationsScreen({ navigation }: any) {
                 <Text style={styles.declineText}>Recusar</Text>
               </TouchableOpacity>
             </View>
+          ) : null}
+          {tableInvite?.canRespond ? (
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={styles.accept}
+                onPress={() => void respondToTableInvite(tableInvite, 'accept')}
+                disabled={respondingInvite === tableInvite.id}
+                accessibilityRole="button"
+                testID={`notification-accept-${tableInvite.id}`}
+              >
+                {respondingInvite === tableInvite.id
+                  ? <ActivityIndicator size="small" color="#FFFFFF" />
+                  : <Text style={styles.acceptText}>Aceitar</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.decline}
+                onPress={() => void respondToTableInvite(tableInvite, 'decline')}
+                disabled={respondingInvite === tableInvite.id}
+                accessibilityRole="button"
+                testID={`notification-decline-${tableInvite.id}`}
+              >
+                <Text style={styles.declineText}>Recusar</Text>
+              </TouchableOpacity>
+            </View>
+          ) : tableInvite ? (
+            <Text style={styles.inviteState} testID={`notification-invite-state-${tableInvite.id}`}>
+              {tableInvite.status === 'awaiting_capacity'
+                ? 'Mesa cheia: aguardando a recepção liberar um lugar.'
+                : describeClosedInvite(tableInvite)}
+            </Text>
           ) : null}
         </View>
       </TouchableOpacity>
@@ -158,7 +244,7 @@ export default function NotificationsScreen({ navigation }: any) {
           renderItem={renderItem}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={query.isRefetching && !query.isFetchingNextPage} onRefresh={() => query.refetch()} tintColor={ORANGE} />}
+          refreshControl={refreshControl}
           onEndReached={() => query.hasNextPage && !query.isFetchingNextPage && query.fetchNextPage()}
           onEndReachedThreshold={0.35}
           ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator style={styles.footer} color={ORANGE} /> : null}

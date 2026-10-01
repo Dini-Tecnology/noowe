@@ -7,6 +7,13 @@
 import { supabaseAuthAdapter } from './supabase-auth';
 import { authService } from './auth';
 import logger from '../utils/logger';
+import { localizeAuthError } from '../utils/auth-errors';
+
+/** Mensagem do provedor (em inglês) traduzida quando conhecida; senão a mensagem padrão em português. */
+function localizedOr(message: string | undefined, fallback: string): string {
+  const localized = localizeAuthError(message);
+  return localized && localized !== message?.trim() ? localized : fallback;
+}
 
 export type OTPChannel = 'whatsapp' | 'sms';
 export type OTPPurpose = 'registration' | 'login' | 'verification';
@@ -69,7 +76,7 @@ class OTPAuthService {
 
       return {
         success: true,
-        message: 'OTP sent successfully',
+        message: 'Código enviado com sucesso',
         channel: request.channel || 'whatsapp',
       };
     } catch (error: unknown) {
@@ -79,7 +86,7 @@ class OTPAuthService {
       if (err.response?.status === 429) {
         return {
           success: false,
-          message: 'Too many attempts. Please wait before trying again.',
+          message: 'Muitas tentativas. Aguarde um pouco antes de tentar novamente.',
           channel: request.channel || 'whatsapp',
           retryAfter: err.response.data?.retry_after || 60,
         };
@@ -87,7 +94,7 @@ class OTPAuthService {
 
       return {
         success: false,
-        message: err.message || 'Failed to send OTP',
+        message: localizedOr(err.message, 'Não foi possível enviar o código. Tente novamente.'),
         channel: request.channel || 'whatsapp',
       };
     }
@@ -135,7 +142,7 @@ class OTPAuthService {
         return {
           success: false,
           status: 'authenticated',
-          message: 'Invalid or expired code. Please try again.',
+          message: 'Código inválido ou expirado. Tente novamente.',
         };
       }
 
@@ -143,14 +150,14 @@ class OTPAuthService {
         return {
           success: false,
           status: 'authenticated',
-          message: 'Too many failed attempts. Please request a new code.',
+          message: 'Muitas tentativas sem sucesso. Solicite um novo código.',
         };
       }
 
       return {
         success: false,
         status: 'authenticated',
-        message: err.message || 'Verification failed',
+        message: localizedOr(err.message, 'Não foi possível verificar o código. Tente novamente.'),
       };
     }
   }
@@ -201,7 +208,7 @@ class OTPAuthService {
       return {
         success: false,
         status: 'registration_required',
-        message: err.message || 'Registration failed',
+        message: localizedOr(err.message, 'Não foi possível concluir o cadastro. Tente novamente.'),
       };
     }
   }

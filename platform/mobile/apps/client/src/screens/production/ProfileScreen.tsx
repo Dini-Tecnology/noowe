@@ -1,6 +1,6 @@
 /* Hallmark · macrostructure: Profile-Led · genre: modern-minimal · theme: studied-DNA (user reference) + Noowe tokens · enrichment: none · designed-as-app · pre-emit critique: P5 H5 E5 S5 R5 V5 */
 import React, { useMemo } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -63,7 +63,8 @@ export default function ProfileScreen({ navigation }: any) {
     avatarImage: { width: '100%', height: '100%' },
     profileInfo: { flex: 1, minWidth: 0 },
     name: { color: colors.foreground, fontSize: 15, fontWeight: '800' },
-    email: { marginTop: 4, color: colors.foregroundSecondary, fontSize: 11 },
+    username: { marginTop: 3, color: colors.primary, fontSize: 12, fontWeight: '700' },
+    email: { marginTop: 3, color: colors.foregroundSecondary, fontSize: 11 },
     pointsBlock: { minWidth: 56, alignItems: 'flex-end' },
     points: { color: colors.primary, fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
     pointsLabel: { marginTop: 3, color: colors.foregroundMuted, fontSize: 9 },
@@ -90,12 +91,23 @@ export default function ProfileScreen({ navigation }: any) {
         <StateView loading={profileQuery.isLoading} error={profileQuery.error} onRetry={() => profileQuery.refetch()} />
 
         {profileQuery.data ? (
-          <TouchableOpacity style={styles.profileCard} onPress={() => rootNavigate(navigation, 'EditProfile')} activeOpacity={0.84} accessibilityRole="button" accessibilityLabel="Abrir edição do perfil">
+          <TouchableOpacity
+            style={styles.profileCard}
+            onPress={() => rootNavigate(navigation, 'EditProfile')}
+            onLongPress={() => {
+              if (profileQuery.data?.username) void Share.share({ message: `Me chama na Noowe: @${profileQuery.data.username}` });
+            }}
+            activeOpacity={0.84}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir edição do perfil"
+            accessibilityHint="Toque e segure para compartilhar seu @"
+          >
             <View style={styles.avatar}>
               {profileQuery.data.avatarUrl ? <Image source={{ uri: profileQuery.data.avatarUrl }} style={styles.avatarImage} resizeMode="cover" /> : <Ionicons name="person-outline" size={25} color={colors.primary} />}
             </View>
             <View style={styles.profileInfo}>
               <Text numberOfLines={1} style={styles.name}>{profileQuery.data.fullName || 'Usuário Noowe'}</Text>
+              {profileQuery.data.username ? <Text numberOfLines={1} style={styles.username} testID="profile-username">@{profileQuery.data.username}</Text> : null}
               <Text numberOfLines={1} style={styles.email}>{profileQuery.data.email ?? 'Conta Noowe'}</Text>
             </View>
             <View style={styles.pointsBlock}>

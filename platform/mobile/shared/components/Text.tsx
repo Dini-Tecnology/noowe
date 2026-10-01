@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Text as RNText, TextStyle, StyleSheet } from 'react-native';
+import { Text as RNText, TextStyle, StyleProp, StyleSheet, AccessibilityRole } from 'react-native';
 import { useOkinawaTheme } from '../contexts/ThemeContext';
 import { TypographyKey } from '../theme/typography';
 
@@ -15,7 +15,8 @@ interface TextProps {
   color?: string;
   align?: 'left' | 'center' | 'right';
   numberOfLines?: number;
-  style?: TextStyle;
+  style?: StyleProp<TextStyle>;
+  accessibilityRole?: AccessibilityRole;
 }
 
 const Text: React.FC<TextProps> = ({
@@ -25,6 +26,7 @@ const Text: React.FC<TextProps> = ({
   align = 'left',
   numberOfLines,
   style,
+  accessibilityRole,
 }) => {
   const { theme } = useOkinawaTheme();
   const typographyStyle = theme.typography[variant];
@@ -33,11 +35,11 @@ const Text: React.FC<TextProps> = ({
     ...typographyStyle,
     color: color || theme.colors.foreground,
     textAlign: align,
-    ...style,
+    ...StyleSheet.flatten(style),
   };
 
   return (
-    <RNText style={textStyle} numberOfLines={numberOfLines}>
+    <RNText style={textStyle} numberOfLines={numberOfLines} accessibilityRole={accessibilityRole}>
       {children}
     </RNText>
   );

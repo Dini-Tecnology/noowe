@@ -583,7 +583,7 @@ export default function RestaurantReviewsScreen() {
         }}
         style={{ backgroundColor: colors.primary }}
       >
-        {t('reviews.newReviewReceived') || 'Nova avaliacao recebida!'}
+        {t('reviews.newReviewReceived') || 'Nova avaliação recebida!'}
       </Snackbar>
     </View>
     </ScreenContainer>

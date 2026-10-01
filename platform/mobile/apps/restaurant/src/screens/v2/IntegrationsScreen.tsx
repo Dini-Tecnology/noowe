@@ -7,6 +7,7 @@ import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 import { V2FormSheet } from './shared/V2FormSheet';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface Integration {
   provider: 'ifood' | 'rappi' | 'uber_eats';
@@ -45,10 +46,7 @@ const PROVIDERS: {
 ];
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-  return fallback;
+  return userErrorMessage(error, fallback);
 }
 
 export default function IntegrationsScreen() {

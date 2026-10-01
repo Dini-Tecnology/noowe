@@ -23,6 +23,7 @@ import {
 import { formatBrazilianPostalCode } from '@okinawa/shared/utils/phone-validation';
 import { AuthTextField } from '../auth/AuthTextField';
 import { AUTH_BRAND, authFieldStyles } from '../auth/authScreenTheme';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 export interface BrazilianAddressValue {
   postalCode: string;
@@ -77,7 +78,7 @@ export function BrazilianAddressFields({ value, onChange, disabled = false }: Pr
         neighborhood: address.neighborhood,
       });
     } catch (error) {
-      setPostalCodeError(error instanceof Error ? error.message : 'Não foi possível consultar o CEP.');
+      setPostalCodeError(userErrorMessage(error, 'Não foi possível consultar o CEP.'));
     } finally {
       setPostalCodeLoading(false);
     }
@@ -94,7 +95,7 @@ export function BrazilianAddressFields({ value, onChange, disabled = false }: Pr
       if (resolvedMode === 'state') setStates(await getBrazilianStates());
       else setCities(await getBrazilianCities(value.state || undefined));
     } catch (error) {
-      setPickerError(error instanceof Error ? error.message : 'Não foi possível carregar as opções.');
+      setPickerError(userErrorMessage(error, 'Não foi possível carregar as opções.'));
     } finally {
       setPickerLoading(false);
     }
@@ -127,7 +128,7 @@ export function BrazilianAddressFields({ value, onChange, disabled = false }: Pr
     try {
       setCities(await getBrazilianCities(item.code));
     } catch (error) {
-      setPickerError(error instanceof Error ? error.message : 'Não foi possível carregar as cidades.');
+      setPickerError(userErrorMessage(error, 'Não foi possível carregar as cidades.'));
     } finally {
       setPickerLoading(false);
     }

@@ -184,7 +184,7 @@ export default function ForecastScreen() {
       )}
 
       {/* Projected Balance Chart */}
-      {forecast?.projections?.length > 0 && (
+      {(forecast?.projections?.length ?? 0) > 0 && (
         <Card style={styles.card}>
           <Card.Content>
             <Text variant="titleLarge" style={styles.title}>
@@ -222,7 +222,7 @@ export default function ForecastScreen() {
                 </Text>
                 <Text variant="titleMedium" style={{ color: colors.success }}>
                   {formatCurrency(
-                    forecast.projections.reduce(
+                    forecast!.projections.reduce(
                       (s, p) => s + p.projected_revenue,
                       0,
                     ),
@@ -236,7 +236,7 @@ export default function ForecastScreen() {
                 </Text>
                 <Text variant="titleMedium" style={{ color: colors.error }}>
                   {formatCurrency(
-                    forecast.projections.reduce(
+                    forecast!.projections.reduce(
                       (s, p) => s + p.projected_expenses,
                       0,
                     ),

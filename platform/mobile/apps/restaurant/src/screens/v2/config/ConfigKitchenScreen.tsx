@@ -37,6 +37,7 @@ import { V2FormSheet } from '../shared/V2FormSheet';
 import { V2Shell } from '../shared/V2Shell';
 import type { KitchenBarKdsPrefs } from '../shared/v2Types';
 import { ConfigSectionCard } from './ConfigSectionCard';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 type StationType = 'kitchen' | 'bar' | 'drinks' | 'pastry' | 'cold';
 
@@ -117,7 +118,7 @@ export default function ConfigKitchenScreen() {
         });
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro ao salvar configurações KDS');
+        setError(userErrorMessage(err, 'Erro ao salvar configurações KDS'));
       }
     },
     [restaurantId],
@@ -163,7 +164,7 @@ export default function ConfigKitchenScreen() {
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar Cozinha & Bar');
+      setError(userErrorMessage(err, 'Erro ao carregar Cozinha & Bar'));
     } finally {
       setLoading(false);
     }
@@ -229,7 +230,7 @@ export default function ConfigKitchenScreen() {
       setEditor(undefined);
       await load();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Não foi possível salvar a estação.');
+      setFormError(userErrorMessage(err, 'Não foi possível salvar a estação.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -243,7 +244,7 @@ export default function ConfigKitchenScreen() {
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível excluir a estação.');
+      setError(userErrorMessage(err, 'Não foi possível excluir a estação.'));
       setDeleteTarget(null);
     } finally {
       setIsSubmitting(false);

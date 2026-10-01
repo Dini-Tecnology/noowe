@@ -28,6 +28,7 @@ import {
   SERVICE_TYPE_CONFIGS,
   type ServiceType,
 } from '@okinawa/shared/config/service-types';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 const SERVICE_TYPE_OPTIONS = [
   { type: 'fine_dining' as const, Icon: Crown },
@@ -102,7 +103,7 @@ export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantSc
       Haptic.successNotification();
       await onCreated();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Não foi possível criar o restaurante.';
+      const message = userErrorMessage(err, 'Não foi possível criar o restaurante.');
       setError(message);
       Haptic.errorNotification();
     } finally {

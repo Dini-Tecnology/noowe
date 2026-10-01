@@ -16,6 +16,7 @@ import { formatCurrency } from '@okinawa/shared/utils/formatters';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from './shared/V2Shell';
 import { useTableBills, type TableBill } from './shared/useRestaurantOperations';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 type Stage = 'amount' | 'tap' | 'success';
 
@@ -95,7 +96,7 @@ export default function WaiterTapToPayScreen() {
       }
       setStage('success');
     } catch (err) {
-      Alert.alert('Falha na cobrança', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha na cobrança', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setSubmitting(false);
     }

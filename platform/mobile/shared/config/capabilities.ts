@@ -15,22 +15,35 @@ export type LoyaltyMode = 'points' | 'tiers' | 'stamps' | 'mixed';
 export type ConsumptionUnit = 'table_with_guests' | 'per_person' | 'individual_cart';
 /** Spec §6 "Acompanhamento": what the customer follows after ordering. */
 export type OrderTrackingMode = 'item_with_preparer' | 'table_order' | 'pickup_steps';
+export type StaffCallType = 'waiter' | 'sommelier' | 'help' | 'bill';
 
 export type RestaurantCapabilities = {
+  /** Contract schema version. Consumers must fail closed on unknown versions. */
+  contractVersion: 2;
   reservations: boolean;
+  reservationRequired: boolean;
   virtualQueue: boolean;
   queueIsPrimaryEntry: boolean;
+  orderWhileWaiting: boolean;
   tableSession: boolean;
+  tableCheckIn: boolean;
+  tableQr: boolean;
+  counterQr: boolean;
   guestLink: boolean;
+  /** ADR-011: convite por @username com aceite do convidado. */
+  userInvite: boolean;
   splitBill: boolean;
   splitModes: SplitMode[];
   serviceFee: boolean;
   staffCalls: boolean;
+  staffCallTypes: StaffCallType[];
   familyMode: boolean;
   parties: boolean;
   comboBuilder: boolean;
   prepaidRequired: boolean;
   pickupCode: boolean;
+  pickupSlots: boolean;
+  qualityCheck: boolean;
   loyaltyMode: LoyaltyMode;
   consumptionUnit: ConsumptionUnit;
   orderTracking: OrderTrackingMode;
@@ -42,6 +55,9 @@ export type RestaurantCapabilityPolicies = {
   queueCallToleranceMin: number | null;
   reservationNoShowMin: number | null;
   guestLinkTtlMin: number | null;
+  userInviteTtlMin: number | null;
+  userSearchMinChars: number | null;
+  capacityRequestTtlMin: number | null;
   requireGuestAccount: boolean;
   enforceTableCapacity: boolean;
   capacityOverrideRoles: string[];
@@ -54,6 +70,8 @@ export type RestaurantCapabilityPolicies = {
 };
 
 export type RestaurantCapabilityContract = {
+  contractVersion: 2;
+  enabledServiceModels: ServiceModel[];
   serviceModel: ServiceModel;
   capabilities: RestaurantCapabilities;
   policies: RestaurantCapabilityPolicies;
@@ -68,15 +86,17 @@ export type ClientFeatureFlags = {
 };
 
 const capabilityKeys = [
-  'reservations', 'virtualQueue', 'queueIsPrimaryEntry', 'tableSession',
-  'guestLink', 'splitBill', 'serviceFee', 'staffCalls', 'familyMode', 'parties',
-  'comboBuilder', 'prepaidRequired', 'pickupCode',
+  'reservations', 'reservationRequired', 'virtualQueue', 'queueIsPrimaryEntry',
+  'orderWhileWaiting', 'tableSession', 'tableCheckIn', 'tableQr', 'counterQr',
+  'guestLink', 'userInvite', 'splitBill', 'serviceFee', 'staffCalls', 'familyMode', 'parties',
+  'comboBuilder', 'prepaidRequired', 'pickupCode', 'pickupSlots', 'qualityCheck',
 ] as const;
 
 const splitModes: readonly SplitMode[] = ['by_owner', 'equal', 'by_item', 'fixed_amount'];
 const loyaltyModes: readonly LoyaltyMode[] = ['points', 'tiers', 'stamps', 'mixed'];
 const consumptionUnits: readonly ConsumptionUnit[] = ['table_with_guests', 'per_person', 'individual_cart'];
 const orderTrackingModes: readonly OrderTrackingMode[] = ['item_with_preparer', 'table_order', 'pickup_steps'];
+const staffCallTypes: readonly StaffCallType[] = ['waiter', 'sommelier', 'help', 'bill'];
 
 const asRecord = (value: unknown): Record<string, unknown> | null => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -103,11 +123,16 @@ export function parseRestaurantCapabilityContract(value: unknown): RestaurantCap
   const root = asRecord(value);
   const capabilities = asRecord(root?.capabilities);
   const policies = asRecord(root?.policies);
-  if (!root || !capabilities || !policies || !isServiceModel(root.serviceModel)) return null;
+  if (!root || !capabilities || !policies || root.contractVersion !== 2 || !isServiceModel(root.serviceModel)) return null;
+
+  const enabledServiceModels = asStringArray(root.enabledServiceModels);
+  if (!enabledServiceModels || !enabledServiceModels.every(isServiceModel) || !enabledServiceModels.includes(root.serviceModel)) return null;
 
   if (capabilityKeys.some((key) => typeof capabilities[key] !== 'boolean')) return null;
   const rawSplitModes = asStringArray(capabilities.splitModes);
+  const rawStaffCallTypes = asStringArray(capabilities.staffCallTypes);
   if (!rawSplitModes || !rawSplitModes.every((mode) => splitModes.includes(mode as SplitMode))) return null;
+  if (!rawStaffCallTypes || !rawStaffCallTypes.every((type) => staffCallTypes.includes(type as StaffCallType))) return null;
   if (!loyaltyModes.includes(capabilities.loyaltyMode as LoyaltyMode)) return null;
   if (!consumptionUnits.includes(capabilities.consumptionUnit as ConsumptionUnit)) return null;
   if (!orderTrackingModes.includes(capabilities.orderTracking as OrderTrackingMode)) return null;
@@ -120,6 +145,7 @@ export function parseRestaurantCapabilityContract(value: unknown): RestaurantCap
   };
   const nullableNumberFields = [
     'serviceFeeBps', 'queueCallToleranceMin', 'reservationNoShowMin', 'guestLinkTtlMin',
+    'userInviteTtlMin', 'userSearchMinChars', 'capacityRequestTtlMin',
     'comboDiscountBps', 'pickupCapacityPerSlot', 'pickupExpiryMin', 'stampsPerReward',
   ] as const;
   if (nullableNumberFields.some((field) => asNullableNumber(policies[field]) === undefined)) return null;

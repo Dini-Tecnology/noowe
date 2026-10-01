@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { validationMsg, localizeValidationMessage } from './messages';
+import { isValidCnpj } from '../utils/cnpj';
 
 // ============================================
 // COMMON FIELD VALIDATORS
@@ -436,10 +437,11 @@ export type FinancialReportFormData = z.infer<typeof financialReportSchema>;
 // FISCAL SCHEMAS
 // ============================================
 
+// Numérico antigo e alfanumérico da Receita Federal (dígitos verificadores inclusos).
 export const cnpjSchema = z
   .string()
   .trim()
-  .regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$|^\d{14}$/, { message: validationMsg.cnpjInvalid });
+  .refine((value) => isValidCnpj(value), { message: validationMsg.cnpjInvalid });
 
 export const fiscalConfigSchema = z.object({
   cnpj: cnpjSchema,

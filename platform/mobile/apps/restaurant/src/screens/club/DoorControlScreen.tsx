@@ -133,7 +133,7 @@ function ScanResultDisplay({
       <Card.Content style={styles.resultContent}>
         {/* Status Badge */}
         <View style={[styles.statusBadge, { backgroundColor: config.color }]}>
-          <Text style={styles.statusIcon}>{config.icon}</Text>
+          <Text style={[styles.statusIcon, { color: colors.premiumCardForeground }]}>{config.icon}</Text>
         </View>
         <Text
           variant="titleLarge"
@@ -144,7 +144,7 @@ function ScanResultDisplay({
 
         {/* Guest Info */}
         {result.status === 'valid' && result.data && (
-          <View style={styles.guestInfo}>
+          <View style={[styles.guestInfo, { borderTopColor: colors.borderLight }]}>
             <Text
               variant="titleSmall"
               style={{ color: colors.foreground, fontWeight: '600', marginBottom: 8 }}
@@ -387,7 +387,7 @@ export default function DoorControlScreen({ route }: DoorControlScreenProps) {
               {t('club.door.admitted')}
             </Text>
           </View>
-          <View style={styles.occupancyDivider} />
+          <View style={[styles.occupancyDivider, { backgroundColor: colors.muted }]} />
           <View style={styles.occupancyItem}>
             <Text
               variant="headlineLarge"
@@ -508,7 +508,6 @@ const styles = StyleSheet.create({
   occupancyDivider: {
     width: 1,
     height: 40,
-    backgroundColor: colors.muted,
     marginHorizontal: 16,
   },
   scanBtn: {
@@ -537,7 +536,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusIcon: {
-    color: colors.premiumCardForeground,
     fontSize: 32,
     fontWeight: '800',
   },
@@ -547,7 +545,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
   },
   guestRow: {
     flexDirection: 'row',

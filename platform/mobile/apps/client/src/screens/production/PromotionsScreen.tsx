@@ -9,7 +9,7 @@ import { useVisitSession } from '../../contexts/VisitSessionContext';
 import customerBackend from '../../services/customer-backend';
 import { StateView, useQueryRefreshControl } from './shared';
 
-export default function PromotionsScreen() {
+export default function PromotionsScreen({ navigation }: any) {
   const colors = useColors();
   const visit = useVisitSession();
   const queryClient = useQueryClient();
@@ -28,6 +28,10 @@ export default function PromotionsScreen() {
     () =>
       StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.background },
+        header: { height: 56, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        back: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.backgroundTertiary, alignItems: 'center', justifyContent: 'center' },
+        headerTitle: { fontSize: 17, fontWeight: '800', color: colors.foreground },
+        headerSpacer: { width: 32 },
         card: { padding: 16, borderRadius: 18, backgroundColor: colors.card, borderWidth: 1.5, borderColor: '#FFD4C2', marginBottom: 12, gap: 6 },
         row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
         name: { fontSize: 16, fontWeight: '700', color: colors.foreground },
@@ -41,6 +45,13 @@ export default function PromotionsScreen() {
 
   return (
     <ScreenContainer edges={['top']}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Voltar">
+          <Ionicons name="arrow-back" size={18} color={colors.foregroundSecondary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Cupons</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView
         style={styles.container}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32 }}

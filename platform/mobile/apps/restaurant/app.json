@@ -62,7 +62,9 @@
         ],
         "NSCameraUsageDescription": "Permite escanear QR codes nas estações de trabalho",
         "NSLocationWhenInUseUsageDescription": "Permite identificar a filial do restaurante",
-        "NSPhotoLibraryUsageDescription": "Permite upload de fotos de pratos e cardápio",
+        "NSLocationAlwaysUsageDescription": "Permite identificar a filial do restaurante e modo food truck",
+        "NSMicrophoneUsageDescription": "O microfone não é usado neste aplicativo.",
+        "NSPhotoLibraryUsageDescription": "Permite escolher fotos do restaurante, do seu perfil e dos pratos do cardápio.",
         "NSFaceIDUsageDescription": "Permite login rápido com biometria"
       }
     },
@@ -126,7 +128,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Permita que o NOOWE acesse suas fotos para definir a imagem do restaurante."
+          "photosPermission": "Permite escolher fotos do restaurante, do seu perfil e dos pratos do cardápio."
         }
       ],
       [

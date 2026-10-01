@@ -1,16 +1,19 @@
 /* Hallmark · pre-emit critique: P5 H4 E4 S5 R4 V5 */
 /* Hallmark · macrostructure: Long Document · tone: warm utilitarian · anchor hue: orange */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Crypto from 'expo-crypto';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useCart } from '@/shared/contexts/CartContext';
-import customerBackend from '../../services/customer-backend';
-import { money } from './shared';
+import customerBackend, { type PlaceOrderItem } from '../../services/customer-backend';
+import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
+import { money, translateOrderError } from './shared';
 
 const HEADER_GRADIENT = ['#FF5724', '#F97316', '#F59E0B'] as const;
 
@@ -26,17 +29,27 @@ const PAYMENT_METHODS: { type: PaymentMethodType; icon: keyof typeof Ionicons.gl
 ];
 
 /**
- * Skip the Line checkout: no gateway integration — payment stays simulated,
- * same as `payTableBill` does for fine/casual dining. Selecting a method and
- * confirming places the order (which already counts as "paid") and drops the
- * customer straight into live tracking.
+ * Skip the Line checkout uses the same intent/event boundary as a real
+ * provider. The provider is simulated, but only the server confirmation can
+ * release this order to the KDS.
  */
 export default function QuickServiceCheckoutScreen({ navigation }: any) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const cart = useCart();
   const queryClient = useQueryClient();
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('pix');
   const [usePoints, setUsePoints] = useState(false);
+  const checkoutKey = useRef(Crypto.randomUUID());
+  const { capabilities, policies } = useServiceTypeFor(cart.restaurantId, 'quick_service');
+  const pickupSlots = useMemo(() => {
+    if (!capabilities?.pickupSlots || !policies?.pickupCapacityPerSlot) return [];
+    const first = new Date();
+    first.setSeconds(0, 0);
+    first.setMinutes(Math.ceil((first.getMinutes() + 5) / 15) * 15);
+    return Array.from({ length: 4 }, (_, index) => new Date(first.getTime() + index * 15 * 60_000).toISOString());
+  }, [capabilities?.pickupSlots, policies?.pickupCapacityPerSlot]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
   const loyalty = useQuery({
     queryKey: ['loyalty'],
@@ -54,17 +67,45 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
   const total = Math.max(0, cart.total - pointsDiscount);
 
   const place = useMutation({
-    mutationFn: () =>
-      customerBackend.placeOrder({
+    mutationFn: async () => {
+      const orderItems: PlaceOrderItem[] = cart.items.filter((item) => !item.combo).map((item) => ({
+        menuItemId: item.menu_item_id,
+        quantity: item.quantity,
+        specialInstructions: item.special_instructions,
+      }));
+      for (const item of cart.items) {
+        if (!item.combo) continue;
+        for (let quantity = 0; quantity < item.quantity; quantity += 1) {
+          const comboGroup = `${item.id}:${quantity}`;
+          orderItems.push(
+            { menuItemId: item.combo.lancheItemId, quantity: 1, comboGroup },
+            { menuItemId: item.combo.acompanhamentoItemId, quantity: 1, comboGroup },
+            { menuItemId: item.combo.bebidaItemId, quantity: 1, comboGroup },
+          );
+        }
+      }
+      if (!orderItems.length) throw new Error('A comanda está vazia.');
+      const order = await customerBackend.placeOrder({
         restaurantId: cart.restaurantId!,
-        items: cart.items.map((i) => ({ menuItemId: i.menu_item_id, quantity: i.quantity, specialInstructions: i.special_instructions })),
-      }),
+        serviceModel: 'quick_service',
+        idempotencyKey: checkoutKey.current,
+        pickupSlotStart: selectedSlot,
+        items: orderItems,
+      });
+      const payment = await customerBackend.startPayment({
+        orderId: order.id,
+        paymentMethod: selectedMethod,
+        idempotencyKey: checkoutKey.current,
+      });
+      if (payment.paymentStatus !== 'confirmed') throw new Error('O pagamento ainda não foi confirmado.');
+      return { ...order, paymentStatus: payment.paymentStatus };
+    },
     onSuccess: (order) => {
       cart.clearCart();
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       navigation.replace('OrderDetail', { orderId: order.id });
     },
-    onError: (error: Error) => Alert.alert('Pagamento não confirmado', error.message),
+    onError: (error: Error) => Alert.alert('Pagamento não confirmado', translateOrderError(error)),
   });
 
   const selectMethod = useCallback((method: PaymentMethodType) => setSelectedMethod(method), []);
@@ -84,7 +125,7 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
         headerTotal: { alignItems: 'flex-end' },
         headerTotalLabel: { fontSize: 11, color: 'rgba(255,255,255,0.8)' },
         headerTotalValue: { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
-        body: { paddingHorizontal: 16, marginTop: -8, gap: 16 },
+        body: { paddingHorizontal: 16, gap: 16 },
         loyaltyCard: {
           flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16,
           backgroundColor: colors.card, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
@@ -111,6 +152,9 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
         methodSelected: { borderColor: colors.primary, backgroundColor: 'rgba(234, 88, 12, 0.08)' },
         methodUnselected: { borderColor: colors.border, backgroundColor: colors.card },
         methodLabel: { fontSize: 12, fontWeight: '700' },
+        slotRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+        slot: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
+        slotText: { fontSize: 12, fontWeight: '700' },
         summaryCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, gap: 8 },
         summaryTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 4 },
         summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -135,7 +179,7 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
     <ScreenContainer edges={[]}>
       <View style={styles.root}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-          <LinearGradient colors={HEADER_GRADIENT as unknown as [string, string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.gradientHeader}>
+          <LinearGradient colors={HEADER_GRADIENT as unknown as [string, string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.gradientHeader, { paddingTop: insets.top + 8 }]}>
             <View style={styles.headerTop}>
               <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Voltar">
                 <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
@@ -151,7 +195,9 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
             </View>
           </LinearGradient>
 
-          <View style={styles.body}>
+          {/* The loyalty card tucks into the header; without it the section
+              title needs room below the gradient instead. */}
+          <View style={[styles.body, { marginTop: pointsBalance > 0 ? -8 : 16 }]}>
             {pointsBalance > 0 && (
               <View style={styles.loyaltyCard}>
                 <View style={styles.loyaltyBadge}>
@@ -196,6 +242,30 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
               </View>
             </View>
 
+            {pickupSlots.length > 0 && (
+              <View style={{ gap: 12 }}>
+                <Text style={styles.sectionTitle}>Horário de retirada</Text>
+                <View style={styles.slotRow}>
+                  {pickupSlots.map((slot) => {
+                    const selected = selectedSlot === slot;
+                    return (
+                      <TouchableOpacity
+                        key={slot}
+                        style={[styles.slot, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}12` : colors.card }]}
+                        onPress={() => setSelectedSlot(slot)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                      >
+                        <Text style={[styles.slotText, { color: selected ? colors.primary : colors.foreground }]}>
+                          {new Date(slot).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Resumo</Text>
               <View style={styles.summaryRow}>
@@ -216,9 +286,9 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
             </View>
 
             <TouchableOpacity
-              style={[styles.cta, (place.isPending || !cart.items.length) && styles.ctaDisabled]}
+              style={[styles.cta, (place.isPending || !cart.items.length || (pickupSlots.length > 0 && !selectedSlot)) && styles.ctaDisabled]}
               onPress={() => place.mutate()}
-              disabled={place.isPending || !cart.items.length}
+              disabled={place.isPending || !cart.items.length || (pickupSlots.length > 0 && !selectedSlot)}
               activeOpacity={0.9}
               accessibilityRole="button"
             >

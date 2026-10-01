@@ -8,18 +8,24 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Text } from 'react-native-paper';
-import * as ImagePicker from 'expo-image-picker';
-import { Camera, User } from 'lucide-react-native';
+import { pickImageFromLibrary } from '@okinawa/shared/utils/pick-image';
+import { Camera, Repeat, Store, User } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { getSupabaseClient } from '@okinawa/shared/services/supabase';
 import { supabaseAuthAdapter } from '@okinawa/shared/services/supabase-auth';
 import { authService } from '@/shared/services/auth';
 import { formatBrazilianPhone, validateBrazilianPhone } from '@okinawa/shared/utils/phone-validation';
+import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 import { V2FormField } from './shared/V2FormField';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 export default function UserAccountScreen() {
   const colors = useColors();
+  const navigation = useNavigation<any>();
+  const { restaurants, restaurantId } = useRestaurantRole();
+  const activeRestaurant = restaurants.find((item) => item.id === restaurantId);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -45,7 +51,7 @@ export default function UserAccountScreen() {
       setEmail(user.email ?? '');
       setAvatarUrl(user.avatar_url ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar perfil');
+      setError(userErrorMessage(err, 'Erro ao carregar perfil'));
     } finally {
       setLoading(false);
     }
@@ -57,22 +63,12 @@ export default function UserAccountScreen() {
 
   const uploadAvatar = async () => {
     if (!userId || uploading) return;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permissão necessária', 'Autorize o acesso às fotos para alterar sua foto.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.85,
-    });
-    if (result.canceled || !result.assets[0]) return;
+    const picked = await pickImageFromLibrary({ aspect: [1, 1], quality: 0.85 });
+    if (!picked) return;
 
     setUploading(true);
     try {
-      const asset = result.assets[0];
+      const asset = picked;
       const response = await fetch(asset.uri);
       if (!response.ok) throw new Error('Não foi possível preparar a imagem.');
       const file = await response.arrayBuffer();
@@ -92,7 +88,7 @@ export default function UserAccountScreen() {
       setAvatarUrl(url);
       setSaved(true);
     } catch (err) {
-      Alert.alert('Falha no upload', err instanceof Error ? err.message : 'Tente novamente.');
+      Alert.alert('Falha no upload', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setUploading(false);
     }
@@ -113,7 +109,7 @@ export default function UserAccountScreen() {
       });
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar perfil');
+      setError(userErrorMessage(err, 'Erro ao salvar perfil'));
     } finally {
       setSaving(false);
     }
@@ -154,6 +150,27 @@ export default function UserAccountScreen() {
             <Text style={[styles.hint, { color: colors.foregroundSecondary }]}>Toque para alterar a foto</Text>
           </View>
 
+          {restaurants.length > 1 ? (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('RestaurantSelector')}
+              accessibilityRole="button"
+              accessibilityLabel="Trocar de restaurante"
+              style={[styles.switchRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            >
+              <View style={[styles.switchIcon, { backgroundColor: `${colors.primary}15` }]}>
+                <Store size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 11, color: colors.foregroundSecondary }}>Restaurante em uso</Text>
+                <Text style={{ fontWeight: '700', color: colors.foreground }} numberOfLines={1}>
+                  {activeRestaurant?.name ?? 'Selecionar restaurante'}
+                </Text>
+              </View>
+              <Repeat size={16} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>Trocar</Text>
+            </TouchableOpacity>
+          ) : null}
+
           <View style={[styles.form, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <V2FormField label="Nome" value={fullName} onChangeText={(v) => { setFullName(v); setSaved(false); }} />
             <V2FormField
@@ -192,6 +209,16 @@ export default function UserAccountScreen() {
 }
 
 const styles = StyleSheet.create({
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+  },
+  switchIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   avatarBlock: { alignItems: 'center', marginBottom: 18 },
   avatarWrap: { width: 96, height: 96, position: 'relative' },
   avatarBox: {

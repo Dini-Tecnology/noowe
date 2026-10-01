@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Calendar, ClipboardList, Map, Users } from 'lucide-react-native';
+import { Calendar, ClipboardList, Map, UserPlus, Users } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { MaitreRoleView, useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2ListScreen } from './shared/V2ListScreen';
 import { useRestaurantTables, useWaitlist } from './shared/useRestaurantOperations';
+import { useCapacityRequests } from './shared/useCapacityRequests';
 
 export default function MaitreScreen() {
   const navigation = useNavigation<any>();
   const { setRole, setMaitreView, restaurantId } = useRestaurantRole();
   const { data: tables, refresh: refreshTables } = useRestaurantTables();
   const { data: waitlist, refresh: refreshWaitlist } = useWaitlist();
+  const { data: capacityRequests, refresh: refreshCapacity } = useCapacityRequests();
   const [reservationsToday, setReservationsToday] = useState<number | null>(null);
 
   const loadReservations = useCallback(async () => {
@@ -38,7 +40,15 @@ export default function MaitreScreen() {
   };
 
   return (
-    <V2ListScreen title="Maître" subtitle="Sala, fluxo e reservas" showBack onRefresh={() => Promise.all([refreshTables(), refreshWaitlist(), loadReservations()]).then(() => undefined)} items={[
+    <V2ListScreen title="Maître" subtitle="Sala, fluxo e reservas" showBack onRefresh={() => Promise.all([refreshTables(), refreshWaitlist(), loadReservations(), refreshCapacity()]).then(() => undefined)} items={[
+      {
+        icon: UserPlus,
+        label: 'Lotação',
+        subtitle: capacityRequests.length > 0
+          ? `${capacityRequests.length} entrada${capacityRequests.length === 1 ? '' : 's'} aguardando decisão`
+          : 'Nenhuma mesa acima da lotação',
+        onPress: () => navigation.navigate('CapacityRequests'),
+      },
       {
         icon: Calendar,
         label: 'Reservas',

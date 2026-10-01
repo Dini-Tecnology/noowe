@@ -321,7 +321,7 @@ export function formatTimeForA11y(date: Date): string {
  * Format rating for screen readers
  */
 export function formatRatingForA11y(rating: number, maxRating: number = 5): string {
-  return `Avaliacao ${rating} de ${maxRating} estrelas`;
+  return `Avaliação ${rating} de ${maxRating} estrelas`;
 }
 
 /**

@@ -78,23 +78,23 @@ export const useBiometricAuth = () => {
       if (!isAvailable) {
         return {
           success: false,
-          error: 'Biometric authentication is not available on this device',
+          error: 'A biometria não está disponível neste aparelho',
         };
       }
 
       if (!isEnrolled) {
         return {
           success: false,
-          error: 'No biometric data enrolled. Please set up biometric authentication in your device settings.',
+          error: 'Nenhuma biometria cadastrada. Cadastre uma biometria nos ajustes do aparelho.',
         };
       }
 
       // Authenticate
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: promptMessage || getBiometricPromptMessage(),
-        fallbackLabel: fallbackLabel || 'Use Passcode',
+        fallbackLabel: fallbackLabel || 'Usar senha do aparelho',
         disableDeviceFallback: false,
-        cancelLabel: 'Cancel',
+        cancelLabel: 'Cancelar',
       });
 
       if (result.success) {
@@ -111,7 +111,7 @@ export const useBiometricAuth = () => {
       logger.error('Biometric authentication error:', error);
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: 'Não foi possível autenticar. Tente novamente.',
       };
     }
   };
@@ -122,15 +122,15 @@ export const useBiometricAuth = () => {
   const getBiometricPromptMessage = (): string => {
     switch (biometricType) {
       case 'FaceID':
-        return 'Authenticate with Face ID';
+        return 'Autentique com o Face ID';
       case 'TouchID':
-        return 'Authenticate with Touch ID';
+        return 'Autentique com o Touch ID';
       case 'Fingerprint':
-        return 'Authenticate with Fingerprint';
+        return 'Autentique com a impressão digital';
       case 'Iris':
-        return 'Authenticate with Iris';
+        return 'Autentique com a íris';
       default:
-        return 'Authenticate to continue';
+        return 'Autentique-se para continuar';
     }
   };
 
@@ -138,21 +138,21 @@ export const useBiometricAuth = () => {
    * Get user-friendly error message
    */
   const getBiometricErrorMessage = (error?: string): string => {
-    if (!error) return 'Authentication failed';
+    if (!error) return 'Não foi possível autenticar';
 
     switch (error) {
       case 'user_cancel':
-        return 'Authentication cancelled by user';
+        return 'Autenticação cancelada';
       case 'system_cancel':
-        return 'Authentication cancelled by system';
+        return 'Autenticação cancelada pelo sistema';
       case 'lockout':
-        return 'Too many failed attempts. Try again later.';
+        return 'Muitas tentativas sem sucesso. Tente novamente mais tarde.';
       case 'not_enrolled':
-        return 'No biometric data enrolled';
+        return 'Nenhuma biometria cadastrada';
       case 'not_available':
-        return 'Biometric authentication not available';
+        return 'A biometria não está disponível';
       default:
-        return 'Authentication failed. Please try again.';
+        return 'Não foi possível autenticar. Tente novamente.';
     }
   };
 
@@ -166,11 +166,11 @@ export const useBiometricAuth = () => {
       case 'TouchID':
         return 'Touch ID';
       case 'Fingerprint':
-        return 'Fingerprint';
+        return 'Impressão digital';
       case 'Iris':
-        return 'Iris Scanner';
+        return 'Leitor de íris';
       default:
-        return 'Biometric';
+        return 'Biometria';
     }
   };
 

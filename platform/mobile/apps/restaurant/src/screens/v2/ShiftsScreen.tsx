@@ -9,6 +9,7 @@ import { V2Shell } from './shared/V2Shell';
 import { V2FormSheet } from './shared/V2FormSheet';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { DateInput, saoPauloDateToIso } from './shared/DateInput';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface Shift {
   id: string;
@@ -56,10 +57,7 @@ function isoDate(date: Date): string {
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
-  }
-  return fallback;
+  return userErrorMessage(error, fallback);
 }
 
 export default function ShiftsScreen() {

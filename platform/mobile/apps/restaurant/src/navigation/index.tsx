@@ -82,6 +82,7 @@ import RestaurantSelectorScreen from '../screens/v2/RestaurantSelectorScreen';
 import ServiceConfigScreen from '../screens/v2/ServiceConfigScreen';
 import WaitlistScreen from '../screens/v2/WaitlistScreen';
 import CallsScreen from '../screens/v2/CallsScreen';
+import CapacityRequestsScreen from '../screens/v2/CapacityRequestsScreen';
 import CasualDiningScreen from '../screens/v2/CasualDiningScreen';
 import FineDiningScreen from '../screens/v2/FineDiningScreen';
 import QuickServiceScreen from '../screens/v2/QuickServiceScreen';
@@ -217,6 +218,8 @@ const GuardedMenu = withRoleGuard(MenuScreen, ['owner', 'manager', 'chef']);
 const GuardedTips = withRoleGuard(TipsScreen, ['owner', 'manager', 'waiter']);
 const GuardedReservations = withRoleGuard(ReservationsScreen, ['owner', 'manager', 'maitre']);
 const GuardedCalls = withRoleGuard(CallsScreen, ['owner', 'manager', 'waiter', 'maitre']);
+// Everyone on the floor sees over-capacity entries; the server decides who can resolve them.
+const GuardedCapacityRequests = withRoleGuard(CapacityRequestsScreen, ['owner', 'manager', 'maitre', 'waiter']);
 const GuardedTables = withRoleGuard(TablesScreen, ['owner', 'manager', 'maitre', 'waiter']);
 const GuardedQRGenerator = withRoleGuard(QRGeneratorScreen, ['owner', 'manager']);
 const GuardedQRBatch = withRoleGuard(QRBatchScreen, ['owner', 'manager']);
@@ -237,6 +240,11 @@ const JourneyCalls = withServiceGuard(
   GuardedCalls,
   ['callWaiter'],
   'Chamados de mesa não fazem parte do atendimento configurado.',
+);
+const JourneyCapacityRequests = withServiceGuard(
+  GuardedCapacityRequests,
+  ['tableManagement'],
+  'Lotação de mesa não se aplica ao modelo de atendimento configurado.',
 );
 const JourneyTables = withServiceGuard(
   GuardedTables,
@@ -490,11 +498,13 @@ function MainStack() {
       <Stack.Screen name="ServiceConfig" component={GuardedServiceConfig} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Waitlist" component={JourneyWaitlist} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Calls" component={JourneyCalls} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="CapacityRequests" component={JourneyCapacityRequests} options={scaleFadeScreenOptions} />
       <Stack.Screen name="CasualDining" component={CasualDiningScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="FineDining" component={FineDiningScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="QuickService" component={QuickServiceScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RestaurantProfile" component={GuardedRestaurantProfile} options={scaleFadeScreenOptions} />
       <Stack.Screen name="UserAccount" component={UserAccountScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="RestaurantSelector" component={RestaurantSelectorScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="BusinessHours" component={GuardedBusinessHours} options={scaleFadeScreenOptions} />
       <Stack.Screen name="NotificationSettings" component={GuardedNotificationSettings} options={scaleFadeScreenOptions} />
       <Stack.Screen name="PaymentSettings" component={GuardedPaymentSettings} options={scaleFadeScreenOptions} />

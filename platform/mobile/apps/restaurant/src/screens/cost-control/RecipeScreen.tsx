@@ -97,13 +97,13 @@ export default function RecipeScreen() {
 
   const recipesQuery = useQuery({
     queryKey: ['recipes', restaurantId],
-    queryFn: () => ApiService.getRecipes(restaurantId),
+    queryFn: () => ApiService.getRecipes(restaurantId!),
     enabled: !!restaurantId,
   });
 
   const ingredientsQuery = useQuery({
     queryKey: ['ingredients', restaurantId],
-    queryFn: () => ApiService.getIngredients(restaurantId),
+    queryFn: () => ApiService.getIngredients(restaurantId!),
     enabled: !!restaurantId,
   });
 
@@ -580,7 +580,7 @@ export default function RecipeScreen() {
               onPress={() => {
                 createRecipeMutation.mutate({
                   menu_item_id: selectedMenuItemId,
-                  restaurant_id: restaurantId,
+                  restaurant_id: restaurantId!,
                 });
               }}
               buttonColor={colors.primary}

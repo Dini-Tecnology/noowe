@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
 import { featureFlags } from 'react-native-screens';
 import { Text } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +10,9 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { getSupabaseClient, isSupabaseConfigured } from '@/shared/services/supabase';
+import { queryClient } from '@/shared/config/react-query';
 import customerBackend from '../services/customer-backend';
+import { Notifications } from '../services/customer-push';
 import { ClientTabBar } from '../components/navigation/ClientTabBar';
 import { liquidGlassTabNavigatorScreenOptions } from '@okinawa/shared/components/LiquidGlassBottomNav';
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -19,7 +22,7 @@ import {
   BirthdayScreen, CallWaiterScreen, CartScreen, ComboBuilderScreen, CreateReservationScreen, DigitalReceiptScreen, EditProfileScreen, EntryOptionsScreen, FavoritesScreen, FecharContaScreen, HarmonizacaoScreen,
   HomeScreen, KidsActivitiesScreen, LoyaltyScreen,
   MenuScreen, ModoFamiliaScreen, NotificationsScreen, OrderDetailScreen, OrderReadyScreen, OrdersScreen, PaymentSuccessScreen, PrivacyScreen,
-  PaymentMethodsScreen, ProfileScreen, PromotionsScreen, QrScannerScreen, QuickServiceCheckoutScreen, QuickServiceRatingScreen, ReservationConfirmationScreen, ReservationRestaurantScreen,
+  PaymentMethodsScreen, ProfileScreen, PromotionsScreen, QrScannerScreen, QuickServiceCheckoutScreen, ReservationConfirmationScreen, ReservationRestaurantScreen,
   ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TipPaymentScreen,
   WaitlistScreen,
 } from '../screens/production';
@@ -53,17 +56,54 @@ function AuthNavigator() {
     try {
       const supabase = getSupabaseClient();
       const redirectTo = makeRedirectUri({ scheme: 'noowe', path: 'auth/callback' });
-      const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true } });
-      if (error || !data.url) throw error ?? new Error('OAuth indisponível');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (error || !data.url) throw error ?? new Error('Login com Google indisponível.');
+
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      if (result.type === 'success') {
-        const params = new URL(result.url.replace('#', '?')).searchParams;
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        if (!accessToken || !refreshToken) throw new Error('Sessão OAuth inválida');
-        const { error: sessionError } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-        if (sessionError) throw sessionError;
+
+      if (result.type === 'cancel' || result.type === 'dismiss') return;
+
+      if (result.type !== 'success' || !result.url) {
+        throw new Error(
+          'O Google não retornou ao aplicativo. Verifique se "noowe://auth/callback" está na lista de Redirect URLs do Supabase (Auth → URL Configuration).',
+        );
       }
+
+      // O fluxo PKCE do Supabase retorna `?code=...`; o fluxo implícito retorna
+      // `#access_token=...&refresh_token=...`. Tratamos ambos.
+      const url = result.url;
+      const queryString = url.includes('?') ? url.split('?')[1].split('#')[0] : '';
+      const hashString = url.includes('#') ? url.split('#')[1] : '';
+      const params = new URLSearchParams(queryString);
+      const hashParams = new URLSearchParams(hashString);
+
+      const authError =
+        params.get('error_description') || params.get('error') ||
+        hashParams.get('error_description') || hashParams.get('error');
+      if (authError) throw new Error(decodeURIComponent(authError));
+
+      const code = params.get('code') || hashParams.get('code');
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) throw exchangeError;
+        return;
+      }
+
+      const accessToken = hashParams.get('access_token') || params.get('access_token');
+      const refreshToken = hashParams.get('refresh_token') || params.get('refresh_token');
+      if (accessToken && refreshToken) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionError) throw sessionError;
+        return;
+      }
+
+      throw new Error('Retorno do Google não contém sessão válida.');
     } catch (error) {
       Alert.alert('Google', error instanceof Error ? error.message : 'Login indisponível.');
     } finally {
@@ -135,7 +175,33 @@ function DefaultMainTabs() {
   );
 }
 
+const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update']);
+
+/**
+ * Tapping a push about a table invite (ADR-011) opens Notificações, where the
+ * invite can be answered with its current state. Also covers a cold start
+ * from the push.
+ */
+function useOpenTableInviteFromPush() {
+  const navigation = useNavigation<any>();
+  useEffect(() => {
+    const handled = new Set<string>();
+    const open = (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const id = response.notification.request.identifier;
+      const type = response.notification.request.content.data?.type;
+      if (handled.has(id) || typeof type !== 'string' || !TABLE_INVITE_PUSH_TYPES.has(type)) return;
+      handled.add(id);
+      navigation.navigate('Notifications');
+    };
+    const subscription = Notifications.addNotificationResponseReceivedListener(open);
+    Notifications.getLastNotificationResponseAsync().then(open).catch(() => undefined);
+    return () => subscription.remove();
+  }, [navigation]);
+}
+
 function MainTabs() {
+  useOpenTableInviteFromPush();
   // TODO: LiquidGlassMainTabs (native BottomTabs/BottomTabsScreen from react-native-screens)
   // creates a UITabBarController natively but it never becomes visible on-screen — confirmed via
   // device log (UITabBarController prefs lookups fire, but no bar renders). Needs a react-native-screens
@@ -162,13 +228,30 @@ export default function ProductionNavigation() {
     const bootstrap = async () => {
       try {
         const supabase = getSupabaseClient();
-        const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-          if (!cancelled) setAuthenticated(!!session);
+        let previousUserId: string | null = null;
+        const { data } = supabase.auth.onAuthStateChange((event, session) => {
+          if (cancelled) return;
+          const nextUserId = session?.user?.id ?? null;
+
+          // Descarta caches do react-query sempre que a identidade mudar:
+          // após logout (nova identidade = null) ou ao entrar com outra conta.
+          // Sem isso a tela de Perfil (e outras) segue mostrando dados do usuário
+          // anterior até o pull-to-refresh.
+          if (event === 'SIGNED_OUT' || nextUserId !== previousUserId) {
+            queryClient.clear();
+          }
+
+          previousUserId = nextUserId;
+          setAuthenticated(!!session);
         });
         unsubscribe = () => data.subscription.unsubscribe();
 
         const active = await customerBackend.restoreAuth();
-        if (!cancelled) setAuthenticated(active);
+        if (!cancelled) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          previousUserId = sessionData.session?.user?.id ?? null;
+          setAuthenticated(active);
+        }
       } catch (error) {
         if (!cancelled) {
           setBootError(error instanceof Error ? error.message : 'Falha ao iniciar o app.');
@@ -214,13 +297,12 @@ export default function ProductionNavigation() {
     <Stack.Screen name="QuickServiceCheckout" component={QuickServiceCheckoutScreen} options={{ headerShown: false }} />
     <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ headerShown: false }} />
     <Stack.Screen name="OrderReady" component={OrderReadyScreen} options={{ headerShown: false, gestureEnabled: false }} />
-    <Stack.Screen name="QuickServiceRating" component={QuickServiceRatingScreen} options={{ headerShown: false, gestureEnabled: false }} />
     <Stack.Screen name="QrScanner" component={QrScannerScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Reservations" component={ReservationsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ReservationRestaurant" component={ReservationRestaurantScreen} options={{ headerShown: false }} />
     <Stack.Screen name="CreateReservation" component={CreateReservationScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ReservationConfirmation" component={ReservationConfirmationScreen} options={{ headerShown: false, gestureEnabled: false }} />
-    <Stack.Screen name="Waitlist" component={WaitlistScreen} options={{ title: 'Fila de espera' }} />
+    <Stack.Screen name="Waitlist" component={WaitlistScreen} options={{ headerShown: false }} />
     <Stack.Screen name="EntryOptions" component={EntryOptionsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Birthday" component={BirthdayScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ModoFamilia" component={ModoFamiliaScreen} options={{ headerShown: false }} />
@@ -230,17 +312,17 @@ export default function ProductionNavigation() {
     <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ headerShown: false, gestureEnabled: false }} />
     <Stack.Screen name="Review" component={ReviewScreen} options={{ headerShown: false }} />
     <Stack.Screen name="DigitalReceipt" component={DigitalReceiptScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="CallWaiter" component={CallWaiterScreen} options={{ title: 'Atendimento' }} />
+    <Stack.Screen name="CallWaiter" component={CallWaiterScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Harmonizacao" component={HarmonizacaoScreen} options={{ headerShown: false }} />
     <Stack.Screen name="FecharConta" component={FecharContaScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Loyalty" component={LoyaltyScreen} options={{ headerShown: false }} />
     <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="Promotions" component={PromotionsScreen} options={{ title: 'Cupons' }} />
-    <Stack.Screen name="Reviews" component={ReviewsScreen} options={{ title: 'Avaliações' }} />
+    <Stack.Screen name="Promotions" component={PromotionsScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="Reviews" component={ReviewsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ title: 'Privacidade' }} />
-    <Stack.Screen name="Support" component={SupportScreen} options={{ title: 'Ajuda' }} />
+    <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="Support" component={SupportScreen} options={{ headerShown: false }} />
   </Stack.Navigator>;
 }
 

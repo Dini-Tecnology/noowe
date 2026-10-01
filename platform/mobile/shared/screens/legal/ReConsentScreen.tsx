@@ -145,8 +145,8 @@ export const ReConsentScreen: React.FC<ReConsentScreenProps> = ({
     },
     onError: () => {
       Alert.alert(
-        'Error',
-        'Failed to record your consent. Please try again.',
+        'Erro',
+        'Não foi possível registrar seu consentimento. Tente novamente.',
         [{ text: 'OK' }],
       );
     },
@@ -163,12 +163,12 @@ export const ReConsentScreen: React.FC<ReConsentScreenProps> = ({
 
   const handleDecline = () => {
     Alert.alert(
-      'Decline Terms',
-      'If you decline the updated terms, you will need to delete your account. Do you want to proceed?',
+      'Recusar termos',
+      'Se você recusar os termos atualizados, será necessário excluir sua conta. Deseja continuar?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Delete Account',
+          text: 'Excluir conta',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -178,7 +178,7 @@ export const ReConsentScreen: React.FC<ReConsentScreenProps> = ({
                 routes: [{ name: 'Welcome' }],
               });
             } catch {
-              Alert.alert('Error', 'Failed to delete account. Please try again.');
+              Alert.alert('Erro', 'Não foi possível excluir a conta. Tente novamente.');
             }
           },
         },
@@ -191,7 +191,7 @@ export const ReConsentScreen: React.FC<ReConsentScreenProps> = ({
       <ScreenContainer>
         <View style={styles.centeredContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading legal documents...</Text>
+          <Text style={styles.loadingText}>Carregando documentos legais...</Text>
         </View>
       </ScreenContainer>
     );

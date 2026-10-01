@@ -1,14 +1,17 @@
 /* Hallmark · pre-emit critique: P5 H5 E4 S5 R4 V5 */
 /* Hallmark · macrostructure: Form · tone: warm utilitarian · anchor hue: green */
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import type { TableCheckoutResult } from '../../services/customer-backend';
+import customerBackend, { type TableCheckoutResult } from '../../services/customer-backend';
 import { money } from './shared';
+import { MY_REVIEWS_KEY } from './ReviewScreen';
+import { clearPendingPaymentConfirmation } from '../../utils/pending-payment-confirmation';
 
 const FAMILY_TIER_LABELS: Record<string, string> = {
   bronze: 'Família Bronze',
@@ -21,7 +24,11 @@ export default function PaymentSuccessScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
   const result: TableCheckoutResult = route?.params?.result;
   const restaurantName: string | undefined = route?.params?.restaurantName;
-  const paidAmount: number = route?.params?.paidAmount ?? result?.charged ?? 0;
+  const paidAmount: number = result?.charged ?? 0;
+  // The confirmation is on screen now; nothing left to restore.
+  useEffect(() => { void clearPendingPaymentConfirmation().catch(() => undefined); }, []);
+  const myReviews = useQuery({ queryKey: MY_REVIEWS_KEY, queryFn: () => customerBackend.listMyReviews() });
+  const alreadyReviewed = !!result?.orderId && (myReviews.data ?? []).some((review) => review.orderId === result.orderId);
 
   const styles = useMemo(
     () =>
@@ -30,10 +37,10 @@ export default function PaymentSuccessScreen({ route, navigation }: any) {
         content: { paddingHorizontal: 16, paddingBottom: 40, alignItems: 'center' },
         successCircle: {
           width: 88, height: 88, borderRadius: 44, backgroundColor: colors.successBackground,
-          alignItems: 'center', justifyContent: 'center', marginTop: 32, marginBottom: 20,
+          alignItems: 'center', justifyContent: 'center', marginTop: 40, marginBottom: 24,
         },
         title: { fontSize: 24, fontWeight: '800', color: colors.foreground, textAlign: 'center' },
-        subtitle: { fontSize: 14, color: colors.foregroundSecondary, marginTop: 6, marginBottom: 24, textAlign: 'center' },
+        subtitle: { fontSize: 14, lineHeight: 20, color: colors.foregroundSecondary, marginTop: 8, marginBottom: 28, paddingHorizontal: 8, textAlign: 'center' },
         card: {
           width: '100%', borderRadius: 18, padding: 16, backgroundColor: colors.card,
           borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, gap: 10, marginBottom: 16,
@@ -53,13 +60,20 @@ export default function PaymentSuccessScreen({ route, navigation }: any) {
         rewardSub: { fontSize: 12, color: colors.foregroundSecondary, marginTop: 2 },
         badgeRow: {
           width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 16,
-          backgroundColor: colors.backgroundTertiary, marginBottom: 24,
+          backgroundColor: colors.backgroundTertiary, marginBottom: 12,
         },
         badgeText: { fontSize: 13, fontWeight: '600', color: colors.foreground, flex: 1 },
-        receiptLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20 },
-        receiptLinkText: { fontSize: 14, fontWeight: '700', color: colors.primary },
-        cta: { width: '100%', paddingVertical: 17, borderRadius: 18, alignItems: 'center', backgroundColor: colors.primary },
+        actions: { width: '100%', gap: 12, marginTop: 8 },
+        cta: { width: '100%', minHeight: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
         ctaText: { fontSize: 16, fontWeight: '700', color: colors.primaryForeground },
+        ctaSecondary: { width: '100%', minHeight: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.card },
+        ctaSecondaryText: { fontSize: 16, fontWeight: '700', color: colors.primary },
+        reviewedRow: { width: '100%', minHeight: 54, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.successBackground },
+        reviewedText: { fontSize: 14, fontWeight: '700', color: colors.success },
+        linksCard: { width: '100%', borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.card, overflow: 'hidden' },
+        linkRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16 },
+        linkRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+        linkText: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.foreground },
       }),
     [colors],
   );
@@ -74,8 +88,8 @@ export default function PaymentSuccessScreen({ route, navigation }: any) {
         <View style={styles.successCircle}>
           <Ionicons name="checkmark" size={44} color={colors.success} />
         </View>
-        <Text style={styles.title}>Pagamento Confirmado!</Text>
-        <Text style={styles.subtitle}>{restaurantName ?? 'O restaurante'} agradece sua visita</Text>
+        <Text style={styles.title}>{result?.simulated ? 'Pagamento simulado concluído!' : 'Pagamento confirmado!'}</Text>
+        <Text style={styles.subtitle}>{result?.sessionReleased ? 'Sua conta foi encerrada. Você já pode ler o QR Code de outra mesa.' : 'Pagamento registrado. Ainda há saldo na sua conta.'}{result?.simulated ? ' Nenhum valor foi cobrado.' : ''}</Text>
 
         <View style={styles.card}>
           <View style={styles.row}>
@@ -119,29 +133,70 @@ export default function PaymentSuccessScreen({ route, navigation }: any) {
           </View>
         )}
 
-        {result?.receiptId && (
+        <View style={styles.actions}>
+          {alreadyReviewed ? (
+            <View style={styles.reviewedRow}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+              <Text style={styles.reviewedText}>Avaliação enviada. Obrigado!</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.cta}
+              onPress={() => navigation.navigate('Review', {
+                orderId: result?.orderId ?? null,
+                restaurantId: result?.restaurantId,
+                restaurantName,
+              })}
+              activeOpacity={0.9}
+              accessibilityRole="button"
+            >
+              <Text style={styles.ctaText}>Avaliar experiência</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
-            style={styles.receiptLink}
-            onPress={() => navigation.navigate('DigitalReceipt', { receiptId: result.receiptId })}
+            style={styles.ctaSecondary}
+            onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Main' }] })}
+            activeOpacity={0.9}
             accessibilityRole="button"
           >
-            <Ionicons name="receipt-outline" size={16} color={colors.primary} />
-            <Text style={styles.receiptLinkText}>Ver recibo digital</Text>
+            <Text style={styles.ctaSecondaryText}>Voltar ao início</Text>
           </TouchableOpacity>
-        )}
 
-        <TouchableOpacity
-          style={styles.cta}
-          onPress={() => navigation.navigate('Review', {
-            orderId: result?.orderId ?? null,
-            restaurantId: result?.restaurantId,
-            restaurantName,
-          })}
-          activeOpacity={0.9}
-          accessibilityRole="button"
-        >
-          <Text style={styles.ctaText}>Avaliar Experiência</Text>
-        </TouchableOpacity>
+          <View style={styles.linksCard}>
+            {result?.receiptId ? (
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => navigation.navigate('DigitalReceipt', { receiptId: result.receiptId })}
+                accessibilityRole="button"
+              >
+                <Ionicons name="receipt-outline" size={18} color={colors.primary} />
+                <Text style={styles.linkText}>Ver recibo digital</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.foregroundMuted} />
+              </TouchableOpacity>
+            ) : null}
+            {!result?.sessionReleased ? (
+              <TouchableOpacity
+                style={[styles.linkRow, result?.receiptId ? styles.linkRowBorder : null]}
+                onPress={() => navigation.replace('FecharConta', { tableSessionId: route?.params?.tableSessionId })}
+                accessibilityRole="button"
+              >
+                <Ionicons name="wallet-outline" size={18} color={colors.primary} />
+                <Text style={styles.linkText}>Ver saldo restante</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.foregroundMuted} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.linkRow, result?.receiptId ? styles.linkRowBorder : null]}
+                onPress={() => navigation.replace('QrScanner')}
+                accessibilityRole="button"
+              >
+                <Ionicons name="qr-code-outline" size={18} color={colors.primary} />
+                <Text style={styles.linkText}>Ler QR Code de outra mesa</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.foregroundMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </ScrollView>
     </ScreenContainer>
   );

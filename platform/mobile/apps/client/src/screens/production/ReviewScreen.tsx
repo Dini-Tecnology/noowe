@@ -3,13 +3,15 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend from '../../services/customer-backend';
 import { rootNavigate } from './shared';
+
+export const MY_REVIEWS_KEY = ['reviews'] as const;
 
 const CATEGORIES = [
   { key: 'food', label: 'Comida', icon: 'restaurant-outline' },
@@ -65,6 +67,13 @@ export default function ReviewScreen({ route, navigation }: any) {
   });
   const orderId = explicitOrderId ?? fallbackOrder.data ?? null;
 
+  // One review per order: the server rejects duplicates, and here the form is
+  // replaced by a confirmation as soon as we know the order was already rated.
+  const queryClient = useQueryClient();
+  const myReviews = useQuery({ queryKey: MY_REVIEWS_KEY, queryFn: () => customerBackend.listMyReviews() });
+  const alreadyReviewed = !!orderId && (myReviews.data ?? []).some((review) => review.orderId === orderId);
+  const noReviewableOrder = !explicitOrderId && !fallbackOrder.isLoading && !orderId;
+
   const submit = useMutation({
     mutationFn: () =>
       customerBackend.createReview({
@@ -76,18 +85,29 @@ export default function ReviewScreen({ route, navigation }: any) {
         comment: comment.trim() || undefined,
         tags: selectedTags.length ? selectedTags : undefined,
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: MY_REVIEWS_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['reviewable-order'] });
+      // reset (not navigate) so the back gesture can't return to a rateable form.
       Alert.alert('Obrigado!', 'Sua avaliação foi enviada.', [
-        { text: 'OK', onPress: () => rootNavigate(navigation, 'Home') },
+        { text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }) },
       ]);
     },
-    onError: (error: Error) => Alert.alert('Não foi possível enviar', error.message),
+    onError: (error: Error) => {
+      if (/already reviewed/i.test(error.message)) {
+        void queryClient.invalidateQueries({ queryKey: MY_REVIEWS_KEY });
+        Alert.alert('Pedido já avaliado', 'Você já enviou uma avaliação para este pedido.');
+        return;
+      }
+      Alert.alert('Não foi possível enviar', error.message);
+    },
   });
 
   const toggleTag = (tag: string) =>
     setSelectedTags((current) => (current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag]));
 
-  const canSubmit = !!orderId && (ratings.food > 0 || ratings.service > 0 || ratings.ambiance > 0);
+  const canSubmit = !!orderId && !alreadyReviewed && (ratings.food > 0 || ratings.service > 0 || ratings.ambiance > 0);
 
   const styles = useMemo(
     () =>
@@ -125,6 +145,9 @@ export default function ReviewScreen({ route, navigation }: any) {
         },
         ctaDisabled: { opacity: 0.6 },
         ctaText: { fontSize: 16, fontWeight: '700', color: colors.primaryForeground },
+        doneCard: { alignItems: 'center', gap: 10, paddingVertical: 24 },
+        doneTitle: { fontSize: 18, fontWeight: '800', color: colors.foreground },
+        doneText: { fontSize: 14, lineHeight: 20, color: colors.foregroundSecondary, textAlign: 'center', marginBottom: 12 },
         secondaryBtn: { paddingVertical: 15, borderRadius: 16, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center' },
         secondaryBtnText: { fontSize: 15, fontWeight: '700', color: colors.foreground },
       }),
@@ -150,6 +173,21 @@ export default function ReviewScreen({ route, navigation }: any) {
         </View>
         <Text style={styles.heroTitle}>Como foi {restaurantName === 'o restaurante' ? 'na sua visita' : `na ${restaurantName}`}?</Text>
 
+        {alreadyReviewed || noReviewableOrder ? (
+          <View style={styles.doneCard}>
+            <Ionicons name="checkmark-circle" size={36} color={colors.success} />
+            <Text style={styles.doneTitle}>{alreadyReviewed ? 'Pedido já avaliado' : 'Nada para avaliar agora'}</Text>
+            <Text style={styles.doneText}>
+              {alreadyReviewed
+                ? 'Cada pedido pode ser avaliado uma única vez. Obrigado pelo seu feedback!'
+                : 'Você não tem pedidos concluídos aguardando avaliação.'}
+            </Text>
+            <TouchableOpacity style={styles.cta} onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Main' }] })} accessibilityRole="button">
+              <Text style={styles.ctaText}>Voltar ao início</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
         {!explicitOrderId && fallbackOrder.isLoading && (
           <ActivityIndicator color={colors.primary} style={{ marginBottom: 20 }} />
         )}
@@ -216,6 +254,8 @@ export default function ReviewScreen({ route, navigation }: any) {
         >
           <Text style={styles.secondaryBtnText}>Ver Carteira</Text>
         </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </ScreenContainer>
   );

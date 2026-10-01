@@ -18,6 +18,7 @@ import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from '../shared/V2Shell';
 import type { MarketplaceFeatures } from '../shared/v2Types';
 import type { IconComponent } from './configTypes';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 const DEFAULT_FEATURES: MarketplaceFeatures = {
   loyalty: true,
@@ -139,7 +140,7 @@ export default function ConfigMarketplaceScreen() {
       await supabaseApiAdapter.updateRestaurantProfile(id, { features: next });
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar features');
+      setError(userErrorMessage(err, 'Erro ao salvar features'));
     }
   }, []);
 
@@ -172,7 +173,7 @@ export default function ConfigMarketplaceScreen() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar marketplace');
+      setError(userErrorMessage(err, 'Erro ao carregar marketplace'));
     } finally {
       setLoading(false);
     }

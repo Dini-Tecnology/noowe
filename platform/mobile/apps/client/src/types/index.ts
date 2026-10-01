@@ -352,7 +352,7 @@ export type RootStackParamList = {
 
   // Reservations
   Reservations: undefined;
-  CreateReservation: { restaurantId: string };
+  CreateReservation: { restaurantId: string; restaurantName?: string; restaurantPhoto?: string | null };
   ReservationDetail: { reservationId: string };
 
   // Reviews

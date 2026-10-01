@@ -53,6 +53,14 @@ export function capabilitiesFor(config: EstablishmentConfig, model: ServiceModel
 | `family_mode_enabled` | bool | false | Casual |
 | `guest_link_enabled` | bool | true | Fine, Casual |
 | `guest_link_ttl_min` | int | 180 | Fine, Casual |
+| `user_invite_enabled` | bool | true | Fine, Casual (ADR-011) |
+| `user_invite_ttl_min` | int | 30 | Fine, Casual |
+| `user_invite_max_pending_per_session` | int | 10 | Fine, Casual |
+| `user_invite_max_per_inviter_hour` | int | 20 | Fine, Casual |
+| `user_invite_redecline_cooldown_min` | int | 60 | Fine, Casual |
+| `user_search_min_chars` | int | 3 | Fine, Casual |
+| `user_search_limit` | int | 10 | Fine, Casual |
+| `capacity_request_ttl_min` | int | 15 | Fine, Casual (ADR-007) |
 | `require_guest_account` | bool | false | Fine, Casual |
 | `enforce_table_capacity` | bool | true | Fine, Casual |
 | `capacity_override_roles[]` | enum[] | ['maitre','manager'] | Fine, Casual |

@@ -3,14 +3,22 @@ import { getSupabaseClient } from '@okinawa/shared/services/supabase';
 import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import logger from '@okinawa/shared/utils/logger';
+import { getActiveRestaurantId, setActiveRestaurantId } from '@okinawa/shared/services/active-restaurant';
+import { loadStoredActiveRestaurantId, saveStoredActiveRestaurantId } from '@okinawa/shared/services/active-restaurant-storage';
+import socketService from '../services/socket';
 import {
   DISABLED_SERVICE_TYPE_FEATURES,
-  getServiceTypeFeatures,
   isSupportedServiceType,
   type ServiceType,
   type ServiceTypeFeatures,
   type CustomerExperienceConfig,
 } from '@okinawa/shared/config/service-types';
+import {
+  clientFeaturesFromCapabilities,
+  parseRestaurantCapabilityContract,
+  type RestaurantCapabilityContract,
+  type ServiceModel,
+} from '@okinawa/shared/config/capabilities';
 
 export interface RestaurantOption {
   id: string;
@@ -92,6 +100,9 @@ interface RestaurantRoleContextValue {
   restaurantId: string | null;
   serviceType: ServiceType | null;
   serviceFeatures: ServiceTypeFeatures;
+  capabilities: RestaurantCapabilityContract | null;
+  enabledServiceModels: ServiceModel[];
+  switchServiceModel: (model: ServiceModel) => void;
   roleLoading: boolean;
   /** Owners/managers can switch to another role view for supervision purposes. */
   setRole: (role: RestaurantRole) => void;
@@ -129,6 +140,8 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<RestaurantRole>('owner');
   const [restaurants, setRestaurants] = useState<RestaurantOption[]>([]);
   const [restaurantsLoading, setRestaurantsLoading] = useState(true);
+  const [activeServiceModel, setActiveServiceModel] = useState<ServiceModel | null>(null);
+  const [capabilities, setCapabilities] = useState<RestaurantCapabilityContract | null>(null);
   const [managerView, setManagerView] = useState<ManagerRoleView>('manager-ops');
   const [maitreView, setMaitreView] = useState<MaitreRoleView>('maitre-reservations');
   const [chefView, setChefView] = useState<ChefRoleView>('chef-kds');
@@ -157,6 +170,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       setServerRole(loaded);
       setRoleState(loaded);
       setRestaurantId(data.restaurant_id as string);
+      setActiveRestaurantId(data.restaurant_id as string);
       return true;
     }
 
@@ -175,6 +189,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       logger.warn('[RestaurantRoleContext] Failed to load owned restaurant:', ownedError.message);
       setServerRole(null);
       setRestaurantId(null);
+      setActiveRestaurantId(null);
       return false;
     }
 
@@ -182,35 +197,51 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       setServerRole('owner');
       setRoleState('owner');
       setRestaurantId(owned.id as string);
+      setActiveRestaurantId(owned.id as string);
       return true;
     }
 
     setServerRole(null);
     setRestaurantId(null);
+    setActiveRestaurantId(null);
     return false;
   }, []);
+
+  /**
+   * Abre o restaurante que a pessoa estava usando; se o vínculo não existe mais
+   * (foi removido, ou é outra conta), cai no vínculo mais antigo.
+   */
+  const loadPreferredRole = useCallback(async (userId: string, preferredId?: string | null) => {
+    if (preferredId && (await loadRoleForRestaurant(userId, preferredId))) return true;
+    return loadRoleForRestaurant(userId);
+  }, [loadRoleForRestaurant]);
 
   const reloadRole = useCallback(async () => {
     const { user } = await getOptionalSupabaseSessionUser();
     if (!user) return false;
     setRoleLoading(true);
     try {
-      return await loadRoleForRestaurant(user.id);
+      // Recarregar não pode devolver a pessoa ao primeiro restaurante: mantém o ativo.
+      return await loadPreferredRole(user.id, getActiveRestaurantId());
     } finally {
       setRoleLoading(false);
     }
-  }, [loadRoleForRestaurant]);
+  }, [loadPreferredRole]);
 
   const switchRestaurant = useCallback(async (targetRestaurantId: string) => {
     const { user } = await getOptionalSupabaseSessionUser();
     if (!user) return;
     setRoleLoading(true);
+    setCapabilities(null);
+    setActiveServiceModel(null);
     try {
-      await loadRoleForRestaurant(user.id, targetRestaurantId);
+      const switched = await loadRoleForRestaurant(user.id, targetRestaurantId);
+      if (switched) await saveStoredActiveRestaurantId(user.id, targetRestaurantId);
+      else await loadPreferredRole(user.id);
     } finally {
       setRoleLoading(false);
     }
-  }, [loadRoleForRestaurant]);
+  }, [loadRoleForRestaurant, loadPreferredRole]);
 
   const reloadRestaurants = useCallback(async () => {
     setRestaurantsLoading(true);
@@ -245,7 +276,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
         const { user } = await getOptionalSupabaseSessionUser();
         if (!user) return;
 
-        await loadRoleForRestaurant(user.id);
+        await loadPreferredRole(user.id, await loadStoredActiveRestaurantId(user.id));
 
         if (!cancelled) await reloadRestaurants();
       } catch (err) {
@@ -258,8 +289,45 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
     }
 
     void loadRole();
+    return () => {
+      cancelled = true;
+      // Saiu da conta: o próximo login não herda o restaurante deste.
+      setActiveRestaurantId(null);
+    };
+  }, [loadPreferredRole, reloadRestaurants]);
+
+  // Eventos em tempo real só do restaurante em uso (a pessoa pode ter vários).
+  useEffect(() => {
+    if (!restaurantId) return;
+    socketService.joinRestaurantRoom(restaurantId);
+    return () => socketService.leaveRestaurantRoom(restaurantId);
+  }, [restaurantId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const current = restaurants.find((item) => item.id === restaurantId);
+    const model = activeServiceModel
+      ?? (isSupportedServiceType(current?.serviceType) ? current.serviceType : null);
+    if (!restaurantId || !model) {
+      return;
+    }
+    void (async () => {
+      const { data, error } = await (getSupabaseClient() as any).rpc('get_restaurant_model_capabilities_v2', {
+        p_restaurant_id: restaurantId,
+        p_service_model: model,
+      });
+      if (cancelled) return;
+      if (error) {
+        logger.warn('[RestaurantRoleContext] Failed to load capabilities:', error.message);
+        setCapabilities(null);
+        return;
+      }
+      const parsed = parseRestaurantCapabilityContract(data);
+      setCapabilities(parsed);
+      if (parsed && parsed.serviceModel !== activeServiceModel) setActiveServiceModel(parsed.serviceModel);
+    })();
     return () => { cancelled = true; };
-  }, [loadRoleForRestaurant, reloadRestaurants]);
+  }, [restaurantId, restaurants, activeServiceModel]);
 
   const setRole = (newRole: RestaurantRole) => {
     // Only supervisory roles can impersonate another role view.
@@ -270,20 +338,21 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => {
       const currentRestaurant = restaurants.find((item) => item.id === restaurantId);
-      const serviceType = isSupportedServiceType(currentRestaurant?.serviceType)
-        ? currentRestaurant.serviceType
-        : null;
+      const serviceType = capabilities?.serviceModel
+        ?? (isSupportedServiceType(currentRestaurant?.serviceType) ? currentRestaurant.serviceType : null);
       return {
       role,
       serverRole,
       restaurantId,
       serviceType,
-      serviceFeatures: serviceType
-        ? getServiceTypeFeatures(serviceType, {
-            featureOverrides: currentRestaurant?.serviceConfig.feature_overrides,
-            customerExperience: currentRestaurant?.customerExperience,
-          })
+      serviceFeatures: capabilities
+        ? clientFeaturesFromCapabilities(capabilities)
         : DISABLED_SERVICE_TYPE_FEATURES,
+      capabilities,
+      enabledServiceModels: capabilities?.enabledServiceModels ?? [],
+      switchServiceModel: (model: ServiceModel) => {
+        if (capabilities?.enabledServiceModels.includes(model)) setActiveServiceModel(model);
+      },
       roleLoading,
       setRole,
       reloadRole,
@@ -306,7 +375,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [role, serverRole, restaurantId, roleLoading, reloadRole, restaurants, restaurantsLoading, reloadRestaurants, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView],
+    [role, serverRole, restaurantId, roleLoading, reloadRole, restaurants, restaurantsLoading, reloadRestaurants, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView, capabilities],
   );
 
   return (

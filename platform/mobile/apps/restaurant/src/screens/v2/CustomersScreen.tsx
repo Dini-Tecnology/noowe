@@ -6,6 +6,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface Customer {
   user_id: string;
@@ -60,7 +61,7 @@ export default function CustomersScreen() {
       setSummary(data?.summary ?? {});
       setCustomers(Array.isArray(data?.customers) ? data.customers : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar clientes');
+      setError(userErrorMessage(err, 'Erro ao carregar clientes'));
     } finally {
       setLoading(false);
       setRefreshing(false);

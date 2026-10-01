@@ -25,6 +25,7 @@ import { V2ConfirmDialog } from '../shared/V2ConfirmDialog';
 import { V2FormSheet } from '../shared/V2FormSheet';
 import { V2Shell } from '../shared/V2Shell';
 import { useRestaurantTables, type V2Table } from '../shared/useRestaurantOperations';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 const ZONE_PALETTE = [
   { bg: '#FFEDD5', text: '#C2410C', badge: '#FED7AA' },
@@ -143,7 +144,7 @@ export default function ConfigFloorScreen() {
       setSelectedZone(payload.section);
       await refresh();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Não foi possível salvar a mesa.');
+      setFormError(userErrorMessage(err, 'Não foi possível salvar a mesa.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -159,7 +160,7 @@ export default function ConfigFloorScreen() {
       await refresh();
     } catch (err) {
       setDeleteTable(null);
-      setActionError(err instanceof Error ? err.message : 'Não foi possível excluir a mesa.');
+      setActionError(userErrorMessage(err, 'Não foi possível excluir a mesa.'));
     } finally {
       setIsSubmitting(false);
     }

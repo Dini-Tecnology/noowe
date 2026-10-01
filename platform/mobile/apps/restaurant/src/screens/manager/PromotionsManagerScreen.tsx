@@ -167,8 +167,8 @@ export default function PromotionsManagerScreen() {
         {
           id: '3',
           restaurant_id: 'rest-1',
-          code: 'ANIVERSARIO',
-          title: 'R$30 off no aniversario',
+          code: 'ANIVERSÁRIO',
+          title: 'R$30 off no aniversário',
           description: null,
           type: 'fixed',
           status: 'expired',

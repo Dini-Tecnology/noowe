@@ -109,6 +109,7 @@ export default function CasualDiningItemDetail({
           width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
           backgroundColor: colors.backgroundTertiary,
         },
+        headerSpacer: { width: 40, height: 40 },
         headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.foreground },
         content: { paddingHorizontal: 20, paddingBottom: 40 },
         imageWrap: { alignItems: 'center', marginTop: 8, marginBottom: 18 },
@@ -200,7 +201,7 @@ export default function CasualDiningItemDetail({
               <Ionicons name="arrow-back" size={22} color={colors.foreground} />
             </TouchableOpacity>
             <Text style={styles.headerTitle} numberOfLines={1}>{item.name}</Text>
-            <View style={styles.headerBtn} />
+            <View style={styles.headerSpacer} />
           </View>
         </View>
 

@@ -128,7 +128,14 @@ function getButtonBehavior(props: ButtonProps) {
   };
   
   // Variant logic
-  const variantMap = {
+  type VariantSpec = {
+    useGradient: boolean;
+    textColor: string;
+    bgColor?: string;
+    hasBorder?: boolean;
+    transparent?: boolean;
+  };
+  const variantMap: Record<string, VariantSpec> = {
     primary: { useGradient: true, textColor: '#FFFFFF' },
     secondary: { useGradient: false, textColor: '#FFFFFF', bgColor: '#0D9488' },
     outline: { useGradient: false, textColor: '#111827', hasBorder: true },

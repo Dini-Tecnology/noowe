@@ -74,6 +74,7 @@ export default function OrderReadyScreen() {
           backgroundColor: colors.primary,
         },
         ctaText: { fontSize: 16, fontWeight: '700', color: colors.primaryForeground },
+        reviewed: { fontSize: 14, fontWeight: '600', color: colors.foregroundSecondary, marginBottom: 16 },
       }),
     [colors],
   );
@@ -110,14 +111,36 @@ export default function OrderReadyScreen() {
           </View>
         )}
 
-        <TouchableOpacity
-          style={styles.cta}
-          onPress={() => navigation.replace('QuickServiceRating', { orderId, restaurantId: order?.restaurantId })}
-          activeOpacity={0.9}
-          accessibilityRole="button"
-        >
-          <Text style={styles.ctaText}>★ Avaliar Experiência</Text>
-        </TouchableOpacity>
+        {order && order.rating != null && (
+          <Text style={styles.reviewed} accessibilityLabel={`Você avaliou com ${order.rating} de 5 estrelas`}>
+            Você avaliou: {'★'.repeat(Math.round(order.rating))}{'☆'.repeat(5 - Math.round(order.rating))}
+          </Text>
+        )}
+        {order && (order.rating == null ? (
+          <TouchableOpacity
+            style={styles.cta}
+            // Same review flow as Fine/Casual after payment: per-category
+            // ratings, comment and tags, submitted explicitly, one per order.
+            onPress={() => navigation.navigate('Review', {
+              orderId,
+              restaurantId: order.restaurantId,
+              restaurantName: order.restaurantName,
+            })}
+            activeOpacity={0.9}
+            accessibilityRole="button"
+          >
+            <Text style={styles.ctaText}>★ Avaliar restaurante</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.cta}
+            onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Main', params: { screen: 'Home' } }] })}
+            activeOpacity={0.9}
+            accessibilityRole="button"
+          >
+            <Text style={styles.ctaText}>Voltar ao Início</Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </ScreenContainer>
   );

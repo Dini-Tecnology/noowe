@@ -26,21 +26,21 @@ type PaperIconButtonProps = ComponentProps<typeof PaperIconButton>;
 type PaperTextInputProps = ComponentProps<typeof PaperTextInput>;
 type PaperFABProps = ComponentProps<typeof PaperFAB>;
 
-interface AccessibleButtonProps extends PaperButtonProps {
+type AccessibleButtonProps = PaperButtonProps & {
   accessibilityLabel: string;
-}
+};
 
-interface AccessibleIconButtonProps extends PaperIconButtonProps {
+type AccessibleIconButtonProps = PaperIconButtonProps & {
   accessibilityLabel: string;
-}
+};
 
-interface AccessibleTextInputProps extends PaperTextInputProps {
+type AccessibleTextInputProps = PaperTextInputProps & {
   accessibilityLabel: string;
-}
+};
 
-interface AccessibleFABProps extends PaperFABProps {
+type AccessibleFABProps = PaperFABProps & {
   accessibilityLabel: string;
-}
+};
 
 // ============================================
 // COMPONENTS

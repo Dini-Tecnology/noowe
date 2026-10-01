@@ -2534,11 +2534,6 @@ class ApiService {
     return response.data;
   }
 
-  async joinWaitlist(data: any) {
-    const response = await this.api.post('/restaurant-waitlist/join', data);
-    return response.data;
-  }
-
   async cancelWaitlistEntry(id: string) {
     const response = await this.api.patch(`/restaurant-waitlist/${id}/cancel`);
     return response.data;

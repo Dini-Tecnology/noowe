@@ -131,6 +131,10 @@ export interface ServiceTypeResolution {
   capabilities: RestaurantCapabilities | null;
   /** Configured values (fees, discounts, tolerances); null until resolved. */
   policies: RestaurantCapabilityPolicies | null;
+  /** Terminal failure while resolving the restaurant capability contract. */
+  error?: unknown;
+  /** Retries whichever request is needed to resolve the contract. */
+  retry?: () => Promise<unknown>;
 }
 
 const UNRESOLVED: Pick<ServiceTypeResolution, 'features' | 'isFeatureEnabled' | 'capabilities' | 'policies'> = {
@@ -158,7 +162,7 @@ const UNRESOLVED: Pick<ServiceTypeResolution, 'features' | 'isFeatureEnabled' | 
  * `unsupported` — screens must not tell the user a feature is unavailable
  * just because the request is still retrying.
  */
-export const useServiceTypeFor = (restaurantId?: string | null): ServiceTypeResolution => {
+export const useServiceTypeFor = (restaurantId?: string | null, journeyModel?: ServiceType | null): ServiceTypeResolution => {
   const globalContext = useServiceType();
 
   const ownQuery = useQuery({
@@ -168,7 +172,7 @@ export const useServiceTypeFor = (restaurantId?: string | null): ServiceTypeReso
     staleTime: 5 * 60 * 1000,
   });
 
-  const ownServiceType = ownQuery.data?.serviceType;
+  const ownServiceType = journeyModel ?? ownQuery.data?.serviceType;
   const ownCapabilities = useQuery({
     queryKey: ['restaurant-capabilities', restaurantId, ownServiceType],
     queryFn: () => customerBackend.getRestaurantCapabilities(restaurantId!, ownServiceType as ServiceType),
@@ -189,15 +193,29 @@ export const useServiceTypeFor = (restaurantId?: string | null): ServiceTypeReso
       };
     }
 
-    if (ownQuery.isPending || ownQuery.isError || ownCapabilities.isPending || ownCapabilities.isError) {
-      return { status: 'loading', type: null, serviceName: 'Desconhecido', ...UNRESOLVED };
+    if (ownQuery.isPending || ownQuery.isError) {
+      return {
+        status: 'loading', type: null, serviceName: 'Desconhecido', ...UNRESOLVED,
+        error: ownQuery.error,
+        retry: ownQuery.refetch,
+      };
     }
 
     const serviceType = ownServiceType;
     if (!isSupportedServiceType(serviceType)) {
       return { status: 'unsupported', type: null, serviceName: 'Desconhecido', ...UNRESOLVED };
     }
-    if (!ownCapabilities.data) return { status: 'loading', type: null, serviceName: 'Desconhecido', ...UNRESOLVED };
+
+    // Only checked once the type is known to be supported: an unsupported
+    // type never enables this query, so it would stay `isPending` forever
+    // and mask the `unsupported` status above with a permanent `loading`.
+    if (ownCapabilities.isPending || ownCapabilities.isError || !ownCapabilities.data) {
+      return {
+        status: 'loading', type: null, serviceName: 'Desconhecido', ...UNRESOLVED,
+        error: ownCapabilities.error,
+        retry: ownCapabilities.refetch,
+      };
+    }
 
     const config = SERVICE_TYPE_CONFIGS[serviceType];
     const features = clientFeaturesFromCapabilities(ownCapabilities.data);
@@ -210,5 +228,5 @@ export const useServiceTypeFor = (restaurantId?: string | null): ServiceTypeReso
       capabilities: ownCapabilities.data.capabilities,
       policies: ownCapabilities.data.policies,
     };
-  }, [restaurantId, globalContext, ownQuery.isPending, ownQuery.isError, ownServiceType, ownCapabilities.isPending, ownCapabilities.isError, ownCapabilities.data]);
+  }, [restaurantId, globalContext, ownQuery.isPending, ownQuery.isError, ownQuery.error, ownQuery.refetch, ownServiceType, ownCapabilities.isPending, ownCapabilities.isError, ownCapabilities.error, ownCapabilities.data, ownCapabilities.refetch]);
 };

@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { authService } from '../../services/auth';
 import logger from '../../utils/logger';
+import { localizeAuthError } from '../../utils/auth-errors';
 
 type NavigationLike = {
   reset?: (state: { index: number; routes: Array<{ name: string }> }) => void;
@@ -23,6 +24,17 @@ interface AuthCallbackScreenProps {
   onComplete?: () => void;
 }
 
+const AUTH_LINK_MISSING_MESSAGE = 'Link de autenticação ausente.';
+const AUTH_LINK_FAILED_MESSAGE = 'Não foi possível confirmar este link. Peça um novo e-mail e tente de novo.';
+
+/** Erro do provedor de autenticação vem em inglês; só mostramos o que sabemos traduzir. */
+function callbackErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : '';
+  if (raw === AUTH_LINK_MISSING_MESSAGE) return raw;
+  const localized = localizeAuthError(raw);
+  return localized && localized !== raw ? localized : AUTH_LINK_FAILED_MESSAGE;
+}
+
 async function resolveAuthSession(route?: AuthCallbackScreenProps['route']) {
   const tokenHash = route?.params?.token_hash;
   if (tokenHash) {
@@ -36,7 +48,7 @@ async function resolveAuthSession(route?: AuthCallbackScreenProps['route']) {
 
   const url = route?.params?.url ?? (await Linking.getInitialURL());
   if (!url) {
-    throw new Error('Link de autenticacao ausente.');
+    throw new Error(AUTH_LINK_MISSING_MESSAGE);
   }
 
   return authService.recoverSessionFromUrl(url);
@@ -96,7 +108,7 @@ export function AuthCallbackScreen({ navigation, route, onComplete }: AuthCallba
         if (!active) return;
         logger.warn('[Auth] Auth callback failed:', error);
         setStatus('error');
-        setMessage(error instanceof Error ? error.message : 'Nao foi possivel confirmar este link.');
+        setMessage(callbackErrorMessage(error));
       });
 
     return () => {
@@ -107,7 +119,7 @@ export function AuthCallbackScreen({ navigation, route, onComplete }: AuthCallba
   return (
     <View style={styles.container}>
       {status === 'loading' && <ActivityIndicator size="large" color="#FF6B35" />}
-      <Text style={styles.title}>{status === 'error' ? 'Link invalido' : 'Autenticacao'}</Text>
+      <Text style={styles.title}>{status === 'error' ? 'Link inválido' : 'Autenticação'}</Text>
       <Text style={styles.message}>{message}</Text>
       {status === 'error' && (
         <Pressable style={styles.button} onPress={() => leaveCallback(navigation, onComplete)}>

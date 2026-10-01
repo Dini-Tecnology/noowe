@@ -12,6 +12,7 @@ import {
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 import { ConfigSectionCard } from './config/ConfigSectionCard';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 const AMBIANCE_ICONS: Record<FineDiningAmbiance, typeof Wine> = {
   casual: Cake,
@@ -47,7 +48,7 @@ export default function FineDiningScreen() {
         ),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar configuração');
+      setError(userErrorMessage(err, 'Erro ao carregar configuração'));
     } finally {
       setLoading(false);
     }
@@ -66,7 +67,7 @@ export default function FineDiningScreen() {
       await supabaseApiAdapter.updateFineDiningAmenities(restaurantId, amenitiesRef.current);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar configuração');
+      setError(userErrorMessage(err, 'Erro ao salvar configuração'));
     }
   }, [restaurantId]);
 

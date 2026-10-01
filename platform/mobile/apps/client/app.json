@@ -42,6 +42,8 @@
         "NSCameraUsageDescription": "Permite escanear QR codes de mesas e produtos",
         "NSPhotoLibraryUsageDescription": "Permite upload de fotos de perfil",
         "NSLocationWhenInUseUsageDescription": "Permite encontrar restaurantes próximos",
+        "NSLocationAlwaysUsageDescription": "Permite encontrar restaurantes próximos",
+        "NSMicrophoneUsageDescription": "O microfone não é usado neste aplicativo.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Permite notificações baseadas em localização mesmo com o app em segundo plano",
         "NSFaceIDUsageDescription": "Permite login rápido com biometria"
       }

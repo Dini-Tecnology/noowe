@@ -12,6 +12,7 @@ import {
   saoPauloDateKey,
   saoPauloUpcomingDateKeys,
 } from './shared/calendarDate';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface Reservation {
   id: string;
@@ -115,7 +116,7 @@ export default function ReservationsScreen() {
       }
       setReservations(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar reservas');
+      setError(userErrorMessage(err, 'Erro ao carregar reservas'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -146,7 +147,7 @@ export default function ReservationsScreen() {
       }
       void load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao atualizar reserva');
+      setError(userErrorMessage(err, 'Erro ao atualizar reserva'));
     } finally {
       setActing(null);
     }

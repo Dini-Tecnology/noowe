@@ -52,13 +52,13 @@
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>Permite identificar a filial do restaurante e modo food truck</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your location</string>
+    <string>Permite identificar a filial do restaurante e modo food truck</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Permite identificar a filial do restaurante</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
+    <string>O microfone não é usado neste aplicativo.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Permite upload de fotos de pratos e cardápio</string>
+    <string>Permite escolher fotos do restaurante, do seu perfil e dos pratos do cardápio.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

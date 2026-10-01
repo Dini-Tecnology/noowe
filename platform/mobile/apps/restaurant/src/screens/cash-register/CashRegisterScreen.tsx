@@ -18,6 +18,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Pressable,
 } from 'react-native';
 import {
   Text,
@@ -728,15 +729,18 @@ export default function CashRegisterScreen() {
                     </Text>
                   </View>
                 )}
-                <Icon
-                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={20}
-                  color={colors.mutedForeground}
+                <Pressable
                   onPress={() =>
                     setExpandedSessionId(isExpanded ? null : item.id)
                   }
                   style={{ marginTop: 4 }}
-                />
+                >
+                  <Icon
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={20}
+                    color={colors.mutedForeground}
+                  />
+                </Pressable>
               </View>
             </View>
 

@@ -204,7 +204,7 @@ function createUseOffline(storage: MockOfflineStorage): UseOfflineReturn {
     setCache: <T>(key: string, data: T, ttl?: number) => storage.setCache(key, data, ttl),
     
     queueOperation: async (operation) => {
-      const id = await storage.addToSyncQueue(operation);
+      const id = await storage.addToSyncQueue({ ...operation, maxRetries: operation.maxRetries ?? 3 });
       pendingCount = await storage.getPendingSyncCount();
       return id;
     },

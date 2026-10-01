@@ -60,11 +60,11 @@
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>Permite encontrar restaurantes próximos</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your location</string>
+    <string>Permite encontrar restaurantes próximos</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Permite encontrar restaurantes próximos</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
+    <string>O microfone não é usado neste aplicativo.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Permite upload de fotos de perfil</string>
     <key>NSUserActivityTypes</key>

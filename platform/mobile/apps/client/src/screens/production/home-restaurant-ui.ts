@@ -21,17 +21,111 @@ export function getServiceTypePresentation(serviceType: string) {
     ?? DEFAULT_SERVICE_TYPE_PRESENTATION;
 }
 
-export function formatPriceLevel(averageTicket: number | null): string | null {
-  if (averageTicket == null || averageTicket <= 0) return null;
-  if (averageTicket <= 50) return '$';
-  if (averageTicket <= 100) return '$$';
-  if (averageTicket <= 200) return '$$$';
-  return '$$$$';
+/**
+ * "Preço médio R$ 58,27": média dos itens do cardápio, calculada no servidor em
+ * centavos (`restaurants.avg_menu_price_cents`). Só aqui, na borda da UI, o
+ * valor vira reais. Sem cardápio (null) não há o que mostrar.
+ */
+export function formatAverageMenuPrice(avgMenuPriceCents: number | null | undefined): string | null {
+  if (avgMenuPriceCents == null || !Number.isFinite(avgMenuPriceCents) || avgMenuPriceCents <= 0) return null;
+  const reais = new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: avgMenuPriceCents % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(avgMenuPriceCents / 100);
+  // Espaço sem quebra: o card não pode separar "R$" do valor em duas linhas.
+  return `Preço médio R$\u00A0${reais}`;
 }
 
 export function formatDistance(km: number): string {
   if (km < 1) return `${Math.round(km * 1000)}m`;
   return `${km.toFixed(1)}km`;
+}
+
+export const NO_RATING_LABEL = 'Sem avaliação';
+
+/** A restaurant nobody has reviewed yet has no rating — not a rating of zero. */
+export function hasRating(rating: number, totalReviews: number): boolean {
+  return totalReviews > 0 && rating > 0;
+}
+
+/** "4.6" for a rated restaurant, "Sem avaliação" for one nobody reviewed. */
+export function formatRating(rating: number, totalReviews: number): string {
+  return hasRating(rating, totalReviews) ? rating.toFixed(1) : NO_RATING_LABEL;
+}
+
+/** Same, with the review count: "4.6 (120)". */
+export function formatRatingWithCount(rating: number, totalReviews: number): string {
+  return hasRating(rating, totalReviews) ? `${rating.toFixed(1)} (${totalReviews})` : NO_RATING_LABEL;
+}
+
+/**
+ * Peso de cada critério no destaque da home. Valores atuais, não constantes de
+ * regra: trocar o equilíbrio entre "perto" e "bem avaliado" é mudança de uma
+ * linha aqui (CLAUDE.md, convenção de valores).
+ */
+export const FEATURED_WEIGHTS = { proximity: 0.5, rating: 0.5 } as const;
+/** Nota máxima da escala, usada para normalizar a avaliação em 0..1. */
+const RATING_SCALE = 5;
+
+export interface FeaturedCandidate {
+  id: string;
+  rating: number;
+  totalReviews: number;
+  lat: number | null;
+  lng: number | null;
+}
+
+/**
+ * Proximidade normalizada em 0..1 com decaimento suave: 0km → 1, 1km → 0.5,
+ * 4km → 0.2. Não depende do conjunto, então acrescentar um restaurante
+ * distante não reordena os demais.
+ */
+function proximityScore(distance: number | null): number {
+  if (distance == null) return 0;
+  return 1 / (1 + Math.max(distance, 0));
+}
+
+function ratingScore(candidate: FeaturedCandidate): number {
+  return hasRating(candidate.rating, candidate.totalReviews)
+    ? Math.min(candidate.rating, RATING_SCALE) / RATING_SCALE
+    : 0;
+}
+
+export function featuredScore(candidate: FeaturedCandidate, distance: number | null): number {
+  return proximityScore(distance) * FEATURED_WEIGHTS.proximity
+    + ratingScore(candidate) * FEATURED_WEIGHTS.rating;
+}
+
+/**
+ * O destaque da home: o restaurante mais próximo com a melhor avaliação,
+ * combinando os dois critérios em uma nota única em vez de desempatar um pelo
+ * outro. Sem localização do usuário, decide só pela avaliação; empate cai para
+ * quem tem mais avaliações e, por fim, para a ordem recebida — nunca aleatório,
+ * para a home não trocar de destaque a cada render.
+ */
+export function pickFeatured<T extends FeaturedCandidate>(
+  restaurants: T[],
+  location: { latitude: number; longitude: number } | null,
+  distanceOf: (location: { latitude: number; longitude: number }, target: { lat: number; lng: number }) => number,
+): T | undefined {
+  if (restaurants.length === 0) return undefined;
+
+  let best: T | undefined;
+  let bestScore = -Infinity;
+  for (const restaurant of restaurants) {
+    const distance = location && restaurant.lat != null && restaurant.lng != null
+      ? distanceOf(location, { lat: restaurant.lat, lng: restaurant.lng })
+      : null;
+    const score = featuredScore(restaurant, distance);
+    if (
+      score > bestScore
+      || (score === bestScore && best != null && restaurant.totalReviews > best.totalReviews)
+    ) {
+      best = restaurant;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 /** Labels for the boolean flags a restaurant sets in menu_items.dietary_info. */

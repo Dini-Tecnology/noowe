@@ -161,19 +161,19 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
           {/* Error Title */}
           <Text style={[styles.title, { color: colors.foreground }]}>
-            Oops! Something went wrong
+            Ops! Algo deu errado
           </Text>
 
           {/* Error Description */}
           <Text style={[styles.description, { color: colors.mutedForeground }]}>
-            We're sorry, but something unexpected happened. Please try again.
+            Sentimos muito, mas algo inesperado aconteceu. Tente novamente.
           </Text>
 
           {/* Error Details (Development Only) */}
           {showDetails && error && (
             <ScrollView style={[styles.detailsContainer, { backgroundColor: colors.muted }]}>
               <Text style={[styles.detailsTitle, { color: colors.destructive }]}>
-                Error Details:
+                Detalhes do erro:
               </Text>
               <Text style={[styles.detailsText, { color: colors.card }]}>
                 {error.message}
@@ -181,7 +181,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               {errorInfo?.componentStack && (
                 <>
                   <Text style={[styles.detailsTitle, { color: colors.destructive }]}>
-                    Component Stack:
+                    Pilha de componentes:
                   </Text>
                   <Text style={[styles.detailsText, { color: colors.card }]}>
                     {errorInfo.componentStack}
@@ -197,7 +197,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             onPress={this.handleRetry}
           >
             <Text style={[styles.retryButtonText, { color: colors.primaryForeground }]}>
-              Try Again
+              Tentar novamente
             </Text>
           </TouchableOpacity>
         </View>

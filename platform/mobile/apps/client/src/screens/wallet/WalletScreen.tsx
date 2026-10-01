@@ -23,6 +23,12 @@ import { useWallet } from '../../hooks/useWallet';
 import type { CustomerPaymentMethod, CustomerWalletTransaction } from '../../services/customer-backend';
 import { money, rootNavigate, useQueryRefreshControl } from '../production/shared';
 import { formatWalletDate, isWalletCredit, parseWalletAmount } from './wallet-formatters';
+import { isUsernameFormatValid, normalizeUsernameInput } from '../../utils/username';
+import { CardBrandIcon } from '../../components/payment/CardBrandIcon';
+import { detectCardBrand, formatCardNumber, formatExpiry, isExpired, isValidLuhn, onlyDigits, parseExpiry } from '../../utils/card';
+
+type MethodKind = 'credit_card' | 'debit_card' | 'pix';
+const KIND_LABELS: Record<MethodKind, string> = { credit_card: 'Crédito', debit_card: 'Débito', pix: 'PIX' };
 
 type WalletModalProps = {
   visible: boolean;
@@ -62,14 +68,19 @@ function WalletModal({ visible, title, children, onClose }: WalletModalProps) {
 export default function WalletScreen() {
   const navigation = useNavigation<any>();
   const colors = useColors();
-  const { query, addPix, setDefault, removeMethod, transfer } = useWallet();
+  const { query, addPix, addCard, setDefault, removeMethod, transfer } = useWallet();
   const refreshControl = useQueryRefreshControl([query]);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [pixModalVisible, setPixModalVisible] = useState(false);
+  const [methodModalVisible, setMethodModalVisible] = useState(false);
   const [transferModalVisible, setTransferModalVisible] = useState(false);
+  const [methodKind, setMethodKind] = useState<MethodKind>('credit_card');
   const [pixKey, setPixKey] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [holderName, setHolderName] = useState('');
+  const [expiry, setExpiry] = useState('');
   const [pixDefault, setPixDefault] = useState(true);
-  const [recipientEmail, setRecipientEmail] = useState('');
+  const [recipientUsername, setRecipientUsername] = useState('');
   const [transferAmount, setTransferAmount] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -127,6 +138,13 @@ export default function WalletScreen() {
         input: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.inputBorder, backgroundColor: colors.input, paddingHorizontal: 16, fontSize: 15, color: colors.foreground },
         helper: { minHeight: 32, paddingTop: 8, fontSize: 11, lineHeight: 16, color: colors.foregroundSecondary },
         errorMessage: { color: colors.error },
+        kindRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+        kindChip: { flex: 1, minHeight: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
+        kindChipActive: { borderColor: colors.walletSurfaceEnd, backgroundColor: colors.walletSurfaceEnd },
+        kindText: { fontSize: 12, fontWeight: '800', color: colors.foregroundSecondary },
+        kindTextActive: { color: colors.walletForeground },
+        inputRow: { flexDirection: 'row', gap: 12 },
+        inputHalf: { flex: 1 },
         checkRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 12 },
         checkbox: { width: 24, height: 24, borderRadius: 8, borderWidth: 1, borderColor: pixDefault ? colors.walletSurfaceEnd : colors.border, backgroundColor: pixDefault ? colors.walletSurfaceEnd : colors.card, alignItems: 'center', justifyContent: 'center' },
         checkLabel: { fontSize: 13, color: colors.foreground },
@@ -142,30 +160,80 @@ export default function WalletScreen() {
 
   const goProfile = useCallback(() => navigation.navigate('Profile'), [navigation]);
   const openPixModal = useCallback(() => {
+    setMethodModalVisible(false);
     setFormError(null);
     setPixKey('');
+    setCardNumber('');
+    setHolderName('');
+    setExpiry('');
+    setMethodKind('credit_card');
     setPixDefault(!hasMethods);
     setPixModalVisible(true);
   }, [hasMethods]);
 
-  const submitPix = useCallback(async () => {
-    if (pixKey.trim().length < 5) {
-      setFormError('Informe uma chave PIX válida para continuar.');
+  const selectSavedMethod = useCallback(async (method: CustomerPaymentMethod) => {
+    try {
+      if (!method.isDefault) await setDefault.mutateAsync(method.id);
+      setMethodModalVisible(false);
+    } catch {
+      Alert.alert('Método de pagamento', 'Não foi possível selecionar este método. Tente novamente.');
+    }
+  }, [setDefault]);
+
+  const submitMethod = useCallback(async () => {
+    setFormError(null);
+    if (methodKind === 'pix') {
+      if (pixKey.trim().length < 5) {
+        setFormError('Informe uma chave PIX válida para continuar.');
+        return;
+      }
+      try {
+        await addPix.mutateAsync({ pixKey, setDefault: pixDefault });
+        setPixModalVisible(false);
+      } catch (error) {
+        setFormError(error instanceof Error ? error.message : 'Não foi possível salvar a chave PIX. Tente novamente.');
+      }
       return;
     }
-    setFormError(null);
+    if (!isValidLuhn(cardNumber)) {
+      setFormError('Número do cartão inválido.');
+      return;
+    }
+    const parsed = parseExpiry(expiry);
+    if (!parsed) {
+      setFormError('Informe a validade no formato MM/AA.');
+      return;
+    }
+    if (isExpired(parsed)) {
+      setFormError('Este cartão está vencido.');
+      return;
+    }
+    if (holderName.trim().length < 3) {
+      setFormError('Informe o nome impresso no cartão.');
+      return;
+    }
+    const digits = onlyDigits(cardNumber);
     try {
-      await addPix.mutateAsync({ pixKey, setDefault: pixDefault });
+      // Only brand, last four digits and expiry are sent; the full number stays on the device.
+      await addCard.mutateAsync({
+        cardType: methodKind,
+        brand: detectCardBrand(digits) === 'unknown' ? 'cartão' : detectCardBrand(digits),
+        lastFour: digits.slice(-4),
+        expMonth: parsed.month,
+        expYear: parsed.year,
+        holderName: holderName.trim(),
+        setDefault: pixDefault,
+      });
       setPixModalVisible(false);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Não foi possível salvar a chave PIX. Tente novamente.');
+      setFormError(error instanceof Error ? error.message : 'Não foi possível salvar o cartão. Tente novamente.');
     }
-  }, [addPix, pixDefault, pixKey]);
+  }, [addCard, addPix, cardNumber, expiry, holderName, methodKind, pixDefault, pixKey]);
 
   const submitTransfer = useCallback(async () => {
     const amount = parseWalletAmount(transferAmount);
-    if (!recipientEmail.includes('@')) {
-      setFormError('Informe o e-mail da conta Noowe que receberá a transferência.');
+    if (!isUsernameFormatValid(recipientUsername)) {
+      setFormError('Informe o @usuário da conta Noowe que receberá a transferência.');
       return;
     }
     if (amount < 1) {
@@ -174,14 +242,14 @@ export default function WalletScreen() {
     }
     setFormError(null);
     try {
-      await transfer.mutateAsync({ recipientEmail, amount });
+      await transfer.mutateAsync({ recipientUsername, amount });
       setTransferModalVisible(false);
-      setRecipientEmail('');
+      setRecipientUsername('');
       setTransferAmount('');
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'A transferência não foi concluída. Confira os dados e tente novamente.');
     }
-  }, [recipientEmail, transfer, transferAmount]);
+  }, [recipientUsername, transfer, transferAmount]);
 
   const openMethodActions = useCallback((method: CustomerPaymentMethod) => {
     const actions: Parameters<typeof Alert.alert>[2] = [];
@@ -210,11 +278,10 @@ export default function WalletScreen() {
   }, []);
 
   const quickActions = useMemo(() => [
-    { label: 'Adicionar', icon: 'add' as const, color: colors.walletPositive, background: colors.walletPositiveBackground, onPress: openPixModal },
     { label: 'Transferir', icon: 'paper-plane-outline' as const, color: colors.walletInfo, background: colors.walletInfoBackground, onPress: openTransfer },
     { label: 'Pagar QR', icon: 'qr-code-outline' as const, color: colors.primaryDark, background: colors.errorBackground, onPress: () => rootNavigate(navigation, 'QrScanner') },
     { label: 'Resgatar', icon: 'gift-outline' as const, color: colors.walletWarning, background: colors.walletWarningBackground, onPress: () => rootNavigate(navigation, 'Loyalty') },
-  ], [colors, navigation, openPixModal, openTransfer]);
+  ], [colors, navigation, openTransfer]);
 
   const renderTransaction = (transaction: CustomerWalletTransaction) => {
     const credit = isWalletCredit(transaction);
@@ -342,7 +409,7 @@ export default function WalletScreen() {
               )) : (
                 <View style={styles.empty}>
                   <Ionicons name="card-outline" size={22} color={colors.foregroundSecondary} />
-                  <Text style={styles.emptyText}>Nenhum método salvo. Adicione uma chave PIX para receber transferências.</Text>
+                  <Text style={styles.emptyText}>Nenhum método salvo. Adicione um cartão ou uma chave PIX.</Text>
                 </View>
               )}
             </View>
@@ -362,19 +429,114 @@ export default function WalletScreen() {
         )}
       </ScrollView>
 
-      <WalletModal visible={pixModalVisible} title="Adicionar chave PIX" onClose={() => setPixModalVisible(false)}>
-        <Text style={styles.fieldLabel}>Chave PIX</Text>
-        <TextInput
-          value={pixKey}
-          onChangeText={(value) => { setPixKey(value); if (formError) setFormError(null); }}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="CPF, e-mail, telefone ou chave aleatória"
-          placeholderTextColor={colors.foregroundSecondary}
-          style={styles.input}
-          accessibilityLabel="Chave PIX"
-        />
-        <Text style={[styles.helper, formError && styles.errorMessage]}>{formError ?? 'A chave é armazenada com acesso restrito à sua conta.'}</Text>
+      <WalletModal visible={methodModalVisible} title="Selecionar método" onClose={() => setMethodModalVisible(false)}>
+        <Text style={styles.helper}>Escolha uma chave PIX ou outro método já cadastrado.</Text>
+        {(data?.paymentMethods ?? []).map((method) => (
+          <TouchableOpacity
+            key={method.id}
+            style={styles.row}
+            onPress={() => void selectSavedMethod(method)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: method.isDefault }}
+          >
+            <View style={styles.rowIcon}>
+              <Ionicons name={method.methodType === 'pix' ? 'qr-code-outline' : 'card-outline'} size={19} color={colors.foregroundSecondary} />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowTitle}>{method.displayName}</Text>
+              <Text style={styles.rowDetail}>{method.detail}</Text>
+            </View>
+            <Ionicons name={method.isDefault ? 'radio-button-on' : 'radio-button-off'} size={20} color={method.isDefault ? colors.primary : colors.foregroundMuted} />
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={[styles.secondaryButton, { marginTop: 16 }]} onPress={openPixModal} accessibilityRole="button">
+          <Text style={styles.secondaryButtonText}>Adicionar novo método</Text>
+        </TouchableOpacity>
+      </WalletModal>
+
+      <WalletModal visible={pixModalVisible} title="Novo método de pagamento" onClose={() => setPixModalVisible(false)}>
+        <View style={styles.kindRow}>
+          {(Object.keys(KIND_LABELS) as MethodKind[]).map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[styles.kindChip, methodKind === option && styles.kindChipActive]}
+              onPress={() => { setMethodKind(option); setFormError(null); }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: methodKind === option }}
+            >
+              <Text style={[styles.kindText, methodKind === option && styles.kindTextActive]}>{KIND_LABELS[option]}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {methodKind === 'pix' ? (
+          <>
+            <Text style={styles.fieldLabel}>Chave PIX</Text>
+            <TextInput
+              value={pixKey}
+              onChangeText={(value) => { setPixKey(value); if (formError) setFormError(null); }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="CPF, e-mail, telefone ou chave aleatória"
+              placeholderTextColor={colors.foregroundSecondary}
+              style={styles.input}
+              accessibilityLabel="Chave PIX"
+            />
+          </>
+        ) : (
+          <>
+            <Text style={styles.fieldLabel}>Número do cartão</Text>
+            <TextInput
+              value={cardNumber}
+              onChangeText={(value) => { setCardNumber(formatCardNumber(value)); if (formError) setFormError(null); }}
+              keyboardType="number-pad"
+              autoComplete="cc-number"
+              maxLength={23}
+              placeholder="0000 0000 0000 0000"
+              placeholderTextColor={colors.foregroundSecondary}
+              style={styles.input}
+              accessibilityLabel="Número do cartão"
+            />
+            <View style={styles.inputRow}>
+              <View style={styles.inputHalf}>
+                <Text style={styles.fieldLabel}>Validade</Text>
+                <TextInput
+                  value={expiry}
+                  onChangeText={(value) => { setExpiry(formatExpiry(value)); if (formError) setFormError(null); }}
+                  keyboardType="number-pad"
+                  autoComplete="cc-exp"
+                  maxLength={5}
+                  placeholder="MM/AA"
+                  placeholderTextColor={colors.foregroundSecondary}
+                  style={styles.input}
+                  accessibilityLabel="Validade do cartão"
+                />
+              </View>
+              <View style={styles.inputHalf}>
+                <Text style={styles.fieldLabel}>Bandeira</Text>
+                <View style={[styles.input, { justifyContent: 'center' }]}>
+                  {detectCardBrand(cardNumber) === 'unknown' ? (
+                    <Text style={{ color: colors.foregroundSecondary, fontSize: 15 }}>—</Text>
+                  ) : (
+                    <CardBrandIcon brand={detectCardBrand(cardNumber)} width={46} />
+                  )}
+                </View>
+              </View>
+            </View>
+            <Text style={styles.fieldLabel}>Nome impresso no cartão</Text>
+            <TextInput
+              value={holderName}
+              onChangeText={(value) => { setHolderName(value.toUpperCase()); if (formError) setFormError(null); }}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoComplete="cc-name"
+              placeholder="NOME COMO NO CARTÃO"
+              placeholderTextColor={colors.foregroundSecondary}
+              style={styles.input}
+              accessibilityLabel="Nome impresso no cartão"
+            />
+          </>
+        )}
+        <Text style={[styles.helper, formError && styles.errorMessage]}>{formError ?? (methodKind === 'pix' ? 'A chave é armazenada com acesso restrito à sua conta.' : 'Guardamos apenas a bandeira, os 4 últimos dígitos e a validade. O número completo e o CVV nunca são salvos.')}</Text>
         <TouchableOpacity style={styles.checkRow} onPress={() => setPixDefault((value) => !value)} accessibilityRole="checkbox" accessibilityState={{ checked: pixDefault }}>
           <View style={styles.checkbox}>{pixDefault ? <Ionicons name="checkmark" size={16} color={colors.walletForeground} /> : null}</View>
           <Text style={styles.checkLabel}>Usar como método padrão</Text>
@@ -383,24 +545,23 @@ export default function WalletScreen() {
           <TouchableOpacity style={styles.secondaryButton} onPress={() => setPixModalVisible(false)} accessibilityRole="button">
             <Text style={styles.secondaryButtonText}>Cancelar</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.primaryButton, addPix.isPending && styles.primaryButtonDisabled]} onPress={() => void submitPix()} disabled={addPix.isPending} accessibilityRole="button">
-            {addPix.isPending ? <ActivityIndicator color={colors.walletForeground} /> : <Text style={styles.primaryButtonText}>Salvar PIX</Text>}
+          <TouchableOpacity style={[styles.primaryButton, (addPix.isPending || addCard.isPending) && styles.primaryButtonDisabled]} onPress={() => void submitMethod()} disabled={addPix.isPending || addCard.isPending} accessibilityRole="button">
+            {addPix.isPending || addCard.isPending ? <ActivityIndicator color={colors.walletForeground} /> : <Text style={styles.primaryButtonText}>{methodKind === 'pix' ? 'Salvar PIX' : 'Salvar cartão'}</Text>}
           </TouchableOpacity>
         </View>
       </WalletModal>
 
       <WalletModal visible={transferModalVisible} title="Transferir saldo" onClose={() => setTransferModalVisible(false)}>
-        <Text style={styles.fieldLabel}>E-mail da conta Noowe</Text>
+        <Text style={styles.fieldLabel}>@usuário da conta Noowe</Text>
         <TextInput
-          value={recipientEmail}
-          onChangeText={(value) => { setRecipientEmail(value); if (formError) setFormError(null); }}
+          value={recipientUsername}
+          onChangeText={(value) => { setRecipientUsername(normalizeUsernameInput(value)); if (formError) setFormError(null); }}
           autoCapitalize="none"
           autoCorrect={false}
-          keyboardType="email-address"
-          placeholder="nome@exemplo.com"
+          placeholder="@usuario"
           placeholderTextColor={colors.foregroundSecondary}
           style={styles.input}
-          accessibilityLabel="E-mail de quem receberá a transferência"
+          accessibilityLabel="@usuário de quem receberá a transferência"
         />
         <Text style={styles.fieldLabel}>Valor</Text>
         <TextInput

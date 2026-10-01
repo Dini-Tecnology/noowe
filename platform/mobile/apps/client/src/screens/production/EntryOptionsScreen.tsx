@@ -52,7 +52,10 @@ export default function EntryOptionsScreen({ route, navigation }: any) {
     () => navigation.navigate('Birthday', { restaurantId, restaurantName }),
     [navigation, restaurantId, restaurantName],
   );
-  const openScanner = useCallback(() => rootNavigate(navigation, 'QrScanner'), [navigation]);
+  const openScanner = useCallback(
+    () => rootNavigate(navigation, 'QrScanner', { contextRestaurantId: restaurantId, contextRestaurantName: restaurantName }),
+    [navigation, restaurantId, restaurantName],
+  );
 
   const waitLabel = stats.data
     ? stats.data.estimatedWaitMinutes > 0

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import customerBackend, { type CustomerWalletSnapshot } from '../services/customer-backend';
+import customerBackend, { type CustomerCardInput, type CustomerWalletSnapshot } from '../services/customer-backend';
 
 export const walletQueryKey = ['customer-wallet'] as const;
 
@@ -23,6 +23,11 @@ export function useWallet() {
     onSuccess: commitSnapshot,
   });
 
+  const addCard = useMutation({
+    mutationFn: (input: CustomerCardInput) => customerBackend.addCardPaymentMethod(input),
+    onSuccess: commitSnapshot,
+  });
+
   const setDefault = useMutation({
     mutationFn: (id: string) => customerBackend.setDefaultPaymentMethod(id),
     onSuccess: commitSnapshot,
@@ -34,7 +39,7 @@ export function useWallet() {
   });
 
   const transfer = useMutation({
-    mutationFn: (input: { recipientEmail: string; amount: number }) =>
+    mutationFn: (input: { recipientUsername: string; amount: number }) =>
       customerBackend.transferWallet(input),
     onSuccess: commitSnapshot,
   });
@@ -58,5 +63,5 @@ export function useWallet() {
     };
   }, [queryClient]);
 
-  return { query, addPix, setDefault, removeMethod, transfer };
+  return { query, addPix, addCard, setDefault, removeMethod, transfer };
 }

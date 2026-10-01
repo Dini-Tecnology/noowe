@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, Image, ScrollView, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -11,7 +11,8 @@ import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { FeatureUnavailableMessage } from '../../components/ServiceTypeAdapter';
 import customerBackend, { type CustomerWaitlistEntry, type WaitlistOccupancyLevel } from '../../services/customer-backend';
-import { StateView, rootNavigate, useQueryRefreshControl } from './shared';
+import { StateView, rootNavigate, useQueryRefreshControl, tableLabel } from './shared';
+import { closedQueueMessage, isActiveWaitlistStatus, pastWaitlistEntries, waitlistErrorMessage, waitlistStatusLabel } from './waitlist-ui';
 
 const PARTY_SIZES = ['1', '2', '3', '4', '5+'] as const;
 const PREFERENCES = [
@@ -64,6 +65,12 @@ function PositionRing({ position, colors }: { position: number; colors: ReturnTy
   );
 }
 
+function formatEntryDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
 export default function WaitlistScreen({ route, navigation }: any) {
   const colors = useColors();
   const visit = useVisitSession();
@@ -71,11 +78,19 @@ export default function WaitlistScreen({ route, navigation }: any) {
   const [party, setParty] = useState('2');
   const [preference, setPreference] = useState<string>('qualquer');
   const restaurantId = route.params?.restaurantId ?? visit.session?.restaurantId;
-  const { status: serviceTypeStatus, features } = useServiceTypeFor(restaurantId);
+  const { status: serviceTypeStatus, features, type: serviceModel } = useServiceTypeFor(restaurantId);
   const virtualQueueEnabled = features.virtualQueue;
 
   const query = useQuery({ queryKey: ['waitlist'], queryFn: () => customerBackend.listMyWaitlist() });
-  const refreshControl = useQueryRefreshControl([query]);
+  // Same key as the restaurant page, so "Fechado" there and here never disagree.
+  const liveStatus = useQuery({
+    queryKey: ['restaurant-live-status', restaurantId],
+    queryFn: () => customerBackend.getRestaurantLiveStatus(restaurantId),
+    enabled: !!restaurantId,
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+  });
+  const refreshControl = useQueryRefreshControl([query, liveStatus]);
   const restaurantQuery = useQuery({
     queryKey: ['restaurant', restaurantId],
     queryFn: () => customerBackend.getRestaurant(restaurantId),
@@ -89,9 +104,44 @@ export default function WaitlistScreen({ route, navigation }: any) {
   });
 
   const myEntry: CustomerWaitlistEntry | undefined = useMemo(
-    () => (query.data ?? []).find((entry) => entry.restaurantId === restaurantId && entry.status !== 'cancelled' && entry.status !== 'no_show'),
+    () => (query.data ?? []).find((entry) => entry.restaurantId === restaurantId && isActiveWaitlistStatus(entry.status)),
     [query.data, restaurantId],
   );
+
+  // The maitre calls/seats the customer from the restaurant panel — without
+  // Realtime the "Sua mesa está pronta!" banner only showed after a manual pull.
+  useEffect(() => {
+    if (!restaurantId) return undefined;
+    let channel: { unsubscribe: () => unknown } | undefined;
+    let cancelled = false;
+    customerBackend.subscribeToWaitlistChanges(restaurantId, () => {
+      queryClient.invalidateQueries({ queryKey: ['waitlist'] });
+      queryClient.invalidateQueries({ queryKey: ['waitlist-stats', restaurantId] });
+    })
+      .then((value) => {
+        if (cancelled) void value.unsubscribe();
+        else channel = value;
+      })
+      .catch(() => {
+        // Pull-to-refresh remains available when Realtime is temporarily offline.
+      });
+    return () => {
+      cancelled = true;
+      channel?.unsubscribe();
+    };
+  }, [restaurantId, queryClient]);
+
+  // iOS suspends the Realtime socket in the background and missed events are
+  // not replayed — coming back to the app must re-read the entry, or a "called"
+  // status that arrived meanwhile stays hidden behind the old "Na fila".
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      queryClient.invalidateQueries({ queryKey: ['waitlist'] });
+      queryClient.invalidateQueries({ queryKey: ['restaurant-live-status', restaurantId] });
+    });
+    return () => subscription.remove();
+  }, [restaurantId, queryClient]);
 
   const join = useMutation({
     mutationFn: () => customerBackend.joinWaitlist({ restaurantId, partySize: party === '5+' ? 5 : Number(party), preference }),
@@ -99,7 +149,11 @@ export default function WaitlistScreen({ route, navigation }: any) {
       queryClient.invalidateQueries({ queryKey: ['waitlist'] });
       queryClient.invalidateQueries({ queryKey: ['waitlist-stats', restaurantId] });
     },
-    onError: (error: Error) => Alert.alert('Fila', error.message),
+    onError: (error: Error) => {
+      queryClient.invalidateQueries({ queryKey: ['waitlist'] });
+      queryClient.invalidateQueries({ queryKey: ['restaurant-live-status', restaurantId] });
+      Alert.alert('Fila Virtual', waitlistErrorMessage(error));
+    },
   });
   const update = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'cancel' | 'arrive' }) => customerBackend.updateWaitlist(id, action),
@@ -107,19 +161,70 @@ export default function WaitlistScreen({ route, navigation }: any) {
       queryClient.invalidateQueries({ queryKey: ['waitlist'] });
       queryClient.invalidateQueries({ queryKey: ['waitlist-stats', restaurantId] });
     },
+    onError: (error: Error) => {
+      queryClient.invalidateQueries({ queryKey: ['waitlist'] });
+      Alert.alert('Não foi possível sair da fila', waitlistErrorMessage(error));
+    },
   });
   const toggleKids = useMutation({
     mutationFn: ({ id, hasKids }: { id: string; hasKids: boolean }) => customerBackend.setWaitlistHasKids(id, hasKids),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['waitlist'] }),
-    onError: (error: Error) => Alert.alert('Modo Família', error.message),
+    onError: (error: Error) => Alert.alert('Modo Família', waitlistErrorMessage(error)),
   });
 
-  const openMenu = () => rootNavigate(navigation, 'Menu', { restaurantId });
+  const confirmLeave = useCallback((entryId: string) => {
+    Alert.alert(
+      'Sair da fila',
+      'Você perderá sua posição na fila. Deseja sair mesmo assim?',
+      [
+        { text: 'Continuar na fila', style: 'cancel' },
+        { text: 'Sair da fila', style: 'destructive', onPress: () => update.mutate({ id: entryId, action: 'cancel' }) },
+      ],
+    );
+  }, [update]);
+
+  const openMenu = () => {
+    if (myEntry && (serviceModel === 'fine_dining' || serviceModel === 'casual_dining')) {
+      void visit.selectWaitlistJourney(restaurantId, myEntry.id, serviceModel);
+    }
+    rootNavigate(navigation, 'Menu', { restaurantId });
+  };
+  const callWaiter = () => rootNavigate(navigation, 'CallWaiter');
+
+  // Convite para a fila. A fila é individual — cada pessoa precisa da própria
+  // entrada, então o link não "gruda" convidados na entrada atual. Ele apenas
+  // aponta para o mesmo restaurante para que o amigo entre na fila também.
+  // O universal link noowebr.com já abre no app (app.json/associatedDomains);
+  // sem app instalado, o site cai numa página que oferece o download.
+  const shareInvite = useCallback(async () => {
+    const name = restaurantQuery.data?.name ?? 'no restaurante';
+    const url = `https://noowebr.com/r/${restaurantId}`;
+    const position = myEntry?.position;
+    const eta = myEntry?.estimatedWaitMinutes ?? statsQuery.data?.estimatedWaitMinutes;
+    const partOne = position != null
+      ? `Estou na fila do ${name} (posição ${position}º${eta != null ? `, ~${eta} min` : ''}).`
+      : `Estou entrando na fila do ${name}.`;
+    try {
+      await Share.share({ message: `${partOne} Vem também: ${url}`, url });
+    } catch (error) {
+      // Share.share can throw on iOS if the user cancels — a normal case, not
+      // an error worth surfacing. Anything else we surface once, without
+      // retry, since re-opening the sheet automatically would fight the user.
+      const message = error instanceof Error ? error.message : '';
+      if (message && !/dismissed|cancel/i.test(message)) {
+        Alert.alert('Não foi possível abrir o compartilhamento', message);
+      }
+    }
+  }, [myEntry, restaurantId, restaurantQuery.data, statsQuery.data]);
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
         scroll: { flex: 1, backgroundColor: colors.background },
+        header: { height: 56, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        back: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.backgroundTertiary, alignItems: 'center', justifyContent: 'center' },
+        headerTitle: { fontSize: 17, fontWeight: '800', color: colors.foreground },
+        headerSpacer: { width: 32 },
         content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
         summaryCard: {
           flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16,
@@ -129,6 +234,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
           width: 44, height: 44, borderRadius: 14, backgroundColor: `${colors.primary}1A`,
           alignItems: 'center', justifyContent: 'center',
         },
+        summaryPhoto: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.backgroundSecondary },
         summaryName: { fontSize: 16, fontWeight: '700', color: colors.foreground },
         summarySub: { fontSize: 13, color: colors.foregroundSecondary, marginTop: 2 },
         summarySubHighlight: { fontWeight: '700' },
@@ -176,16 +282,47 @@ export default function WaitlistScreen({ route, navigation }: any) {
         leaveBtn: { alignItems: 'center', paddingVertical: 14 },
         leaveBtnText: { fontSize: 14, fontWeight: '700', color: '#DC2626' },
         entryCard: { padding: 16, borderRadius: 18, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, marginBottom: 12, gap: 6 },
-        position: { fontSize: 18, fontWeight: '800', color: colors.foreground },
+        closedCard: {
+          alignItems: 'center', gap: 8, paddingVertical: 28, paddingHorizontal: 20, borderRadius: 18,
+          backgroundColor: colors.backgroundTertiary, marginBottom: 24,
+        },
+        closedTitle: { fontSize: 16, fontWeight: '700', color: colors.foreground },
+        closedSub: { fontSize: 13, lineHeight: 19, color: colors.foregroundSecondary, textAlign: 'center' },
+        historyTitle: { fontSize: 13, fontWeight: '700', color: colors.foregroundSecondary, marginTop: 8, marginBottom: 10 },
+        position: { fontSize: 15, fontWeight: '700', color: colors.foreground },
         meta: { fontSize: 13, color: colors.foregroundSecondary },
+        inviteBtn: {
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+          paddingVertical: 12, marginBottom: 16, borderRadius: 14, borderWidth: 1.5,
+          borderColor: colors.primary, backgroundColor: colors.backgroundSecondary,
+        },
+        inviteBtnText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
       }),
     [colors],
   );
 
-  const otherEntries = (query.data ?? []).filter((entry) => entry.id !== myEntry?.id);
+  // The maitre's own estimate wins; until they set one, fall back to the
+  // restaurant-wide estimate the server already computes for the queue.
+  // The queue only takes new entries while the restaurant is open. The server
+  // enforces it (customer_join_waitlist); this just avoids offering a form that
+  // can only fail. An unknown status doesn't block — the server has the final word.
+  const restaurantClosed = liveStatus.data?.isOpen === false;
+
+  const entryWaitMinutes = myEntry?.estimatedWaitMinutes ?? statsQuery.data?.estimatedWaitMinutes ?? null;
+
+  // Past entries in this restaurant's queue only — other restaurants' history
+  // has no context here and an "active" entry elsewhere is shown on its own page.
+  const pastEntries = pastWaitlistEntries(query.data, restaurantId);
 
   return (
     <ScreenContainer edges={['top', 'bottom']}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Voltar">
+          <Ionicons name="arrow-back" size={18} color={colors.foregroundSecondary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Fila de espera</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
@@ -205,7 +342,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
                 <Ionicons name="notifications" size={28} color={colors.success} />
                 <Text style={styles.readyText}>Sua mesa está pronta!</Text>
                 <Text style={styles.readySub}>
-                  {myEntry.tableNumber ? `Mesa ${myEntry.tableNumber} · ` : ''}Dirija-se à recepção
+                  {myEntry.tableNumber ? `${tableLabel(myEntry.tableNumber)} · ` : ''}Dirija-se à recepção
                 </Text>
               </View>
             )}
@@ -213,7 +350,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
             <View style={styles.statusBlock}>
               <PositionRing position={myEntry.position} colors={colors} />
               <Text style={styles.statusSub}>
-                Estimativa: {myEntry.estimatedWaitMinutes != null ? `~${myEntry.estimatedWaitMinutes} min` : '—'}
+                Estimativa: {entryWaitMinutes != null ? `~${entryWaitMinutes} min` : '—'}
               </Text>
             </View>
 
@@ -230,7 +367,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
               </View>
               <View style={styles.pill}>
                 <Ionicons name="time-outline" size={16} color={colors.foregroundSecondary} />
-                <Text style={styles.pillValue}>{myEntry.status === 'called' ? 'Chamado' : 'Na fila'}</Text>
+                <Text style={styles.pillValue}>{waitlistStatusLabel(myEntry.status)}</Text>
                 <Text style={styles.pillLabel}>Status</Text>
               </View>
             </View>
@@ -261,7 +398,32 @@ export default function WaitlistScreen({ route, navigation }: any) {
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.foregroundMuted} />
               </TouchableOpacity>
+              {features.callWaiter && (
+                <>
+                  <View style={styles.divider} />
+                  <TouchableOpacity style={styles.actionRow} onPress={callWaiter} accessibilityRole="button">
+                    <View style={styles.actionIcon}>
+                      <Ionicons name="hand-left-outline" size={17} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.actionTitle}>Chamar Garçom</Text>
+                      <Text style={styles.actionSub}>Tire dúvidas sem perder a vez</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={colors.foregroundMuted} />
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
+
+            <TouchableOpacity
+              style={styles.inviteBtn}
+              onPress={shareInvite}
+              accessibilityRole="button"
+              accessibilityLabel="Convidar alguém para a fila"
+            >
+              <Ionicons name="person-add-outline" size={16} color={colors.primary} />
+              <Text style={styles.inviteBtnText}>Convidar alguém para a fila</Text>
+            </TouchableOpacity>
 
             <View style={styles.familyRow}>
               <View style={{ flex: 1 }}>
@@ -279,23 +441,26 @@ export default function WaitlistScreen({ route, navigation }: any) {
               </TouchableOpacity>
             </View>
 
-            {myEntry.status === 'waiting' && (
-              <TouchableOpacity
-                style={styles.leaveBtn}
-                onPress={() => update.mutate({ id: myEntry.id, action: 'cancel' })}
-                accessibilityRole="button"
-              >
-                <Text style={styles.leaveBtnText}>Sair da fila</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={[styles.leaveBtn, update.isPending && styles.ctaDisabled]}
+              onPress={() => confirmLeave(myEntry.id)}
+              disabled={update.isPending}
+              accessibilityRole="button"
+            >
+              <Text style={styles.leaveBtnText}>{update.isPending ? 'Saindo...' : 'Sair da fila'}</Text>
+            </TouchableOpacity>
           </>
         ) : (
           <>
             {restaurantQuery.data && (
               <View style={styles.summaryCard}>
-                <View style={styles.summaryIcon}>
-                  <Ionicons name="restaurant" size={22} color={colors.primary} />
-                </View>
+                {restaurantQuery.data.bannerUrl || restaurantQuery.data.logoUrl ? (
+                  <Image source={{ uri: restaurantQuery.data.bannerUrl || restaurantQuery.data.logoUrl || undefined }} style={styles.summaryPhoto} resizeMode="cover" />
+                ) : (
+                  <View style={styles.summaryIcon}>
+                    <Ionicons name="restaurant" size={22} color={colors.primary} />
+                  </View>
+                )}
                 <View style={{ flex: 1 }}>
                   <Text style={styles.summaryName}>{restaurantQuery.data.name}</Text>
                   {statsQuery.data && statsQuery.data.occupancyLevel !== 'indisponivel' && (
@@ -310,45 +475,60 @@ export default function WaitlistScreen({ route, navigation }: any) {
               </View>
             )}
 
-            <SelectionSection title="Quantas pessoas?">
-              <View style={styles.chipRow}>
-                {PARTY_SIZES.map((n) => (
-                  <SelectChip key={n} label={n} selected={party === n} onPress={() => setParty(n)} />
-                ))}
+            {restaurantClosed ? (
+              <View style={styles.closedCard}>
+                <Ionicons name="moon-outline" size={26} color={colors.foregroundSecondary} />
+                <Text style={styles.closedTitle}>Restaurante fechado agora</Text>
+                <Text style={styles.closedSub}>{closedQueueMessage(liveStatus.data?.opensAt ?? null)}</Text>
               </View>
-            </SelectionSection>
-
-            <SelectionSection title="Preferência">
-              <View style={styles.prefRow}>
-                {PREFERENCES.map((pref) => (
-                  <View key={pref.id} style={styles.prefChip}>
-                    <SelectChip label={pref.label} selected={preference === pref.id} onPress={() => setPreference(pref.id)} />
+            ) : (
+              <>
+                <SelectionSection title="Quantas pessoas?">
+                  <View style={styles.chipRow}>
+                    {PARTY_SIZES.map((n) => (
+                      <SelectChip key={n} label={n} selected={party === n} onPress={() => setParty(n)} />
+                    ))}
                   </View>
-                ))}
-              </View>
-            </SelectionSection>
+                </SelectionSection>
 
-            <TouchableOpacity
-              style={[styles.cta, join.isPending && styles.ctaDisabled]}
-              onPress={() => join.mutate()}
-              disabled={join.isPending}
-              accessibilityRole="button"
-            >
-              <Text style={styles.ctaText}>{join.isPending ? 'Entrando...' : 'Entrar na Fila Virtual'}</Text>
-            </TouchableOpacity>
+                <SelectionSection title="Preferência">
+                  <View style={styles.prefRow}>
+                    {PREFERENCES.map((pref) => (
+                      <View key={pref.id} style={styles.prefChip}>
+                        <SelectChip label={pref.label} selected={preference === pref.id} onPress={() => setPreference(pref.id)} />
+                      </View>
+                    ))}
+                  </View>
+                </SelectionSection>
+
+                <TouchableOpacity
+                  style={[styles.cta, join.isPending && styles.ctaDisabled]}
+                  onPress={() => join.mutate()}
+                  disabled={join.isPending}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.ctaText}>{join.isPending ? 'Entrando...' : 'Entrar na Fila Virtual'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </>
         )}
 
         <StateView loading={query.isLoading} error={query.error} onRetry={() => query.refetch()} />
 
-        {otherEntries.map((entry) => (
-          <View key={entry.id} style={styles.entryCard}>
-            <Text style={styles.position}>Posição {entry.position}</Text>
-            <Text style={styles.meta}>
-              {entry.partySize} pessoas · {entry.status}{entry.estimatedWaitMinutes ? ` · ~${entry.estimatedWaitMinutes} min` : ''}
-            </Text>
-          </View>
-        ))}
+        {virtualQueueEnabled && !myEntry && pastEntries.length > 0 && (
+          <>
+            <Text style={styles.historyTitle}>Histórico nesta fila</Text>
+            {pastEntries.map((entry) => (
+              <View key={entry.id} style={styles.entryCard}>
+                <Text style={styles.position}>{waitlistStatusLabel(entry.status)}</Text>
+                <Text style={styles.meta}>
+                  {formatEntryDate(entry.createdAt)} · {entry.partySize} {entry.partySize === 1 ? 'pessoa' : 'pessoas'}
+                </Text>
+              </View>
+            ))}
+          </>
+        )}
       </ScrollView>
     </ScreenContainer>
   );

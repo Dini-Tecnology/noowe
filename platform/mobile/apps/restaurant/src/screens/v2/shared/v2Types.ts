@@ -32,6 +32,7 @@ export interface HubOrder {
 
 export interface KdsOrder {
   id: string;
+  itemIds: string[];
   table: string;
   meta: string;
   status: KdsStatus;

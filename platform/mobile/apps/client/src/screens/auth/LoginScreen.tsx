@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
+  Alert,
   View,
   StyleSheet,
   TouchableOpacity,
@@ -13,6 +14,7 @@ import { authService } from '@/shared/services/auth';
 import { biometricAuthService } from '@/shared/services/biometric-auth';
 import { useBiometricAuth } from '@/shared/hooks/useBiometricAuth';
 import { secureStorage } from '@/shared/services/secure-storage';
+import { isBiometricAuthConfigured } from '@/shared/config/auth-providers';
 import { showErrorToast, showSuccessToast } from '@/shared/utils/error-handler';
 import { useScreenTracking, useAnalytics } from '@/shared/hooks/useAnalytics';
 import { useAnalyticsContext } from '@/shared/contexts/AnalyticsContext';
@@ -107,6 +109,45 @@ export default function LoginScreen({
     };
   }, [isAvailable, isEnrolled, onBiometricLogin]);
 
+  const maybeOfferBiometricEnrollment = useCallback(
+    async (userId: string) => {
+      try {
+        if (!isBiometricAuthConfigured()) return;
+        if (!isAvailable || !isEnrolled) return;
+        if (await biometricAuthService.isEnabled()) return;
+
+        const promptKey = '@noowe_biometric_prompt_shown_v1';
+        const alreadyPrompted = await secureStorage.getItem(promptKey);
+        if (alreadyPrompted === 'true') return;
+        await secureStorage.setItem(promptKey, 'true');
+
+        const label = biometricAuthService.getDisplayName(biometricType);
+        Alert.alert(
+          `Usar ${label}?`,
+          `Ative o login rápido com ${label} para entrar na sua conta sem digitar a senha.`,
+          [
+            { text: 'Agora não', style: 'cancel' },
+            {
+              text: 'Ativar',
+              onPress: async () => {
+                const enableResult = await biometricAuthService.enable(userId);
+                if (enableResult.success) {
+                  await secureStorage.setUserEmail(email);
+                  showSuccessToast(`${label} ativada.`);
+                } else if (enableResult.error) {
+                  showErrorToast(new Error(enableResult.error));
+                }
+              },
+            },
+          ],
+        );
+      } catch (err) {
+        logger.warn('[Login] Biometric enrollment offer failed:', err);
+      }
+    },
+    [biometricType, email, isAvailable, isEnrolled],
+  );
+
   const validateFields = useCallback((): boolean => {
     const result = validateForm(loginSchema, { email, password });
 
@@ -172,6 +213,13 @@ export default function LoginScreen({
 
       Haptic.successNotification();
       showSuccessToast(t('auth.loginSuccess'));
+
+      // Após o primeiro login com senha, oferece ativar biometria para próximas
+      // entradas. O prompt aparece uma única vez por instalação (flag em
+      // AsyncStorage), somente se o aparelho suporta e tem biometria cadastrada.
+      if (result?.user?.id) {
+        void maybeOfferBiometricEnrollment(result.user.id);
+      }
     } catch (err: any) {
       if (isEmailNotConfirmedError(err)) {
         setError('');

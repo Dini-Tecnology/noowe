@@ -22,7 +22,7 @@ export function ServiceTypeSync() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const serviceType = restaurant.data?.serviceType;
+  const serviceType = session?.serviceModel ?? restaurant.data?.serviceType;
   const capabilities = useQuery({
     queryKey: ['restaurant-capabilities', restaurantId, serviceType],
     queryFn: () => customerBackend.getRestaurantCapabilities(restaurantId!, serviceType as ServiceModel),
