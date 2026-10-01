@@ -3,7 +3,6 @@ import { Alert } from 'react-native';
 import { useCart } from '@/shared/contexts/CartContext';
 import logger from '@okinawa/shared/utils/logger';
 import { QrCheckInCancelled, useVisitSession } from '../contexts/VisitSessionContext';
-import customerBackend, { type ServiceQrResolution } from '../services/customer-backend';
 import { classifyQrPayload } from './qr-payload';
 import type { QrScanOutcome } from './qr-scan-outcome';
 
@@ -44,36 +43,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 type ContextRestaurant = { id: string; name?: string | null };
 
-/** "Este QR é de outro restaurante": pergunta antes de trocar; nunca troca em silêncio. */
-async function confirmRestaurantSwitch(target: ServiceQrResolution, current: ContextRestaurant): Promise<boolean> {
-  let targetName = 'outro restaurante';
-  try {
-    const restaurant = await customerBackend.getRestaurant(target.restaurantId);
-    if (restaurant?.name) targetName = restaurant.name;
-  } catch {
-    // Sem o nome ainda dá para perguntar; o servidor valida o QR de qualquer forma.
-  }
-  const where = current.name ? ` Você está em ${current.name}.` : '';
-  return new Promise<boolean>((resolve) => {
-    Alert.alert(
-      'Este QR Code é de outro restaurante',
-      `Este QR Code pertence a ${targetName}.${where} Deseja ir para ${targetName}?`,
-      [
-        { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
-        { text: `Ir para ${targetName}`, onPress: () => resolve(true) },
-      ],
-      { cancelable: true, onDismiss: () => resolve(false) },
-    );
-  });
-}
-
 /**
  * Shared logic for every way a table QR can be opened: the in-app scanner
  * and a deep link opened by the OS (native camera, another app, cold
  * launch). Rejects anything that is not a NOOWE QR before touching the
  * server, classifies failures so the caller can show the right message, and —
- * when the scanner was opened from inside a restaurant — asks before jumping
- * to the restaurant that actually owns the scanned table.
+ * when the scanner was opened from inside a restaurant — refuses a QR that
+ * belongs to another one. It never says which restaurant owns it and never
+ * offers to switch: a QR printed for the wrong place is simply invalid here.
  */
 export function useTableQrHandler() {
   const { openFromQr } = useVisitSession();
@@ -90,7 +67,7 @@ export function useTableQrHandler() {
     if (!classifyQrPayload(payload)) return { ok: false, reason: 'not_noowe' };
 
     const context = options?.contextRestaurant;
-    let switched = false;
+    let foreignRestaurant = false;
     let visit: Awaited<ReturnType<typeof openFromQr>>;
     try {
       visit = await withTimeout(openFromQr(payload, {
@@ -98,13 +75,15 @@ export function useTableQrHandler() {
         beforeCheckIn: context
           ? async (resolution) => {
               if (resolution.restaurantId === context.id) return true;
-              switched = await confirmRestaurantSwitch(resolution, context);
-              return switched;
+              foreignRestaurant = true;
+              return false;
             }
           : undefined,
       }), QR_REQUEST_TIMEOUT_MS);
     } catch (error) {
-      if (error instanceof QrCheckInCancelled) return { ok: false, reason: 'cancelled' };
+      if (error instanceof QrCheckInCancelled) {
+        return { ok: false, reason: foreignRestaurant ? 'other_restaurant' : 'cancelled' };
+      }
       const code = errorCode(error);
       if (code === '22023' || code === 'P0002') return { ok: false, reason: 'invalid' };
       if (code === 'P0006') return { ok: false, reason: 'replaced' };
@@ -127,12 +106,6 @@ export function useTableQrHandler() {
     }
 
     const restaurantId = visit.restaurantId;
-
-    if (switched) {
-      // The user chose to leave the previous restaurant: its cart goes with it.
-      cart.clearCart();
-      return { ok: true, restaurantId, switched: true };
-    }
 
     // A seated table session already makes SessionCartSync drop a foreign cart;
     // the prompt only matters for counter QRs, which have no table session.

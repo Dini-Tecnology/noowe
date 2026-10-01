@@ -5,6 +5,7 @@ export type QrScanFailureReason =
   | 'not_noowe'
   | 'closed'
   | 'cancelled'
+  | 'other_restaurant'
   | 'booking_required'
   | 'replaced'
   | 'expired'
@@ -14,25 +15,33 @@ export type QrScanFailureReason =
   | 'network';
 
 export type QrScanOutcome =
-  /** `switched`: o QR era de outro restaurante e o usuário confirmou a troca. */
-  | { ok: true; restaurantId: string; switched?: boolean }
+  | { ok: true; restaurantId: string }
   | { ok: false; reason: QrScanFailureReason };
 
 export function showTableQrOutcome(
   outcome: QrScanOutcome,
   actions: {
-    onOpened: (restaurantId: string, info: { switched: boolean }) => void;
+    onOpened: (restaurantId: string) => void;
     onRetry: () => void;
     onOpenAccount: () => void;
   },
 ): void {
   if (outcome.ok) {
-    actions.onOpened(outcome.restaurantId, { switched: outcome.switched === true });
+    actions.onOpened(outcome.restaurantId);
     return;
   }
   if (outcome.reason === 'cancelled') {
-    // O usuário mesmo recusou (ex.: não quis trocar de restaurante): sem alerta.
+    // O usuário mesmo desistiu: sem alerta.
     actions.onRetry();
+    return;
+  }
+  if (outcome.reason === 'other_restaurant') {
+    // Propositalmente genérico: não nomeia o restaurante dono do QR nem oferece trocar.
+    Alert.alert(
+      'QR Code inválido',
+      'Este QR Code não pertence a este restaurante.',
+      [{ text: 'OK', onPress: actions.onRetry }],
+    );
     return;
   }
   if (outcome.reason === 'not_noowe') {

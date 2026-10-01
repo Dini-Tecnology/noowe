@@ -27,7 +27,7 @@ export default function QrScannerScreen({ navigation, route }: any) {
   const { refreshSession } = useVisitSession();
   const unlock = () => { scanning.current = false; setLocked(false); };
   const { handleQrScanned } = useTableQrHandler();
-  // Aberto de dentro de um restaurante: o QR de outro restaurante pergunta antes de trocar.
+  // Aberto de dentro de um restaurante: o QR de outro restaurante é recusado como inválido.
   const contextRestaurantId: string | undefined = route?.params?.contextRestaurantId;
   const contextRestaurantName: string | undefined = route?.params?.contextRestaurantName;
 
@@ -43,21 +43,7 @@ export default function QrScannerScreen({ navigation, route }: any) {
     // Falha de rede se resolve tentando o mesmo código de novo; o resto não.
     lastRejected.current = !outcome.ok && outcome.reason !== 'network' ? { data, at: Date.now() } : null;
     showTableQrOutcome(outcome, {
-      onOpened: (restaurantId, { switched }) => {
-        if (switched) {
-          // Saiu do restaurante anterior: recomeça a pilha no novo, sem "voltar" para o antigo.
-          navigation.reset({
-            index: 2,
-            routes: [
-              { name: 'Main' },
-              { name: 'Restaurant', params: { restaurantId } },
-              { name: 'Menu', params: { restaurantId } },
-            ],
-          });
-          return;
-        }
-        navigation.replace('Menu', { restaurantId });
-      },
+      onOpened: (restaurantId) => navigation.replace('Menu', { restaurantId }),
       onRetry: unlock,
       onOpenAccount: () => {
         void (async () => {

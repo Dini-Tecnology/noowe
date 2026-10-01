@@ -199,36 +199,19 @@ describe('useTableQrHandler — QR de outro restaurante', () => {
     });
   }
 
-  it('pergunta e, se o usuário cancelar, não faz check-in nem mexe no carrinho', async () => {
+  it('recusa o QR de outro restaurante: sem alerta do hook, sem check-in, sem buscar nem nomear o outro restaurante', async () => {
     fakeOpenFromQr('parrilaria');
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
-      buttons?.find((b) => b.text === 'Cancelar')?.onPress?.();
-    });
+    const alertSpy = jest.spyOn(Alert, 'alert');
     const { result } = renderTableQrHandler();
     let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
     await act(async () => {
       outcome = await result.current.handleQrScanned(QR, { contextRestaurant: context });
     });
 
-    expect(alertSpy.mock.calls[0][1]).toContain('Parrilaria Noowe');
-    expect(alertSpy.mock.calls[0][1]).toContain('Ateliê Noowe');
-    expect(outcome!).toEqual({ ok: false, reason: 'cancelled' });
+    expect(outcome!).toEqual({ ok: false, reason: 'other_restaurant' });
+    expect(mockGetRestaurant).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalled();
     expect(mockClearCart).not.toHaveBeenCalled();
-  });
-
-  it('se o usuário confirmar, troca de restaurante e limpa o carrinho do anterior', async () => {
-    fakeOpenFromQr('parrilaria');
-    jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => {
-      buttons?.find((b) => b.text === 'Ir para Parrilaria Noowe')?.onPress?.();
-    });
-    const { result } = renderTableQrHandler();
-    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
-    await act(async () => {
-      outcome = await result.current.handleQrScanned(QR, { contextRestaurant: context });
-    });
-
-    expect(outcome!).toEqual({ ok: true, restaurantId: 'parrilaria', switched: true });
-    expect(mockClearCart).toHaveBeenCalledTimes(1);
   });
 
   it('QR do próprio restaurante não pergunta nada', async () => {

@@ -33,10 +33,18 @@ describe('showTableQrOutcome — novos motivos', () => {
     expect(actions.onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('sucesso informa se houve troca de restaurante', () => {
-    const { actions } = run({ ok: true, restaurantId: 'r2', switched: true });
-    expect(actions.onOpened).toHaveBeenCalledWith('r2', { switched: true });
-    const plain = run({ ok: true, restaurantId: 'r1' });
-    expect(plain.actions.onOpened).toHaveBeenCalledWith('r1', { switched: false });
+  it('QR de outro restaurante diz só que é inválido, sem nomear nem oferecer troca', () => {
+    const { alertSpy, actions } = run({ ok: false, reason: 'other_restaurant' });
+    expect(alertSpy.mock.calls[0][0]).toBe('QR Code inválido');
+    expect(alertSpy.mock.calls[0][1]).toBe('Este QR Code não pertence a este restaurante.');
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    expect(buttons.map((b) => b.text)).toEqual(['OK']);
+    buttons[0].onPress?.();
+    expect(actions.onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('sucesso abre o restaurante do QR', () => {
+    const { actions } = run({ ok: true, restaurantId: 'r1' });
+    expect(actions.onOpened).toHaveBeenCalledWith('r1');
   });
 });
