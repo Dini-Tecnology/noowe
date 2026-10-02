@@ -212,6 +212,77 @@ export interface SupabaseReservationsParams {
   status?: SupabaseReservationStatus | string;
 }
 
+export type QuickPanelTab = 'new' | 'preparing' | 'awaiting_pickup' | 'picked_up' | 'not_picked_up' | 'scheduled';
+
+export type QuickPanelOrder = {
+  id: string;
+  shortRef: string;
+  callName: string | null;
+  consumptionMode: 'dine_here' | 'takeaway' | null;
+  paymentStatus: string;
+  fulfillmentStatus: string;
+  totalCents: number;
+  refundedCents: number;
+  createdAt: string;
+  paidAt: string | null;
+  acceptedAt: string | null;
+  pickupSlotStart: string | null;
+  pickupExpiresAt: string | null;
+  pickedUpAt: string | null;
+  recallCount: number;
+  acceptDeadline: string | null;
+  tab: QuickPanelTab | null;
+  items: { id: string; menu_item_id: string; name?: string; quantity: number; status: string }[];
+};
+
+export type QuickPanelSettings = {
+  ordersPaused: boolean;
+  acceptMode: 'auto' | 'manual';
+  acceptTimeoutMin: number;
+  pickupExpiryMin: number;
+  noPickupPolicy: 'none' | 'store_credit';
+  defaultPrepMin: number;
+  closeOrdersBeforeMin: number;
+  pixExpiryMin: number;
+  distanceWarningKm: number;
+  pickupCapacityPerSlot: number | null;
+  pickupLocation: string | null;
+};
+
+export type QuickPanel = {
+  restaurantId: string;
+  orders: QuickPanelOrder[];
+  settings: QuickPanelSettings;
+  estimatedPrepMinutes: number;
+};
+
+/** Campos editáveis da política do Quick (o servidor valida as faixas). */
+export type QuickPolicyPatch = Partial<{
+  pickupExpiryMin: number;
+  pickupCapacityPerSlot: number | null;
+  noPickupPolicy: 'none' | 'store_credit';
+  acceptMode: 'auto' | 'manual';
+  acceptTimeoutMin: number;
+  defaultPrepMin: number;
+  closeOrdersBeforeMin: number;
+  pixExpiryMin: number;
+  distanceWarningKm: number;
+  pickupLocation: string | null;
+}>;
+
+/** Rascunho do editor de personalização. `id` ausente = grupo/opção nova; com `id`, o servidor atualiza no lugar. */
+export interface ItemCustomizationDraft {
+  groups: {
+    id?: string;
+    name: string;
+    minSelect: number;
+    maxSelect: number;
+    options: { id?: string; name: string; priceDeltaCents: number; isAvailable: boolean }[];
+  }[];
+  removable: string[];
+  upsellItemIds: string[];
+}
+
 export interface SupabaseApiAdapter {
   // ── Orders ──────────────────────────────────────────────────────────────────
   createOrder(data: SupabaseCreateOrderInput): Promise<any>;
@@ -236,8 +307,20 @@ export interface SupabaseApiAdapter {
   getKdsQueue(restaurantId?: string, stationId?: string): Promise<any>;
   getBarQueue(restaurantId?: string): Promise<any>;
   updateOrderItemStatus(itemId: string, status: string): Promise<any>;
-  completeQuickQualityCheck(orderId: string, passed: boolean, checklist: Record<string, boolean>, reason?: string): Promise<any>;
+  /** Reprovar com `itemIds` devolve só esses itens à estação (ADR-013, critério Q1 #9). */
+  completeQuickQualityCheck(orderId: string, passed: boolean, checklist: Record<string, boolean>, reason?: string, itemIds?: string[]): Promise<any>;
   confirmQuickPickup(orderId: string, pickupCode: string): Promise<any>;
+  /** Retirada por código digitado: o servidor acha o pedido pronto do dia com esse código. */
+  confirmQuickPickupByCode(restaurantId: string, pickupCode: string): Promise<any>;
+  /** Painel Quick: pedidos por aba + configurações (roda as expirações antes de ler). */
+  getQuickPanel(restaurantId: string): Promise<QuickPanel>;
+  acceptQuickOrder(orderId: string): Promise<any>;
+  /** Cancelar ou recusar: motivo obrigatório, estorno integral e audit_log no servidor. */
+  cancelQuickOrder(orderId: string, reason: string): Promise<any>;
+  refundQuickItem(orderItemId: string, reason: string): Promise<any>;
+  recallQuickPickup(orderId: string): Promise<any>;
+  setQuickOrdersPaused(restaurantId: string, paused: boolean): Promise<any>;
+  updateQuickServicePolicy(restaurantId: string, patch: QuickPolicyPatch): Promise<any>;
   fireCourse(orderId: string, course: string): Promise<any>;
   getCookStations(restaurantId?: string): Promise<any>;
   createCookStation(restaurantId: string, data: Record<string, unknown>): Promise<any>;
@@ -328,6 +411,9 @@ export interface SupabaseApiAdapter {
   updateMenuItem(itemId: string, data: Record<string, unknown>): Promise<any>;
   toggleMenuItem(itemId: string, isAvailable: boolean): Promise<any>;
   deleteMenuItem(itemId: string): Promise<any>;
+  /** ADR-013 §2.9: grupos (com opções indisponíveis), ingredientes removíveis e upsell de um item. */
+  getItemCustomization(itemId: string): Promise<ItemCustomizationDraft>;
+  saveItemCustomization(itemId: string, draft: ItemCustomizationDraft): Promise<void>;
   uploadMenuItemImage(restaurantId: string, uri: string, contentType?: string): Promise<string>;
   deleteMenuCategory(categoryId: string): Promise<any>;
   createMenuCategory(restaurantId: string, name: string, description?: string, imageUrl?: string, sortOrder?: number): Promise<any>;
@@ -528,12 +614,13 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
-  async completeQuickQualityCheck(orderId: string, passed: boolean, checklist: Record<string, boolean>, reason?: string) {
+  async completeQuickQualityCheck(orderId: string, passed: boolean, checklist: Record<string, boolean>, reason?: string, itemIds?: string[]) {
     const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_complete_quality_check', {
       p_order_id: orderId,
       p_passed: passed,
       p_checklist: checklist,
       p_reason: reason ?? null,
+      p_item_ids: itemIds ?? null,
     });
     if (error) throw error;
     return data;
@@ -543,6 +630,65 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_confirm_pickup', {
       p_order_id: orderId,
       p_pickup_code: pickupCode,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async confirmQuickPickupByCode(restaurantId: string, pickupCode: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_confirm_pickup_by_code', {
+      p_restaurant_id: restaurantId,
+      p_pickup_code: pickupCode,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getQuickPanel(restaurantId: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_get_quick_panel', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return data as QuickPanel;
+  },
+
+  async acceptQuickOrder(orderId: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_accept_quick_order', { p_order_id: orderId });
+    if (error) throw error;
+    return data;
+  },
+
+  async cancelQuickOrder(orderId: string, reason: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_cancel_quick_order', {
+      p_order_id: orderId, p_reason: reason,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async refundQuickItem(orderItemId: string, reason: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_refund_unavailable_item', {
+      p_order_item_id: orderItemId, p_reason: reason,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async recallQuickPickup(orderId: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_recall_pickup', { p_order_id: orderId });
+    if (error) throw error;
+    return data;
+  },
+
+  async setQuickOrdersPaused(restaurantId: string, paused: boolean) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_set_quick_orders_paused', {
+      p_restaurant_id: restaurantId, p_paused: paused,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async updateQuickServicePolicy(restaurantId: string, patch: QuickPolicyPatch) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_update_quick_service_policy', {
+      p_restaurant_id: restaurantId, p_patch: patch,
     });
     if (error) throw error;
     return data;
@@ -1403,6 +1549,58 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     });
     if (error) throw error;
     return data;
+  },
+
+  async getItemCustomization(itemId: string) {
+    const supabase = getSupabaseClient() as any;
+    const [groups, item] = await Promise.all([
+      supabase.from('menu_item_option_groups')
+        .select('id, name, min_select, max_select, sort_order, menu_item_options(id, name, price_delta_cents, is_available, sort_order)')
+        .eq('menu_item_id', itemId)
+        .order('sort_order'),
+      supabase.from('menu_items').select('removable_ingredients, upsell_item_ids').eq('id', itemId).single(),
+    ]);
+    if (groups.error) throw groups.error;
+    if (item.error) throw item.error;
+    return {
+      groups: ((groups.data ?? []) as any[]).map((g) => ({
+        id: String(g.id),
+        name: String(g.name ?? ''),
+        minSelect: Number(g.min_select ?? 0),
+        maxSelect: Number(g.max_select ?? 1),
+        options: ((g.menu_item_options ?? []) as any[])
+          .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
+          .map((o) => ({
+            id: String(o.id),
+            name: String(o.name ?? ''),
+            priceDeltaCents: Number(o.price_delta_cents ?? 0),
+            isAvailable: o.is_available !== false,
+          })),
+      })),
+      removable: Array.isArray(item.data?.removable_ingredients) ? item.data.removable_ingredients : [],
+      upsellItemIds: Array.isArray(item.data?.upsell_item_ids) ? item.data.upsell_item_ids : [],
+    };
+  },
+
+  async saveItemCustomization(itemId: string, draft: ItemCustomizationDraft) {
+    const { error } = await (getSupabaseClient() as any).rpc('restaurant_save_item_customization', {
+      p_menu_item_id: itemId,
+      p_groups: draft.groups.map((g) => ({
+        ...(g.id ? { id: g.id } : {}),
+        name: g.name,
+        minSelect: g.minSelect,
+        maxSelect: g.maxSelect,
+        options: g.options.map((o) => ({
+          ...(o.id ? { id: o.id } : {}),
+          name: o.name,
+          priceDeltaCents: o.priceDeltaCents,
+          isAvailable: o.isAvailable,
+        })),
+      })),
+      p_removable: draft.removable,
+      p_upsell: draft.upsellItemIds,
+    });
+    if (error) throw error;
   },
 
   async deleteMenuItem(itemId: string) {

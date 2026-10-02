@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { secureStorage } from '../services/secure-storage';
 
+/** ADR-013 §2.9: ids das opções e ingredientes retirados. O servidor valida e precifica. */
+export interface CartItemCustomization {
+  options: string[];
+  removed: string[];
+}
+
 export interface CartItem {
   id: string;
   menu_item_id: string;
@@ -23,15 +29,32 @@ export interface CartItem {
    * compatibility with carts persisted before this field existed.
    */
   preparation_time?: number | null;
+  /**
+   * Personalização escolhida no detalhe do item. `price` já inclui a prévia dos extras;
+   * o valor cobrado é recalculado no servidor.
+   */
+  customizations?: CartItemCustomization;
+  /** Texto pronto para o carrinho: "Ponto: Ao ponto · Sem cebola". */
+  customization_summary?: string;
   /** Quick-service combo kept locally until checkout confirms the order. */
   combo?: {
     lancheItemId: string;
     acompanhamentoItemId: string;
     bebidaItemId: string;
+    /** Soma dos itens avulsos, antes do desconto — para o carrinho mostrar o desconto explícito. */
+    listPrice?: number;
+    /** Personalização de cada etapa do combo, quando o item da etapa tem opções. */
+    customizations?: Partial<Record<'lanche' | 'acompanhamento' | 'bebida', CartItemCustomization>>;
   };
 }
 
+/** Quick Service (ADR-013): o cliente quer retirar agora ou em um horário agendado. */
+export type PickupIntent = 'now' | 'scheduled';
+
 export interface CartContextData {
+  /** Preferência de retirada herdada da página do restaurante ("Fazer pedido" × "Agendar retirada"). Não persiste. */
+  pickupIntent: PickupIntent;
+  setPickupIntent: (intent: PickupIntent) => void;
   items: CartItem[];
   restaurantId: string | null;
   restaurantName: string | null;
@@ -56,6 +79,7 @@ export function CartProvider({ children }: CartProviderProps) {
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [pickupIntent, setPickupIntent] = useState<PickupIntent>('now');
 
   useEffect(() => {
     void loadCart();
@@ -101,7 +125,7 @@ export function CartProvider({ children }: CartProviderProps) {
   // new item was lost).
   const addItem = (newItem: Omit<CartItem, 'id'>) => {
     // Two lines only merge when they are the same dish, for the same diner,
-    // with the same note — a family table ordering one lasanha for Maria and
+    // with the same note and the same customization — a family table ordering one lasanha for Maria and
     // another for João must keep them apart so the comanda can bill each
     // person and the kitchen knows who gets what.
     setItems((current) => {
@@ -109,6 +133,7 @@ export function CartProvider({ children }: CartProviderProps) {
         (item) =>
           item.menu_item_id === newItem.menu_item_id &&
           JSON.stringify(item.combo ?? null) === JSON.stringify(newItem.combo ?? null) &&
+          JSON.stringify(item.customizations ?? null) === JSON.stringify(newItem.customizations ?? null) &&
           (item.diner_id ?? null) === (newItem.diner_id ?? null) &&
           (item.special_instructions ?? '') === (newItem.special_instructions ?? '')
       );
@@ -145,6 +170,7 @@ export function CartProvider({ children }: CartProviderProps) {
   };
 
   const clearCart = () => {
+    setPickupIntent('now');
     setItems([]);
     setRestaurantId(null);
     setRestaurantName(null);
@@ -171,6 +197,8 @@ export function CartProvider({ children }: CartProviderProps) {
   return (
     <CartContext.Provider
       value={{
+        pickupIntent,
+        setPickupIntent,
         items,
         restaurantId,
         restaurantName,

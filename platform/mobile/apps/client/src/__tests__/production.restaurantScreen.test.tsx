@@ -21,6 +21,8 @@ const mockGetRestaurant = jest.fn();
 const mockGetCapabilities = jest.fn();
 const mockGetLiveStatus = jest.fn();
 const mockListFavorites = jest.fn();
+const mockGetQuickStatus = jest.fn();
+const mockListOrders = jest.fn();
 
 jest.mock('../services/customer-backend', () => ({
   __esModule: true,
@@ -29,6 +31,9 @@ jest.mock('../services/customer-backend', () => ({
     getRestaurantCapabilities: (...args: unknown[]) => mockGetCapabilities(...args),
     getRestaurantLiveStatus: (...args: unknown[]) => mockGetLiveStatus(...args),
     listFavorites: (...args: unknown[]) => mockListFavorites(...args),
+    getQuickServiceStatus: (...args: unknown[]) => mockGetQuickStatus(...args),
+    listOrders: (...args: unknown[]) => mockListOrders(...args),
+    getMenu: jest.fn(),
     setFavorite: jest.fn(),
   },
 }));
@@ -102,6 +107,8 @@ function buildContract(
       parties: false,
       comboBuilder: false,
       prepaidRequired: false,
+      orderAhead: false,
+      pickupSlots: false,
       pickupCode: false,
       loyaltyMode: 'points',
       consumptionUnit: 'table_with_guests',
@@ -123,6 +130,9 @@ function buildContract(
       pickupCapacityPerSlot: null,
       pickupExpiryMin: null,
       stampsPerReward: null,
+      noPickupPolicy: null, acceptMode: null, acceptTimeoutMin: null, ordersPaused: false,
+      defaultPrepMin: null, closeOrdersBeforeMin: null, pixExpiryMin: null, distanceWarningKm: null,
+      pickupLocation: null,
     },
   };
 }
@@ -154,6 +164,13 @@ const SERVICE_MODELS: ServiceModel[] = ['fine_dining', 'casual_dining', 'quick_s
 beforeEach(() => {
   mockGetLiveStatus.mockResolvedValue(null);
   mockListFavorites.mockResolvedValue([]);
+  mockGetQuickStatus.mockResolvedValue({
+    r1: {
+      restaurantId: 'r1', state: 'open', acceptingOrders: true, isOpen: true, paused: false, closesAt: '22:00',
+      acceptsUntilMinutes: 240, pickupLocation: 'Balcão 3', estimatedPrepMinutes: 12, ordersInQueue: 2,
+    },
+  });
+  mockListOrders.mockResolvedValue({ data: [], nextCursor: null });
 });
 
 afterEach(() => jest.clearAllMocks());
@@ -236,6 +253,110 @@ describe('RestaurantScreen — one page for every service model', () => {
     expect(await findByText('Fila Virtual')).toBeTruthy();
     expect(queryByText('Reservar')).toBeTruthy();
     expect(queryByText('Escanear QR')).toBeNull();
+  });
+});
+
+const quickContract = (overrides: Partial<RestaurantCapabilityContract['capabilities']> = {}) =>
+  buildContract('quick_service', {
+    reservations: false, virtualQueue: false, tableSession: false, staffCalls: false,
+    prepaidRequired: true, orderAhead: true, pickupSlots: true, pickupCode: true, ...overrides,
+  });
+
+describe('RestaurantScreen — Quick Service: o totem dentro do app (ADR-013)', () => {
+  it('mostra "Fazer pedido" e "Agendar retirada" no lugar de QR, reserva e fila', async () => {
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('quick_service'));
+    mockGetCapabilities.mockResolvedValue(quickContract());
+
+    const { findByText, queryByText } = renderScreen();
+
+    expect(await findByText('Fazer pedido')).toBeTruthy();
+    expect(queryByText('Agendar retirada')).toBeTruthy();
+    expect(queryByText('Escanear QR')).toBeNull();
+    expect(queryByText('Reservar')).toBeNull();
+    expect(queryByText('Fila Virtual')).toBeNull();
+  });
+
+  it('mostra o estado de pedidos, o tempo de preparo e o local de retirada', async () => {
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('quick_service'));
+    mockGetCapabilities.mockResolvedValue(quickContract());
+
+    const { findByText, queryByText } = renderScreen();
+
+    expect(await findByText(/Aceitando pedidos/)).toBeTruthy();
+    expect(queryByText(/Preparo em ~12 min/)).toBeTruthy();
+    expect(queryByText('Retirada: Balcão 3')).toBeTruthy();
+    expect(queryByText('Como funciona')).toBeTruthy();
+  });
+
+  it('o botão "Fazer pedido" abre o cardápio', async () => {
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('quick_service'));
+    mockGetCapabilities.mockResolvedValue(quickContract());
+
+    const { findByText, navigation } = renderScreen();
+    fireEvent.press(await findByText('Fazer pedido'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('Menu', { restaurantId: 'r1' });
+  });
+
+  it('não leva ao cardápio como se tudo estivesse bem quando os pedidos estão pausados', async () => {
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('quick_service'));
+    mockGetCapabilities.mockResolvedValue(quickContract());
+    mockGetQuickStatus.mockResolvedValue({
+      r1: {
+        restaurantId: 'r1', state: 'paused', acceptingOrders: false, isOpen: true, paused: true, closesAt: null,
+        acceptsUntilMinutes: null, pickupLocation: null, estimatedPrepMinutes: 10, ordersInQueue: 0,
+      },
+    });
+
+    const { findByText, navigation } = renderScreen();
+    await findByText('Pedidos pausados');
+    fireEvent.press(await findByText('Fazer pedido'));
+
+    expect(navigation.navigate).not.toHaveBeenCalledWith('Menu', expect.anything());
+  });
+
+  it('com pedido em andamento mostra "Meus pedidos"; só com histórico, "Pedir novamente"', async () => {
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('quick_service'));
+    mockGetCapabilities.mockResolvedValue(quickContract());
+    const order = (id: string, fulfillmentStatus: string) => ({
+      id, restaurantId: 'r1', serviceModel: 'quick_service', fulfillmentStatus, paymentStatus: 'confirmed', items: [],
+    });
+
+    mockListOrders.mockResolvedValue({ data: [order('o1', 'preparing')], nextCursor: null });
+    const first = renderScreen();
+    expect(await first.findByText('Meus pedidos')).toBeTruthy();
+    expect(first.queryByText('Pedir novamente')).toBeNull();
+    first.unmount();
+
+    mockListOrders.mockResolvedValue({ data: [order('o0', 'picked_up')], nextCursor: null });
+    const second = renderScreen();
+    expect(await second.findByText('Pedir novamente')).toBeTruthy();
+    expect(second.queryByText('Meus pedidos')).toBeNull();
+  });
+
+  it('sem a capability orderAhead o servidor decide: nada de ações Quick', async () => {
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('quick_service'));
+    mockGetCapabilities.mockResolvedValue(quickContract({ orderAhead: false }));
+
+    const { findByText, queryByText } = renderScreen();
+
+    await findByText('Cardápio');
+    expect(queryByText('Fazer pedido')).toBeNull();
+    expect(mockGetQuickStatus).not.toHaveBeenCalled();
+  });
+
+  it('não mostra lotação de mesas onde não há mesa', async () => {
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('quick_service'));
+    mockGetCapabilities.mockResolvedValue(quickContract());
+    mockGetLiveStatus.mockResolvedValue({
+      restaurantId: 'r1', isOpen: true, opensAt: null, closesAt: '22:00', groupsWaiting: 0,
+      estimatedWaitMinutes: 0, occupancyLevel: 'baixa', occupancyRatio: 0.2, occupancyPercent: 20,
+    });
+
+    const { findByText, queryByText } = renderScreen();
+
+    await findByText('Status Agora');
+    expect(queryByText('Lotação:')).toBeNull();
   });
 });
 

@@ -6,9 +6,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { type CartItem, useCart } from '@/shared/contexts/CartContext';
+import { cartOrderItems } from '../../utils/cart-order-items';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
-import customerBackend from '../../services/customer-backend';
+import customerBackend, { type ConsumptionMode } from '../../services/customer-backend';
+import { QuickOrderOptions } from '../../components/quick/QuickOrderOptions';
+import { cartComboDiscount, pickupSlotOptions } from './quick-service-ui';
 import InviteToTableSheet from '../../components/table/InviteToTableSheet';
 import { useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
 import CasualDiningComandaScreen from './CasualDiningComandaScreen';
@@ -68,6 +71,23 @@ export default function CartScreen({ navigation, route }: any) {
   const ctaDisabled = prepaidCheckout ? !cart.items.length : !canSubmit;
   const estimatedMinutes = useMemo(() => estimatedTimeFromCartItems(cart.items), [cart.items]);
 
+  // Quick Service (ADR-013): pedido antecipado — nome para chamada, comer aqui/levar e retirada.
+  const orderAhead = capabilities?.orderAhead === true;
+  const profile = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => customerBackend.getProfile(),
+    enabled: orderAhead,
+  });
+  const [callNameDraft, setCallNameDraft] = useState<string | null>(null);
+  const defaultCallName = profile.data?.callName?.trim() || profile.data?.fullName?.trim().split(/\s+/)[0] || '';
+  const callName = callNameDraft ?? defaultCallName;
+  const [consumptionMode, setConsumptionMode] = useState<ConsumptionMode>('takeaway');
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const pickupSlots = useMemo(() => pickupSlotOptions(), []);
+  const scheduled = orderAhead && capabilities?.pickupSlots === true && cart.pickupIntent === 'scheduled';
+  const comboDiscount = useMemo(() => cartComboDiscount(cart.items), [cart.items]);
+  const quickIncomplete = orderAhead && (!callName.trim() || (scheduled && !selectedSlot));
+
   const restaurant = useQuery({
     queryKey: ['restaurant', cart.restaurantId],
     queryFn: () => customerBackend.getRestaurant(cart.restaurantId!),
@@ -92,7 +112,7 @@ export default function CartScreen({ navigation, route }: any) {
         tableSessionId: needsTableSession && hasUsableSession ? session!.tableSessionId : undefined,
         waitlistEntryId: canOrderWhileWaiting ? session?.waitlistEntryId : undefined,
         serviceModel: serviceModel ?? undefined,
-        items: cart.items.map((i) => ({ menuItemId: i.menu_item_id, quantity: i.quantity, specialInstructions: i.special_instructions })),
+        items: cartOrderItems(cart.items),
       }),
     onSuccess: (order) => {
       cart.clearCart();
@@ -151,6 +171,7 @@ export default function CartScreen({ navigation, route }: any) {
         itemInfo: { flex: 1 },
         itemName: { fontSize: 15, fontWeight: '600', color: colors.foreground, marginBottom: 4 },
         itemPrice: { fontSize: 13, color: colors.foregroundSecondary },
+        itemNote: { fontSize: 12, lineHeight: 16, color: colors.foregroundSecondary, marginBottom: 2 },
         qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 10 },
         qtyBtn: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.backgroundTertiary },
         qtyValue: { fontSize: 15, fontWeight: '700', color: colors.foreground, minWidth: 20, textAlign: 'center' },
@@ -276,7 +297,13 @@ export default function CartScreen({ navigation, route }: any) {
                   <Image source={{ uri: item.image_url || FALLBACK_IMAGE }} style={styles.itemImage} resizeMode="cover" />
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.itemPrice}>{money(item.price)}</Text>
+                    {item.customization_summary ? (
+                      <Text style={styles.itemNote} numberOfLines={2}>{item.customization_summary}</Text>
+                    ) : null}
+                    <Text style={styles.itemPrice}>
+                      {money(item.price)}
+                      {item.combo?.listPrice != null && item.combo.listPrice > item.price ? `  de ${money(item.combo.listPrice)}` : ''}
+                    </Text>
                   </View>
                   <View style={styles.qtyControl}>
                     <TouchableOpacity style={styles.qtyBtn} onPress={() => decrement(item.id, item.quantity)} accessibilityRole="button" accessibilityLabel="Diminuir quantidade">
@@ -289,6 +316,21 @@ export default function CartScreen({ navigation, route }: any) {
                   </View>
                 </View>
               ))}
+
+              {orderAhead && (
+                <QuickOrderOptions
+                  callName={callName}
+                  onCallName={setCallNameDraft}
+                  mode={consumptionMode}
+                  onMode={setConsumptionMode}
+                  showSchedule={capabilities?.pickupSlots === true}
+                  pickupIntent={cart.pickupIntent ?? 'now'}
+                  onPickupIntent={(intent) => cart.setPickupIntent?.(intent)}
+                  slots={pickupSlots}
+                  selectedSlot={selectedSlot}
+                  onSlot={setSelectedSlot}
+                />
+              )}
 
               {individualCart && (
                 <TouchableOpacity style={styles.addMoreRow} onPress={() => navigation.navigate('Menu', { restaurantId: cart.restaurantId })} accessibilityRole="button">
@@ -338,6 +380,12 @@ export default function CartScreen({ navigation, route }: any) {
                 <Text style={styles.totalLabel}>Subtotal ({cart.itemCount} {cart.itemCount === 1 ? 'item' : 'itens'})</Text>
                 <Text style={styles.totalValue}>{money(cart.total)}</Text>
               </View>
+              {comboDiscount > 0 && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Desconto do combo (já aplicado)</Text>
+                  <Text style={[styles.totalValue, { color: colors.success }]}>{`- ${money(comboDiscount)}`}</Text>
+                </View>
+              )}
               <View style={styles.grandTotalRow}>
                 <Text style={styles.grandTotalLabel}>Total</Text>
                 <Text style={styles.grandTotalValue}>{money(cart.total)}</Text>
@@ -361,14 +409,19 @@ export default function CartScreen({ navigation, route }: any) {
               )}
 
               <TouchableOpacity
-                style={[styles.cta, ctaDisabled && styles.ctaDisabled]}
+                style={[styles.cta, (ctaDisabled || quickIncomplete) && styles.ctaDisabled]}
                 onPress={() =>
                   prepaidCheckout
-                    ? navigation.navigate('QuickServiceCheckout', { restaurantId: cart.restaurantId })
+                    ? navigation.navigate('QuickServiceCheckout', {
+                        restaurantId: cart.restaurantId,
+                        callName: callName.trim(),
+                        consumptionMode,
+                        pickupSlotStart: scheduled ? selectedSlot : null,
+                      })
                     : place.mutate()
                 }
-                disabled={ctaDisabled || place.isPending}
-                accessibilityState={{ disabled: ctaDisabled }}
+                disabled={ctaDisabled || quickIncomplete || place.isPending}
+                accessibilityState={{ disabled: ctaDisabled || quickIncomplete }}
                 accessibilityRole="button"
               >
                 {tableWithGuests && !place.isPending && <Ionicons name="time-outline" size={18} color={colors.primaryForeground} />}

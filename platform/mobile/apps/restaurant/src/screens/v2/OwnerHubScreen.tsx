@@ -26,6 +26,7 @@ import {
   Package,
   QrCode,
   Zap,
+  ChevronRight,
   UtensilsCrossed,
   Users,
   BarChart,
@@ -447,7 +448,7 @@ function formatApprovalCurrency(value: number): string {
 }
 
 function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void; colors: ReturnType<typeof useColors> }) {
-  const { serviceFeatures } = useRestaurantRole();
+  const { serviceFeatures, capabilities } = useRestaurantRole();
   const { data: snapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useDashboardSnapshot();
   const { data: recentOrders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useRestaurantOrders();
   const { data: serviceCalls, loading: callsLoading, error: callsError, refresh: refreshCalls } = useServiceCalls();
@@ -503,6 +504,22 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
       </View>
       {snapshotError ? (
         <InlineNotice message={snapshotError} actionLabel="Recarregar" onPress={() => void refreshSnapshot()} colors={colors} />
+      ) : null}
+      {capabilities?.capabilities.pickupCode ? (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => onNavigate('QuickOrders')}
+          accessibilityRole="button"
+          accessibilityLabel="Abrir pedidos do Quick Service"
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginBottom: 12 }}
+        >
+          <Zap size={20} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.foreground }}>Pedidos Quick Service</Text>
+            <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>Novos, em preparo, retirada e agendados</Text>
+          </View>
+          <ChevronRight size={18} color={colors.foregroundMuted} />
+        </TouchableOpacity>
       ) : null}
       <SectionTitle title="Ações rápidas" subtitle="Os 4 atalhos principais do dia" colors={colors} />
       <View style={styles.metricGrid}>

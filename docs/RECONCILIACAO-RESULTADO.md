@@ -461,6 +461,17 @@ Pedido lançado pelo garçom usa o mesmo `place_order` com `p_customer_id`
 
 ### 1.14 Q1 — Quick Service completo — **AUSENTE** (banco/servidor) · PARCIAL (UI)
 
+> **Atualização 2026-10-01 — esta seção descreve o commit `bbd69c5` (03/09) e está superada em parte.**
+> A migration `20260929120000_service_model_runtime_v2.sql` adicionou: `orders.pickup_code` e
+> `pickup_expires_at`, `pickup_slot_reservations` com capacidade por janela, `quick_quality_checks` e a
+> etapa `checking`, o gate de pagamento (`quick_order_may_enter_production`), `restaurant_confirm_pickup`
+> e `payment_provider_events` idempotente. **Continuam ausentes:** aceite, `not_picked_up`, tolerância
+> contada de "pronto", estorno parcial, `order_status_events`, Pix com expiração, modificadores
+> precificados, `combo_definitions`, painel do restaurante com as abas pedidas e impressora.
+> **Bug confirmado:** `restaurant/src/screens/v2/QuickServiceScreen.tsx:133-141` confirma a retirada
+> enviando o `pickup_code` do próprio pedido, sem validar nada. A jornada pedida pelo cliente está no
+> [ADR-013](decisoes/ADR-013-jornada-quick-service-retirada.md).
+
 **Existe apenas na superfície.** Telas: `QuickServiceRestaurantView.tsx`,
 `QuickServiceCheckoutScreen.tsx`, `ComboBuilderScreen.tsx`, `OrderReadyScreen.tsx`,
 `QuickServiceRatingScreen.tsx` (client); `v2/QuickServiceScreen.tsx` (restaurant).

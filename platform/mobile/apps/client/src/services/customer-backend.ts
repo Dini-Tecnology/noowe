@@ -4,6 +4,7 @@ import { getSupabaseClient } from '@/shared/services/supabase';
 import type { Database } from '@/shared/types/database.generated';
 import type { CustomerExperienceConfig } from '@okinawa/shared/config/service-types';
 import { normalizeUsernameInput } from '../utils/username';
+import { parseMenuCustomizations, type MenuCustomizations } from '../utils/item-customization';
 import {
   isServiceModel,
   parseRestaurantCapabilityContract,
@@ -86,6 +87,8 @@ export type CustomerProfile = {
   id: string;
   email: string | null;
   fullName: string;
+  /** Nome falado no balcão do Quick Service ao chamar o pedido (ADR-013). */
+  callName: string | null;
   /** Public unique handle, without the "@" (ADR-011). */
   username: string;
   phone: string | null;
@@ -213,7 +216,8 @@ export type PlaceOrderItem = {
   menuItemId: string;
   quantity: number;
   specialInstructions?: string;
-  customizations?: unknown[];
+  /** ADR-013 §2.9: `{ options, removed }` — ids e nomes; o servidor valida e precifica. */
+  customizations?: unknown;
   /** Diner the item is for (casual dining group ordering). */
   dinerId?: string | null;
   /** Groups server-priced lines into a configured Quick Service combo. */
@@ -229,14 +233,22 @@ export type PlaceOrderInput = {
   serviceModel?: ServiceModel;
   waitlistEntryId?: string | null;
   pickupSlotStart?: string | null;
+  /** Quick Service (ADR-013): nome falado no balcão, modo de consumo e aceite da política de retirada. */
+  callName?: string | null;
+  consumptionMode?: ConsumptionMode;
+  pickupPolicyAccepted?: boolean;
 };
+
+export type ConsumptionMode = 'dine_here' | 'takeaway';
 
 export type CustomerOrderStatus =
   | 'pending' | 'confirmed' | 'preparing' | 'ready'
   | 'delivered' | 'completed' | 'cancelled';
 
 export type CustomerPaymentStatus = 'pending' | 'confirmed' | 'failed' | 'refunded';
-export type CustomerFulfillmentStatus = 'received' | 'preparing' | 'checking' | 'ready' | 'delivered' | 'picked_up' | 'cancelled';
+export type CustomerFulfillmentStatus =
+  | 'received' | 'accepted' | 'preparing' | 'checking' | 'ready'
+  | 'delivered' | 'picked_up' | 'not_picked_up' | 'cancelled';
 
 export type CustomerOrder = {
   id: string;
@@ -254,6 +266,14 @@ export type CustomerOrder = {
   fulfillmentStatus: CustomerFulfillmentStatus;
   pickupCode: string | null;
   pickupExpiresAt: string | null;
+  /** Quick Service (ADR-013). */
+  callName: string | null;
+  consumptionMode: ConsumptionMode | null;
+  paymentExpiresAt: string | null;
+  paidAt: string | null;
+  acceptedAt: string | null;
+  pickedUpAt: string | null;
+  refundedCents: number;
   subtotal: number;
   total: number;
   estimatedTime: number | null;
@@ -270,6 +290,8 @@ export type CustomerOrder = {
     totalPrice: number;
     status: string;
     specialInstructions: string | null;
+    /** Snapshot da personalização gravado pelo servidor (ADR-013 §2.9); `null` em item simples. */
+    customizations: unknown;
     expectedReadyAt: string | null;
     preparedByName: string | null;
   }[];
@@ -317,6 +339,33 @@ export type CustomerWaitlistStats = {
   estimatedWaitMinutes: number;
   occupancyLevel: WaitlistOccupancyLevel;
   occupancyRatio: number | null;
+};
+
+/** Estado de recebimento de pedidos de um restaurante Quick Service (ADR-013). */
+export type OrderStatusEvent = {
+  id: string;
+  field: 'payment_status' | 'fulfillment_status';
+  fromValue: string | null;
+  toValue: string;
+  actorKind: 'customer' | 'staff' | 'system';
+  reason: string | null;
+  createdAt: string;
+};
+
+export type QuickServiceState = 'open' | 'paused' | 'closed' | 'closing' | 'unavailable';
+
+export type QuickServiceStatus = {
+  restaurantId: string;
+  state: QuickServiceState;
+  acceptingOrders: boolean;
+  isOpen: boolean;
+  paused: boolean;
+  closesAt: string | null;
+  /** Minutos até o restaurante parar de aceitar pedidos (já descontada a janela de encerramento). */
+  acceptsUntilMinutes: number | null;
+  pickupLocation: string | null;
+  estimatedPrepMinutes: number;
+  ordersInQueue: number;
 };
 
 /** Live "Status Agora" for a restaurant card / page. */
@@ -401,7 +450,8 @@ export type DigitalReceipt = {
   discountReason: string | null;
   total: number;
   tip: number;
-  paymentMethod: PaymentMethodType;
+  /** Nulo quando o comprovante vem de um pedido Quick, que não guarda o meio de pagamento. */
+  paymentMethod: PaymentMethodType | null;
   cashback: number;
   pointsAwarded: number;
   familyTier: string | null;
@@ -476,7 +526,7 @@ export interface CustomerBackend {
   requestPasswordReset(email: string, redirectTo: string): Promise<void>;
   signOut(): Promise<void>;
   getProfile(): Promise<CustomerProfile>;
-  updateProfile(patch: Partial<Pick<CustomerProfile, 'fullName' | 'phone' | 'avatarUrl' | 'favoriteCuisines' | 'dietaryRestrictions' | 'preferences'>>): Promise<CustomerProfile>;
+  updateProfile(patch: Partial<Pick<CustomerProfile, 'fullName' | 'callName' | 'phone' | 'avatarUrl' | 'favoriteCuisines' | 'dietaryRestrictions' | 'preferences'>>): Promise<CustomerProfile>;
   uploadProfileAvatar(uri: string, contentType?: string): Promise<CustomerProfile>;
   checkUsernameAvailability(username: string): Promise<UsernameAvailability>;
   /** Returns the stored (normalized) username. */
@@ -496,7 +546,17 @@ export interface CustomerBackend {
   getRestaurantCapabilities(restaurantId: string, serviceModel: ServiceModel): Promise<RestaurantCapabilityContract>;
   getRestaurantLiveStatus(id: string): Promise<RestaurantLiveStatus | null>;
   listRestaurantsLiveStatus(ids: string[]): Promise<Record<string, RestaurantLiveStatus>>;
+  /** Quick Service: aceita pedidos agora?, tempo de preparo e local de retirada, em lote. */
+  getQuickServiceStatus(ids: string[]): Promise<Record<string, QuickServiceStatus>>;
+  /** Aplica as expirações do Quick (Pix, aceite, retirada) antes de ler pedidos. Best effort. */
+  refreshQuickService(restaurantId: string): Promise<number>;
+  /** Histórico de cada mudança de status do pedido, com horário (ADR-013 §2.8). */
+  listOrderStatusEvents(orderId: string): Promise<OrderStatusEvent[]>;
+  /** Somente desenvolvimento: confirma o Pix simulado pendente (flag no banco). */
+  confirmSimulatedPix(orderId: string): Promise<void>;
   getMenu(restaurantId: string): Promise<{ categories: CustomerMenuCategory[]; items: CustomerMenuItem[] }>;
+  /** ADR-013 §2.9: grupos de opções, ingredientes removíveis e upsell, por item. */
+  getMenuCustomizations(restaurantId: string): Promise<MenuCustomizations>;
   getActiveVisit(): Promise<VisitSession | null>;
   openTableSession(qrData: string): Promise<VisitSession>;
   resolveServiceQr(qrData: string): Promise<ServiceQrResolution>;
@@ -511,6 +571,10 @@ export interface CustomerBackend {
   placeOrder(input: PlaceOrderInput): Promise<CustomerOrder>;
   startPayment(input: { orderId: string; paymentMethod: string; idempotencyKey?: string }): Promise<{
     transactionId: string; orderId: string; paymentStatus: CustomerPaymentStatus; idempotentReplay: boolean; simulated: boolean;
+    fulfillmentStatus: CustomerFulfillmentStatus | null;
+    /** Pix pendente: copia-e-cola e prazo (ADR-013). */
+    pixCode: string | null;
+    paymentExpiresAt: string | null;
   }>;
   /** quick_service "Monte seu Combo": places a pickup order for 1 lanche + 1 acompanhamento + 1 bebida at 20% off, computed server-side. */
   orderCustomCombo(input: {
@@ -534,6 +598,8 @@ export interface CustomerBackend {
   updateWaitlist(id: string, action: 'cancel' | 'arrive'): Promise<CustomerWaitlistEntry>;
   setWaitlistHasKids(id: string, hasKids: boolean): Promise<CustomerWaitlistEntry>;
   getWaitlistStats(restaurantId: string): Promise<CustomerWaitlistStats>;
+  /** Setores do mapa de mesas do restaurante: as opções de "Preferência" da fila. */
+  getWaitlistSections(restaurantId: string): Promise<string[]>;
   callWaiter(input: { restaurantId: string; tableId: string; type: string; message?: string }): Promise<unknown>;
   getTableFamilyMode(tableSessionId: string): Promise<boolean>;
   setTableFamilyMode(tableSessionId: string, enabled: boolean): Promise<boolean>;
@@ -579,8 +645,6 @@ export interface CustomerBackend {
   createReview(input: {
     orderId: string;
     restaurantId: string;
-  /** Setores do mapa de mesas do restaurante: as opções de "Preferência" da fila. */
-  getWaitlistSections(restaurantId: string): Promise<string[]>;
     rating?: number;
     comment?: string;
     foodRating?: number;
@@ -698,6 +762,13 @@ function mapOrder(row: Record<string, unknown>): CustomerOrder {
     )) as CustomerFulfillmentStatus,
     pickupCode: optionalString(row.pickup_code),
     pickupExpiresAt: optionalString(row.pickup_expires_at),
+    callName: optionalString(row.call_name),
+    consumptionMode: row.consumption_mode === 'dine_here' || row.consumption_mode === 'takeaway' ? row.consumption_mode : null,
+    paymentExpiresAt: optionalString(row.payment_expires_at),
+    paidAt: optionalString(row.paid_at),
+    acceptedAt: optionalString(row.accepted_at),
+    pickedUpAt: optionalString(row.picked_up_at),
+    refundedCents: numberValue(row.refunded_cents),
     subtotal: numberValue(row.subtotal),
     total: numberValue(row.total_amount),
     estimatedTime: row.estimated_time == null ? null : numberValue(row.estimated_time),
@@ -717,6 +788,7 @@ function mapOrder(row: Record<string, unknown>): CustomerOrder {
         totalPrice: numberValue(item.total_price),
         status: String(item.status ?? 'pending'),
         specialInstructions: typeof item.special_instructions === 'string' ? item.special_instructions : null,
+        customizations: item.customizations ?? null,
         expectedReadyAt: typeof item.expected_ready_at === 'string' ? item.expected_ready_at : null,
         preparedByName: null,
       };
@@ -979,6 +1051,7 @@ export const customerBackend: CustomerBackend = {
       id: userId,
       email: typeof row.email === 'string' ? row.email : null,
       fullName: String(row.full_name ?? ''),
+      callName: optionalString(row.call_name),
       username: String(row.username ?? ''),
       phone: typeof row.phone === 'string' ? row.phone : null,
       avatarUrl: typeof row.avatar_url === 'string' ? row.avatar_url : null,
@@ -992,6 +1065,7 @@ export const customerBackend: CustomerBackend = {
     const userId = await requireUserId();
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (patch.fullName !== undefined) payload.full_name = patch.fullName;
+    if (patch.callName !== undefined) payload.call_name = patch.callName?.trim() || null;
     if (patch.phone !== undefined) payload.phone = patch.phone;
     if (patch.avatarUrl !== undefined) payload.avatar_url = patch.avatarUrl;
     if (patch.favoriteCuisines !== undefined) payload.favorite_cuisines = patch.favoriteCuisines;
@@ -1120,6 +1194,59 @@ export const customerBackend: CustomerBackend = {
     return byId;
   },
 
+  async getQuickServiceStatus(ids) {
+    if (ids.length === 0) return {};
+    const { data, error } = await (getSupabaseClient() as any).rpc('customer_quick_service_status', {
+      p_restaurant_ids: ids,
+    });
+    if (error) throw error;
+    const byId: Record<string, QuickServiceStatus> = {};
+    for (const raw of Array.isArray(data) ? data : []) {
+      const row = objectValue(raw);
+      const state = String(row.state ?? 'unavailable') as QuickServiceState;
+      byId[String(row.restaurantId)] = {
+        restaurantId: String(row.restaurantId),
+        state,
+        acceptingOrders: row.acceptingOrders === true,
+        isOpen: row.isOpen === true,
+        paused: row.paused === true,
+        closesAt: optionalString(row.closesAt),
+        acceptsUntilMinutes: row.acceptsUntilMinutes == null ? null : numberValue(row.acceptsUntilMinutes),
+        pickupLocation: optionalString(row.pickupLocation),
+        estimatedPrepMinutes: numberValue(row.estimatedPrepMinutes),
+        ordersInQueue: numberValue(row.ordersInQueue),
+      };
+    }
+    return byId;
+  },
+
+  async refreshQuickService(restaurantId) {
+    // Best effort: a falha aqui não pode impedir a leitura do pedido.
+    const { data, error } = await (getSupabaseClient() as any).rpc('quick_service_refresh', { p_restaurant_id: restaurantId });
+    return error ? 0 : numberValue(data);
+  },
+
+  async listOrderStatusEvents(orderId) {
+    const { data, error } = await (getSupabaseClient() as any).from('order_status_events')
+      .select('id, field, from_value, to_value, actor_kind, reason, created_at')
+      .eq('order_id', orderId).order('created_at', { ascending: true });
+    if (error) throw error;
+    return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+      id: String(row.id),
+      field: row.field === 'payment_status' ? 'payment_status' : 'fulfillment_status',
+      fromValue: optionalString(row.from_value),
+      toValue: String(row.to_value),
+      actorKind: (row.actor_kind === 'customer' || row.actor_kind === 'staff' ? row.actor_kind : 'system') as OrderStatusEvent['actorKind'],
+      reason: optionalString(row.reason),
+      createdAt: String(row.created_at),
+    }));
+  },
+
+  async confirmSimulatedPix(orderId) {
+    const { error } = await (getSupabaseClient() as any).rpc('customer_confirm_simulated_pix', { p_order_id: orderId });
+    if (error) throw error;
+  },
+
   async getMenu(restaurantId) {
     const [categoriesResult, itemsResult] = await Promise.all([
       getSupabaseClient().from('menu_categories').select('*').eq('restaurant_id', restaurantId)
@@ -1145,6 +1272,14 @@ export const customerBackend: CustomerBackend = {
         isKidsFriendly: Boolean((row as Record<string, unknown>).is_kids_friendly),
       })),
     };
+  },
+
+  async getMenuCustomizations(restaurantId) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('customer_get_menu_customizations', {
+      p_restaurant_id: restaurantId,
+    });
+    if (error) throw error;
+    return parseMenuCustomizations(data);
   },
 
   async getActiveVisit() {
@@ -1219,6 +1354,11 @@ export const customerBackend: CustomerBackend = {
           p_table_session_id: input.tableSessionId ?? null,
           p_waitlist_entry_id: input.waitlistEntryId ?? null,
           p_pickup_slot_start: input.pickupSlotStart ?? null,
+          ...(input.serviceModel === 'quick_service' ? {
+            p_call_name: input.callName ?? null,
+            p_consumption_mode: input.consumptionMode ?? null,
+            p_pickup_policy_accepted: input.pickupPolicyAccepted === true,
+          } : {}),
         })
       : await getSupabaseClient().rpc('customer_place_order', {
           p_restaurant_id: input.restaurantId,
@@ -1244,6 +1384,9 @@ export const customerBackend: CustomerBackend = {
       paymentStatus: String(row.paymentStatus ?? 'pending') as CustomerPaymentStatus,
       idempotentReplay: Boolean(row.idempotentReplay),
       simulated: Boolean(row.simulated),
+      fulfillmentStatus: optionalString(row.fulfillmentStatus) as CustomerFulfillmentStatus | null,
+      pixCode: optionalString(row.pixCode),
+      paymentExpiresAt: optionalString(row.paymentExpiresAt),
     };
   },
 
@@ -1276,7 +1419,19 @@ export const customerBackend: CustomerBackend = {
       '*, restaurant:restaurants(name, logo_url, banner_url), table:tables(table_number), order_items(*, menu_item:menu_items(name, image_url)), reviews(rating)',
     ).eq('id', id).is('reviews.deleted_at', null).single();
     if (error) throw error;
-    const order = mapOrder(data as unknown as Record<string, unknown>);
+    let order = mapOrder(data as unknown as Record<string, unknown>);
+
+    // Quick (ADR-013): as expirações (Pix, aceite, retirada) são aplicadas ao ler. Se alguma mudou o
+    // pedido, lê de novo para o cliente ver o estado real.
+    if (order.serviceModel === 'quick_service' && ['received', 'accepted', 'ready'].includes(order.fulfillmentStatus)) {
+      const changed = await customerBackend.refreshQuickService(order.restaurantId);
+      if (changed > 0) {
+        const reread = await getSupabaseClient().from('orders').select(
+          '*, restaurant:restaurants(name, logo_url, banner_url), table:tables(table_number), order_items(*, menu_item:menu_items(name, image_url)), reviews(rating)',
+        ).eq('id', id).is('reviews.deleted_at', null).single();
+        if (!reread.error) order = mapOrder(reread.data as unknown as Record<string, unknown>);
+      }
+    }
 
     const { data: preparers } = await getSupabaseClient().rpc('customer_get_order_item_preparers', { p_order_id: id });
     if (preparers) {
@@ -1402,6 +1557,12 @@ export const customerBackend: CustomerBackend = {
     return mapWaitlist(data as unknown as Record<string, unknown>);
   },
 
+  async getWaitlistSections(restaurantId) {
+    const { data, error } = await getSupabaseClient().rpc('customer_get_waitlist_sections', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return (Array.isArray(data) ? data : []).filter((name): name is string => typeof name === 'string' && name.trim() !== '');
+  },
+
   async getWaitlistStats(restaurantId) {
     const { data, error } = await getSupabaseClient().rpc('customer_waitlist_stats', { p_restaurant_id: restaurantId });
     if (error) throw error;
@@ -1500,12 +1661,6 @@ export const customerBackend: CustomerBackend = {
       participants: rawParticipants.map(mapTableDiner),
       items: rawItems.map((value) => {
         const item = objectValue(value);
-  async getWaitlistSections(restaurantId) {
-    const { data, error } = await getSupabaseClient().rpc('customer_get_waitlist_sections', { p_restaurant_id: restaurantId });
-    if (error) throw error;
-    return (Array.isArray(data) ? data : []).filter((name): name is string => typeof name === 'string' && name.trim() !== '');
-  },
-
         return {
           orderItemId: String(item.orderItemId),
           orderId: String(item.orderId),

@@ -26,6 +26,9 @@ em `place_order`**. `place_order` (`20260710130000_place_order_rpc.sql:84`) usa 
 puro e grava `customizations` como jsonb opaco — **o preço com extras exibido no app não é o preço
 que o servidor calcula.**
 **Aceite** Preço de item com extras vem do servidor e confere com o exibido, incluindo o efeito no tempo de preparo.
+**Estado (2026-10-01)** Parcial. `20261001162000_menu_item_customization.sql` cria `menu_item_option_groups` e
+`menu_item_options`; `place_order` valida e precifica a escolha (teste `24_menu_item_customization.sql`). App
+cliente e editor do restaurante prontos (ADR-013 §2.9). **Falta** o efeito do extra no tempo de preparo.
 
 ### T-N1-03 · NOVO — `menu_items` no Realtime
 **Tipo** banco **Tamanho** P

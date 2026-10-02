@@ -8,6 +8,8 @@ type IconComponent = any;
 
 export interface V2ListItem {
   icon: IconComponent;
+  /** Chave estável quando dois itens podem ter o mesmo rótulo (ex.: restaurantes homônimos). */
+  id?: string;
   label: string;
   subtitle?: string;
   onPress?: () => void;
@@ -33,7 +35,7 @@ export function V2ListScreen({ title, subtitle, showBack, hero, items, onRefresh
           const Icon = item.icon;
           return (
             <TouchableOpacity
-              key={item.label}
+              key={item.id ?? item.label}
               onPress={item.onPress}
               style={[styles.row, index < items.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }]}
             >

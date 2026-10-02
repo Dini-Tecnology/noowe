@@ -11,45 +11,66 @@ import * as Crypto from 'expo-crypto';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useCart } from '@/shared/contexts/CartContext';
-import customerBackend, { type PlaceOrderItem } from '../../services/customer-backend';
+import { cartOrderItems } from '../../utils/cart-order-items';
+import customerBackend, { type ConsumptionMode, type CustomerOrder, type PlaceOrderItem } from '../../services/customer-backend';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
+import { useDistanceToRestaurant } from '../../hooks/useDistanceToRestaurant';
+import { PixPendingPanel } from '../../components/quick/PixPendingPanel';
+import { QUICK_ORDER_ERROR_COPY, duplicateOrderId, quickOrderErrorKind } from '../../services/quick-service-errors';
 import { money, translateOrderError } from './shared';
+import { formatDistance, isFarFromRestaurant, pickupPolicyText } from './quick-service-ui';
 
 const HEADER_GRADIENT = ['#FF5724', '#F97316', '#F59E0B'] as const;
 
-type PaymentMethodType = 'pix' | 'credit' | 'apple' | 'google' | 'tap' | 'wallet';
+type PaymentMethodType = 'pix' | 'credit_card' | 'apple_pay' | 'google_pay' | 'tap_to_pay' | 'wallet';
 
 const PAYMENT_METHODS: { type: PaymentMethodType; icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
   { type: 'pix', icon: 'qr-code-outline', label: 'PIX' },
-  { type: 'credit', icon: 'card-outline', label: 'Crédito' },
-  { type: 'apple', icon: 'logo-apple', label: 'Apple Pay' },
-  { type: 'google', icon: 'logo-google', label: 'Google Pay' },
-  { type: 'tap', icon: 'flash-outline', label: 'TAP to Pay' },
+  { type: 'credit_card', icon: 'card-outline', label: 'Crédito' },
+  { type: 'apple_pay', icon: 'logo-apple', label: 'Apple Pay' },
+  { type: 'google_pay', icon: 'logo-google', label: 'Google Pay' },
+  { type: 'tap_to_pay', icon: 'flash-outline', label: 'TAP to Pay' },
   { type: 'wallet', icon: 'wallet-outline', label: 'Carteira' },
 ];
+
+/** Dados que o carrinho coleta e o checkout envia ao servidor (ADR-013). */
+export type QuickCheckoutParams = {
+  callName?: string;
+  consumptionMode?: ConsumptionMode;
+  pickupSlotStart?: string | null;
+};
+
+type PendingPix = { orderId: string; code: string; expiresAt: string | null };
 
 /**
  * Skip the Line checkout uses the same intent/event boundary as a real
  * provider. The provider is simulated, but only the server confirmation can
  * release this order to the KDS.
  */
-export default function QuickServiceCheckoutScreen({ navigation }: any) {
+export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
+  const params: QuickCheckoutParams = route?.params ?? {};
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const cart = useCart();
   const queryClient = useQueryClient();
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('pix');
   const [usePoints, setUsePoints] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [pix, setPix] = useState<PendingPix | null>(null);
   const checkoutKey = useRef(Crypto.randomUUID());
-  const { capabilities, policies } = useServiceTypeFor(cart.restaurantId, 'quick_service');
-  const pickupSlots = useMemo(() => {
-    if (!capabilities?.pickupSlots || !policies?.pickupCapacityPerSlot) return [];
-    const first = new Date();
-    first.setSeconds(0, 0);
-    first.setMinutes(Math.ceil((first.getMinutes() + 5) / 15) * 15);
-    return Array.from({ length: 4 }, (_, index) => new Date(first.getTime() + index * 15 * 60_000).toISOString());
-  }, [capabilities?.pickupSlots, policies?.pickupCapacityPerSlot]);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const { policies } = useServiceTypeFor(cart.restaurantId, 'quick_service');
+  const restaurant = useQuery({
+    queryKey: ['restaurant', cart.restaurantId],
+    queryFn: () => customerBackend.getRestaurant(cart.restaurantId!),
+    enabled: !!cart.restaurantId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const distance = useDistanceToRestaurant(restaurant.data);
+  const farAway = isFarFromRestaurant(distance, policies?.distanceWarningKm ?? null);
+  const policyText = pickupPolicyText({
+    pickupExpiryMin: policies?.pickupExpiryMin ?? null,
+    noPickupPolicy: policies?.noPickupPolicy ?? null,
+  });
 
   const loyalty = useQuery({
     queryKey: ['loyalty'],
@@ -68,28 +89,16 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
 
   const place = useMutation({
     mutationFn: async () => {
-      const orderItems: PlaceOrderItem[] = cart.items.filter((item) => !item.combo).map((item) => ({
-        menuItemId: item.menu_item_id,
-        quantity: item.quantity,
-        specialInstructions: item.special_instructions,
-      }));
-      for (const item of cart.items) {
-        if (!item.combo) continue;
-        for (let quantity = 0; quantity < item.quantity; quantity += 1) {
-          const comboGroup = `${item.id}:${quantity}`;
-          orderItems.push(
-            { menuItemId: item.combo.lancheItemId, quantity: 1, comboGroup },
-            { menuItemId: item.combo.acompanhamentoItemId, quantity: 1, comboGroup },
-            { menuItemId: item.combo.bebidaItemId, quantity: 1, comboGroup },
-          );
-        }
-      }
+      const orderItems: PlaceOrderItem[] = cartOrderItems(cart.items);
       if (!orderItems.length) throw new Error('A comanda está vazia.');
       const order = await customerBackend.placeOrder({
         restaurantId: cart.restaurantId!,
         serviceModel: 'quick_service',
         idempotencyKey: checkoutKey.current,
-        pickupSlotStart: selectedSlot,
+        pickupSlotStart: params.pickupSlotStart ?? null,
+        callName: params.callName ?? null,
+        consumptionMode: params.consumptionMode ?? 'takeaway',
+        pickupPolicyAccepted: policyAccepted,
         items: orderItems,
       });
       const payment = await customerBackend.startPayment({
@@ -97,15 +106,66 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
         paymentMethod: selectedMethod,
         idempotencyKey: checkoutKey.current,
       });
-      if (payment.paymentStatus !== 'confirmed') throw new Error('O pagamento ainda não foi confirmado.');
-      return { ...order, paymentStatus: payment.paymentStatus };
+      return { order, payment };
     },
-    onSuccess: (order) => {
-      cart.clearCart();
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      navigation.replace('OrderDetail', { orderId: order.id });
+    onSuccess: ({ order, payment }) => {
+      if (payment.paymentStatus === 'confirmed') return finish(order.id);
+      if (payment.paymentStatus === 'pending' && payment.pixCode) {
+        setPix({ orderId: order.id, code: payment.pixCode, expiresAt: payment.paymentExpiresAt });
+        return undefined;
+      }
+      Alert.alert('Pagamento não confirmado', 'O pagamento ainda não foi confirmado. Tente novamente.');
+      return undefined;
     },
-    onError: (error: Error) => Alert.alert('Pagamento não confirmado', translateOrderError(error)),
+    onError: (error: unknown) => {
+      const kind = quickOrderErrorKind(error);
+      const existingOrderId = duplicateOrderId(error);
+      if (kind === 'duplicate' && existingOrderId) {
+        Alert.alert(QUICK_ORDER_ERROR_COPY.duplicate.title, QUICK_ORDER_ERROR_COPY.duplicate.message, [
+          { text: 'Ver pedido', onPress: () => navigation.replace('OrderDetail', { orderId: existingOrderId }) },
+          { text: 'Agora não', style: 'cancel' },
+        ]);
+        return;
+      }
+      if (kind) {
+        Alert.alert(QUICK_ORDER_ERROR_COPY[kind].title, QUICK_ORDER_ERROR_COPY[kind].message);
+        return;
+      }
+      Alert.alert('Pagamento não confirmado', translateOrderError(error));
+    },
+  });
+
+  const finish = useCallback((orderId: string) => {
+    cart.clearCart();
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
+    navigation.replace('OrderDetail', { orderId });
+  }, [cart, navigation, queryClient]);
+
+  // Pix pendente: o servidor é quem confirma. Consulta o pedido até o pagamento entrar
+  // (ou o pedido ser cancelado por expiração).
+  const pixOrder = useQuery<CustomerOrder>({
+    queryKey: ['quick-pix-order', pix?.orderId],
+    queryFn: async () => {
+      await customerBackend.refreshQuickService(cart.restaurantId!);
+      return customerBackend.getOrder(pix!.orderId);
+    },
+    enabled: !!pix,
+    refetchInterval: 4000,
+  });
+  const resetPix = useCallback(() => {
+    // A chave de idempotência acompanha o pedido: um novo pedido precisa de uma nova chave.
+    checkoutKey.current = Crypto.randomUUID();
+    setPix(null);
+  }, []);
+  const pixExpired = !!pix && pixOrder.data?.fulfillmentStatus === 'cancelled';
+  React.useEffect(() => {
+    if (pix && pixOrder.data?.paymentStatus === 'confirmed') finish(pixOrder.data.id);
+  }, [pixOrder.data, pix, finish]);
+
+  const simulatePixPaid = useMutation({
+    mutationFn: () => customerBackend.confirmSimulatedPix(pix!.orderId),
+    onSuccess: () => { void pixOrder.refetch(); },
+    onError: (error: unknown) => Alert.alert('Pix simulado', translateOrderError(error)),
   });
 
   const selectMethod = useCallback((method: PaymentMethodType) => setSelectedMethod(method), []);
@@ -152,9 +212,15 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
         methodSelected: { borderColor: colors.primary, backgroundColor: 'rgba(234, 88, 12, 0.08)' },
         methodUnselected: { borderColor: colors.border, backgroundColor: colors.card },
         methodLabel: { fontSize: 12, fontWeight: '700' },
-        slotRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-        slot: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
-        slotText: { fontSize: 12, fontWeight: '700' },
+        warnCard: {
+          flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14,
+          backgroundColor: colors.backgroundTertiary, borderWidth: 1, borderColor: colors.border,
+        },
+        warnText: { flex: 1, fontSize: 13, color: colors.foreground },
+        policyCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, gap: 10 },
+        policyText: { fontSize: 13, color: colors.foregroundSecondary, lineHeight: 19 },
+        policyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+        policyAccept: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.foreground },
         summaryCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, gap: 8 },
         summaryTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 4 },
         summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -242,30 +308,6 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
               </View>
             </View>
 
-            {pickupSlots.length > 0 && (
-              <View style={{ gap: 12 }}>
-                <Text style={styles.sectionTitle}>Horário de retirada</Text>
-                <View style={styles.slotRow}>
-                  {pickupSlots.map((slot) => {
-                    const selected = selectedSlot === slot;
-                    return (
-                      <TouchableOpacity
-                        key={slot}
-                        style={[styles.slot, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}12` : colors.card }]}
-                        onPress={() => setSelectedSlot(slot)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                      >
-                        <Text style={[styles.slotText, { color: selected ? colors.primary : colors.foreground }]}>
-                          {new Date(slot).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Resumo</Text>
               <View style={styles.summaryRow}>
@@ -285,18 +327,76 @@ export default function QuickServiceCheckoutScreen({ navigation }: any) {
               </View>
             </View>
 
+            {farAway && distance != null && (
+              <View style={styles.warnCard} accessibilityRole="alert">
+                <Ionicons name="location-outline" size={18} color={colors.warning ?? colors.primary} />
+                <Text style={styles.warnText}>
+                  {`Você está a ${formatDistance(distance)} do restaurante. Confira se dá tempo de retirar antes do prazo.`}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.policyCard}>
+              <Text style={styles.sectionTitle}>Política de retirada</Text>
+              <Text style={styles.policyText}>{policyText}</Text>
+              <TouchableOpacity
+                style={styles.policyRow}
+                onPress={() => setPolicyAccepted((value) => !value)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: policyAccepted }}
+                accessibilityLabel="Li e aceito a política de retirada"
+              >
+                <Ionicons
+                  name={policyAccepted ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={policyAccepted ? colors.primary : colors.foregroundSecondary}
+                />
+                <Text style={styles.policyAccept}>Li e aceito a política de retirada</Text>
+              </TouchableOpacity>
+            </View>
+
+            {pix && pixExpired ? (
+              <View style={styles.policyCard}>
+                <Text style={styles.sectionTitle}>Pix expirado</Text>
+                <Text style={styles.policyText}>O tempo para pagar acabou e o pedido foi cancelado. Você pode fazer o pedido novamente.</Text>
+                <TouchableOpacity style={styles.cta} onPress={resetPix} accessibilityRole="button" accessibilityLabel="Fazer o pedido novamente">
+                  <LinearGradient colors={HEADER_GRADIENT as unknown as [string, string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.ctaGradient}>
+                    <Text style={styles.ctaText}>Fazer o pedido novamente</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            ) : pix ? (
+              <PixPendingPanel
+                code={pix.code}
+                expiresAt={pix.expiresAt}
+                checking={pixOrder.isFetching}
+                onCheck={() => {
+                  void pixOrder.refetch().then((result) => {
+                    if (result.data && result.data.paymentStatus !== 'confirmed' && result.data.fulfillmentStatus !== 'cancelled') {
+                      Alert.alert('Pagamento pendente', 'Ainda não recebemos a confirmação do Pix. Assim que o banco confirmar, o pedido segue sozinho.');
+                    }
+                  });
+                }}
+                onSimulatePaid={__DEV__ ? () => simulatePixPaid.mutate() : undefined}
+                onExpired={() => { void pixOrder.refetch(); }}
+              />
+            ) : (
             <TouchableOpacity
-              style={[styles.cta, (place.isPending || !cart.items.length || (pickupSlots.length > 0 && !selectedSlot)) && styles.ctaDisabled]}
+              style={[styles.cta, (place.isPending || !cart.items.length || !policyAccepted) && styles.ctaDisabled]}
               onPress={() => place.mutate()}
-              disabled={place.isPending || !cart.items.length || (pickupSlots.length > 0 && !selectedSlot)}
+              disabled={place.isPending || !cart.items.length || !policyAccepted}
               activeOpacity={0.9}
               accessibilityRole="button"
+              accessibilityLabel="Confirmar pagamento"
             >
               <LinearGradient colors={HEADER_GRADIENT as unknown as [string, string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.ctaGradient}>
                 <Ionicons name="card" size={18} color="#FFFFFF" />
-                <Text style={styles.ctaText}>{place.isPending ? 'Confirmando...' : 'Confirmar Pagamento'}</Text>
+                <Text style={styles.ctaText}>
+                  {place.isPending ? 'Confirmando...' : selectedMethod === 'pix' ? 'Gerar Pix' : 'Confirmar Pagamento'}
+                </Text>
               </LinearGradient>
             </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </View>

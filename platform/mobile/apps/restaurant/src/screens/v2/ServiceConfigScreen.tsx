@@ -39,7 +39,7 @@ const FEATURE_KEYS: Partial<Record<ServiceType, Record<string, ServiceTypeFeatur
   },
   quick_service: {
     'Skip the Line': 'ordering',
-    'Tracking 4 Estágios': 'orderTracking',
+    'Acompanhamento por etapas': 'orderTracking',
   },
 };
 

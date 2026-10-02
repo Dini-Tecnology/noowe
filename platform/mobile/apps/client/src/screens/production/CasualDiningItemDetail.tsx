@@ -23,6 +23,15 @@ import customerBackend, {
   type TableDiner,
 } from '../../services/customer-backend';
 import { money } from './shared';
+import { ItemCustomizationPicker } from '../../components/menu/ItemCustomizationPicker';
+import {
+  EMPTY_SELECTION,
+  missingGroups,
+  selectionDeltaCents,
+  unitPriceWithExtras,
+  type CustomizationSelection,
+  type ItemCustomizationConfig,
+} from '../../utils/item-customization';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
@@ -36,12 +45,15 @@ export interface CasualDiningItemDetailProps {
   tableSessionId: string | null;
   /** Group ordering is off (or there is no table yet) — hide the diner picker. */
   sharedOrdering: boolean;
+  /** ADR-013 §2.9: grupos de opções e ingredientes removíveis do item, quando houver. */
+  customization?: ItemCustomizationConfig | null;
   onClose: () => void;
   onAdd: (input: {
     item: CustomerMenuItem;
     quantity: number;
     diner: TableDiner | null;
     notes: string;
+    selection: CustomizationSelection;
   }) => void;
 }
 
@@ -55,6 +67,7 @@ export default function CasualDiningItemDetail({
   diners,
   tableSessionId,
   sharedOrdering,
+  customization = null,
   onClose,
   onAdd,
 }: CasualDiningItemDetailProps) {
@@ -64,6 +77,9 @@ export default function CasualDiningItemDetail({
   const [selectedDinerId, setSelectedDinerId] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [selection, setSelection] = useState<CustomizationSelection>(EMPTY_SELECTION);
+  const missing = missingGroups(customization, selection);
+  const unitPrice = item ? unitPriceWithExtras(item.price, selectionDeltaCents(customization, selection)) : 0;
   const [companionName, setCompanionName] = useState('');
   const [companionFormOpen, setCompanionFormOpen] = useState(false);
   const [companionIsKid, setCompanionIsKid] = useState(false);
@@ -91,12 +107,13 @@ export default function CasualDiningItemDetail({
   });
 
   const confirm = useCallback(() => {
-    if (!item) return;
-    onAdd({ item, quantity, diner: sharedOrdering ? activeDiner : null, notes: notes.trim() });
+    if (!item || missing.length > 0) return;
+    onAdd({ item, quantity, diner: sharedOrdering ? activeDiner : null, notes: notes.trim(), selection });
     setQuantity(1);
     setNotes('');
+    setSelection(EMPTY_SELECTION);
     onClose();
-  }, [item, quantity, activeDiner, notes, sharedOrdering, onAdd, onClose]);
+  }, [item, missing.length, quantity, activeDiner, notes, selection, sharedOrdering, onAdd, onClose]);
 
   const styles = useMemo(
     () =>
@@ -315,6 +332,10 @@ export default function CasualDiningItemDetail({
             </>
           )}
 
+          {customization && (
+            <ItemCustomizationPicker config={customization} selection={selection} onChange={setSelection} />
+          )}
+
           <Text style={styles.sectionTitle}>Observações</Text>
           <TextInput
             style={styles.notesInput}
@@ -350,9 +371,18 @@ export default function CasualDiningItemDetail({
             </View>
           </View>
 
-          <TouchableOpacity style={styles.cta} onPress={confirm} activeOpacity={0.9} accessibilityRole="button">
+          <TouchableOpacity
+            style={[styles.cta, missing.length > 0 && { opacity: 0.5 }]}
+            onPress={confirm}
+            disabled={missing.length > 0}
+            activeOpacity={0.9}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: missing.length > 0 }}
+          >
             <Ionicons name="add" size={20} color={colors.primaryForeground} />
-            <Text style={styles.ctaText}>Adicionar · {money(item.price * quantity)}</Text>
+            <Text style={styles.ctaText}>
+              {missing.length > 0 ? `Escolha: ${missing[0].name}` : `Adicionar · ${money(unitPrice * quantity)}`}
+            </Text>
           </TouchableOpacity>
 
           {sharedOrdering && !tableSessionId && (

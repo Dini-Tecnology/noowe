@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, AppState, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,11 +12,13 @@ import OrderStatusStepper, { type OrderStatusStep } from '@okinawa/shared/compon
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { DevSkipPrepButton } from '../../components/dev/DevSkipPrepButton';
-import customerBackend, { type CustomerFulfillmentStatus, type CustomerOrderStatus } from '../../services/customer-backend';
-import { money, rootNavigate, StateView, useQueryRefreshControl, tableLabel } from './shared';
+import customerBackend, { type CustomerOrderStatus } from '../../services/customer-backend';
+import { PixPendingPanel } from '../../components/quick/PixPendingPanel';
+import { loadPickupFromCache } from '../../services/pickup-code-cache';
+import { money, rootNavigate, StateView, useQueryRefreshControl, tableLabel, translateOrderError } from './shared';
+import { QUICK_TRACKING_STEPS, canCustomerCancelQuickOrder, describeQuickEvent, pickupPolicyText, quickTrackingStep } from './quick-service-ui';
 
 type TrackingStep = 'received' | 'preparing' | 'ready' | 'delivered';
-type QuickServiceStep = 'received' | 'preparing' | 'checking' | 'ready';
 
 /** Gradiente do header — espelha os tokens `primary → accent` do design de referência. */
 const HEADER_GRADIENT = ['#FF5724', '#F97316', '#F59E0B'] as const;
@@ -29,22 +31,6 @@ const TRACKING_STEPS: (OrderStatusStep & { key: TrackingStep })[] = [
 ];
 
 const STEP_INDEX: Record<TrackingStep, number> = { received: 0, preparing: 1, ready: 2, delivered: 3 };
-
-const QUICK_TRACKING_STEPS: (OrderStatusStep & { key: QuickServiceStep })[] = [
-  { key: 'received', label: 'Recebido', icon: 'checkmark-circle' },
-  { key: 'preparing', label: 'Preparando', icon: 'chef-hat', iconSet: 'material-community' },
-  { key: 'checking', label: 'Conferência', icon: 'search' },
-  { key: 'ready', label: 'Pronto', icon: 'silverware-fork-knife', iconSet: 'material-community' },
-];
-
-const QUICK_STEP_INDEX: Record<QuickServiceStep, number> = { received: 0, preparing: 1, checking: 2, ready: 3 };
-
-function quickStepFromStatus(status: CustomerFulfillmentStatus): QuickServiceStep {
-  if (status === 'preparing') return 'preparing';
-  if (status === 'checking') return 'checking';
-  if (status === 'ready' || status === 'picked_up' || status === 'delivered') return 'ready';
-  return 'received';
-}
 
 const ITEM_STATUS_LABELS: Record<string, string> = {
   pending: 'Na fila', preparing: 'Preparando', ready: 'Pronto', delivered: 'Entregue', cancelled: 'Cancelado',
@@ -99,19 +85,48 @@ export default function OrderDetailScreen({ route, navigation }: any) {
   const orderId = route.params.orderId as string;
   const query = useQuery({ queryKey: ['orders', orderId], queryFn: () => customerBackend.getOrder(orderId) });
   const refreshControl = useQueryRefreshControl([query]);
-  const { capabilities } = useServiceTypeFor(query.data?.restaurantId, query.data?.serviceModel);
+  const { capabilities, policies } = useServiceTypeFor(query.data?.restaurantId, query.data?.serviceModel);
   // Pickup journeys follow the four counter steps and close on a pickup screen;
   // table journeys follow the kitchen status of the order.
   const pickupSteps = capabilities?.orderTracking === 'pickup_steps';
   const showPickupCode = capabilities?.pickupCode === true;
+  const [resumedPix, setResumedPix] = React.useState<{ code: string; expiresAt: string | null } | null>(null);
+  const statusEvents = useQuery({
+    queryKey: ['orders', orderId, 'status-events'],
+    queryFn: () => customerBackend.listOrderStatusEvents(orderId),
+    enabled: pickupSteps && !!query.data,
+  });
+  const resumePix = useMutation({
+    mutationFn: () => customerBackend.startPayment({ orderId, paymentMethod: 'pix' }),
+    onSuccess: (payment) => {
+      if (payment.paymentStatus === 'pending' && payment.pixCode) {
+        setResumedPix({ code: payment.pixCode, expiresAt: payment.paymentExpiresAt });
+      }
+      void queryClient.invalidateQueries({ queryKey: ['orders', orderId] });
+    },
+    onError: (error: unknown) => Alert.alert('Pagamento', translateOrderError(error)),
+  });
 
   // Skip the Line has no "Entregue" step of its own — once the kitchen marks
   // it ready, the customer moves on to the "Pedido Pronto" close-out screen.
+  // `keepDetail` vem da própria tela de retirada ("Ver detalhes do pedido"): sem ele o redirect voltaria.
+  const keepDetail = route.params?.keepDetail === true;
   useEffect(() => {
+    if (keepDetail) return;
     if (pickupSteps && query.data && ['ready', 'picked_up'].includes(query.data.fulfillmentStatus)) {
       navigation.replace('OrderReady', { orderId });
     }
-  }, [pickupSteps, query.data, orderId, navigation]);
+  }, [pickupSteps, query.data, orderId, navigation, keepDetail]);
+
+  // Sem rede no balcão: se o código deste pedido está guardado no aparelho, abre a tela de retirada.
+  useEffect(() => {
+    if (!query.isError || keepDetail) return;
+    let cancelled = false;
+    void loadPickupFromCache(orderId).then((cached) => {
+      if (!cancelled && cached) navigation.replace('OrderReady', { orderId });
+    });
+    return () => { cancelled = true; };
+  }, [query.isError, orderId, navigation, keepDetail]);
   const cancel = useMutation({
     mutationFn: () => customerBackend.cancelOrder(route.params.orderId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['orders'] }),
@@ -124,7 +139,9 @@ export default function OrderDetailScreen({ route, navigation }: any) {
   const confirmCancel = () => {
     Alert.alert(
       'Cancelar pedido?',
-      'Esta ação não pode ser desfeita. O pedido só pode ser cancelado enquanto a cozinha ainda não iniciou o preparo.',
+      pickupSteps
+        ? 'O pedido será cancelado e o valor estornado integralmente. Só é possível cancelar antes de a cozinha iniciar o preparo.'
+        : 'Esta ação não pode ser desfeita. O pedido só pode ser cancelado enquanto a cozinha ainda não iniciou o preparo.',
       [
         { text: 'Manter pedido', style: 'cancel' },
         { text: 'Cancelar pedido', style: 'destructive', onPress: () => cancel.mutate() },
@@ -149,8 +166,18 @@ export default function OrderDetailScreen({ route, navigation }: any) {
       // Pull-to-refresh remains available when Realtime is temporarily offline.
     });
 
+    // O pedido muda enquanto o cliente está fora do app (pronto, cancelado, estornado) e o
+    // Realtime cai com o app em segundo plano: ao voltar, relê o pedido.
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void queryClient.invalidateQueries({ queryKey: ['orders', orderId] });
+        void queryClient.invalidateQueries({ queryKey: ['orders'], exact: true });
+      }
+    });
+
     return () => {
       cancelled = true;
+      appStateSub.remove();
       if (channel) void channel.unsubscribe();
     };
   }, [orderId, queryClient]);
@@ -230,16 +257,29 @@ export default function OrderDetailScreen({ route, navigation }: any) {
   }
 
   const order = query.data;
-  const currentStepIndex = pickupSteps
-    ? QUICK_STEP_INDEX[quickStepFromStatus(order.fulfillmentStatus)]
+  // Quick Service (ADR-013 §2.2): Pago → Aceito → Em preparo → Pronto → Retirado, mais os terminais.
+  const quick = pickupSteps ? quickTrackingStep(order) : null;
+  // Aguardando pagamento ou terminal (cancelado/não retirado): nenhuma etapa fica "atual".
+  const currentStepIndex = quick
+    ? quick.stepIndex
     : STEP_INDEX[stepFromStatus(order.status)];
-  const progress = progressFromStatus(order.status);
+  const progress = quick
+    ? (quick.terminal ? 0 : Math.max(0.1, (quick.stepIndex + 1) / QUICK_TRACKING_STEPS.length))
+    : progressFromStatus(order.status);
+  // Aceite manual: pago e ainda sem resposta do restaurante (o prazo corre no servidor).
+  const awaitingAccept = !!quick && !quick.awaitingPayment && !quick.terminal && order.fulfillmentStatus === 'received';
   // Cancel is only possible before the kitchen starts: the order is still pending
   // AND no item has moved past the queue (the server enforces the same rule).
-  const canCancel = ['pending', 'confirmed'].includes(order.status)
-    && !order.items.some((item) => ['preparing', 'ready', 'delivered'].includes(item.status));
+  const canCancel = quick
+    ? canCustomerCancelQuickOrder(order)
+    : ['pending', 'confirmed'].includes(order.status)
+      && !order.items.some((item) => ['preparing', 'ready', 'delivered'].includes(item.status));
   const isActiveVisit = !!session && session.tableSessionId === order.tableSessionId;
-  const showHelpBar = (isActiveVisit || pickupSteps) && !['delivered', 'completed', 'cancelled', 'ready'].includes(order.status);
+  // "Chamar equipe" é a capability staffCalls: o Quick não tem garçom.
+  const staffCallsEnabled = capabilities?.staffCalls !== false;
+  const showHelpBar = staffCallsEnabled && (isActiveVisit || pickupSteps)
+    && !['delivered', 'completed', 'cancelled', 'ready'].includes(order.status)
+    && !(quick && (quick.terminal || quick.awaitingPayment));
   // RLS on `tables` is staff-only, so the embedded table name comes back null
   // for customers; the active visit already carries it.
   const tableNumber = order.tableNumber ?? (isActiveVisit ? session.tableNumber : null);
@@ -280,16 +320,23 @@ export default function OrderDetailScreen({ route, navigation }: any) {
               </View>
             </View>
 
-            <OrderStatusStepper steps={pickupSteps ? QUICK_TRACKING_STEPS : TRACKING_STEPS} currentStep={currentStepIndex} />
+            <OrderStatusStepper steps={quick ? QUICK_TRACKING_STEPS : TRACKING_STEPS} currentStep={currentStepIndex} />
           </LinearGradient>
 
           <View style={styles.body}>
             <View style={styles.timeCard}>
               <View style={styles.timeCardLeft}>
                 <Text style={styles.timeCardLabel}>
-                  {order.status === 'cancelled' ? 'Pedido cancelado' : 'Tempo estimado'}
+                  {quick?.terminal === 'not_picked_up' ? 'Pedido não retirado'
+                    : quick?.terminal === 'refunded' ? 'Pedido cancelado e estornado'
+                    : order.status === 'cancelled' ? 'Pedido cancelado'
+                    : quick?.awaitingPayment ? 'Aguardando pagamento'
+                    : awaitingAccept ? 'Aguardando o restaurante aceitar'
+                    : 'Tempo estimado'}
                 </Text>
-                {order.status !== 'cancelled' && <Text style={styles.timeCardValue}>{estimatedRangeLabel(order.estimatedTime, order.status)}</Text>}
+                {order.status !== 'cancelled' && !quick?.terminal && !quick?.awaitingPayment && !awaitingAccept && (
+                  <Text style={styles.timeCardValue}>{estimatedRangeLabel(order.estimatedTime, order.status)}</Text>
+                )}
                 <View style={styles.progressTrack}>
                   <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
                 </View>
@@ -299,7 +346,53 @@ export default function OrderDetailScreen({ route, navigation }: any) {
               </View>
             </View>
 
-            {PREP_SKIPPABLE.has(order.status) && (
+            {quick && (
+              <View style={styles.pickupCard}>
+                {order.callName && (
+                  <Text style={styles.pickupLabel}>
+                    {`Chamaremos: ${order.callName}${order.consumptionMode === 'dine_here' ? ' · Comer aqui' : order.consumptionMode === 'takeaway' ? ' · Para levar' : ''}`}
+                  </Text>
+                )}
+                {quick.terminal === 'refunded' && (
+                  <Text style={styles.pickupLabel}>O valor do pedido foi estornado integralmente.</Text>
+                )}
+                {quick.terminal === 'not_picked_up' && (
+                  <Text style={styles.pickupLabel}>
+                    {pickupPolicyText({
+                      pickupExpiryMin: policies?.pickupExpiryMin ?? null,
+                      noPickupPolicy: policies?.noPickupPolicy ?? null,
+                    })}
+                  </Text>
+                )}
+                {!quick.terminal && !quick.awaitingPayment && (
+                  <Text style={styles.pickupLabel}>Você será avisado por notificação em cada etapa.</Text>
+                )}
+              </View>
+            )}
+
+            {quick?.awaitingPayment && (resumedPix ? (
+              <PixPendingPanel
+                code={resumedPix.code}
+                expiresAt={resumedPix.expiresAt}
+                checking={query.isFetching}
+                onCheck={() => { void query.refetch(); }}
+                onExpired={() => { void query.refetch(); }}
+              />
+            ) : (
+              <TouchableOpacity
+                style={styles.payCta}
+                onPress={() => resumePix.mutate()}
+                disabled={resumePix.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Retomar pagamento"
+              >
+                <Ionicons name="qr-code-outline" size={20} color={colors.primaryForeground} />
+                <Text style={styles.payCtaText}>{resumePix.isPending ? 'Gerando Pix...' : 'Retomar pagamento com Pix'}</Text>
+              </TouchableOpacity>
+            ))}
+
+            {/* Quick passa por aceite, preparo e conferência no KDS: o atalho de teste não vale. */}
+            {!quick && PREP_SKIPPABLE.has(order.status) && (
               <DevSkipPrepButton
                 orderId={order.id}
                 onSkipped={() => {
@@ -309,7 +402,7 @@ export default function OrderDetailScreen({ route, navigation }: any) {
               />
             )}
 
-            {showPickupCode && (
+            {showPickupCode && !quick?.terminal && !quick?.awaitingPayment && (
               <View style={styles.pickupCard}>
                 <Text style={styles.pickupLabel}>Código de retirada</Text>
                 <Text style={styles.pickupCode}>{order.pickupCode ?? order.orderNumber}</Text>
@@ -402,6 +495,22 @@ export default function OrderDetailScreen({ route, navigation }: any) {
                 </TouchableOpacity>
                 <Text style={styles.payCtaHint}>Pagamento simulado — nenhum valor é cobrado</Text>
               </>
+            )}
+
+            {quick && (statusEvents.data?.length ?? 0) > 0 && (
+              <View>
+                <Text style={styles.sectionTitle}>HISTÓRICO DO PEDIDO</Text>
+                <View style={{ gap: 6 }}>
+                  {statusEvents.data!.filter((event) => event.fromValue !== null || event.field === 'fulfillment_status').map((event) => (
+                    <View key={event.id} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+                      <Text style={[styles.itemMeta, { flex: 1 }]}>{describeQuickEvent(event)}</Text>
+                      <Text style={styles.itemMeta}>
+                        {new Date(event.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
             )}
 
             {canCancel && (

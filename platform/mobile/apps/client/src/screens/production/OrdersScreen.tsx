@@ -6,7 +6,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend, { type CustomerOrder, type CustomerOrderStatus } from '../../services/customer-backend';
+import { useQuickReorder } from '../../hooks/useQuickReorder';
 import { money, restaurantRowStyles, rootNavigate, StateView, tableLabel, useQueryRefreshControl } from './shared';
+import { canReorderQuickOrder, quickOrderStatusLabel, quickOrdersFilter } from './quick-service-ui';
 
 const STATUS_LABELS: Record<CustomerOrderStatus, string> = {
   pending: 'Recebido', confirmed: 'Confirmado', preparing: 'Preparando',
@@ -33,9 +35,11 @@ const EMPTY_MESSAGES: Record<OrderFilter, string> = {
 };
 
 // "Entregue" still belongs to the open table tab: the order is only concluded after payment.
-function filterOf(status: CustomerOrderStatus): OrderFilter {
-  if (status === 'completed') return 'completed';
-  if (status === 'cancelled') return 'cancelled';
+function filterOf(order: Pick<CustomerOrder, 'status' | 'serviceModel' | 'fulfillmentStatus'>): OrderFilter {
+  // Quick Service não tem comanda aberta: o pedido termina na retirada (ou no "não retirado").
+  if (order.serviceModel === 'quick_service') return quickOrdersFilter(order);
+  if (order.status === 'completed') return 'completed';
+  if (order.status === 'cancelled') return 'cancelled';
   return 'active';
 }
 
@@ -59,7 +63,8 @@ export default function OrdersScreen({ navigation }: any) {
   });
   const allOrders = query.data?.pages.flatMap((page) => page.data) ?? [];
   const [filter, setFilter] = useState<OrderFilter>('active');
-  const orders = allOrders.filter((order) => filterOf(order.status) === filter);
+  const orders = allOrders.filter((order) => filterOf(order) === filter);
+  const { reorder } = useQuickReorder(navigation);
 
   // Filtering happens on loaded pages; keep loading until the chosen tab has enough rows.
   useEffect(() => {
@@ -102,11 +107,16 @@ export default function OrdersScreen({ navigation }: any) {
     statusPill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999 },
     statusPillText: { fontSize: 10, fontWeight: '700' },
     stars: { color: '#F59E0B', fontSize: 11, letterSpacing: 1 },
+    reorderText: { fontSize: 11, fontWeight: '700', color: colors.primary, marginTop: 4 },
     footer: { paddingVertical: 18 },
   }), [colors]);
 
   const renderOrder = ({ item }: { item: CustomerOrder }) => {
-    const statusColor = STATUS_COLORS[item.status] ?? colors.primary;
+    const quickStatus = item.serviceModel === 'quick_service' ? quickOrderStatusLabel(item) : null;
+    const statusLabel = quickStatus?.label ?? STATUS_LABELS[item.status] ?? item.status;
+    const statusColor = quickStatus
+      ? { ok: '#16A34A', warn: '#EA580C', off: '#64748B', bad: '#DC2626' }[quickStatus.tone]
+      : STATUS_COLORS[item.status] ?? colors.primary;
     const firstItemName = item.items[0]?.name;
     const extraCount = item.items.length - 1;
     const preview = firstItemName
@@ -123,7 +133,7 @@ export default function OrdersScreen({ navigation }: any) {
         onPress={() => rootNavigate(navigation, 'OrderDetail', { orderId: item.id })}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel={`${item.restaurantName}, ${STATUS_LABELS[item.status] ?? item.status}, ${money(item.total)}`}
+        accessibilityLabel={`${item.restaurantName}, ${statusLabel}, ${money(item.total)}`}
       >
         {item.restaurantPhoto ? (
           <Image source={{ uri: item.restaurantPhoto }} style={styles.nearbyPhoto} resizeMode="cover" />
@@ -142,8 +152,18 @@ export default function OrdersScreen({ navigation }: any) {
             <Text style={styles.stars}>{'★'.repeat(Math.round(item.rating))}</Text>
           ) : (
             <View style={[styles.statusPill, { backgroundColor: `${statusColor}1A` }]}>
-              <Text style={[styles.statusPillText, { color: statusColor }]}>{STATUS_LABELS[item.status] ?? item.status}</Text>
+              <Text style={[styles.statusPillText, { color: statusColor }]}>{statusLabel}</Text>
             </View>
+          )}
+          {item.serviceModel === 'quick_service' && canReorderQuickOrder(item) && (
+            <TouchableOpacity
+              onPress={() => { void reorder(item); }}
+              accessibilityRole="button"
+              accessibilityLabel={`Pedir novamente em ${item.restaurantName}`}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.reorderText}>Pedir novamente</Text>
+            </TouchableOpacity>
           )}
         </View>
       </TouchableOpacity>

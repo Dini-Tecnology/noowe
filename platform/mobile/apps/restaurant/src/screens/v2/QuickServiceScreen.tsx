@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { ActivityIndicator, Alert, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Check, Flame, IceCream, Leaf, Pizza, Zap } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
-import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
-import { getSupabaseClient } from '@okinawa/shared/services/supabase';
+import { supabaseApiAdapter, type QuickPanelSettings, type QuickPolicyPatch } from '@okinawa/shared/services/supabase-api';
 import {
   QUICK_SERVICE_CUISINE_PRESENTATION,
   QUICK_SERVICE_CUISINE_TAGS,
@@ -15,19 +15,14 @@ import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 import { ConfigSectionCard } from './config/ConfigSectionCard';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { QuickPolicyCard } from './quick-service/QuickPolicyCard';
+import { quickPanelErrorMessage } from './quick-service/quick-panel';
 
 const CUISINE_ICONS: Record<QuickServiceCuisineTag, typeof Zap> = {
   burgers: Flame,
   pizza: Pizza,
   acai: IceCream,
   saudavel: Leaf,
-};
-
-type QuickOperationalOrder = {
-  id: string;
-  pickup_code: string | null;
-  fulfillment_status: 'checking' | 'ready';
-  created_at: string;
 };
 
 /**
@@ -38,12 +33,15 @@ type QuickOperationalOrder = {
  */
 export default function QuickServiceScreen() {
   const colors = useColors();
+  const navigation = useNavigation<any>();
   const { restaurantId } = useRestaurantRole();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cuisineTags, setCuisineTags] = useState<QuickServiceCuisineTag[]>([]);
   const [skipTheLineEnabled, setSkipTheLineEnabled] = useState(false);
-  const [operationalOrders, setOperationalOrders] = useState<QuickOperationalOrder[]>([]);
+  const [settings, setSettings] = useState<QuickPanelSettings | null>(null);
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [policyError, setPolicyError] = useState<string | null>(null);
   const [counterQr, setCounterQr] = useState<{ qrData: string; label: string } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cuisineTagsRef = useRef(cuisineTags);
@@ -57,16 +55,9 @@ export default function QuickServiceScreen() {
     try {
       setError(null);
       const data = await supabaseApiAdapter.getQuickServiceConfig(restaurantId);
-      const { data: operations, error: operationsError } = await (getSupabaseClient() as any)
-        .from('orders')
-        .select('id,pickup_code,fulfillment_status,created_at')
-        .eq('restaurant_id', restaurantId)
-        .eq('service_model', 'quick_service')
-        .eq('payment_status', 'confirmed')
-        .in('fulfillment_status', ['checking', 'ready'])
-        .order('created_at', { ascending: true });
-      if (operationsError) throw operationsError;
-      setOperationalOrders((operations ?? []) as QuickOperationalOrder[]);
+      // As regras de retirada vivem na política do restaurante; o painel de pedidos tem a sua própria tela.
+      const panel = await supabaseApiAdapter.getQuickPanel(restaurantId);
+      setSettings(panel.settings);
       const raw = Array.isArray(data?.cuisineTags) ? data.cuisineTags : [];
       setCuisineTags(
         raw.filter((key: unknown): key is QuickServiceCuisineTag =>
@@ -117,28 +108,20 @@ export default function QuickServiceScreen() {
     schedulePersist();
   }, [schedulePersist]);
 
-  const approveQuality = useCallback(async (orderId: string) => {
+  const savePolicy = useCallback(async (patch: QuickPolicyPatch) => {
+    if (!restaurantId) return;
+    setSavingPolicy(true);
+    setPolicyError(null);
     try {
-      await supabaseApiAdapter.completeQuickQualityCheck(orderId, true, {
-        items: true,
-        packaging: true,
-        pickupCode: true,
-      });
+      await supabaseApiAdapter.updateQuickServicePolicy(restaurantId, patch);
       await load();
+      Alert.alert('Configurações salvas', 'As regras do Quick Service foram atualizadas.');
     } catch (err) {
-      Alert.alert('Não foi possível concluir a conferência', userErrorMessage(err, 'Tente novamente.'));
+      setPolicyError(quickPanelErrorMessage(err));
+    } finally {
+      setSavingPolicy(false);
     }
-  }, [load]);
-
-  const confirmPickup = useCallback(async (order: QuickOperationalOrder) => {
-    if (!order.pickup_code) return;
-    try {
-      await supabaseApiAdapter.confirmQuickPickup(order.id, order.pickup_code);
-      await load();
-    } catch (err) {
-      Alert.alert('Retirada não confirmada', userErrorMessage(err, 'Confira o código.'));
-    }
-  }, [load]);
+  }, [restaurantId, load]);
 
   const generateCounterQr = useCallback(async () => {
     if (!restaurantId) return;
@@ -156,9 +139,14 @@ export default function QuickServiceScreen() {
       showBack
       onRefresh={load}
       headerRight={
-        <View style={[styles.headerIcon, { backgroundColor: '#FEF3C7' }]}>
+        <TouchableOpacity
+          style={[styles.headerIcon, { backgroundColor: '#FEF3C7' }]}
+          onPress={() => navigation.navigate('QuickOrders')}
+          accessibilityRole="button"
+          accessibilityLabel="Abrir pedidos do Quick Service"
+        >
           <Zap size={18} color="#B45309" />
-        </View>
+        </TouchableOpacity>
       }
     >
       {loading ? (
@@ -227,40 +215,18 @@ export default function QuickServiceScreen() {
             </View>
           </ConfigSectionCard>
 
-          <ConfigSectionCard title="Conferência" Icon={Check}>
-            {operationalOrders.filter((order) => order.fulfillment_status === 'checking').length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.foregroundSecondary }]}>Nenhum pedido aguardando conferência.</Text>
-            ) : operationalOrders.filter((order) => order.fulfillment_status === 'checking').map((order) => (
-              <View key={order.id} style={[styles.operationRow, { borderColor: colors.border }]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>Pedido #{order.id.slice(0, 6).toUpperCase()}</Text>
-                  <Text style={[styles.rowSub, { color: colors.foregroundSecondary }]}>Itens, embalagem e código devem ser conferidos</Text>
-                </View>
-                <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.primary }]} onPress={() => void approveQuality(order.id)}>
-                  <Text style={styles.actionText}>Aprovar</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ConfigSectionCard>
-
-          <ConfigSectionCard title="Retirada" Icon={Zap}>
-            {operationalOrders.filter((order) => order.fulfillment_status === 'ready').length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.foregroundSecondary }]}>Nenhum pedido pronto para retirada.</Text>
-            ) : operationalOrders.filter((order) => order.fulfillment_status === 'ready').map((order) => (
-              <View key={order.id} style={[styles.operationRow, { borderColor: colors.border }]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>Código {order.pickup_code ?? 'indisponível'}</Text>
-                  <Text style={[styles.rowSub, { color: colors.foregroundSecondary }]}>Confirme somente após validar o código do cliente</Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: '#16A34A', opacity: order.pickup_code ? 1 : 0.5 }]}
-                  disabled={!order.pickup_code}
-                  onPress={() => void confirmPickup(order)}
-                >
-                  <Text style={styles.actionText}>Retirado</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
+          <ConfigSectionCard title="Regras de retirada e pedidos" Icon={Zap}>
+            {settings ? (
+              <QuickPolicyCard
+                key={JSON.stringify(settings)}
+                settings={settings}
+                saving={savingPolicy}
+                error={policyError}
+                onSave={(patch) => { void savePolicy(patch); }}
+              />
+            ) : (
+              <Text style={[styles.emptyText, { color: colors.foregroundSecondary }]}>Configurações indisponíveis.</Text>
+            )}
           </ConfigSectionCard>
 
           {error ? (

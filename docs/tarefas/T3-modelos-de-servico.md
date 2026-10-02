@@ -3,8 +3,14 @@
 **Fatias:** [Q1](../fatias/Q1-quick-service.md) · [C1](../fatias/C1-casual-familia-festas.md) · [D1](../fatias/D1-fine-harmonizacao-sommelier.md) · [S1](../fatias/S1-chamados-acoes-garcom.md)
 **Spec:** §3.4–§3.6 (Fine), §4.4–§4.6 (Casual), §5.4–§5.6 (Quick)
 
-> **Q1 é AUSENTE no banco e no servidor** — existe só como superfície de telas. É o bloco com a
-> maior distância entre a UI navegável e o mecanismo por trás dela.
+> **Atualização 2026-10-01:** o texto abaixo foi escrito sobre o commit `bbd69c5` (03/09). A migration
+> `20260929120000_service_model_runtime_v2.sql` implementou parte de Q1 no banco. O estado real está
+> na tabela "Estado das tarefas T-Q1" mais abaixo; a jornada pedida pelo cliente está no
+> [ADR-013](../decisoes/ADR-013-jornada-quick-service-retirada.md).
+>
+> ~~Q1 é AUSENTE no banco e no servidor~~ — já não é: existem código de retirada, slots, gate de
+> pagamento, conferência e confirmação de retirada. Falta a jornada de aceite, retirada com
+> validação real, tolerância, estornos e o painel do restaurante.
 
 ---
 
@@ -15,6 +21,38 @@
 > `v2/QuickServiceScreen.tsx`. Backend existente: só
 > `20260815220807_quick_service_cuisine_and_skip_the_line.sql` (tags + toggle) e
 > `20260815224634_quick_service_custom_combo.sql` (combo por matching de texto).
+
+### Estado das tarefas T-Q1 (2026-10-01, após ADR-013)
+
+| Tarefa | Estado | Observação |
+|---|---|---|
+| 01 Código de retirada | Feito | Aleatório, único por restaurante por dia; o painel valida o código lido ou digitado (ADR-013 §2.7) |
+| 02 Capacidade por janela | Parcial | Capacidade existe; falta oferecer o próximo horário |
+| 03 `combo_definitions` | Aberta | |
+| 04 Desconto de combo da configuração | Feito | `ComboBuilderScreen` usa `policies.comboDiscountBps`; extra de personalização entra sem desconto (ADR-013 §2.9) |
+| 05 Quatro etapas + conferência | Feito | Painel com abas Novos, Em preparo (com conferência), Aguardando retirada, Retirados, Não retirados e Agendados; cliente vê as etapas do ADR-013 §2.2 |
+| 06 Gate de pagamento | Feito | Passa a exigir também `accepted` (ADR-013 §2.4) |
+| 07 Tempo estimado | Parcial | `private.quick_estimated_prep_minutes` (padrão + fila); falta recalcular por item |
+| 08 Ciclo pagamento → retirada | Parcial | `order_status_events` grava cada transição com horário; falta o relatório do ciclo |
+| 09 Não retirado | Feito | ADR-013 §2.3; política `none` ou `store_credit` |
+| 10 Item indisponível após pagamento | Feito | Estorno parcial no servidor, com `audit_log` (ADR-013 §2.5) |
+| 11 KDS offline | Aberta | |
+| 12 SLA proativo | Aberta | |
+| 13 Erro de montagem volta à estação | Feito | Reprovar na conferência devolve só o item apontado |
+| 14 Cupons e pontos | Aberta | |
+| 15 Modo de retirada e balcão | Feito | `consumption_mode` e `pickup_location`; o push de pronto traz o balcão |
+| 16 Recompra | Feito | "Pedir novamente" recalcula preço e personalização com o cardápio de hoje |
+| 17 Fila visível antes de pedir | Feito | `customer_quick_service_status`: estado, fila, tempo estimado e local de retirada |
+
+### T-Q1-18 · NOVO — Jornada de pedido antecipado (ADR-013)
+**Tipo** banco/servidor/app/painel **Tamanho** G **Depende de** T-Q1-01, T-Q1-06
+**Origem** Resposta do cliente: o QS substitui o totem de autoatendimento.
+**Escopo** Ações da tela do restaurante por capability (`orderAhead`); nome para chamada; comer aqui ou
+levar; agora ou agendar; política de não retirada aceita no checkout; Pix com expiração; aceite
+automático ou manual com timeout; etapas Pago → Aceito → Em preparo → Pronto → Retirado; retirada por
+QR ou código validado; tolerância 15–60 a partir de "pronto"; Não retirado; estornos; pausa de pedidos;
+duplicado; `order_status_events`.
+**Aceite** Cada regra do ADR-013 tem teste (SQL ou Jest). A retirada só conclui com o código do cliente.
 
 ### T-Q1-01 · NOVO — Código de retirada
 **Tipo** banco/servidor **Tamanho** M

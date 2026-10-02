@@ -19,6 +19,14 @@ begin
   update public.restaurant_model_configs set
     service_models=array['casual_dining','quick_service']::public.noowe_service_model[],
     pickup_capacity_per_slot=2,loyalty_mode='mixed' where restaurant_id=r;
+  -- ADR-013: pedido Quick só entra com o restaurante aberto e fora da janela de encerramento.
+  update public.restaurants set opening_hours=(
+    select jsonb_object_agg(d,jsonb_build_object('closed',false,
+      'shifts',jsonb_build_array(jsonb_build_object('open','00:00','close','23:59'))))
+    from unnest(array['sunday','monday','tuesday','wednesday','thursday','friday','saturday']) d
+  ) where id=r;
+  update public.restaurant_model_policies set close_orders_before_min=0
+    where restaurant_id=r and service_model='quick_service';
   select service_models into models from public.restaurant_model_configs where restaurant_id=r;
   assert 'quick_service'::public.noowe_service_model=any(models);
   select id into menu from public.menu_items where restaurant_id=r and is_available limit 1;
@@ -26,7 +34,8 @@ begin
 
   perform pg_temp.act(c);
   result:=public.customer_create_order_v2(r,'quick_service',
-    jsonb_build_array(jsonb_build_object('menu_item_id',menu,'quantity',1)),gen_random_uuid());
+    jsonb_build_array(jsonb_build_object('menu_item_id',menu,'quantity',1)),gen_random_uuid(),
+    null,null,null,'Cliente','takeaway',true);
   insert into _runtime values('order',(result->>'id')::uuid);
 end $$;
 
@@ -53,7 +62,7 @@ select is(
 do $$ declare result jsonb;
 begin
   perform pg_temp.act((select v from _runtime where k='customer'));
-  result:=public.customer_start_payment((select v from _runtime where k='order'),'pix',gen_random_uuid());
+  result:=public.customer_start_payment((select v from _runtime where k='order'),'credit_card',gen_random_uuid());
   assert result->>'paymentStatus'='confirmed';
   assert (select payment_status from public.orders where id=(select v from _runtime where k='order'))='confirmed';
   assert (select count(*) from public.payment_provider_events where gateway_transaction_id=(result->>'transactionId')::uuid)=1;

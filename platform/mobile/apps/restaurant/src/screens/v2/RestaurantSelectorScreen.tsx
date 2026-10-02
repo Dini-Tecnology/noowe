@@ -12,6 +12,7 @@ export default function RestaurantSelectorScreen() {
     : restaurants.length === 0
       ? [{ icon: Store, label: 'Nenhuma unidade vinculada à sua conta' }]
       : restaurants.map((restaurant) => ({
+          id: restaurant.id,
           icon: restaurant.id === restaurantId ? Check : Store,
           label: restaurant.name,
           subtitle: restaurant.id === restaurantId

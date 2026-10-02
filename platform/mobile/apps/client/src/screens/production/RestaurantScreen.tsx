@@ -9,6 +9,9 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend, { type CustomerRestaurant } from '../../services/customer-backend';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
+import { useQuickReorder } from '../../hooks/useQuickReorder';
+import { useCart } from '@/shared/contexts/CartContext';
+import { isActiveQuickOrder, quickJourneyKeys } from './quick-service-ui';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { FloatingCartBar } from '../../components/cart/FloatingCartBar';
 import { StateView, useQueryRefreshControl, tableLabel } from './shared';
@@ -74,7 +77,23 @@ export default function RestaurantScreen({ route, navigation }: any) {
     queryFn: () => customerBackend.getRestaurantLiveStatus(restaurantId),
     staleTime: 60 * 1000,
   });
-  const refreshControl = useQueryRefreshControl([query, liveStatus]);
+  const orderAhead = serviceTypeFor.capabilities?.orderAhead === true;
+  const pickupSlots = serviceTypeFor.capabilities?.pickupSlots === true;
+  // Quick Service (ADR-013): estado de pedidos, tempo de preparo, local de retirada e histórico aqui.
+  const quickStatus = useQuery({
+    queryKey: ['quick-status', restaurantId],
+    queryFn: async () => (await customerBackend.getQuickServiceStatus([restaurantId]))[restaurantId] ?? null,
+    enabled: orderAhead,
+    staleTime: 30 * 1000,
+  });
+  const myOrders = useQuery({
+    queryKey: ['orders', 'restaurant', restaurantId],
+    queryFn: () => customerBackend.listOrders(20),
+    enabled: orderAhead,
+    select: (page) => page.data.filter((order) => order.restaurantId === restaurantId && order.serviceModel === 'quick_service'),
+    staleTime: 15 * 1000,
+  });
+  const refreshControl = useQueryRefreshControl([query, liveStatus, ...(orderAhead ? [quickStatus, myOrders] : [])]);
   const favoritesQuery = useQuery({ queryKey: ['favorites'], queryFn: () => customerBackend.listFavorites() });
   const isFavorite = favoritesQuery.data?.some((item) => item.id === restaurantId) ?? false;
   // Optimistic toggle: the heart flips instantly so a double-tap doesn't cause
@@ -104,6 +123,8 @@ export default function RestaurantScreen({ route, navigation }: any) {
   });
   const toggleFavorite = useCallback(() => favorite.mutate(!isFavorite), [favorite, isFavorite]);
   const { session, leaveTable: leaveCurrentTable } = useVisitSession();
+  const cart = useCart();
+  const { reorder } = useQuickReorder(navigation);
 
   const openMenu = useCallback(() => navigation.navigate('Menu', { restaurantId }), [navigation, restaurantId]);
   const openReserve = useCallback(
@@ -139,6 +160,23 @@ export default function RestaurantScreen({ route, navigation }: any) {
     );
   }, [session, leaveCurrentTable]);
 
+  const startQuickOrder = useCallback((intent: 'now' | 'scheduled') => {
+    const state = quickStatus.data;
+    if (state && !state.acceptingOrders) {
+      const reason = state.state === 'paused' ? 'O restaurante pausou os pedidos por enquanto.'
+        : state.state === 'closing' ? 'O restaurante já encerrou os pedidos de hoje.'
+        : 'O restaurante não está aceitando pedidos agora.';
+      Alert.alert('Pedidos indisponíveis', `${reason} Você ainda pode ver o cardápio.`);
+      return;
+    }
+    cart.setPickupIntent?.(intent);
+    navigation.navigate('Menu', { restaurantId });
+  }, [quickStatus.data, cart, navigation, restaurantId]);
+
+  const orders = myOrders.data ?? [];
+  const activeQuickOrder = orders.find(isActiveQuickOrder);
+  const lastQuickOrder = orders[0];
+
   // Escanear QR · Reservar · Fila Virtual — each one appears only where the
   // restaurant's capabilities enable that entry point. Chamar garçom não entra
   // aqui: é ação de quem já está sentado, não de quem está decidindo entrar.
@@ -153,8 +191,23 @@ export default function RestaurantScreen({ route, navigation }: any) {
     if (serviceTypeFor.features.virtualQueue) {
       actions.push({ key: 'waitlist', icon: 'timer-outline', label: 'Fila Virtual', onPress: openWaitlist });
     }
+    // Quick Service (ADR-013): as ações do "totem no app" vêm das capabilities orderAhead /
+    // pickupSlots, nunca do nome do modelo.
+    for (const key of quickJourneyKeys({
+      orderAhead, pickupSlots, hasActiveOrder: !!activeQuickOrder, hasPastOrder: !!lastQuickOrder,
+    })) {
+      if (key === 'order') {
+        actions.unshift({ key, variant: 'primary', icon: 'restaurant-outline', label: 'Fazer pedido', onPress: () => startQuickOrder('now') });
+      } else if (key === 'schedule') {
+        actions.push({ key, icon: 'time-outline', label: 'Agendar retirada', onPress: () => startQuickOrder('scheduled') });
+      } else if (key === 'my_orders' && activeQuickOrder) {
+        actions.push({ key, icon: 'receipt-outline', label: 'Meus pedidos', onPress: () => navigation.navigate('OrderDetail', { orderId: activeQuickOrder.id }) });
+      } else if (key === 'reorder' && lastQuickOrder) {
+        actions.push({ key, icon: 'refresh-outline', label: 'Pedir novamente', onPress: () => { void reorder(lastQuickOrder); } });
+      }
+    }
     return actions;
-  }, [serviceTypeFor.features, openScanner, openReserve, openWaitlist]);
+  }, [serviceTypeFor.features, openScanner, openReserve, openWaitlist, orderAhead, pickupSlots, activeQuickOrder, lastQuickOrder, startQuickOrder, navigation, reorder]);
 
   const activeSessionHere = session?.restaurantId === restaurantId && !!session?.tableSessionId;
 
@@ -233,6 +286,9 @@ export default function RestaurantScreen({ route, navigation }: any) {
         isFavorite={isFavorite}
         favoritePending={favorite.isPending}
         journeyActions={journeyActions}
+        quickStatus={quickStatus.data}
+        showQuickInfo={orderAhead}
+        showOccupancy={serviceTypeFor.capabilities?.tableSession !== false}
         activeSessionHere={activeSessionHere}
         tableNumber={session?.tableNumber}
         refreshControl={refreshControl}

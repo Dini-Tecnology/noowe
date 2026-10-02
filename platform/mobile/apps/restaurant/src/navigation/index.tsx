@@ -86,6 +86,7 @@ import CapacityRequestsScreen from '../screens/v2/CapacityRequestsScreen';
 import CasualDiningScreen from '../screens/v2/CasualDiningScreen';
 import FineDiningScreen from '../screens/v2/FineDiningScreen';
 import QuickServiceScreen from '../screens/v2/QuickServiceScreen';
+import QuickOrdersScreen from '../screens/v2/QuickOrdersScreen';
 import RestaurantProfileScreen from '../screens/v2/RestaurantProfileScreen';
 import BusinessHoursScreen from '../screens/v2/BusinessHoursScreen';
 import NotificationSettingsScreen from '../screens/v2/NotificationSettingsScreen';
@@ -212,6 +213,10 @@ const GuardedConfigMarketplace = withRoleGuard(ConfigMarketplaceScreen, ['owner'
 const GuardedWaiter = withRoleGuard(WaiterScreen, ['owner', 'manager', 'waiter', 'maitre']);
 const GuardedWaiterTapToPay = withRoleGuard(WaiterTapToPayScreen, ['owner', 'manager', 'waiter']);
 const GuardedBarKDS = withRoleGuard(BarKDSScreen, ['owner', 'manager', 'barman', 'chef']);
+// Configuração do Quick muda regras de dinheiro (tolerância, estorno): só dono e gerente.
+const GuardedQuickService = withRoleGuard(QuickServiceScreen, ['owner', 'manager']);
+// Painel de pedidos: quem atende o balcão. O servidor decide quem cancela depois do preparo.
+const GuardedQuickOrders = withRoleGuard(QuickOrdersScreen, ['owner', 'manager', 'chef', 'cook', 'waiter', 'maitre']);
 const GuardedMaitre = withRoleGuard(MaitreScreen, ['owner', 'manager', 'maitre']);
 const GuardedKitchen = withRoleGuard(KitchenDisplayScreen, ['owner', 'manager', 'chef', 'cook']);
 const GuardedMenu = withRoleGuard(MenuScreen, ['owner', 'manager', 'chef']);
@@ -516,7 +521,8 @@ function MainStack() {
       <Stack.Screen name="CapacityRequests" component={JourneyCapacityRequests} options={scaleFadeScreenOptions} />
       <Stack.Screen name="CasualDining" component={CasualDiningScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="FineDining" component={FineDiningScreen} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="QuickService" component={QuickServiceScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="QuickService" component={GuardedQuickService} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="QuickOrders" component={GuardedQuickOrders} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RestaurantProfile" component={GuardedRestaurantProfile} options={scaleFadeScreenOptions} />
       <Stack.Screen name="UserAccount" component={UserAccountScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RestaurantSelector" component={RestaurantSelectorScreen} options={scaleFadeScreenOptions} />

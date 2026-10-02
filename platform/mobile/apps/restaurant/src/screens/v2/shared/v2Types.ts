@@ -14,6 +14,8 @@ export interface TabOrder {
   status: OrderStatus;
   /** Real backend status (pending/confirmed/preparing/ready/…), before collapsing to OrderStatus. */
   rawStatus: string;
+  /** `pickup` = pedido de retirada (Quick Service): vai pelo painel Quick, não pelas ações de salão. */
+  orderType?: string | null;
   customerName?: string;
   notes?: string;
   createdAt?: string;

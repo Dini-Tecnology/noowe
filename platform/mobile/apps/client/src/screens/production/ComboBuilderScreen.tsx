@@ -7,12 +7,20 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useCart } from '@/shared/contexts/CartContext';
 import customerBackend, { type CustomerMenuItem } from '../../services/customer-backend';
+import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { money, StateView } from './shared';
+import { comboDiscountAmount } from './quick-service-ui';
+import { ItemCustomizationSheet } from '../../components/menu/ItemCustomizationPicker';
+import {
+  hasChoices,
+  selectionDeltaCents,
+  selectionPayload,
+  selectionSummary,
+  type CustomizationSelection,
+} from '../../utils/item-customization';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&q=80';
-
-const DISCOUNT_PERCENT = 20;
 
 /**
  * The 3 pools a combo is built from. Matched by category name — the same
@@ -43,6 +51,19 @@ export default function ComboBuilderScreen({ route, navigation }: any) {
     queryFn: () => customerBackend.getMenu(restaurantId!),
     enabled: !!restaurantId,
   });
+  // ADR-013 §2.9: item de etapa com opções abre a personalização antes de entrar no combo.
+  const customizations = useQuery({
+    queryKey: ['menu-customizations', restaurantId],
+    queryFn: () => customerBackend.getMenuCustomizations(restaurantId!),
+    enabled: !!restaurantId,
+  });
+  const configOf = useCallback((itemId: string) => customizations.data?.[itemId] ?? null, [customizations.data]);
+  const [stepChoices, setStepChoices] = useState<Partial<Record<StepKey, CustomizationSelection>>>({});
+  const [customizing, setCustomizing] = useState<{ key: StepKey; item: CustomerMenuItem } | null>(null);
+
+  // O desconto é da política do restaurante (comboDiscountBps), não um literal da tela.
+  const { policies } = useServiceTypeFor(restaurantId, 'quick_service');
+  const discountBps = policies?.comboDiscountBps ?? 0;
 
   const step = STEPS[stepIndex];
 
@@ -63,8 +84,13 @@ export default function ComboBuilderScreen({ route, navigation }: any) {
   const selectedItems = [selection.lanche, selection.acompanhamento, selection.bebida];
   const allSelected = selectedItems.every(Boolean);
   const subtotal = selectedItems.reduce((sum, item) => sum + (item?.price ?? 0), 0);
-  const discount = subtotal * (DISCOUNT_PERCENT / 100);
-  const total = subtotal - discount;
+  const discount = comboDiscountAmount(subtotal, discountBps);
+  // Extras entram cheios, sem o desconto do combo — o mesmo que o servidor cobra (ADR-013 §2.9).
+  const extrasCents = STEPS.reduce((sum, s) => {
+    const item = selection[s.key];
+    return sum + (item ? selectionDeltaCents(configOf(item.id), stepChoices[s.key] ?? { options: [], removed: [] }) : 0);
+  }, 0);
+  const total = (Math.round((subtotal - discount) * 100) + extrasCents) / 100;
   const isLastStep = stepIndex === STEPS.length - 1;
   const canAdvance = !!selection[step.key];
 
@@ -77,10 +103,21 @@ export default function ComboBuilderScreen({ route, navigation }: any) {
   const addComboToCart = useCallback(() => {
     if (!restaurantId || !selection.lanche || !selection.acompanhamento || !selection.bebida) return;
     cart.setRestaurant(restaurantId, restaurant.data?.name ?? 'Quick Service');
+    const picked = { lanche: selection.lanche, acompanhamento: selection.acompanhamento, bebida: selection.bebida };
+    const stepCustomizations: Partial<Record<StepKey, { options: string[]; removed: string[] }>> = {};
+    const summaries: string[] = [];
+    for (const s of STEPS) {
+      const payload = selectionPayload(stepChoices[s.key]);
+      if (!payload) continue;
+      stepCustomizations[s.key] = payload;
+      const text = selectionSummary(configOf(picked[s.key].id), payload);
+      if (text) summaries.push(`${picked[s.key].name}: ${text}`);
+    }
     cart.addItem({
       menu_item_id: selection.lanche.id,
       name: `Combo: ${selection.lanche.name} + ${selection.acompanhamento.name} + ${selection.bebida.name}`,
       price: total,
+      customization_summary: summaries.length ? summaries.join(' / ') : undefined,
       quantity: 1,
       image_url: selection.lanche.imageUrl ?? undefined,
       preparation_time: Math.max(
@@ -92,14 +129,22 @@ export default function ComboBuilderScreen({ route, navigation }: any) {
         lancheItemId: selection.lanche.id,
         acompanhamentoItemId: selection.acompanhamento.id,
         bebidaItemId: selection.bebida.id,
+        // Preço de lista inclui os extras, para o carrinho mostrar só o desconto do combo.
+        listPrice: (Math.round((selection.lanche.price + selection.acompanhamento.price + selection.bebida.price) * 100) + extrasCents) / 100,
+        ...(Object.keys(stepCustomizations).length ? { customizations: stepCustomizations } : {}),
       },
     });
     navigation.replace('Cart');
-  }, [cart, navigation, restaurant.data?.name, restaurantId, selection, total]);
+  }, [cart, configOf, extrasCents, navigation, restaurant.data?.name, restaurantId, selection, stepChoices, total]);
 
   const selectItem = useCallback((key: StepKey, item: CustomerMenuItem) => {
+    if (hasChoices(configOf(item.id))) {
+      setCustomizing({ key, item });
+      return;
+    }
     setSelection((current) => ({ ...current, [key]: item }));
-  }, []);
+    setStepChoices((current) => ({ ...current, [key]: undefined }));
+  }, [configOf]);
 
   const goNext = useCallback(() => {
     if (!canAdvance) return;
@@ -266,9 +311,15 @@ export default function ComboBuilderScreen({ route, navigation }: any) {
               <Text style={[styles.summaryValue, styles.summaryValueStrike]}>{money(subtotal)}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Desconto combo (-{DISCOUNT_PERCENT}%)</Text>
+              <Text style={styles.summaryLabel}>Desconto combo (-{discountBps / 100}%)</Text>
               <Text style={[styles.summaryValue, styles.summaryValueDiscount]}>-{money(discount)}</Text>
             </View>
+            {extrasCents > 0 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Adicionais</Text>
+                <Text style={styles.summaryValue}>+{money(extrasCents / 100)}</Text>
+              </View>
+            )}
             <View style={styles.divider} />
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Combo</Text>
@@ -292,6 +343,20 @@ export default function ComboBuilderScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
       </View>
+      <ItemCustomizationSheet
+        key={customizing ? `${customizing.key}:${customizing.item.id}` : 'none'}
+        item={customizing?.item ?? null}
+        config={customizing ? configOf(customizing.item.id) : null}
+        initial={customizing && selection[customizing.key]?.id === customizing.item.id ? stepChoices[customizing.key] : undefined}
+        confirmLabel="Escolher"
+        onClose={() => setCustomizing(null)}
+        onConfirm={(choice) => {
+          if (!customizing) return;
+          setSelection((current) => ({ ...current, [customizing.key]: customizing.item }));
+          setStepChoices((current) => ({ ...current, [customizing.key]: choice }));
+          setCustomizing(null);
+        }}
+      />
     </ScreenContainer>
   );
 }

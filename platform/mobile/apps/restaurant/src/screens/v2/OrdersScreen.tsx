@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { Alert, View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Text } from 'react-native-paper';
 import { Clock, Check, ChefHat, Truck, X, Info, Play } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import ApiService from '@okinawa/shared/services/api';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { V2Shell } from './shared/V2Shell';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2DetailDialog } from './shared/V2DetailDialog';
@@ -42,6 +44,7 @@ function nextStatus(action: PendingAction['action']): 'confirmed' | OrderStatus 
 
 export default function OrdersScreen() {
   const colors = useColors();
+  const navigation = useNavigation<any>();
   const [activeTab, setActiveTab] = useState<OrdersTab>('all');
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [detailOrder, setDetailOrder] = useState<TabOrder | null>(null);
@@ -71,6 +74,8 @@ export default function OrdersScreen() {
       }
       await refresh();
       setPendingAction(null);
+    } catch (err) {
+      Alert.alert('Não foi possível concluir', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -150,7 +155,19 @@ export default function OrdersScreen() {
           ))}
           <View style={[styles.footer, { borderTopColor: colors.border }]}>
             <Text style={{ fontWeight: '700', color: colors.primary }}>R$ {order.total.toFixed(2)}</Text>
-            {order.rawStatus === 'pending' && (
+            {order.orderType === 'pickup' && (
+              // Pedido de retirada: aceite, conferência, retirada por código e estorno vivem no painel Quick.
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.primary }]}
+                onPress={() => navigation.navigate('QuickOrders')}
+                accessibilityRole="button"
+                accessibilityLabel="Abrir painel de pedidos Quick"
+              >
+                <Play size={16} color="#FFF" />
+                <Text style={styles.btnText}>Abrir painel Quick</Text>
+              </TouchableOpacity>
+            )}
+            {order.orderType !== 'pickup' && order.rawStatus === 'pending' && (
               <View style={styles.actions}>
                 <TouchableOpacity
                   style={styles.iconBtn}
@@ -167,7 +184,7 @@ export default function OrdersScreen() {
                 </TouchableOpacity>
               </View>
             )}
-            {order.rawStatus === 'confirmed' && (
+            {order.orderType !== 'pickup' && order.rawStatus === 'confirmed' && (
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#F59E0B' }]}
                 onPress={() => setPendingAction({ orderId: order.id, action: 'prepare' })}
@@ -176,7 +193,7 @@ export default function OrdersScreen() {
                 <Text style={styles.btnText}>Preparar</Text>
               </TouchableOpacity>
             )}
-            {(order.rawStatus === 'preparing' || order.rawStatus === 'open_for_additions') && (
+            {order.orderType !== 'pickup' && (order.rawStatus === 'preparing' || order.rawStatus === 'open_for_additions') && (
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#22C55E' }]}
                 onPress={() => setPendingAction({ orderId: order.id, action: 'ready' })}
@@ -185,7 +202,7 @@ export default function OrdersScreen() {
                 <Text style={styles.btnText}>Marcar como Pronto</Text>
               </TouchableOpacity>
             )}
-            {order.rawStatus === 'ready' && (
+            {order.orderType !== 'pickup' && order.rawStatus === 'ready' && (
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: '#8B5CF6' }]}
                 onPress={() => setPendingAction({ orderId: order.id, action: 'deliver' })}

@@ -16,6 +16,9 @@ export type ConsumptionUnit = 'table_with_guests' | 'per_person' | 'individual_c
 /** Spec §6 "Acompanhamento": what the customer follows after ordering. */
 export type OrderTrackingMode = 'item_with_preparer' | 'table_order' | 'pickup_steps';
 export type StaffCallType = 'waiter' | 'sommelier' | 'help' | 'bill';
+/** ADR-013 §2.3: o que acontece com um pedido pronto que o cliente não retirou. */
+export type NoPickupPolicy = 'none' | 'store_credit';
+export type AcceptMode = 'auto' | 'manual';
 
 export type RestaurantCapabilities = {
   /** Contract schema version. Consumers must fail closed on unknown versions. */
@@ -41,6 +44,8 @@ export type RestaurantCapabilities = {
   parties: boolean;
   comboBuilder: boolean;
   prepaidRequired: boolean;
+  /** ADR-013: o cliente pede, paga e retira pelo app, sem mesa (substitui o totem). */
+  orderAhead: boolean;
   pickupCode: boolean;
   pickupSlots: boolean;
   qualityCheck: boolean;
@@ -67,6 +72,16 @@ export type RestaurantCapabilityPolicies = {
   pickupCapacityPerSlot: number | null;
   pickupExpiryMin: number | null;
   stampsPerReward: number | null;
+  /** ADR-013 — regras de aceite, retirada e pagamento do Quick Service. */
+  noPickupPolicy: NoPickupPolicy | null;
+  acceptMode: AcceptMode | null;
+  acceptTimeoutMin: number | null;
+  ordersPaused: boolean;
+  defaultPrepMin: number | null;
+  closeOrdersBeforeMin: number | null;
+  pixExpiryMin: number | null;
+  distanceWarningKm: number | null;
+  pickupLocation: string | null;
 };
 
 export type RestaurantCapabilityContract = {
@@ -154,7 +169,29 @@ export function parseRestaurantCapabilityContract(value: unknown): RestaurantCap
   if (policies.splitFixedRemainder !== null && policies.splitFixedRemainder !== 'redistribute_unpaid' && policies.splitFixedRemainder !== 'keep_on_table') return null;
   if (policies.tipAllocation !== null && policies.tipAllocation !== 'table_waiter' && policies.tipAllocation !== 'team_pool') return null;
 
-  return value as RestaurantCapabilityContract;
+  // ADR-013: campos novos são opcionais no contrato — um servidor anterior à
+  // migration de 2026-10-01 não os envia, e isso não pode derrubar o app.
+  const optionalNumber = (field: string): number | null => {
+    const raw = policies[field];
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+  };
+  return {
+    ...(value as RestaurantCapabilityContract),
+    capabilities: { ...(capabilities as unknown as RestaurantCapabilities), orderAhead: capabilities.orderAhead === true },
+    policies: {
+      ...(policies as unknown as RestaurantCapabilityPolicies),
+      noPickupPolicy: policies.noPickupPolicy === 'none' || policies.noPickupPolicy === 'store_credit'
+        ? policies.noPickupPolicy : null,
+      acceptMode: policies.acceptMode === 'auto' || policies.acceptMode === 'manual' ? policies.acceptMode : null,
+      acceptTimeoutMin: optionalNumber('acceptTimeoutMin'),
+      ordersPaused: policies.ordersPaused === true,
+      defaultPrepMin: optionalNumber('defaultPrepMin'),
+      closeOrdersBeforeMin: optionalNumber('closeOrdersBeforeMin'),
+      pixExpiryMin: optionalNumber('pixExpiryMin'),
+      distanceWarningKm: optionalNumber('distanceWarningKm'),
+      pickupLocation: typeof policies.pickupLocation === 'string' && policies.pickupLocation ? policies.pickupLocation : null,
+    },
+  };
 }
 
 /** Bridges the server contract to existing screens without deciding by model. */

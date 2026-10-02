@@ -12,6 +12,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend, { type DigitalReceipt, type PaymentMethodType } from '../../services/customer-backend';
 import { rootNavigate, StateView } from './shared';
+import { quickReceiptFromOrder } from './quick-receipt';
 
 const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
@@ -49,14 +50,14 @@ function receiptHtml(receipt: DigitalReceipt): string {
         <hr style="border:none;border-top:1px solid #eee;margin:16px 0;" />
         <table style="width:100%;border-collapse:collapse;">
           <tr><td>Subtotal</td><td style="text-align:right;">${money(receipt.subtotal)}</td></tr>
-          <tr><td>Taxa de serviço (${receipt.serviceFeePercent}%)</td><td style="text-align:right;">${money(receipt.serviceFee)}</td></tr>
+          ${receipt.serviceFeePercent > 0 || receipt.serviceFee > 0 ? `<tr><td>Taxa de serviço (${receipt.serviceFeePercent}%)</td><td style="text-align:right;">${money(receipt.serviceFee)}</td></tr>` : ''}
           ${receipt.discount > 0 ? `<tr><td>${receipt.discountReason ?? 'Desconto'}</td><td style="text-align:right;color:#16A34A;">-${money(receipt.discount)}</td></tr>` : ''}
           ${receipt.tip > 0 ? `<tr><td>Gorjeta</td><td style="text-align:right;">${money(receipt.tip)}</td></tr>` : ''}
           <tr><td style="font-weight:700;padding-top:8px;">Total</td><td style="text-align:right;font-weight:700;padding-top:8px;">${money(receipt.total + receipt.tip)}</td></tr>
         </table>
         <hr style="border:none;border-top:1px solid #eee;margin:16px 0;" />
         <p style="font-size:13px;color:#444;">
-          Pagamento: ${PAYMENT_METHOD_LABELS[receipt.paymentMethod] ?? receipt.paymentMethod}<br/>
+          ${receipt.paymentMethod ? `Pagamento: ${PAYMENT_METHOD_LABELS[receipt.paymentMethod] ?? receipt.paymentMethod}<br/>` : 'Pagamento confirmado<br/>'}
           ${receipt.cashback > 0 ? `Cashback ganho: +${money(receipt.cashback)}<br/>` : ''}
           ${receipt.pointsAwarded > 0 ? `Pontos ganhos: +${receipt.pointsAwarded} pts<br/>` : ''}
         </p>
@@ -72,12 +73,16 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const receiptId: string | undefined = route?.params?.receiptId;
+  // Quick Service: o comprovante nasce do próprio pedido, não de um recibo de mesa.
+  const orderId: string | undefined = route?.params?.orderId;
   const [exporting, setExporting] = useState(false);
 
   const query = useQuery({
-    queryKey: ['receipt', receiptId],
-    queryFn: () => customerBackend.getReceipt(receiptId!),
-    enabled: !!receiptId,
+    queryKey: ['receipt', receiptId ?? orderId],
+    queryFn: async () => (receiptId
+      ? customerBackend.getReceipt(receiptId)
+      : quickReceiptFromOrder(await customerBackend.getOrder(orderId!))),
+    enabled: !!receiptId || !!orderId,
   });
   const receipt = query.data;
 
@@ -201,10 +206,12 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
               <Text style={styles.summaryLabel}>Subtotal</Text>
               <Text style={styles.summaryValue}>{money(receipt.subtotal)}</Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Taxa de serviço ({receipt.serviceFeePercent}%)</Text>
-              <Text style={styles.summaryValue}>{money(receipt.serviceFee)}</Text>
-            </View>
+            {(receipt.serviceFeePercent > 0 || receipt.serviceFee > 0) && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Taxa de serviço ({receipt.serviceFeePercent}%)</Text>
+                <Text style={styles.summaryValue}>{money(receipt.serviceFee)}</Text>
+              </View>
+            )}
             {receipt.discount > 0 && (
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>{receipt.discountReason ?? 'Desconto'}</Text>
@@ -228,7 +235,7 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
             <View style={styles.infoBox}>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Pagamento</Text>
-                <Text style={styles.infoValue}>{PAYMENT_METHOD_LABELS[receipt.paymentMethod] ?? receipt.paymentMethod}</Text>
+                <Text style={styles.infoValue}>{receipt.paymentMethod ? (PAYMENT_METHOD_LABELS[receipt.paymentMethod] ?? receipt.paymentMethod) : 'Confirmado'}</Text>
               </View>
               {receipt.cashback > 0 && (
                 <View style={styles.infoRow}>

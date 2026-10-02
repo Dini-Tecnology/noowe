@@ -42,7 +42,7 @@ import {
 } from './home-restaurant-ui';
 import { DISCOVERY_FILTERS } from './casual-dining-ui';
 import { FINE_DINING_FILTERS } from './fine-dining-ui';
-import { QUICK_SERVICE_FILTERS, type QuickServiceFilterKey } from './quick-service-ui';
+import { QUICK_SERVICE_FILTERS, quickListLine, type QuickServiceFilterKey } from './quick-service-ui';
 import { useRestorePaymentConfirmation } from '../../hooks/useRestorePaymentConfirmation';
 import { distanceKm, restaurantRowStyles, rootNavigate, StateView, useQueryRefreshControl, tableLabel } from './shared';
 
@@ -194,6 +194,15 @@ export default function HomeScreen({ navigation }: any) {
   const serviceTypeCatalog = useQuery({
     queryKey: ['restaurants', 'service-types', search],
     queryFn: () => customerBackend.listRestaurants({ search, limit: 50 }),
+  });
+  // Estado de pedidos e tempo de preparo (ADR-013). O servidor só responde pelos restaurantes
+  // que têm pedido antecipado; para os demais a linha simplesmente não existe.
+  const listedIds = (restaurants.data?.data ?? []).map((r) => r.id);
+  const quickStatuses = useQuery({
+    queryKey: ['quick-status-batch', listedIds.join(',')],
+    queryFn: () => customerBackend.getQuickServiceStatus(listedIds),
+    enabled: listedIds.length > 0,
+    staleTime: 30 * 1000,
   });
   const unread = useQuery({
     queryKey: ['notifications', 'unread'],
@@ -727,6 +736,17 @@ export default function HomeScreen({ navigation }: any) {
                   <View style={styles.nearbyInfo}>
                     <Text style={styles.nearbyName}>{item.name}</Text>
                     <Text style={styles.nearbySub}>{subtitle}</Text>
+                    {(() => {
+                      const line = quickListLine(quickStatuses.data?.[item.id]);
+                      return line ? (
+                        <Text
+                          style={[styles.nearbySub, { color: line.tone === 'ok' ? colors.success : colors.foregroundSecondary, fontWeight: '600' }]}
+                          numberOfLines={1}
+                        >
+                          {line.text}
+                        </Text>
+                      ) : null;
+                    })()}
                   </View>
                   <View style={styles.nearbyTrailing}>
                     <View style={styles.nearbyRating}>

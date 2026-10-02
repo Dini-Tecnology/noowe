@@ -138,7 +138,7 @@ export const SERVICE_TYPE_CATALOG: ServiceTypeDef[] = [
     id: 'quick_service',
     name: 'Quick Service',
     desc: 'Skip the line, pickup rápido',
-    features: ['Skip the Line', 'Tracking 4 Estágios'],
+    features: ['Skip the Line', 'Acompanhamento por etapas'],
     Icon: Zap,
     mvp: true,
   },

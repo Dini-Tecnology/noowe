@@ -15,6 +15,18 @@ import { casualDiningConfigOf } from './casual-dining-ui';
 import { money, rootNavigate, StateView, useQueryRefreshControl } from './shared';
 import { FeatureUnavailableMessage } from '../../components/ServiceTypeAdapter';
 import CasualDiningItemDetail from './CasualDiningItemDetail';
+import { ItemCustomizationPicker } from '../../components/menu/ItemCustomizationPicker';
+import {
+  EMPTY_SELECTION,
+  hasChoices,
+  missingGroups,
+  selectionDeltaCents,
+  selectionPayload,
+  selectionSummary,
+  unitPriceWithExtras,
+  type CustomizationSelection,
+  type ItemCustomizationConfig,
+} from '../../utils/item-customization';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&q=80';
@@ -46,6 +58,18 @@ export default function MenuScreen({ route, navigation }: any) {
     queryFn: () => customerBackend.getMenu(restaurantId!),
     enabled: !!restaurantId,
   });
+  // ADR-013 §2.9: grupos de opções, ingredientes removíveis e upsell. Se a leitura falhar, o
+  // cardápio continua; o servidor recusa com mensagem clara o item que exige escolha.
+  const customizations = useQuery({
+    queryKey: ['menu-customizations', restaurantId],
+    queryFn: () => customerBackend.getMenuCustomizations(restaurantId!),
+    enabled: !!restaurantId && features.ordering,
+  });
+  const customizationOf = useCallback(
+    (itemId: string | undefined): ItemCustomizationConfig | null =>
+      (itemId && customizations.data?.[itemId]) || null,
+    [customizations.data],
+  );
   const diners = useQuery({
     queryKey: ['table-diners', tableSessionId],
     queryFn: () => customerBackend.listTableDiners(tableSessionId!),
@@ -78,29 +102,60 @@ export default function MenuScreen({ route, navigation }: any) {
   const showComboBuilder = capabilities?.comboBuilder === true && !!combosCategoryId && selectedCategory === combosCategoryId;
   const comboDiscountLabel = policies?.comboDiscountBps ? ` com ${policies.comboDiscountBps / 100}% off` : '';
 
-  const add = useCallback(
-    (item: CustomerMenuItem, quantity = 1) => {
-      if (!features.ordering) return;
-      cart.setRestaurant(restaurantId, restaurant.data?.name ?? 'Restaurante');
-      cart.addItem({ menu_item_id: item.id, name: item.name, price: item.price, quantity, image_url: item.imageUrl ?? undefined, preparation_time: item.preparationTime });
-      Toast.show({ type: 'success', text1: 'Adicionado à comanda', text2: `${quantity}x ${item.name}`, visibilityTime: 1800 });
-    },
-    [cart, features.ordering, restaurant.data, restaurantId],
-  );
+  // Mesa = comanda; sem mesa (pedido antecipado) = pedido.
+  const addedLabel = tableService ? 'Adicionado à comanda' : 'Adicionado ao pedido';
 
-  const addCasualItem = useCallback(
-    ({ item, quantity, diner, notes }: {
-      item: CustomerMenuItem;
-      quantity: number;
-      diner: TableDiner | null;
-      notes: string;
-    }) => {
+  const add = useCallback(
+    (item: CustomerMenuItem, quantity = 1, selection: CustomizationSelection = EMPTY_SELECTION) => {
       if (!features.ordering) return;
+      const config = customizationOf(item.id);
       cart.setRestaurant(restaurantId, restaurant.data?.name ?? 'Restaurante');
       cart.addItem({
         menu_item_id: item.id,
         name: item.name,
-        price: item.price,
+        price: unitPriceWithExtras(item.price, selectionDeltaCents(config, selection)),
+        quantity,
+        image_url: item.imageUrl ?? undefined,
+        preparation_time: item.preparationTime,
+        customizations: selectionPayload(selection),
+        customization_summary: selectionSummary(config, selection) || undefined,
+      });
+      Toast.show({ type: 'success', text1: addedLabel, text2: `${quantity}x ${item.name}`, visibilityTime: 1800 });
+    },
+    [addedLabel, cart, customizationOf, features.ordering, restaurant.data, restaurantId],
+  );
+
+  // Item com escolhas não entra direto pelo "Adicionar" da lista: abre o detalhe.
+  const quickAdd = useCallback(
+    (item: CustomerMenuItem) => (hasChoices(customizationOf(item.id)) ? setDetailItem(item) : add(item)),
+    [add, customizationOf],
+  );
+  const upsellItemsOf = useCallback(
+    (item: CustomerMenuItem | null) => {
+      const ids = customizationOf(item?.id)?.upsellItemIds ?? [];
+      const byId = new Map((menu.data?.items ?? []).map((m) => [m.id, m]));
+      return ids.map((id) => byId.get(id)).filter((m): m is CustomerMenuItem => !!m);
+    },
+    [customizationOf, menu.data?.items],
+  );
+
+  const addCasualItem = useCallback(
+    ({ item, quantity, diner, notes, selection }: {
+      item: CustomerMenuItem;
+      quantity: number;
+      diner: TableDiner | null;
+      notes: string;
+      selection: CustomizationSelection;
+    }) => {
+      if (!features.ordering) return;
+      const config = customizationOf(item.id);
+      cart.setRestaurant(restaurantId, restaurant.data?.name ?? 'Restaurante');
+      cart.addItem({
+        menu_item_id: item.id,
+        name: item.name,
+        price: unitPriceWithExtras(item.price, selectionDeltaCents(config, selection)),
+        customizations: selectionPayload(selection),
+        customization_summary: selectionSummary(config, selection) || undefined,
         quantity,
         image_url: item.imageUrl ?? undefined,
         special_instructions: notes || undefined,
@@ -110,7 +165,7 @@ export default function MenuScreen({ route, navigation }: any) {
       });
       Toast.show({ type: 'success', text1: 'Adicionado à comanda', text2: `${quantity}x ${item.name}`, visibilityTime: 1800 });
     },
-    [cart, features.ordering, restaurant.data, restaurantId],
+    [cart, customizationOf, features.ordering, restaurant.data, restaurantId],
   );
 
   const callWaiter = useCallback(() => navigation.navigate('CallWaiter'), [navigation]);
@@ -336,7 +391,7 @@ export default function MenuScreen({ route, navigation }: any) {
                         </View>
                       ) : null
                     ) : features.ordering ? (
-                      <TouchableOpacity style={styles.addBtn} onPress={() => add(item)} accessibilityRole="button" accessibilityLabel={`Adicionar ${item.name}`}>
+                      <TouchableOpacity style={styles.addBtn} onPress={() => quickAdd(item)} accessibilityRole="button" accessibilityLabel={`Adicionar ${item.name}`}>
                         <Ionicons name="add" size={16} color={colors.primaryForeground} />
                         <Text style={styles.addBtnText}>Adicionar</Text>
                       </TouchableOpacity>
@@ -345,7 +400,8 @@ export default function MenuScreen({ route, navigation }: any) {
                 </View>
               </>
             );
-            if (!tableService) {
+            // Sem mesa e sem pedido pelo app (ex.: só vitrine), o item é só leitura.
+            if (!tableService && !features.ordering) {
               return <View key={item.id} style={styles.menuItem}>{content}</View>;
             }
             return (
@@ -387,6 +443,7 @@ export default function MenuScreen({ route, navigation }: any) {
           diners={dinerList}
           tableSessionId={tableSessionId}
           sharedOrdering={sharedOrdering}
+          customization={customizationOf(detailItem?.id)}
           onClose={() => setDetailItem(null)}
           onAdd={addCasualItem}
         />
@@ -395,6 +452,9 @@ export default function MenuScreen({ route, navigation }: any) {
           key={detailItem?.id ?? 'none'}
           item={detailItem}
           orderingEnabled={features.ordering}
+          customization={customizationOf(detailItem?.id)}
+          upsellItems={upsellItemsOf(detailItem)}
+          onUpsell={(next) => (hasChoices(customizationOf(next.id)) ? setDetailItem(next) : add(next))}
           onClose={() => setDetailItem(null)}
           onAdd={add}
         />
@@ -406,22 +466,30 @@ export default function MenuScreen({ route, navigation }: any) {
 function MenuItemDetailModal({
   item,
   orderingEnabled,
+  customization,
+  upsellItems,
+  onUpsell,
   onClose,
   onAdd,
 }: {
   item: CustomerMenuItem | null;
   orderingEnabled: boolean;
+  customization: ItemCustomizationConfig | null;
+  upsellItems: CustomerMenuItem[];
+  onUpsell: (item: CustomerMenuItem) => void;
   onClose: () => void;
-  onAdd: (item: CustomerMenuItem, quantity: number) => void;
+  onAdd: (item: CustomerMenuItem, quantity: number, selection: CustomizationSelection) => void;
 }) {
   const colors = useColors();
   const [quantity, setQuantity] = useState(1);
+  const [selection, setSelection] = useState<CustomizationSelection>(EMPTY_SELECTION);
+  const missing = missingGroups(customization, selection);
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
         backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-        sheet: { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+        sheet: { maxHeight: '92%', backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
         image: { width: '100%', height: 220, backgroundColor: colors.backgroundTertiary },
         backBtn: {
           position: 'absolute', top: 16, left: 16, width: 40, height: 40, borderRadius: 20,
@@ -453,6 +521,7 @@ function MenuItemDetailModal({
   if (!item) return null;
   const tags = dietaryTags(item.dietaryInfo);
   const prepTime = formatPrepTime(item.preparationTime);
+  const unitPrice = unitPriceWithExtras(item.price, selectionDeltaCents(customization, selection));
 
   return (
     <Modal visible={!!item} animationType="slide" transparent onRequestClose={onClose}>
@@ -464,7 +533,7 @@ function MenuItemDetailModal({
               <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-          <View style={styles.body}>
+          <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={styles.nameRow}>
               <Text style={styles.name}>{item.name}</Text>
               {item.isPopular && (
@@ -489,8 +558,17 @@ function MenuItemDetailModal({
                 <Text style={styles.prepText}>Preparo: {prepTime}</Text>
               </View>
             )}
+            {customization && (
+              <ItemCustomizationPicker
+                config={customization}
+                selection={selection}
+                onChange={setSelection}
+                upsellItems={orderingEnabled ? upsellItems : []}
+                onUpsell={onUpsell}
+              />
+            )}
             <View style={styles.footerRow}>
-              <Text style={styles.price}>{money(item.price)}</Text>
+              <Text style={styles.price}>{money(unitPrice)}</Text>
               <View style={styles.stepper}>
                 <TouchableOpacity
                   style={styles.stepperBtn}
@@ -513,19 +591,25 @@ function MenuItemDetailModal({
             </View>
             {orderingEnabled ? (
               <TouchableOpacity
-                style={styles.addBtn}
+                style={[styles.addBtn, missing.length > 0 && { opacity: 0.5 }]}
+                disabled={missing.length > 0}
                 onPress={() => {
-                  onAdd(item, quantity);
+                  onAdd(item, quantity, selection);
                   setQuantity(1);
+                  setSelection(EMPTY_SELECTION);
                   onClose();
                 }}
                 activeOpacity={0.9}
                 accessibilityRole="button"
+                accessibilityState={{ disabled: missing.length > 0 }}
               >
-                <Text style={styles.addBtnText}>Adicionar · {money(item.price * quantity)}</Text>
+                <Text style={styles.addBtnText}>
+                  {missing.length > 0 ? `Escolha: ${missing[0].name}` : `Adicionar · ${money(unitPrice * quantity)}`}
+                </Text>
               </TouchableOpacity>
             ) : null}
-          </View>
+            <View style={{ height: 24 }} />
+          </ScrollView>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>

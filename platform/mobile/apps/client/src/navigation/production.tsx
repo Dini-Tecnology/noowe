@@ -13,6 +13,7 @@ import { getSupabaseClient, isSupabaseConfigured } from '@/shared/services/supab
 import { queryClient } from '@/shared/config/react-query';
 import customerBackend from '../services/customer-backend';
 import { Notifications } from '../services/customer-push';
+import { orderIdFromPush } from '../services/push-routing';
 import { ClientTabBar } from '../components/navigation/ClientTabBar';
 import { liquidGlassTabNavigatorScreenOptions } from '@okinawa/shared/components/LiquidGlassBottomNav';
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -177,6 +178,7 @@ function DefaultMainTabs() {
 
 const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update']);
 
+
 /**
  * Tapping a push about a table invite (ADR-011) opens Notificações, where the
  * invite can be answered with its current state. Also covers a cold start
@@ -189,8 +191,17 @@ function useOpenTableInviteFromPush() {
     const open = (response: Notifications.NotificationResponse | null) => {
       if (!response) return;
       const id = response.notification.request.identifier;
-      const type = response.notification.request.content.data?.type;
-      if (handled.has(id) || typeof type !== 'string' || !TABLE_INVITE_PUSH_TYPES.has(type)) return;
+      const data = response.notification.request.content.data;
+      const type = data?.type;
+      if (handled.has(id)) return;
+      // Pedido Quick (ADR-013): o push de cada etapa e os lembretes de retirada abrem o pedido.
+      const orderId = orderIdFromPush(data);
+      if (orderId) {
+        handled.add(id);
+        navigation.navigate('OrderDetail', { orderId });
+        return;
+      }
+      if (typeof type !== 'string' || !TABLE_INVITE_PUSH_TYPES.has(type)) return;
       handled.add(id);
       navigation.navigate('Notifications');
     };

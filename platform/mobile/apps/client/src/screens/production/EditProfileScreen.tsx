@@ -62,6 +62,7 @@ function EditProfileForm({ profile, navigation }: { profile: CustomerProfile; na
   const colors = useColors();
   const queryClient = useQueryClient();
   const [fullName, setFullName] = useState(profile.fullName);
+  const [callName, setCallName] = useState(profile.callName ?? '');
   const [phone, setPhone] = useState(profile.phone ? formatBrazilianPhone(profile.phone) : '');
   const [username, setUsername] = useState(profile.username);
   const usernameChanged = username !== profile.username;
@@ -69,14 +70,15 @@ function EditProfileForm({ profile, navigation }: { profile: CustomerProfile; na
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const normalizedInitialPhone = profile.phone ? formatBrazilianPhone(profile.phone) : '';
-  const changed = fullName.trim() !== profile.fullName || phone.trim() !== normalizedInitialPhone || usernameChanged;
+  const changed = fullName.trim() !== profile.fullName || phone.trim() !== normalizedInitialPhone || usernameChanged
+    || callName.trim() !== (profile.callName ?? '');
 
   const save = useMutation({
     mutationFn: async () => {
       // The @ goes through its own RPC (the server guards the column); only
       // then the regular profile fields.
       if (usernameChanged) await customerBackend.setUsername(username);
-      return customerBackend.updateProfile({ fullName: fullName.trim(), phone: phone.trim() || null });
+      return customerBackend.updateProfile({ fullName: fullName.trim(), callName: callName.trim() || null, phone: phone.trim() || null });
     },
     onSuccess: (updated) => {
       queryClient.setQueryData(['profile'], updated);
@@ -196,6 +198,18 @@ function EditProfileForm({ profile, navigation }: { profile: CustomerProfile; na
             placeholderTextColor={colors.foregroundMuted}
             style={styles.input}
             accessibilityLabel="Nome"
+          />
+          <Text style={styles.label}>Nome para chamada</Text>
+          <TextInput
+            value={callName}
+            onChangeText={(value) => { setCallName(value); setSaved(false); if (formError) setFormError(null); }}
+            autoCapitalize="words"
+            autoCorrect={false}
+            maxLength={40}
+            placeholder="Como te chamamos no balcão"
+            placeholderTextColor={colors.foregroundMuted}
+            style={styles.input}
+            accessibilityLabel="Nome para chamada"
           />
           <Text style={styles.label}>Seu @</Text>
           <View style={styles.usernameRow}>

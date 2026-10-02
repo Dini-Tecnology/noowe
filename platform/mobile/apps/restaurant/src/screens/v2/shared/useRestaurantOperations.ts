@@ -31,6 +31,7 @@ type RawOrder = {
   id: string;
   table_number?: string | number | null;
   table_id?: string | null;
+  order_type?: string | null;
   status?: string;
   total_amount?: number | string | null;
   subtotal?: number | string | null;
@@ -191,6 +192,7 @@ export function mapOrderToTabOrder(raw: RawOrder): TabOrder {
     time: clockLabel(raw.created_at) || elapsedLabel(raw.created_at),
     status: mapOrderStatus(raw.status),
     rawStatus: raw.status || 'pending',
+    orderType: raw.order_type ?? null,
     customerName: raw.customer?.full_name || raw.customer_name || raw.customer?.email || undefined,
     notes: raw.special_instructions || undefined,
     createdAt: raw.created_at,
@@ -217,7 +219,8 @@ export function mapKdsRowsToOrders(rows: RawKdsItem[]): KdsOrder[] {
     grouped.set(row.order_id, {
       id: row.order_id,
       itemIds: [row.id],
-      table: row.table_number ? `Mesa ${row.table_number}` : 'Sem mesa',
+      // Pedido sem mesa (retirada): quem a cozinha chama é o nome do cliente.
+      table: row.table_number ? `Mesa ${row.table_number}` : row.customer_name ? `Sem mesa · ${row.customer_name}` : 'Sem mesa',
       meta: `${elapsedLabel(row.order_created_at || row.created_at)} na fila`,
       status: mapKdsStatus(row.status, row.order_status),
       items: [item],

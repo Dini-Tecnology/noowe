@@ -22,6 +22,7 @@ import {
   FolderPlus,
   Pencil,
   Plus,
+  SlidersHorizontal,
   Tag,
   Trash2,
   UtensilsCrossed,
@@ -33,6 +34,7 @@ import { hasDuplicateCategoryName } from './menuCategoryName';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2FormSheet } from './shared/V2FormSheet';
 import { V2Shell } from './shared/V2Shell';
+import { ItemCustomizationEditor } from './menu/ItemCustomizationEditor';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface MenuItem {
@@ -146,6 +148,8 @@ export default function MenuScreen() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [deleting, setDeleting] = useState<DeleteState | null>(null);
+  // ADR-013 §2.9: grupos de opções, ingredientes removíveis e upsell do item.
+  const [customizing, setCustomizing] = useState<MenuItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -339,6 +343,11 @@ export default function MenuScreen() {
     void load();
   };
 
+  const allItems = useMemo(
+    () => categories.flatMap((category) => category.items.map((item) => ({ id: item.id, name: item.name }))),
+    [categories],
+  );
+
   const isEditing = editor?.kind === 'category'
     ? Boolean(editor.category)
     : editor?.kind === 'item'
@@ -504,6 +513,11 @@ export default function MenuScreen() {
                           ) : null}
                           <Text style={[styles.price, { color: colors.primary }]}>{fmt(item.price)}</Text>
                         </View>
+                        {canToggle ? (
+                          <IconAction label="Personalizar item" onPress={() => setCustomizing(item)}>
+                            <SlidersHorizontal size={15} color={colors.primary} />
+                          </IconAction>
+                        ) : null}
                         {canManage ? (
                           <View style={styles.itemEditActions}>
                             <IconAction label="Editar item" onPress={() => openItemEditor(category.id, item)}>
@@ -652,6 +666,13 @@ export default function MenuScreen() {
         ) : null}
         {formError ? <Text style={styles.formError}>{formError}</Text> : null}
       </V2FormSheet>
+
+      <ItemCustomizationEditor
+        key={customizing?.id ?? 'none'}
+        item={customizing}
+        menuItems={allItems}
+        onClose={() => setCustomizing(null)}
+      />
 
       <V2ConfirmDialog
         visible={deleting !== null}

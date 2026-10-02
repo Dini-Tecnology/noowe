@@ -8,6 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useCart } from '@/shared/contexts/CartContext';
+import { cartOrderItems } from '../../utils/cart-order-items';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import customerBackend, { type TableBillItem } from '../../services/customer-backend';
@@ -101,12 +102,7 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
       customerBackend.placeOrder({
         restaurantId: session!.restaurantId,
         tableSessionId: session!.tableSessionId,
-        items: cart.items.map((i) => ({
-          menuItemId: i.menu_item_id,
-          quantity: i.quantity,
-          specialInstructions: i.special_instructions,
-          dinerId: i.diner_id,
-        })),
+        items: cartOrderItems(cart.items),
       }),
     onSuccess: (order) => {
       cart.clearCart();
@@ -337,8 +333,9 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
               </View>
               {cart.items.map((item) => (
                 <View key={item.id} style={styles.pendingRow}>
-                  <Text style={styles.pendingItemName} numberOfLines={1}>
+                  <Text style={styles.pendingItemName} numberOfLines={2}>
                     {item.quantity}x {item.name}{item.diner_name ? ` · ${item.diner_name}` : ''}
+                    {item.customization_summary ? `\n${item.customization_summary}` : ''}
                   </Text>
                   <Text style={styles.pendingItemPrice}>{money(item.price * item.quantity)}</Text>
                 </View>

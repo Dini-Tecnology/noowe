@@ -8,8 +8,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import type {
   CustomerRestaurant,
+  QuickServiceStatus,
   RestaurantLiveStatus,
 } from '../../services/customer-backend';
+import { SKIP_THE_LINE_STEPS, quickStateLabel } from './quick-service-ui';
 import { formatAveragePrice, formatRatingWithCount, hasRating } from './home-restaurant-ui';
 import {
   RESTAURANT_PAGE_ACTIONS,
@@ -48,6 +50,8 @@ export interface RestaurantJourneyAction {
   label: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   onPress: () => void;
+  /** `primary` ocupa a largura toda acima da linha de ações (ex.: "Fazer pedido" no Quick Service). */
+  variant?: 'primary';
 }
 
 export interface RestaurantDetailViewProps {
@@ -57,6 +61,12 @@ export interface RestaurantDetailViewProps {
   favoritePending: boolean;
   /** Entry points enabled for this restaurant (QR, reserva, fila, garçom). */
   journeyActions: RestaurantJourneyAction[];
+  /** Quick Service (ADR-013): status de pedidos, tempo de preparo e local de retirada. */
+  quickStatus?: QuickServiceStatus | null;
+  /** Mostra o card de pedido pelo app e o "Como funciona". */
+  showQuickInfo?: boolean;
+  /** Lotação de mesas só faz sentido onde há mesa. */
+  showOccupancy?: boolean;
   activeSessionHere: boolean;
   tableNumber?: string | null;
   refreshControl: React.ReactElement<any>;
@@ -78,6 +88,9 @@ export default function RestaurantDetailView({
   isFavorite,
   favoritePending,
   journeyActions,
+  quickStatus,
+  showQuickInfo = false,
+  showOccupancy = true,
   activeSessionHere,
   tableNumber,
   refreshControl,
@@ -107,10 +120,15 @@ export default function RestaurantDetailView({
   const hiddenAmenityCount = amenities.length - visibleAmenities.length;
   const rated = hasRating(restaurant.rating, restaurant.totalReviews);
 
+  const primaryActions = useMemo(() => journeyActions.filter((action) => action.variant === 'primary'), [journeyActions]);
+  const rowActions = useMemo(() => journeyActions.filter((action) => action.variant !== 'primary'), [journeyActions]);
   const journeyItemWidth = useMemo(
-    () => journeyButtonWidth(width, journeyActions.length),
-    [width, journeyActions.length],
+    () => journeyButtonWidth(width, rowActions.length),
+    [width, rowActions.length],
   );
+  const quickState = quickStatus
+    ? quickStateLabel(quickStatus.state, quickStatus.closesAt, quickStatus.acceptsUntilMinutes)
+    : null;
 
   const styles = useMemo(
     () =>
@@ -175,6 +193,30 @@ export default function RestaurantDetailView({
           flexDirection: 'row', flexWrap: 'wrap', gap: ACTION_GAP,
           paddingHorizontal: PAGE_PADDING, marginTop: 22,
         },
+        primaryBtn: {
+          minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+          marginHorizontal: PAGE_PADDING, marginTop: 22, borderRadius: 18, backgroundColor: colors.primary,
+        },
+        primaryBtnText: { fontSize: 16, fontWeight: '800', color: colors.primaryForeground },
+        quickCard: {
+          marginHorizontal: PAGE_PADDING, marginTop: 14, padding: 14, borderRadius: 16, gap: 8,
+          backgroundColor: colors.backgroundSecondary, borderWidth: 1, borderColor: colors.primaryLight,
+        },
+        quickRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+        quickRowText: { flex: 1, fontSize: 13, color: colors.foregroundSecondary },
+        quickStateText: { flex: 1, fontSize: 13, fontWeight: '700' },
+        stepsCard: {
+          marginHorizontal: PAGE_PADDING, marginTop: 14, padding: 14, borderRadius: 16, gap: 10,
+          backgroundColor: colors.backgroundTertiary,
+        },
+        stepsTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground },
+        stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+        stepNumber: {
+          width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: colors.primary,
+        },
+        stepNumberText: { fontSize: 12, fontWeight: '800', color: colors.primaryForeground },
+        stepText: { flex: 1, fontSize: 13, color: colors.foregroundSecondary },
         journeyBtn: {
           minHeight: 84, alignItems: 'center', justifyContent: 'center', gap: 8,
           paddingHorizontal: 6, borderRadius: 16, backgroundColor: colors.backgroundTertiary,
@@ -326,13 +368,15 @@ export default function RestaurantDetailView({
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </View>
             <View style={styles.statusRow}>
-              <View style={styles.statusItem}>
-                <Text style={styles.statusLabel}>Lotação:</Text>
-                <Text style={[styles.statusValue, { color: occupancyTone(status) }]}>
-                  {status.occupancyPercent == null ? '—' : `${status.occupancyPercent}%`}
-                </Text>
-              </View>
-              {config.estimatedWaitDisplay && (
+              {showOccupancy && (
+                <View style={styles.statusItem}>
+                  <Text style={styles.statusLabel}>Lotação:</Text>
+                  <Text style={[styles.statusValue, { color: occupancyTone(status) }]}>
+                    {status.occupancyPercent == null ? '—' : `${status.occupancyPercent}%`}
+                  </Text>
+                </View>
+              )}
+              {showOccupancy && config.estimatedWaitDisplay && (
                 <View style={styles.statusItem}>
                   <Text style={styles.statusLabel}>Espera:</Text>
                   <Text style={[styles.statusValue, { color: colors.foreground }]}>{waitText}</Text>
@@ -347,9 +391,55 @@ export default function RestaurantDetailView({
           </TouchableOpacity>
         )}
 
-        {journeyActions.length > 0 && (
+        {primaryActions.map((action) => (
+          <TouchableOpacity
+            key={action.key}
+            style={styles.primaryBtn}
+            onPress={action.onPress}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel={action.label}
+          >
+            <Ionicons name={action.icon} size={22} color={colors.primaryForeground} />
+            <Text style={styles.primaryBtnText}>{action.label}</Text>
+          </TouchableOpacity>
+        ))}
+
+        {showQuickInfo && (
+          <View style={styles.quickCard} accessibilityLabel="Pedido pelo app">
+            {quickState && (
+              <View style={styles.quickRow}>
+                <Ionicons
+                  name={quickState.tone === 'ok' ? 'radio-button-on' : 'pause-circle-outline'}
+                  size={16}
+                  color={quickState.tone === 'ok' ? colors.success : colors.foregroundMuted}
+                />
+                <Text style={[styles.quickStateText, { color: quickState.tone === 'ok' ? colors.success : colors.foreground }]}>
+                  {quickState.label}
+                </Text>
+              </View>
+            )}
+            {quickStatus && quickStatus.estimatedPrepMinutes > 0 && (
+              <View style={styles.quickRow}>
+                <Ionicons name="timer-outline" size={16} color={colors.foregroundMuted} />
+                <Text style={styles.quickRowText}>
+                  {`Preparo em ~${quickStatus.estimatedPrepMinutes} min`}
+                  {quickStatus.ordersInQueue > 0 ? ` · ${quickStatus.ordersInQueue} na fila` : ''}
+                </Text>
+              </View>
+            )}
+            {quickStatus?.pickupLocation && (
+              <View style={styles.quickRow}>
+                <Ionicons name="location-outline" size={16} color={colors.foregroundMuted} />
+                <Text style={styles.quickRowText}>{`Retirada: ${quickStatus.pickupLocation}`}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {rowActions.length > 0 && (
           <View style={styles.journeyRow}>
-            {journeyActions.map((action) => (
+            {rowActions.map((action) => (
               <TouchableOpacity
                 key={action.key}
                 style={[styles.journeyBtn, { width: journeyItemWidth }]}
@@ -363,6 +453,18 @@ export default function RestaurantDetailView({
                   {action.label}
                 </Text>
               </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {showQuickInfo && (
+          <View style={styles.stepsCard}>
+            <Text style={styles.stepsTitle}>Como funciona</Text>
+            {SKIP_THE_LINE_STEPS.map((step, index) => (
+              <View key={step.title} style={styles.stepRow}>
+                <View style={styles.stepNumber}><Text style={styles.stepNumberText}>{index + 1}</Text></View>
+                <Text style={styles.stepText}>{step.title}</Text>
+              </View>
             ))}
           </View>
         )}
