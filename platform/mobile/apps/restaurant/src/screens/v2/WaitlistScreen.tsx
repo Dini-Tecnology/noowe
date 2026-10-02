@@ -4,6 +4,7 @@ import { Bell, ClipboardList, Clock, Users } from 'lucide-react-native';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2ListScreen, type V2ListItem } from './shared/V2ListScreen';
 import { useWaitlist, type WaitlistEntry } from './shared/useRestaurantOperations';
+import { waitlistPreferenceLabel } from './shared/waitlistPreference';
 
 type WaitlistAction = 'call' | 'seat' | 'no_show';
 
@@ -19,8 +20,12 @@ function calledSince(calledAt: string | null): string {
 }
 
 function entrySubtitle(entry: WaitlistEntry): string {
-  if (entry.status === 'called') return `${STATUS_LABELS.called}${calledSince(entry.calledAt)} · toque para acomodar`;
+  const section = waitlistPreferenceLabel(entry.preference);
+  if (entry.status === 'called') {
+    return `${STATUS_LABELS.called}${calledSince(entry.calledAt)}${section ? ` · ${section}` : ''} · toque para acomodar`;
+  }
   const parts = [STATUS_LABELS[entry.status] ?? entry.status];
+  if (section) parts.push(section);
   if (entry.estimatedWaitMinutes != null) parts.push(`Est. ${entry.estimatedWaitMinutes} min`);
   parts.push('toque para chamar');
   return parts.join(' · ');
@@ -57,7 +62,9 @@ export default function WaitlistScreen() {
           { text: 'Acomodar direto', onPress: () => void runAction(entry, 'seat') },
         ];
     buttons.push({ text: 'Cancelar', style: 'cancel' });
-    Alert.alert(title, entry.status === 'called' ? 'Grupo já foi chamado.' : 'Avisar o grupo que a mesa está pronta?', buttons);
+    const section = waitlistPreferenceLabel(entry.preference);
+    const question = entry.status === 'called' ? 'Grupo já foi chamado.' : 'Avisar o grupo que a mesa está pronta?';
+    Alert.alert(title, section ? `Preferência: ${section}.\n${question}` : question, buttons);
   }, [runAction]);
 
   const items: V2ListItem[] = loading

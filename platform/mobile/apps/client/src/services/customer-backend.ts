@@ -579,6 +579,8 @@ export interface CustomerBackend {
   createReview(input: {
     orderId: string;
     restaurantId: string;
+  /** Setores do mapa de mesas do restaurante: as opções de "Preferência" da fila. */
+  getWaitlistSections(restaurantId: string): Promise<string[]>;
     rating?: number;
     comment?: string;
     foodRating?: number;
@@ -1498,6 +1500,12 @@ export const customerBackend: CustomerBackend = {
       participants: rawParticipants.map(mapTableDiner),
       items: rawItems.map((value) => {
         const item = objectValue(value);
+  async getWaitlistSections(restaurantId) {
+    const { data, error } = await getSupabaseClient().rpc('customer_get_waitlist_sections', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return (Array.isArray(data) ? data : []).filter((name): name is string => typeof name === 'string' && name.trim() !== '');
+  },
+
         return {
           orderItemId: String(item.orderItemId),
           orderId: String(item.orderId),

@@ -6088,7 +6088,7 @@ export type Database = {
           notes: string | null
           party_size: number
           position: number
-          preference: Database["public"]["Enums"]["waitlist_entries_preference_enum"]
+          preference: string
           restaurant_id: string
           seated_at: string | null
           status: Database["public"]["Enums"]["waitlist_entries_status_enum"]
@@ -6111,7 +6111,7 @@ export type Database = {
           notes?: string | null
           party_size: number
           position: number
-          preference?: Database["public"]["Enums"]["waitlist_entries_preference_enum"]
+          preference?: string
           restaurant_id: string
           seated_at?: string | null
           status?: Database["public"]["Enums"]["waitlist_entries_status_enum"]
@@ -6134,7 +6134,7 @@ export type Database = {
           notes?: string | null
           party_size?: number
           position?: number
-          preference?: Database["public"]["Enums"]["waitlist_entries_preference_enum"]
+          preference?: string
           restaurant_id?: string
           seated_at?: string | null
           status?: Database["public"]["Enums"]["waitlist_entries_status_enum"]
@@ -6595,6 +6595,7 @@ export type Database = {
         Returns: Json
       }
       customer_get_wallet_snapshot: { Args: never; Returns: Json }
+      customer_get_waitlist_sections: { Args: { p_restaurant_id: string }; Returns: Json }
       customer_redeem_loyalty_reward: {
         Args: { p_loyalty_program_id: string; p_reward_code: string }
         Returns: Json
@@ -6622,7 +6623,7 @@ export type Database = {
           notes: string | null
           party_size: number
           position: number
-          preference: Database["public"]["Enums"]["waitlist_entries_preference_enum"]
+          preference: string
           restaurant_id: string
           seated_at: string | null
           status: Database["public"]["Enums"]["waitlist_entries_status_enum"]
@@ -6727,7 +6728,7 @@ export type Database = {
           notes: string | null
           party_size: number
           position: number
-          preference: Database["public"]["Enums"]["waitlist_entries_preference_enum"]
+          preference: string
           restaurant_id: string
           seated_at: string | null
           status: Database["public"]["Enums"]["waitlist_entries_status_enum"]
@@ -7398,7 +7399,6 @@ export type Database = {
         | "barman"
         | "maitre"
         | "cook"
-      waitlist_entries_preference_enum: "salao" | "terraco" | "qualquer"
       waitlist_entries_status_enum:
         | "waiting"
         | "called"
@@ -7598,7 +7598,6 @@ export const Constants = {
         "maitre",
         "cook",
       ],
-      waitlist_entries_preference_enum: ["salao", "terraco", "qualquer"],
       waitlist_entries_status_enum: [
         "waiting",
         "called",

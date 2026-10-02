@@ -3,6 +3,7 @@ import {
   isActiveWaitlistStatus,
   pastWaitlistEntries,
   waitlistErrorMessage,
+  waitlistPreferenceOptions,
   waitlistStatusLabel,
 } from '../screens/production/waitlist-ui';
 
@@ -96,5 +97,34 @@ describe('pastWaitlistEntries — histórico só do restaurante da tela', () => 
     expect(pastWaitlistEntries(many, 'r1')).toHaveLength(5);
     expect(pastWaitlistEntries(undefined, 'r1')).toEqual([]);
     expect(pastWaitlistEntries(many, undefined)).toEqual([]);
+  });
+});
+
+describe('waitlist preference = setores do mapa de mesas', () => {
+  it('lista os setores do restaurante e termina com "Qualquer"', () => {
+    expect(waitlistPreferenceOptions(['Rooftop', 'Salão Principal', 'Varanda'])).toEqual([
+      { id: 'Rooftop', label: 'Rooftop' },
+      { id: 'Salão Principal', label: 'Salão Principal' },
+      { id: 'Varanda', label: 'Varanda' },
+      { id: 'qualquer', label: 'Qualquer' },
+    ]);
+  });
+
+  it('sem setores cadastrados só resta "Qualquer"', () => {
+    expect(waitlistPreferenceOptions([])).toEqual([{ id: 'qualquer', label: 'Qualquer' }]);
+    expect(waitlistPreferenceOptions(undefined)).toEqual([{ id: 'qualquer', label: 'Qualquer' }]);
+  });
+
+  it('ignora vazios, repetidos e um setor chamado "qualquer"', () => {
+    expect(waitlistPreferenceOptions(['Varanda', ' varanda ', '', '  ', 'Qualquer']).map((o) => o.id)).toEqual([
+      'Varanda',
+      'qualquer',
+    ]);
+  });
+
+  it('explica em português quando o setor deixou de existir', () => {
+    expect(waitlistErrorMessage(new Error('Setor indisponível neste restaurante'))).toBe(
+      'Esse setor não está mais disponível. Escolha outro ou "Qualquer".',
+    );
   });
 });

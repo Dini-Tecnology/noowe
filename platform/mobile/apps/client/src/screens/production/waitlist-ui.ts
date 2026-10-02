@@ -18,6 +18,33 @@ export function isActiveWaitlistStatus(status: string): boolean {
   return ACTIVE_WAITLIST_STATUSES.includes(status);
 }
 
+/** Valor que o servidor aceita para "sem preferência de setor". */
+export const ANY_SECTION = 'qualquer';
+
+export interface WaitlistPreferenceOption {
+  id: string;
+  label: string;
+}
+
+/**
+ * "Preferência" da fila = os setores que o restaurante cadastrou no mapa de mesas
+ * (ex.: Rooftop, Salão Principal, Varanda), mais "Qualquer". O id de um setor é o próprio
+ * nome, que é o que o servidor valida e grava.
+ */
+export function waitlistPreferenceOptions(sections: readonly string[] | undefined): WaitlistPreferenceOption[] {
+  const seen = new Set<string>();
+  const options: WaitlistPreferenceOption[] = [];
+  for (const raw of sections ?? []) {
+    const name = raw.trim();
+    const key = name.toLowerCase();
+    if (!name || key === ANY_SECTION || seen.has(key)) continue;
+    seen.add(key);
+    options.push({ id: name, label: name });
+  }
+  options.push({ id: ANY_SECTION, label: 'Qualquer' });
+  return options;
+}
+
 const MAX_PAST_ENTRIES = 5;
 
 /**
@@ -55,6 +82,7 @@ const WAITLIST_ERROR_MESSAGES: [RegExp, string][] = [
   [/waitlist is unavailable/i, 'A fila virtual não está disponível neste restaurante agora.'],
   [/cannot be updated/i, 'Sua entrada na fila já foi encerrada. Puxe para atualizar.'],
   [/invalid party size/i, 'Quantidade de pessoas inválida.'],
+  [/setor indispon/i, 'Esse setor não está mais disponível. Escolha outro ou "Qualquer".'],
   [/authentication required/i, 'Entre na sua conta para usar a fila virtual.'],
 ];
 

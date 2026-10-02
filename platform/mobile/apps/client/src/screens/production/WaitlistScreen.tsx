@@ -12,14 +12,17 @@ import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { FeatureUnavailableMessage } from '../../components/ServiceTypeAdapter';
 import customerBackend, { type CustomerWaitlistEntry, type WaitlistOccupancyLevel } from '../../services/customer-backend';
 import { StateView, rootNavigate, useQueryRefreshControl, tableLabel } from './shared';
-import { closedQueueMessage, isActiveWaitlistStatus, pastWaitlistEntries, waitlistErrorMessage, waitlistStatusLabel } from './waitlist-ui';
+import {
+  ANY_SECTION,
+  closedQueueMessage,
+  isActiveWaitlistStatus,
+  pastWaitlistEntries,
+  waitlistErrorMessage,
+  waitlistPreferenceOptions,
+  waitlistStatusLabel,
+} from './waitlist-ui';
 
 const PARTY_SIZES = ['1', '2', '3', '4', '5+'] as const;
-const PREFERENCES = [
-  { id: 'salao', label: 'Salão' },
-  { id: 'terraco', label: 'Terraço' },
-  { id: 'qualquer', label: 'Qualquer' },
-] as const;
 
 const OCCUPANCY_LABELS: Record<WaitlistOccupancyLevel, string> = {
   baixa: 'Baixa',
@@ -76,7 +79,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
   const visit = useVisitSession();
   const queryClient = useQueryClient();
   const [party, setParty] = useState('2');
-  const [preference, setPreference] = useState<string>('qualquer');
+  const [preference, setPreference] = useState<string>(ANY_SECTION);
   const restaurantId = route.params?.restaurantId ?? visit.session?.restaurantId;
   const { status: serviceTypeStatus, features, type: serviceModel } = useServiceTypeFor(restaurantId);
   const virtualQueueEnabled = features.virtualQueue;
@@ -102,6 +105,19 @@ export default function WaitlistScreen({ route, navigation }: any) {
     enabled: !!restaurantId && virtualQueueEnabled,
     refetchInterval: 20_000,
   });
+
+  // "Preferência" = setores do mapa de mesas do restaurante, não uma lista fixa.
+  const sectionsQuery = useQuery({
+    queryKey: ['waitlist-sections', restaurantId],
+    queryFn: () => customerBackend.getWaitlistSections(restaurantId),
+    enabled: !!restaurantId && virtualQueueEnabled,
+    staleTime: 5 * 60 * 1000,
+  });
+  const preferenceOptions = useMemo(() => waitlistPreferenceOptions(sectionsQuery.data), [sectionsQuery.data]);
+  // Setor que sumiu do mapa (o restaurante mexeu nas mesas): volta para "Qualquer".
+  useEffect(() => {
+    if (!preferenceOptions.some((option) => option.id === preference)) setPreference(ANY_SECTION);
+  }, [preferenceOptions, preference]);
 
   const myEntry: CustomerWaitlistEntry | undefined = useMemo(
     () => (query.data ?? []).find((entry) => entry.restaurantId === restaurantId && isActiveWaitlistStatus(entry.status)),
@@ -152,6 +168,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
     onError: (error: Error) => {
       queryClient.invalidateQueries({ queryKey: ['waitlist'] });
       queryClient.invalidateQueries({ queryKey: ['restaurant-live-status', restaurantId] });
+      queryClient.invalidateQueries({ queryKey: ['waitlist-sections', restaurantId] });
       Alert.alert('Fila Virtual', waitlistErrorMessage(error));
     },
   });
@@ -241,8 +258,8 @@ export default function WaitlistScreen({ route, navigation }: any) {
         statusBlock: { alignItems: 'center', marginBottom: 20 },
         statusSub: { fontSize: 14, color: colors.foregroundSecondary, marginTop: 8 },
         chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-        prefRow: { flexDirection: 'row', gap: 10 },
-        prefChip: { flex: 1 },
+        prefRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+        prefChip: { minWidth: '30%', flexGrow: 1 },
         sectionLoader: { marginVertical: 32 },
         cta: { marginTop: 8, marginBottom: 24, paddingVertical: 16, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center' },
         ctaDisabled: { opacity: 0.6 },
@@ -493,7 +510,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
 
                 <SelectionSection title="Preferência">
                   <View style={styles.prefRow}>
-                    {PREFERENCES.map((pref) => (
+                    {preferenceOptions.map((pref) => (
                       <View key={pref.id} style={styles.prefChip}>
                         <SelectChip label={pref.label} selected={preference === pref.id} onPress={() => setPreference(pref.id)} />
                       </View>

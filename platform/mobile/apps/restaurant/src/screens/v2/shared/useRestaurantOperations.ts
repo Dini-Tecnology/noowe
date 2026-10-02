@@ -426,6 +426,8 @@ export type WaitlistEntry = {
   id: string;
   customerName: string;
   partySize: number;
+  /** Setor pedido ao entrar na fila ('qualquer' = sem preferência). */
+  preference: string;
   status: string;
   position: number | null;
   estimatedWaitMinutes: number | null;
@@ -437,6 +439,7 @@ function mapWaitlistEntry(raw: any): WaitlistEntry {
     id: raw.id,
     customerName: raw.customer_name || raw.customer?.full_name || 'Cliente',
     partySize: toNumber(raw.party_size, 1),
+    preference: typeof raw.preference === 'string' ? raw.preference : 'qualquer',
     status: raw.status || 'waiting',
     position: raw.position ?? null,
     estimatedWaitMinutes: raw.estimated_wait_minutes ?? null,
