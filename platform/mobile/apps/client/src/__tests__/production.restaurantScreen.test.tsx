@@ -308,6 +308,52 @@ describe('restaurantAmenityChips — every tag vocabulary reads the same way', (
   });
 });
 
+describe('RestaurantScreen — pop-up de horários', () => {
+  const liveStatus = {
+    restaurantId: 'r1', isOpen: false, opensAt: '19:00', closesAt: null, groupsWaiting: 0,
+    estimatedWaitMinutes: 0, occupancyLevel: 'low', occupancyRatio: 0, occupancyPercent: 0,
+    tablesTotal: 4, tablesOccupied: 0,
+  };
+  const everyDay = (day: unknown) => Object.fromEntries(
+    ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((key) => [key, day]),
+  );
+
+  it('abre ao tocar no status, com os turnos cadastrados e dias fechados', async () => {
+    mockGetRestaurant.mockResolvedValue({
+      ...buildRestaurant('casual_dining'),
+      openingHours: {
+        ...everyDay({ closed: false, shifts: [{ open: '11:00', close: '14:00' }, { open: '19:00', close: '23:00' }] }),
+        sunday: { closed: true, shifts: [] },
+      },
+    });
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+    mockGetLiveStatus.mockResolvedValue(liveStatus);
+
+    const { findByText, getByLabelText, getAllByText, queryByText } = renderScreen();
+
+    expect(await findByText('Fechado · abre às 19:00')).toBeTruthy();
+    expect(queryByText('Horários de funcionamento')).toBeNull();
+
+    fireEvent.press(getByLabelText('Ver horários de funcionamento'));
+
+    expect(await findByText('Horários de funcionamento')).toBeTruthy();
+    expect(getAllByText('11:00–14:00 · 19:00–23:00').length).toBe(6);
+    expect(getAllByText('Fechado').length).toBe(1);
+    expect(queryByText('Horário não informado pelo restaurante.')).toBeNull();
+  });
+
+  it('avisa quando o restaurante não cadastrou horário', async () => {
+    mockGetRestaurant.mockResolvedValue({ ...buildRestaurant('casual_dining'), openingHours: {} });
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+    mockGetLiveStatus.mockResolvedValue({ ...liveStatus, opensAt: null });
+
+    const { findByText, findByLabelText } = renderScreen();
+
+    fireEvent.press(await findByLabelText('Ver horários de funcionamento'));
+    expect(await findByText('Horário não informado pelo restaurante.')).toBeTruthy();
+  });
+});
+
 describe('RestaurantDetailView — journey buttons stay on one row', () => {
   // 375 SE/mini · 390/393 iPhone 12–15 · 402 17 Pro · 428 13 Pro Max · 430/440 Pro Max.
   it.each([375, 390, 393, 402, 414, 428, 430, 440])('three buttons fit a %ipt wide screen', (width) => {

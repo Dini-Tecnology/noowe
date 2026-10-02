@@ -204,3 +204,23 @@ export function formatDaySchedule(day: DaySchedule): string {
   if (day.closed || day.shifts.length === 0) return 'Fechado';
   return day.shifts.map((shift) => `${shift.open}–${shift.close}`).join(' · ');
 }
+
+const INTL_WEEKDAY_TO_KEY: Record<string, WeekdayKey> = {
+  Monday: 'monday', Tuesday: 'tuesday', Wednesday: 'wednesday', Thursday: 'thursday',
+  Friday: 'friday', Saturday: 'saturday', Sunday: 'sunday',
+};
+
+/** Fuso em que os horários dos restaurantes são cadastrados e avaliados (igual ao servidor). */
+export const RESTAURANT_TIME_ZONE = 'America/Sao_Paulo';
+
+/** Dia da semana de `now` no fuso do restaurante, não no do aparelho. */
+export function todayWeekdayKey(now: Date = new Date(), timeZone: string = RESTAURANT_TIME_ZONE): WeekdayKey {
+  try {
+    const name = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone }).format(now);
+    const key = INTL_WEEKDAY_TO_KEY[name];
+    if (key) return key;
+  } catch {
+    // Intl sem suporte a fusos: cai no dia local do aparelho.
+  }
+  return WEEKDAY_KEYS[(now.getDay() + 6) % 7];
+}

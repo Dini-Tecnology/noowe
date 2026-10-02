@@ -18,6 +18,7 @@ import {
   occupancyTone,
   restaurantAmenityChips,
 } from './casual-dining-ui';
+import { OpeningHoursSheet } from './OpeningHoursSheet';
 import { tableLabel } from './shared';
 
 const FALLBACK_IMAGE =
@@ -89,6 +90,7 @@ export default function RestaurantDetailView({
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [allAmenitiesOpen, setAllAmenitiesOpen] = useState(false);
+  const [hoursOpen, setHoursOpen] = useState(false);
   const config = useMemo(() => casualDiningConfigOf(restaurant), [restaurant]);
   const amenities = useMemo(() => restaurantAmenityChips(restaurant), [restaurant]);
   const priceLabel = useMemo(
@@ -164,6 +166,7 @@ export default function RestaurantDetailView({
         },
         statusHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
         statusTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground },
+        statusLink: { marginLeft: 'auto', fontSize: 12, fontWeight: '600', color: colors.primary },
         statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
         statusItem: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
         statusLabel: { fontSize: 13, color: colors.foregroundSecondary },
@@ -309,10 +312,18 @@ export default function RestaurantDetailView({
         )}
 
         {status && (
-          <View style={styles.statusCard}>
+          <TouchableOpacity
+            style={styles.statusCard}
+            onPress={() => setHoursOpen(true)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Ver horários de funcionamento"
+          >
             <View style={styles.statusHeader}>
               <Ionicons name="time-outline" size={15} color={colors.primary} />
               <Text style={styles.statusTitle}>Status Agora</Text>
+              <Text style={styles.statusLink}>Ver horários</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </View>
             <View style={styles.statusRow}>
               <View style={styles.statusItem}>
@@ -328,10 +339,12 @@ export default function RestaurantDetailView({
                 </View>
               )}
               <Text style={[styles.statusValue, { color: status.isOpen ? colors.success : colors.foregroundMuted }]}>
-                {status.isOpen ? (status.closesAt ? `Aberto até ${status.closesAt}` : 'Aberto') : 'Fechado'}
+                {status.isOpen
+                  ? (status.closesAt ? `Aberto até ${status.closesAt}` : 'Aberto')
+                  : (status.opensAt ? `Fechado · abre às ${status.opensAt}` : 'Fechado')}
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
 
         {journeyActions.length > 0 && (
@@ -354,6 +367,12 @@ export default function RestaurantDetailView({
           </View>
         )}
       </ScrollView>
+
+      <OpeningHoursSheet
+        visible={hoursOpen}
+        onClose={() => setHoursOpen(false)}
+        openingHours={restaurant.openingHours}
+      />
 
       <Modal
         visible={allAmenitiesOpen}

@@ -6,6 +6,7 @@ import {
   parseBusinessHours,
   parseOpeningHours,
   serializeWeeklyHours,
+  todayWeekdayKey,
   validateDaySchedule,
   validateWeeklyHours,
   weeklyHoursForEditor,
@@ -127,5 +128,13 @@ describe('serialização e exibição', () => {
     expect(formatDaySchedule({ closed: false, shifts: [{ open: '11:00', close: '14:00' }, { open: '19:00', close: '23:00' }] }))
       .toBe('11:00–14:00 · 19:00–23:00');
     expect(formatDaySchedule({ closed: true, shifts: [] })).toBe('Fechado');
+  });
+});
+
+describe('todayWeekdayKey', () => {
+  it('usa o dia no fuso do restaurante, não o do aparelho', () => {
+    // 02:00 UTC de segunda ainda é domingo à noite em São Paulo (UTC-3).
+    expect(todayWeekdayKey(new Date('2026-09-28T02:00:00Z'))).toBe('sunday');
+    expect(todayWeekdayKey(new Date('2026-09-28T15:00:00Z'))).toBe('monday');
   });
 });
