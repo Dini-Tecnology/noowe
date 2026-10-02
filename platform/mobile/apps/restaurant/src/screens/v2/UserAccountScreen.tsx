@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { pickImageFromLibrary } from '@okinawa/shared/utils/pick-image';
-import { Camera, Repeat, Store, User } from 'lucide-react-native';
+import { Camera, Plus, Repeat, Store, User } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { getSupabaseClient } from '@okinawa/shared/services/supabase';
@@ -24,7 +24,7 @@ import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 export default function UserAccountScreen() {
   const colors = useColors();
   const navigation = useNavigation<any>();
-  const { restaurants, restaurantId } = useRestaurantRole();
+  const { restaurants, restaurantId, serverRole } = useRestaurantRole();
   const activeRestaurant = restaurants.find((item) => item.id === restaurantId);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -168,6 +168,23 @@ export default function UserAccountScreen() {
               </View>
               <Repeat size={16} color={colors.primary} />
               <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>Trocar</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {serverRole === 'owner' ? (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('CreateRestaurant')}
+              accessibilityRole="button"
+              accessibilityLabel="Cadastrar novo restaurante"
+              style={[styles.switchRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            >
+              <View style={[styles.switchIcon, { backgroundColor: `${colors.primary}15` }]}>
+                <Plus size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '700', color: colors.foreground }}>Cadastrar novo restaurante</Text>
+                <Text style={{ fontSize: 11, color: colors.foregroundSecondary }}>Você pode ser dono de vários restaurantes</Text>
+              </View>
             </TouchableOpacity>
           ) : null}
 

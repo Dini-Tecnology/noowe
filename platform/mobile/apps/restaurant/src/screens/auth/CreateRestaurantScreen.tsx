@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
+import * as Crypto from 'expo-crypto';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -37,11 +38,19 @@ const SERVICE_TYPE_OPTIONS = [
 ];
 
 interface CreateRestaurantScreenProps {
-  onCreated: () => Promise<void> | void;
+  /** Recebe o id do restaurante criado (o app o torna o restaurante em uso). */
+  onCreated: (restaurantId: string | null) => Promise<void> | void;
+  /**
+   * Quem já tem restaurante cadastra outro de dentro do app: em vez de "Sair da conta",
+   * a tela oferece "Voltar".
+   */
+  onCancel?: () => void;
 }
 
-export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantScreenProps) {
+export default function CreateRestaurantScreen({ onCreated, onCancel }: CreateRestaurantScreenProps) {
   const colors = useColors();
+  // Uma chave por abertura da tela: tocar duas vezes ou tentar de novo devolve o mesmo restaurante.
+  const requestId = useRef(Crypto.randomUUID());
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [name, setName] = useState('');
@@ -87,7 +96,8 @@ export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantSc
     setLoading(true);
     setError('');
     try {
-      await supabaseApiAdapter.createMyRestaurant({
+      const created = await supabaseApiAdapter.createMyRestaurant({
+        requestId: requestId.current,
         name: trimmedName,
         phone: trimmedPhone,
         email: trimmedEmail,
@@ -101,7 +111,8 @@ export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantSc
         serviceType,
       });
       Haptic.successNotification();
-      await onCreated();
+      const createdId = created && typeof created === 'object' && 'id' in created ? String((created as { id: unknown }).id) : null;
+      await onCreated(createdId);
     } catch (err) {
       const message = userErrorMessage(err, 'Não foi possível criar o restaurante.');
       setError(message);
@@ -136,8 +147,10 @@ export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantSc
           showsVerticalScrollIndicator={false}
         >
           <AuthScreenHeader
-            title="Cadastre seu restaurante"
-            subtitle="Para liberar Cardápio, Equipe, Financeiro e o restante do app, precisamos vincular sua conta como dono de um estabelecimento."
+            title={onCancel ? 'Novo restaurante' : 'Cadastre seu restaurante'}
+            subtitle={onCancel
+              ? 'Você será dono do novo restaurante e poderá alternar entre eles quando quiser.'
+              : 'Para liberar Cardápio, Equipe, Financeiro e o restante do app, precisamos vincular sua conta como dono de um estabelecimento.'}
           />
 
           <AuthTextField
@@ -235,13 +248,14 @@ export default function CreateRestaurantScreen({ onCreated }: CreateRestaurantSc
 
           <TouchableOpacity
             style={styles.logoutButton}
-            onPress={handleSignOut}
+            onPress={onCancel ?? handleSignOut}
+            disabled={loading}
             accessibilityRole="button"
-            accessibilityLabel="Sair da conta"
+            accessibilityLabel={onCancel ? 'Voltar sem cadastrar' : 'Sair da conta'}
           >
-            <LogOut size={18} color={colors.foregroundSecondary} />
+            {onCancel ? null : <LogOut size={18} color={colors.foregroundSecondary} />}
             <Text style={[styles.logoutText, { color: colors.foregroundSecondary }]}>
-              Sair da conta
+              {onCancel ? 'Voltar' : 'Sair da conta'}
             </Text>
           </TouchableOpacity>
         </ScrollView>

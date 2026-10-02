@@ -6,6 +6,7 @@ import logger from '@okinawa/shared/utils/logger';
 import { getActiveRestaurantId, setActiveRestaurantId } from '@okinawa/shared/services/active-restaurant';
 import { loadStoredActiveRestaurantId, saveStoredActiveRestaurantId } from '@okinawa/shared/services/active-restaurant-storage';
 import socketService from '../services/socket';
+import { pickRoleRow } from './pickRestaurantRole';
 import {
   DISABLED_SERVICE_TYPE_FEATURES,
   isSupportedServiceType,
@@ -155,16 +156,17 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       .select('role, restaurant_id')
       .eq('user_id', userId)
       .eq('is_active', true)
-      .order('created_at', { ascending: true })
-      .limit(1);
+      .order('created_at', { ascending: true });
 
     query = targetRestaurantId ? query.eq('restaurant_id', targetRestaurantId) : query;
 
-    const { data, error } = await query.maybeSingle();
+    const { data: roleRows, error } = await query;
     if (error) {
       logger.warn('[RestaurantRoleContext] Failed to load role:', error.message);
       return false;
     }
+    // Uma pessoa pode ter mais de um papel no mesmo restaurante (ex.: gerente e depois dono).
+    const data = pickRoleRow(roleRows ?? [], targetRestaurantId);
     if (data) {
       const loaded = data.role as RestaurantRole;
       setServerRole(loaded);

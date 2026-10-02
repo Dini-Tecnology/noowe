@@ -21,7 +21,7 @@ banco**, não a migration completa — a migration é gerada pela fatia correspo
 |---|---|---|
 | `establishments` | `service_models[]`, `timezone` | `service_models` é a lista habilitada (ADR-003) |
 | `establishment_config` | 1:1 com establishment, todos os parâmetros de §7.1 | ver `03-config-service-model.md` |
-| `staff_members` | `user_id`, `establishment_id`, `role` | enum: dono, gerente, maitre, chef, cozinheiro, barman, garcom |
+| `staff_members` | `user_id`, `establishment_id`, `role` | enum: dono, gerente, maitre, chef, cozinheiro, barman, garcom. No banco é `user_roles`. Um estabelecimento tem **um ou mais donos** e um dono pode ter **vários estabelecimentos** (ADR-015) |
 | `tables` | `number`, `seats`, `status`, `merged_into_id` | `merged_into_id` sustenta junção de mesas |
 | `stations` | `type` (cozinha/bar), `name` | roteamento de item vem daqui |
 | `menu_items` | `station_id`, `price_cents`, `prep_time_min`, `available`, `allergens[]` | `available` é o bloqueio do chef |

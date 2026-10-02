@@ -8,6 +8,9 @@ const corsHeaders = {
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// "owner" fica de fora de propósito: esta função grava com a service role, sem usuário no banco, e
+// o papel de dono precisa passar pelo trilho com auditoria (restaurant_upsert_staff_role). Um novo
+// dono é vinculado depois de ter conta ("Vincular existente" no app).
 const ASSIGNABLE_ROLES = ["manager", "maitre", "chef", "barman", "cook", "waiter"];
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
@@ -63,16 +66,18 @@ serve(async (req) => {
       return jsonResponse({ error: "Invalid payload" }, 400);
     }
 
-    const { data: callerRole } = await supabase
+    // Quem é dono e gerente do mesmo restaurante tem duas linhas: a checagem precisa aceitar
+    // qualquer uma (maybeSingle() falharia com duas e devolveria 403 a um dono legítimo).
+    const { data: callerRoles } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", caller.id)
       .eq("restaurant_id", restaurantId)
       .eq("is_active", true)
       .in("role", ["owner", "manager"])
-      .maybeSingle();
+      .limit(1);
 
-    if (!callerRole) return jsonResponse({ error: "Forbidden" }, 403);
+    if (!callerRoles || callerRoles.length === 0) return jsonResponse({ error: "Forbidden" }, 403);
 
     const { data: existingProfile } = await supabase
       .from("profiles")

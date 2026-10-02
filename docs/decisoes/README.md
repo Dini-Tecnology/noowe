@@ -25,6 +25,7 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [011](ADR-011-convite-por-username.md) | Convite por @username com aceite, convivendo com link e QR | Aceito | Convidado entra sem consentir; mesa lota em silêncio |
 | [012](ADR-012-preco-medio-e-horario-com-turnos.md) | Horário com turnos em `opening_hours`; check-in exige restaurante aberto (§1, preço médio calculado, substituída pelo ADR-014) | Aceito | Cliente vê "Fechado" com o restaurante aberto; mesa aberta fora do horário |
 | [014](ADR-014-preco-medio-cadastrado-pelo-restaurante.md) | Preço médio por pessoa cadastrado pelo restaurante (R$, centavos); sem cadastro, sem preço no app | Aceito | Cliente vê preço que o restaurante não declarou |
+| [015](ADR-015-multiplos-donos-e-restaurantes.md) | Vários donos por restaurante e vários restaurantes por dono; só dono muda dono, nunca fica sem dono, com auditoria | Aceito | Gerente promovendo a dono; restaurante sem dono; dono que saiu mantendo acesso |
 
 **Vocabulário:** os ADRs usam os nomes da spec. A tradução para o banco está em
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).

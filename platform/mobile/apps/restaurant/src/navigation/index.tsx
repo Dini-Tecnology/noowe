@@ -466,6 +466,21 @@ function MainTabs() {
   );
 }
 
+/** Quem já é dono cadastra outro restaurante sem sair do app; o novo vira o restaurante em uso. */
+function CreateAnotherRestaurantScreen({ navigation }: { navigation: { goBack: () => void } }) {
+  const { reloadRestaurants, switchRestaurant } = useRestaurantRole();
+  return (
+    <CreateRestaurantScreen
+      onCancel={() => navigation.goBack()}
+      onCreated={async (newRestaurantId) => {
+        await reloadRestaurants();
+        if (newRestaurantId) await switchRestaurant(newRestaurantId);
+        else navigation.goBack();
+      }}
+    />
+  );
+}
+
 function MainStack() {
   return (
     <Stack.Navigator
@@ -505,6 +520,7 @@ function MainStack() {
       <Stack.Screen name="RestaurantProfile" component={GuardedRestaurantProfile} options={scaleFadeScreenOptions} />
       <Stack.Screen name="UserAccount" component={UserAccountScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RestaurantSelector" component={RestaurantSelectorScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="CreateRestaurant" component={CreateAnotherRestaurantScreen} options={{ headerShown: false }} />
       <Stack.Screen name="BusinessHours" component={GuardedBusinessHours} options={scaleFadeScreenOptions} />
       <Stack.Screen name="NotificationSettings" component={GuardedNotificationSettings} options={scaleFadeScreenOptions} />
       <Stack.Screen name="PaymentSettings" component={GuardedPaymentSettings} options={scaleFadeScreenOptions} />

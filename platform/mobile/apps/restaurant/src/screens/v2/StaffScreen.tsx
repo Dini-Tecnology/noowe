@@ -4,7 +4,9 @@ import { Text } from 'react-native-paper';
 import { Users, Shield, UserCheck, UserX, Plus, Pencil, Ban, CheckCircle2, Trash2, Search } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
+import { assignableRoles, canManageMember } from './shared/staffRoles';
 import { V2Shell } from './shared/V2Shell';
 import { V2FormSheet } from './shared/V2FormSheet';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
@@ -60,8 +62,6 @@ const ROLE_COLORS: Record<string, string> = {
   waiter: '#374151',
 };
 
-const ASSIGNABLE_ROLES = ['manager', 'maitre', 'chef', 'barman', 'cook', 'waiter'];
-
 function getErrorMessage(error: unknown, fallback: string): string {
   return userErrorMessage(error, fallback);
 }
@@ -79,6 +79,10 @@ export default function StaffScreen() {
   const colors = useColors();
   const { restaurantId, serverRole } = useRestaurantRole();
   const canManage = serverRole === 'owner' || serverRole === 'manager';
+  const [viewerUserId, setViewerUserId] = useState<string | null>(null);
+  useEffect(() => {
+    void getOptionalSupabaseSessionUser().then(({ user }) => setViewerUserId(user?.id ?? null));
+  }, []);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -324,7 +328,7 @@ export default function StaffScreen() {
                           )}
                           <StaffFacts member={member} />
                         </View>
-                        {canManage && role !== 'owner' ? (
+                        {canManageMember({ viewerRole: serverRole, viewerUserId, member }) ? (
                           <View style={styles.rowActions}>
                             <IconAction label="Editar função" onPress={() => openEdit(member)}>
                               <Pencil size={15} color={colors.foregroundSecondary} />
@@ -431,7 +435,12 @@ export default function StaffScreen() {
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => { setInviteMode('create'); setSearchError(null); }}
+                onPress={() => {
+                  setInviteMode('create');
+                  setSearchError(null);
+                  // Conta nova com senha provisória não nasce como dono.
+                  if (selectedRole === 'owner') setSelectedRole('waiter');
+                }}
                 style={[styles.modeTab, { borderColor: colors.border }, inviteMode === 'create' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
               >
                 <Text style={{ fontWeight: '800', fontSize: 12, color: inviteMode === 'create' ? '#FFF' : colors.foreground }}>
@@ -523,7 +532,7 @@ export default function StaffScreen() {
           || (foundUser && !foundUser.already_in_this_restaurant)) ? (
           <Field label="Função" required>
             <View style={styles.roleOptions}>
-              {ASSIGNABLE_ROLES.map((role) => {
+              {assignableRoles({ viewerRole: serverRole, creatingAccount: !editingMember && inviteMode === 'create' }).map((role) => {
                 const selected = selectedRole === role;
                 return (
                   <Pressable

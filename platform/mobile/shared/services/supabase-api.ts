@@ -408,6 +408,7 @@ export interface SupabaseApiAdapter {
     neighborhood?: string;
     zipCode?: string;
     serviceType: ServiceType;
+    requestId?: string;
   }): Promise<any>;
   // ── Customer Discovery (public/authenticated read, RLS: restaurants_select_active / menu_items_select_public) ──
   getRestaurantsList(filters?: { search?: string; cuisine_type?: string }): Promise<any[]>;
@@ -1942,6 +1943,8 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     neighborhood?: string;
     zipCode?: string;
     serviceType: ServiceType;
+    /** Gerada uma vez por tela de cadastro: reenviar (duplo toque, retry) não cria um segundo restaurante. */
+    requestId?: string;
   }) {
     const { data, error } = await getSupabaseClient().rpc('create_my_restaurant', {
       p_name: input.name,
@@ -1952,6 +1955,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_address: input.address ?? 'Endereço a definir',
       p_zip_code: input.zipCode ?? '00000-000',
       p_service_type: input.serviceType,
+      p_request_id: input.requestId ?? Crypto.randomUUID(),
     });
     if (error) throw error;
 
