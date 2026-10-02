@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { ActivityIndicator, Alert, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Check, Flame, IceCream, Leaf, Pizza, Zap } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
@@ -38,6 +38,7 @@ export default function QuickServiceScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cuisineTags, setCuisineTags] = useState<QuickServiceCuisineTag[]>([]);
+  // Valor antigo, só repassado ao salvar: o pré-pedido do Quick vem da política (orderAhead), não desta chave.
   const [skipTheLineEnabled, setSkipTheLineEnabled] = useState(false);
   const [settings, setSettings] = useState<QuickPanelSettings | null>(null);
   const [savingPolicy, setSavingPolicy] = useState(false);
@@ -100,11 +101,6 @@ export default function QuickServiceScreen() {
 
   const toggleCuisineTag = useCallback((key: QuickServiceCuisineTag) => {
     setCuisineTags((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
-    schedulePersist();
-  }, [schedulePersist]);
-
-  const toggleSkipTheLine = useCallback(() => {
-    setSkipTheLineEnabled((current) => !current);
     schedulePersist();
   }, [schedulePersist]);
 
@@ -181,23 +177,6 @@ export default function QuickServiceScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </View>
-          </ConfigSectionCard>
-
-          <ConfigSectionCard title="Skip the Line" Icon={Zap}>
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.rowTitle, { color: colors.foreground }]}>Pré-pedido no app</Text>
-                <Text style={[styles.rowSub, { color: colors.foregroundSecondary }]}>
-                  Clientes pagam antes de chegar e retiram sem esperar no caixa
-                </Text>
-              </View>
-              <Switch
-                value={skipTheLineEnabled}
-                onValueChange={toggleSkipTheLine}
-                trackColor={{ false: colors.border, true: `${colors.primary}80` }}
-                thumbColor={skipTheLineEnabled ? colors.primary : colors.foregroundSecondary}
-              />
             </View>
           </ConfigSectionCard>
 
