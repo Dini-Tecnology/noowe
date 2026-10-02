@@ -175,8 +175,8 @@ export type CustomerRestaurant = {
   openingHours: Record<string, unknown>;
   rating: number;
   totalReviews: number;
-  /** Preço médio do cardápio em centavos, calculado no servidor; null = sem itens. */
-  avgMenuPriceCents: number | null;
+  /** Preço médio por pessoa cadastrado pelo restaurante, em centavos; null = não informado. */
+  averagePriceCents: number | null;
   lat: number | null;
   lng: number | null;
   serviceConfig: Record<string, unknown>;
@@ -658,7 +658,7 @@ function mapRestaurant(row: RestaurantRow): CustomerRestaurant {
     openingHours: objectValue(row.opening_hours),
     rating: numberValue(row.rating),
     totalReviews: numberValue(row.total_reviews),
-    avgMenuPriceCents: row.avg_menu_price_cents == null ? null : numberValue(row.avg_menu_price_cents),
+    averagePriceCents: row.average_price_cents == null ? null : numberValue(row.average_price_cents),
     lat: row.lat == null ? null : numberValue(row.lat),
     lng: row.lng == null ? null : numberValue(row.lng),
     serviceConfig: objectValue(row.service_config),

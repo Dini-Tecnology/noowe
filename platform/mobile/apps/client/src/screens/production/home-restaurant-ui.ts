@@ -22,16 +22,16 @@ export function getServiceTypePresentation(serviceType: string) {
 }
 
 /**
- * "Preço médio R$ 58,27": média dos itens do cardápio, calculada no servidor em
- * centavos (`restaurants.avg_menu_price_cents`). Só aqui, na borda da UI, o
- * valor vira reais. Sem cardápio (null) não há o que mostrar.
+ * "Preço médio R$ 50,00": o valor que o próprio restaurante cadastrou no painel,
+ * em centavos (`restaurants.average_price_cents`). Só aqui, na borda da UI, o
+ * valor vira reais. Sem cadastro (null) não há o que mostrar.
  */
-export function formatAverageMenuPrice(avgMenuPriceCents: number | null | undefined): string | null {
-  if (avgMenuPriceCents == null || !Number.isFinite(avgMenuPriceCents) || avgMenuPriceCents <= 0) return null;
+export function formatAveragePrice(averagePriceCents: number | null | undefined): string | null {
+  if (averagePriceCents == null || !Number.isFinite(averagePriceCents) || averagePriceCents <= 0) return null;
   const reais = new Intl.NumberFormat('pt-BR', {
-    minimumFractionDigits: avgMenuPriceCents % 100 === 0 ? 0 : 2,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(avgMenuPriceCents / 100);
+  }).format(averagePriceCents / 100);
   // Espaço sem quebra: o card não pode separar "R$" do valor em duas linhas.
   return `Preço médio R$\u00A0${reais}`;
 }

@@ -10,7 +10,7 @@ import type {
   CustomerRestaurant,
   RestaurantLiveStatus,
 } from '../../services/customer-backend';
-import { formatAverageMenuPrice, formatRatingWithCount, hasRating } from './home-restaurant-ui';
+import { formatAveragePrice, formatRatingWithCount, hasRating } from './home-restaurant-ui';
 import {
   RESTAURANT_PAGE_ACTIONS,
   amenityChipLimitForWidth,
@@ -94,8 +94,8 @@ export default function RestaurantDetailView({
   const config = useMemo(() => casualDiningConfigOf(restaurant), [restaurant]);
   const amenities = useMemo(() => restaurantAmenityChips(restaurant), [restaurant]);
   const priceLabel = useMemo(
-    () => formatAverageMenuPrice(restaurant.avgMenuPriceCents),
-    [restaurant.avgMenuPriceCents],
+    () => formatAveragePrice(restaurant.averagePriceCents),
+    [restaurant.averagePriceCents],
   );
 
   // Chips are capped so the page never turns into a wall of tags; how many fit

@@ -4199,7 +4199,7 @@ export type Database = {
           address_number: string | null
           average_prep_time: number | null
           average_ticket: number | null
-          avg_menu_price_cents: number | null
+          average_price_cents: number | null
           banner_url: string | null
           business_hours: Json | null
           city: string
@@ -4240,7 +4240,7 @@ export type Database = {
           address_number?: string | null
           average_prep_time?: number | null
           average_ticket?: number | null
-          avg_menu_price_cents?: number | null
+          average_price_cents?: number | null
           banner_url?: string | null
           business_hours?: Json | null
           city: string
@@ -4281,7 +4281,7 @@ export type Database = {
           address_number?: string | null
           average_prep_time?: number | null
           average_ticket?: number | null
-          avg_menu_price_cents?: number | null
+          average_price_cents?: number | null
           banner_url?: string | null
           business_hours?: Json | null
           city?: string

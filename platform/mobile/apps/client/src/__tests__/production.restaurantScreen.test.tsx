@@ -73,7 +73,7 @@ function buildRestaurant(serviceType: ServiceModel) {
     openingHours: {},
     rating: 4.6,
     totalReviews: 120,
-    avgMenuPriceCents: 5827,
+    averagePriceCents: 5000,
     lat: null,
     lng: null,
     serviceConfig: { amenities: AMENITIES },
@@ -183,14 +183,24 @@ describe('RestaurantScreen — one page for every service model', () => {
     expect(queryByText('Avaliações')).toBeTruthy();
     expect(queryByText('Como ir')).toBeTruthy();
 
-    // Preço médio do cardápio, não "por pessoa".
-    expect(queryByText('Preço médio R$\u00A058,27')).toBeTruthy();
+    // Preço médio cadastrado pelo restaurante, não "por pessoa".
+    expect(queryByText('Preço médio R$\u00A050,00')).toBeTruthy();
     expect(queryByText(/pessoa/)).toBeNull();
 
     // The casual-dining-only CTAs and hint are gone.
     expect(queryByText('Entrar no Restaurante')).toBeNull();
     expect(queryByText('Reservar mesa')).toBeNull();
     expect(queryByText('Walk-in com fila inteligente ou reserve antecipado')).toBeNull();
+  });
+
+  it('não mostra preço quando o restaurante não cadastrou o preço médio', async () => {
+    mockGetRestaurant.mockResolvedValue({ ...buildRestaurant('casual_dining'), averagePriceCents: null });
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+
+    const { findByText, queryByText } = renderScreen();
+
+    expect(await findByText('Cardápio')).toBeTruthy();
+    expect(queryByText(/Preço médio/)).toBeNull();
   });
 
   it.each(SERVICE_MODELS)('shows the three journey actions for %s', async (serviceModel) => {

@@ -34,7 +34,7 @@ import { takePendingTableInvite } from '../../utils/pending-table-invite';
 import customerBackend, { type CustomerRestaurant } from '../../services/customer-backend';
 import {
   featuredScore,
-  formatAverageMenuPrice,
+  formatAveragePrice,
   formatDistance,
   formatRating,
   getServiceTypePresentation,
@@ -702,10 +702,10 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={styles.sectionTitle}>Perto de você</Text>
             {rows.map((item) => {
               const serviceType = getServiceTypePresentation(item.serviceType);
-              // Preço médio do cardápio (calculado no servidor), não "por pessoa".
+              // Preço médio cadastrado pelo restaurante; sem cadastro, a linha não mostra preço.
               const subtitle = [
                 item.cuisineTypes[0] ?? serviceType.label,
-                formatAverageMenuPrice(item.avgMenuPriceCents),
+                formatAveragePrice(item.averagePriceCents),
                 distanceLabelFor(item),
               ].filter(Boolean).join(' · ');
               return (

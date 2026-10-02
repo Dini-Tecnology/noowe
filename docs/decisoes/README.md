@@ -23,7 +23,8 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [009](ADR-009-fila-virtual-waitlist-entries.md) | `waitlist_entries` é a fila; `queue_entries` fica congelada | Aceito | Duas filas divergindo |
 | [010](ADR-010-regras-de-fechamento-por-unidade.md) | Valor fixo e destino da gorjeta viram política da unidade | Aceito | Fine ou Casual fora da spec |
 | [011](ADR-011-convite-por-username.md) | Convite por @username com aceite, convivendo com link e QR | Aceito | Convidado entra sem consentir; mesa lota em silêncio |
-| [012](ADR-012-preco-medio-e-horario-com-turnos.md) | Preço médio do cardápio no lugar de "por pessoa"; horário com turnos em `opening_hours`; check-in exige restaurante aberto | Aceito | Cliente vê "Fechado" com o restaurante aberto; mesa aberta fora do horário |
+| [012](ADR-012-preco-medio-e-horario-com-turnos.md) | Horário com turnos em `opening_hours`; check-in exige restaurante aberto (§1, preço médio calculado, substituída pelo ADR-014) | Aceito | Cliente vê "Fechado" com o restaurante aberto; mesa aberta fora do horário |
+| [014](ADR-014-preco-medio-cadastrado-pelo-restaurante.md) | Preço médio por pessoa cadastrado pelo restaurante (R$, centavos); sem cadastro, sem preço no app | Aceito | Cliente vê preço que o restaurante não declarou |
 
 **Vocabulário:** os ADRs usam os nomes da spec. A tradução para o banco está em
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).

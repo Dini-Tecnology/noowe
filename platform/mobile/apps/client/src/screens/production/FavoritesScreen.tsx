@@ -9,7 +9,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend, { type CustomerRestaurant } from '../../services/customer-backend';
 import { StateView, useQueryRefreshControl } from './shared';
-import { formatAverageMenuPrice, formatRating, hasRating } from './home-restaurant-ui';
+import { formatAveragePrice, formatRating, hasRating } from './home-restaurant-ui';
 
 const ORANGE = '#FF4B22';
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=900&q=85';
@@ -85,7 +85,7 @@ export default function FavoritesScreen({ navigation }: any) {
           </View>
         ) : favorites.map((item) => {
           const cuisine = item.cuisineTypes[0] ?? 'Restaurante';
-          const price = formatAverageMenuPrice(item.avgMenuPriceCents);
+          const price = formatAveragePrice(item.averagePriceCents);
           return (
             <TouchableOpacity key={item.id} style={styles.card} onPress={() => navigation.navigate('Restaurant', { restaurantId: item.id })} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={`${item.name}, ${formatRating(item.rating, item.totalReviews)}`}>
               <Image source={{ uri: item.bannerUrl || item.logoUrl || FALLBACK_IMAGE }} style={styles.image} resizeMode="cover" />

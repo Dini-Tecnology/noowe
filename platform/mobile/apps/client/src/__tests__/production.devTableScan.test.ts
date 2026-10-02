@@ -43,7 +43,7 @@ describe('showTableQrOutcome', () => {
       { ok: true, restaurantId: 'r1' },
       { onOpened, onRetry: jest.fn(), onOpenAccount: jest.fn() },
     );
-    expect(onOpened).toHaveBeenCalledWith('r1', { switched: false });
+    expect(onOpened).toHaveBeenCalledWith('r1');
   });
 
   it.each<[QrScanOutcome, string]>([

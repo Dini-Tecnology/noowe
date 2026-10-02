@@ -1,13 +1,13 @@
 # ADR-012 — Preço médio do cardápio e horário de funcionamento com turnos
 
-**Status:** ACEITO (2026-09-28). Pedido do responsável do produto após a rodada de testes manuais;
+**Status:** ACEITO (2026-09-28). **A seção 1 (preço médio calculado) foi substituída pelo [ADR-014](ADR-014-preco-medio-cadastrado-pelo-restaurante.md) em 2026-10-01**; a seção 2 (horário com turnos) segue valendo. Pedido do responsável do produto após a rodada de testes manuais;
 a escolha do cálculo (média simples dos itens disponíveis) foi confirmada por ele.
 **Origem:** testes manuais no app cliente e no app do restaurante
 **Impacta:** cards e detalhes do restaurante (cliente), perfil e horários (restaurante), check-in de mesa
 **Regras isoladas em função nomeada:** `private.compute_avg_menu_price_cents`,
 `private.opening_hours_max_shifts_per_day`
 
-## 1. Preço médio no lugar de "por pessoa"
+## 1. Preço médio no lugar de "por pessoa" — SUBSTITUÍDA pelo ADR-014
 
 ### Questão
 

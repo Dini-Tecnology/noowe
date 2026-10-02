@@ -112,7 +112,7 @@ export interface CasualDiningConfig {
   /** Party size from which a reservation becomes mandatory. */
   groupReservationRequired: number;
   averageMealDuration: number;
-  /** Typical spend per person, shown as "R$ 60–150/pessoa". */
+  /** Legacy per-person range keys; the page now shows the owner-set average price (ADR-014). */
   pricePerPersonMin: number | null;
   pricePerPersonMax: number | null;
 }
@@ -177,22 +177,4 @@ export function serializeCasualDiningConfig(config: CasualDiningConfig): Record<
     price_per_person_min: config.pricePerPersonMin,
     price_per_person_max: config.pricePerPersonMax,
   };
-}
-
-const brl = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(Math.round(value));
-
-/**
- * "R$ 60-150/pessoa" for the restaurant page. Falls back to the average ticket
- * when the owner hasn't set an explicit range.
- */
-export function formatPricePerPerson(
-  config: Pick<CasualDiningConfig, 'pricePerPersonMin' | 'pricePerPersonMax'>,
-  averageTicket?: number | null,
-): string | null {
-  const { pricePerPersonMin: min, pricePerPersonMax: max } = config;
-  if (min && max && max > min) return `R$ ${brl(min)}-${brl(max)}/pessoa`;
-  if (min || max) return `R$ ${brl((min ?? max)!)}/pessoa`;
-  if (averageTicket && averageTicket > 0) return `~R$ ${brl(averageTicket)}/pessoa`;
-  return null;
 }

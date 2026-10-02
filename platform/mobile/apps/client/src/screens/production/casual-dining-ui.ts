@@ -4,7 +4,6 @@ import {
   CASUAL_DINING_AMENITY_PRESENTATION,
   parseAmenities,
   parseCasualDiningConfig,
-  formatPricePerPerson,
   type CasualDiningAmenity,
   type CasualDiningConfig,
 } from '@okinawa/shared/config/casual-dining';
@@ -18,7 +17,6 @@ type IoniconName = keyof typeof Ionicons.glyphMap;
 export {
   parseAmenities,
   parseCasualDiningConfig,
-  formatPricePerPerson,
   CASUAL_DINING_DISCOVERY_AMENITIES,
   CASUAL_DINING_SERVICE_AMENITIES,
 };

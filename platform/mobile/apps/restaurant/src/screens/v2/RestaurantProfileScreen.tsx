@@ -48,7 +48,7 @@ import {
 import { ConfigSegmentedTabs } from './config/ConfigSegmentedTabs';
 import { ConfigSectionCard } from './config/ConfigSectionCard';
 import { SocialBrandIcon } from './config/SocialBrandIcon';
-import { formatCurrency } from '@okinawa/shared/utils/formatters';
+import { formatCentsBRL, maskCentsInput, parseCentsInput } from '@okinawa/shared/utils/money-input';
 import { cnpjErrorMessage, maskCnpjInput } from '@okinawa/shared/utils/cnpj';
 import {
   DEFAULT_BUSINESS_HOURS,
@@ -66,8 +66,8 @@ interface ProfileState {
   description: string;
   cnpj: string;
   cuisine: string;
-  /** Média do cardápio em centavos, calculada no servidor — somente leitura. */
-  avgMenuPriceCents: number | null;
+  /** Preço médio por pessoa que o restaurante cadastrou, em centavos; null = não informado (o app cliente não mostra preço). */
+  averagePriceCents: number | null;
   capacity: string;
   phone: string;
   email: string;
@@ -83,7 +83,7 @@ const EMPTY_PROFILE: ProfileState = {
   description: '',
   cnpj: '',
   cuisine: '',
-  avgMenuPriceCents: null,
+  averagePriceCents: null,
   capacity: '',
   phone: '',
   email: '',
@@ -143,7 +143,7 @@ export default function RestaurantProfileScreen() {
         description: data.description ?? '',
         cnpj: typeof settings.cnpj === 'string' ? settings.cnpj : data.cnpj ?? '',
         cuisine: data.cuisine_type ?? '',
-        avgMenuPriceCents: data.avg_menu_price_cents == null ? null : Number(data.avg_menu_price_cents),
+        averagePriceCents: data.average_price_cents == null ? null : Number(data.average_price_cents),
         capacity: data.max_party_size != null ? String(data.max_party_size) : '',
         phone: data.phone ?? '',
         email: data.email ?? '',
@@ -262,7 +262,9 @@ export default function RestaurantProfileScreen() {
 
   const startEdit = (field: string, value: string) => {
     setEditingField(field);
-    setEditValue(field === 'capacity' ? value.replace(/\D/g, '') : value);
+    setEditValue(
+      field === 'capacity' ? value.replace(/\D/g, '') : field === 'averagePrice' ? maskCentsInput(value) : value,
+    );
   };
 
   const saveField = async (field: string) => {
@@ -273,6 +275,7 @@ export default function RestaurantProfileScreen() {
     if (field === 'cnpj') next.cnpj = maskCnpjInput(value);
     if (field === 'cuisine') next.cuisine = value;
     if (field === 'capacity') next.capacity = value.replace(/\D/g, '');
+    if (field === 'averagePrice') next.averagePriceCents = parseCentsInput(value);
     setProfile(next);
     setEditingField(null);
 
@@ -283,6 +286,8 @@ export default function RestaurantProfileScreen() {
     if (field === 'cuisine') patch.cuisine_type = next.cuisine;
     if (field === 'capacity') patch.max_party_size = Number(next.capacity) || null;
     if (field === 'cnpj') settingsPatch.cnpj = next.cnpj;
+    // null apaga o preço: o app cliente deixa de mostrar valor.
+    if (field === 'averagePrice') patch.average_price_cents = next.averagePriceCents;
 
     await persistPatch(patch, Object.keys(settingsPatch).length ? settingsPatch : undefined);
   };
@@ -331,10 +336,9 @@ export default function RestaurantProfileScreen() {
     { key: 'cnpj', label: 'CNPJ', value: profile.cnpj || '—' },
     { key: 'cuisine', label: 'Tipo de Cozinha', value: profile.cuisine || '—' },
     {
-      key: 'avgMenuPrice',
-      label: 'Preço médio do cardápio',
-      value: profile.avgMenuPriceCents ? formatCurrency(profile.avgMenuPriceCents / 100) : 'Adicione itens ao cardápio',
-      readOnly: true,
+      key: 'averagePrice',
+      label: 'Preço médio por pessoa',
+      value: profile.averagePriceCents ? formatCentsBRL(profile.averagePriceCents) : 'Não informado',
     },
     {
       key: 'capacity',
@@ -465,14 +469,24 @@ export default function RestaurantProfileScreen() {
                         </Text>
                         <TextInput
                           value={editValue}
-                          onChangeText={(text) => setEditValue(field.key === 'cnpj' ? maskCnpjInput(text) : text)}
+                          onChangeText={(text) =>
+                            setEditValue(
+                              field.key === 'cnpj'
+                                ? maskCnpjInput(text)
+                                : field.key === 'averagePrice'
+                                  ? maskCentsInput(text)
+                                  : text,
+                            )
+                          }
                           autoCapitalize={field.key === 'cnpj' ? 'characters' : 'sentences'}
                           autoCorrect={field.key === 'cnpj' ? false : undefined}
                           maxLength={field.key === 'cnpj' ? 18 : undefined}
                           autoFocus
                           multiline={field.key === 'description'}
-                          keyboardType={field.key === 'capacity' ? 'numeric' : 'default'}
-                          placeholder={field.key === 'cnpj' ? '00.000.000/0000-00' : undefined}
+                          keyboardType={field.key === 'capacity' || field.key === 'averagePrice' ? 'number-pad' : 'default'}
+                          placeholder={
+                            field.key === 'cnpj' ? '00.000.000/0000-00' : field.key === 'averagePrice' ? 'R$ 0,00' : undefined
+                          }
                           placeholderTextColor={colors.foregroundSecondary}
                           style={[
                             styles.input,
@@ -483,6 +497,11 @@ export default function RestaurantProfileScreen() {
                             },
                           ]}
                         />
+                        {field.key === 'averagePrice' && (
+                          <Text style={{ color: colors.foregroundSecondary, fontSize: 11 }}>
+                            Aparece para os clientes nos cards e na página do restaurante. Deixe em branco para não exibir.
+                          </Text>
+                        )}
                         {field.key === 'cnpj' && cnpjErrorMessage(editValue) && (
                           <Text style={{ color: colors.error, fontSize: 11 }} accessibilityRole="alert">
                             {cnpjErrorMessage(editValue)}
@@ -514,13 +533,6 @@ export default function RestaurantProfileScreen() {
                           </TouchableOpacity>
                         </View>
                       </View>
-                    ) : 'readOnly' in field && field.readOnly ? (
-                      <View style={styles.fieldPress} accessible accessibilityLabel={`${field.label}: ${field.value}. Calculado automaticamente a partir do cardápio.`}>
-                        <Text style={[styles.fieldLabel, { color: colors.foregroundSecondary }]}>{field.label}</Text>
-                        <Text style={{ color: colors.foreground, fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
-                          {field.value}
-                        </Text>
-                      </View>
                     ) : (
                       <TouchableOpacity
                         onPress={() =>
@@ -534,7 +546,9 @@ export default function RestaurantProfileScreen() {
                                   ? profile.cnpj
                                   : field.key === 'cuisine'
                                     ? profile.cuisine
-                                    : profile.name,
+                                    : field.key === 'averagePrice'
+                                      ? String(profile.averagePriceCents ?? '')
+                                      : profile.name,
                           )
                         }
                         style={styles.fieldPress}
