@@ -24,7 +24,24 @@ type Decision = { request: CapacityRequest } & (
 const APPROVAL_LABELS: Record<CapacityApprovalReason, string> = {
   cadeira_extra: 'Aprovar · cadeira extra',
   crianca_colo: 'Aprovar · criança de colo',
+  walk_in_liberado: 'Liberar mesa',
 };
+
+/** Motivos de aprovação de cada tipo de pedido: fila ativa só se libera; lotação escolhe o motivo. */
+export function approvalReasonsFor(request: Pick<CapacityRequest, 'requestKind' | 'reason'>): CapacityApprovalReason[] {
+  if (request.requestKind === 'open' && request.reason === 'queue_active') return ['walk_in_liberado'];
+  return ['cadeira_extra', 'crianca_colo'];
+}
+
+/** Linha de contexto do cartão: o que o cliente quer e por que precisa da recepção. */
+export function describeRequest(request: Pick<CapacityRequest, 'requestKind' | 'reason' | 'seatCount' | 'tableNumber' | 'seats' | 'occupiedSeats'>): string {
+  if (request.requestKind === 'open') {
+    return request.reason === 'queue_active'
+      ? `Quer abrir a mesa ${request.tableNumber} com ${request.seatCount} pessoa(s), mas há grupos na fila`
+      : `Quer abrir a mesa ${request.tableNumber} com ${request.seatCount} pessoa(s); ela tem ${request.seats} lugares`;
+  }
+  return `Quer entrar na mesa ${request.tableNumber} (${request.occupiedSeats}/${request.seats} lugares)`;
+}
 
 function elapsedLabel(iso: string, now: number): string {
   const minutes = Math.floor((now - new Date(iso).getTime()) / 60_000);
@@ -103,7 +120,7 @@ export default function CapacityRequestsScreen() {
             <Check size={32} color="#22C55E" />
             <Text style={{ color: colors.foreground, fontWeight: '700', marginTop: 10, fontSize: 16 }}>Nenhuma solicitação</Text>
             <Text style={{ color: colors.foregroundSecondary, marginTop: 4, textAlign: 'center' }}>
-              Quando alguém tentar entrar numa mesa cheia, aparece aqui.
+              Quando alguém tentar entrar numa mesa cheia ou abrir uma mesa que precisa da recepção, aparece aqui.
             </Text>
           </View>
         ) : null}
@@ -113,13 +130,18 @@ export default function CapacityRequestsScreen() {
             <View style={styles.cardHeader}>
               <Users size={18} color="#F59E0B" />
               <Text style={[styles.title, { color: colors.foreground }]}>
-                Mesa {request.tableNumber} · {request.occupiedSeats}/{request.seats} lugares
+                {request.requestKind === 'open'
+                  ? `Abrir mesa ${request.tableNumber} · ${request.seatCount} pessoa(s)`
+                  : `Mesa ${request.tableNumber} · ${request.occupiedSeats}/${request.seats} lugares`}
               </Text>
               <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>{elapsedLabel(request.createdAt, now)}</Text>
             </View>
             <Text style={[styles.detail, { color: colors.foregroundSecondary }]}>
               @{request.requestedUser.username} ({request.requestedUser.displayName})
               {request.invitedBy ? ` · convidado por @${request.invitedBy.username}` : ''}
+            </Text>
+            <Text style={[styles.detail, { color: colors.foregroundSecondary }]} testID={`capacity-context-${request.id}`}>
+              {describeRequest(request)}
             </Text>
 
             {request.canDecide ? (
@@ -134,7 +156,7 @@ export default function CapacityRequestsScreen() {
                   accessibilityLabel={`Observação da mesa ${request.tableNumber}`}
                 />
                 <View style={styles.actions}>
-                  {(Object.keys(APPROVAL_LABELS) as CapacityApprovalReason[]).map((reason) => (
+                  {approvalReasonsFor(request).map((reason) => (
                     <TouchableOpacity
                       key={reason}
                       style={[styles.btn, { backgroundColor: '#22C55E', opacity: acting === request.id ? 0.6 : 1 }]}
@@ -169,7 +191,9 @@ export default function CapacityRequestsScreen() {
         title={pending?.approve ? 'Liberar entrada?' : 'Recusar entrada?'}
         message={pending
           ? pending.approve
-            ? `@${pending.request.requestedUser.username} entra na mesa ${pending.request.tableNumber} acima da lotação (${APPROVAL_LABELS[pending.reason].replace('Aprovar · ', '')}). A decisão fica registrada.`
+            ? pending.request.requestKind === 'open'
+              ? `@${pending.request.requestedUser.username} abre a mesa ${pending.request.tableNumber} (${APPROVAL_LABELS[pending.reason].replace('Aprovar · ', '')}). A decisão fica registrada.`
+              : `@${pending.request.requestedUser.username} entra na mesa ${pending.request.tableNumber} acima da lotação (${APPROVAL_LABELS[pending.reason].replace('Aprovar · ', '')}). A decisão fica registrada.`
             : `@${pending.request.requestedUser.username} não entra na mesa ${pending.request.tableNumber}. A decisão fica registrada.`
           : ''}
         confirmLabel={pending?.approve ? 'Liberar' : 'Recusar'}

@@ -44,6 +44,30 @@ it('lists pending entries with the table occupancy and who invited', async () =>
   expect(mockGet).toHaveBeenCalledWith('r1', 'pending');
 });
 
+const openRequest = (reason: 'capacity' | 'queue_active') => request({
+  tableSessionId: null, requestKind: 'open', reason, seatCount: 5, seats: 4, occupiedSeats: 0, invitedBy: null,
+});
+
+it('pedido de abertura por grupo grande mostra o tamanho e oferece os motivos de lotação (ADR-016)', async () => {
+  mockGet.mockResolvedValue([openRequest('capacity')]);
+  const view = render(<CapacityRequestsScreen />);
+  expect(await view.findByText('Abrir mesa 7 · 5 pessoa(s)')).toBeTruthy();
+  expect(view.getByText(/ela tem 4 lugares/)).toBeTruthy();
+  expect(view.getByText('Aprovar · cadeira extra')).toBeTruthy();
+  expect(view.queryByText('Liberar mesa')).toBeNull();
+});
+
+it('pedido de abertura com fila ativa só se libera ou se recusa, e envia walk_in_liberado', async () => {
+  mockGet.mockResolvedValueOnce([openRequest('queue_active')]).mockResolvedValue([]);
+  mockResolve.mockResolvedValue(request({ status: 'approved' }));
+  const view = render(<CapacityRequestsScreen />);
+  expect(await view.findByText(/há grupos na fila/)).toBeTruthy();
+  expect(view.queryByText('Aprovar · cadeira extra')).toBeNull();
+  fireEvent.press(view.getByText('Liberar mesa'));
+  fireEvent.press(view.getByText('Liberar'));
+  await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('c1', { approve: true, reason: 'walk_in_liberado', note: undefined }));
+});
+
 it('the waiter sees the request but cannot decide', async () => {
   mockGet.mockResolvedValue([request({ canDecide: false })]);
   const view = render(<CapacityRequestsScreen />);

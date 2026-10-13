@@ -175,7 +175,9 @@ export interface RestaurantApproval {
 
 /** ADR-007 / G2b — entrada acima da lotação aguardando a recepção. */
 export type CapacityRequestStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
-export type CapacityApprovalReason = 'cadeira_extra' | 'crianca_colo';
+export type CapacityApprovalReason = 'cadeira_extra' | 'crianca_colo' | 'walk_in_liberado';
+/** `join`: entrar numa mesa aberta lotada · `open`: abrir uma mesa (ADR-016). */
+export type CapacityRequestKind = 'join' | 'open';
 
 export interface CapacityRequestUserCard {
   userId: string;
@@ -187,7 +189,8 @@ export interface CapacityRequestUserCard {
 export interface CapacityRequest {
   id: string;
   restaurantId: string;
-  tableSessionId: string;
+  /** Null nos pedidos de abertura de mesa (`requestKind: 'open'`). */
+  tableSessionId: string | null;
   tableId: string;
   tableNumber: string;
   seats: number;
@@ -195,6 +198,9 @@ export interface CapacityRequest {
   occupiedSeatsAtRequest: number;
   capacityAtRequest: number;
   seatCount: number;
+  requestKind: CapacityRequestKind;
+  /** Por que a recepção precisa decidir: grupo acima dos lugares ou fila ativa. */
+  reason: 'capacity' | 'queue_active' | null;
   status: CapacityRequestStatus;
   decisionReason: string | null;
   decisionNote: string | null;
