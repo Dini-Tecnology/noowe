@@ -5,13 +5,24 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import CapacityRequestsScreen from '../screens/v2/CapacityRequestsScreen';
 
-jest.mock('lucide-react-native', () => ({ Check: 'Check', Users: 'Users' }));
+jest.mock('lucide-react-native', () => ({ Check: 'Check', Users: 'Users', X: 'X' }));
 jest.mock('@okinawa/shared/contexts/ThemeContext', () => ({ useColors: () => new Proxy({}, { get: () => '#333333' }) }));
 jest.mock('../screens/v2/shared/V2Shell', () => ({
   V2Shell: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 jest.mock('../contexts/RestaurantRoleContext', () => ({ useRestaurantRole: () => ({ restaurantId: 'r1' }) }));
 jest.mock('../screens/v2/shared/useRealtimeSubscription', () => ({ useRealtimeSubscription: jest.fn() }));
+
+const mockTables = jest.fn();
+jest.mock('../screens/v2/shared/useRestaurantOperations', () => ({
+  useRestaurantTables: () => ({ data: mockTables(), loading: false, error: null, refresh: jest.fn() }),
+}));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+
+const table = (id: string, label: string, seats: number, overrides: Record<string, unknown> = {}) => ({
+  id, label, seats, effectiveSeats: seats, status: 'available', sessionId: null, mergedIntoId: null, mergedChildren: [],
+  section: 'Salão', ...overrides,
+});
 
 const mockGet = jest.fn();
 const mockResolve = jest.fn();
@@ -31,6 +42,12 @@ const request = (overrides: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  mockTables.mockReturnValue([
+    table('t1', '7', 2, { status: 'occupied', sessionId: 's1' }),
+    table('t2', '8', 2),
+    table('t3', '9', 6),
+    table('t4', '10', 4),
+  ]);
   mockGet.mockReset();
   mockResolve.mockReset();
 });
@@ -109,4 +126,53 @@ it.each([
   fireEvent.press(await view.findByText('Aprovar · cadeira extra'));
   fireEvent.press(view.getByText('Liberar'));
   expect((await view.findByTestId('capacity-action-error')).props.children).toBe(message);
+});
+
+describe('troca e junção de mesas (ADR-018)', () => {
+  it('lotação oferece trocar e juntar mesas; fila ativa só libera', async () => {
+    mockGet.mockResolvedValue([request(), openRequest('queue_active')]);
+    const view = render(<CapacityRequestsScreen />);
+    expect((await view.findAllByText('Trocar mesa')).length).toBe(1);
+    expect(view.getAllByText('Juntar mesas').length).toBe(1);
+  });
+
+  it('troca: o seletor mostra o que não comporta, e a decisão envia a mesa de destino', async () => {
+    mockGet.mockResolvedValueOnce([request({ headcount: 2, seatCount: 1 })]).mockResolvedValue([]);
+    mockResolve.mockResolvedValue(request({ status: 'approved' }));
+    const view = render(<CapacityRequestsScreen />);
+    fireEvent.press(await view.findByText('Trocar mesa'));
+    // precisa de 3 lugares (2 na mesa + 1 que quer entrar): a mesa 8 (2 lugares) não comporta.
+    expect(view.getByText(/2 lugares · não comporta/)).toBeTruthy();
+    fireEvent.press(view.getByTestId('table-pick-t3'));
+    expect(view.getByTestId('table-picker-summary')).toBeTruthy();
+    fireEvent.press(view.getByText('Continuar'));
+    expect(await view.findByText(/vai para a mesa 9 \(6 lugares\)/)).toBeTruthy();
+    fireEvent.press(view.getByText('Liberar'));
+    await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('c1', { approve: true, reason: 'troca_de_mesa', targetTableId: 't3', note: undefined }));
+  });
+
+  it('junção: soma os lugares e só deixa continuar quando o grupo cabe', async () => {
+    mockGet.mockResolvedValueOnce([openRequest('capacity')]).mockResolvedValue([]);
+    mockResolve.mockResolvedValue(request({ status: 'approved' }));
+    const view = render(<CapacityRequestsScreen />);
+    fireEvent.press(await view.findByText('Juntar mesas'));
+    // grupo de 5 numa mesa de 4 lugares: unir a mesa 8 (2) dá 6.
+    fireEvent.press(view.getByTestId('table-pick-t2'));
+    expect(view.getByText(/Capacidade resultante: 6 · grupo: 5/)).toBeTruthy();
+    fireEvent.press(view.getByText('Continuar'));
+    fireEvent.press(await view.findByText('Liberar'));
+    await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('c1', { approve: true, reason: 'juncao_mesas', tableIds: ['t2'], note: undefined }));
+  });
+
+  it('erro P0015 do servidor chega explicado', async () => {
+    mockGet.mockResolvedValueOnce([openRequest('capacity')]).mockResolvedValue([]);
+    mockResolve.mockRejectedValue(Object.assign(new Error('Mesa com 4 lugares para 5 pessoas'), { code: 'P0015' }));
+    const view = render(<CapacityRequestsScreen />);
+    fireEvent.press(await view.findByText('Juntar mesas'));
+    fireEvent.press(view.getByTestId('table-pick-t2'));
+    fireEvent.press(view.getByText('Continuar'));
+    fireEvent.press(await view.findByText('Liberar'));
+    expect(await view.findByTestId('capacity-action-error')).toBeTruthy();
+    expect(view.getByText('Mesa com 4 lugares para 5 pessoas')).toBeTruthy();
+  });
 });

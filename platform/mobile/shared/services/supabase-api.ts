@@ -175,9 +175,14 @@ export interface RestaurantApproval {
 
 /** ADR-007 / G2b — entrada acima da lotação aguardando a recepção. */
 export type CapacityRequestStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
-export type CapacityApprovalReason = 'cadeira_extra' | 'crianca_colo' | 'walk_in_liberado';
+export type CapacityApprovalReason = 'cadeira_extra' | 'crianca_colo' | 'walk_in_liberado' | 'troca_de_mesa' | 'juncao_mesas';
 /** `join`: entrar numa mesa aberta lotada · `open`: abrir uma mesa (ADR-016). */
 export type CapacityRequestKind = 'join' | 'open';
+
+export interface TableMoveResult { tableSessionId: string; tableId: string; tableNumber: string; previousTableNumber: string }
+export interface TableMergeResult { mainTableId: string; childTableIds: string[]; effectiveSeats: number }
+export interface TableUnmergeResult { mainTableId: string; releasedTableIds: string[] }
+export interface ReservationTableResult { reservationId: string; tableId: string; tableNumber: string; effectiveSeats: number }
 
 export interface CapacityRequestUserCard {
   userId: string;
@@ -209,6 +214,10 @@ export interface CapacityRequest {
   createdAt: string;
   requestedUser: CapacityRequestUserCard;
   invitedBy: CapacityRequestUserCard | null;
+  /** Mesas do grupo da solicitação (a mesa principal e as unidas a ela; ADR-018). */
+  tableGroup?: { id: string; tableNumber: string; seats: number }[];
+  /** Pessoas que a sessão já acomoda; null nos pedidos de abertura. */
+  headcount?: number | null;
   /** Server-computed from capacity_override_roles: the waiter sees but cannot decide. */
   canDecide: boolean;
 }
@@ -356,8 +365,17 @@ export interface SupabaseApiAdapter {
   getCapacityRequests(restaurantId: string, status?: CapacityRequestStatus | null): Promise<CapacityRequest[]>;
   resolveCapacityRequest(
     requestId: string,
-    decision: { approve: true; reason: CapacityApprovalReason; note?: string } | { approve: false; note?: string },
+    decision:
+      | { approve: true; reason: 'cadeira_extra' | 'crianca_colo' | 'walk_in_liberado'; note?: string }
+      | { approve: true; reason: 'troca_de_mesa'; targetTableId: string; note?: string }
+      | { approve: true; reason: 'juncao_mesas'; tableIds: string[]; note?: string }
+      | { approve: false; note?: string },
   ): Promise<CapacityRequest>;
+  // ── Troca e junção de mesas (ADR-018) ─────────────────────────────────────
+  moveTableSession(sessionId: string, targetTableId: string, note?: string): Promise<TableMoveResult>;
+  mergeTables(mainTableId: string, childTableIds: string[], note?: string): Promise<TableMergeResult>;
+  unmergeTables(mainTableId: string, childTableIds?: string[] | null, note?: string): Promise<TableUnmergeResult>;
+  assignReservationTable(reservationId: string, tableId: string, note?: string): Promise<ReservationTableResult>;
   createServiceCall(restaurantId: string, tableId?: string, callType?: string, message?: string): Promise<any>;
   getCallStats(restaurantId?: string): Promise<any>;
   // ── Customer Assistance ───────────────────────────────────────────────────
@@ -1120,9 +1138,45 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_decision: decision.approve ? 'approve' : 'reject',
       p_reason: decision.approve ? decision.reason : 'recusado',
       p_note: decision.note?.trim() || null,
+      p_table_ids: !decision.approve ? null
+        : decision.reason === 'troca_de_mesa' ? [decision.targetTableId]
+        : decision.reason === 'juncao_mesas' ? decision.tableIds
+        : null,
     });
     if (error) throw error;
     return data as CapacityRequest;
+  },
+
+  async moveTableSession(sessionId, targetTableId, note) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_move_table_session', {
+      p_session_id: sessionId, p_target_table_id: targetTableId, p_note: note?.trim() || null,
+    });
+    if (error) throw error;
+    return data as unknown as TableMoveResult;
+  },
+
+  async mergeTables(mainTableId, childTableIds, note) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_merge_tables', {
+      p_main_table_id: mainTableId, p_child_table_ids: childTableIds, p_note: note?.trim() || null,
+    });
+    if (error) throw error;
+    return data as unknown as TableMergeResult;
+  },
+
+  async unmergeTables(mainTableId, childTableIds, note) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_unmerge_tables', {
+      p_main_table_id: mainTableId, p_child_table_ids: childTableIds ?? null, p_note: note?.trim() || null,
+    });
+    if (error) throw error;
+    return data as unknown as TableUnmergeResult;
+  },
+
+  async assignReservationTable(reservationId, tableId, note) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_assign_reservation_table', {
+      p_reservation_id: reservationId, p_table_id: tableId, p_note: note?.trim() || null,
+    });
+    if (error) throw error;
+    return data as unknown as ReservationTableResult;
   },
 
   async createServiceCall(restaurantId: string, tableId?: string, callType?: string, message?: string) {

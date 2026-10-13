@@ -5,6 +5,8 @@ import { renderHook, act } from '@testing-library/react-native';
 // The shared logger transitively loads @sentry/react-native which is shipped
 // as ESM and blows up jest's CJS runtime. The hook only calls logger.error,
 // so a stub is enough here.
+jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
+import Toast from 'react-native-toast-message';
 jest.mock('@okinawa/shared/utils/logger', () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -225,6 +227,27 @@ describe('useTableQrHandler — timeout não conta o tempo do prompt de pessoas'
     let outcome: Awaited<typeof pending>;
     await act(async () => { outcome = await pending; });
     expect(outcome!).toEqual({ ok: false, reason: 'network' });
+  });
+});
+
+describe('useTableQrHandler — mesa trocada pela recepção (ADR-018)', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it('QR da mesa antiga devolve a visita atual e avisa a mesa nova', async () => {
+    mockOpenFromQr.mockResolvedValueOnce({ restaurantId: 'r1', tableId: 't2', tableSessionId: 's1', tableNumber: '9', tableMoved: true });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => { outcome = await result.current.handleQrScanned(QR); });
+    expect(outcome!).toEqual({ ok: true, restaurantId: 'r1' });
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text2: 'Sua mesa agora é a 9' }));
+  });
+
+  it('P0013 (mesa unida) não vira "sem conexão"', async () => {
+    mockOpenFromQr.mockRejectedValueOnce({ code: 'P0013', message: 'Mesa unida a outra' });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => { outcome = await result.current.handleQrScanned(QR); });
+    expect(outcome!).toEqual({ ok: false, reason: 'table_unavailable' });
   });
 });
 

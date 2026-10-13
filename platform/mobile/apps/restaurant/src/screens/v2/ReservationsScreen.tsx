@@ -13,6 +13,42 @@ import {
   saoPauloUpcomingDateKeys,
 } from './shared/calendarDate';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { useRestaurantTables } from './shared/useRestaurantOperations';
+import { TablePickerSheet } from './shared/TablePickerSheet';
+import { describeLayoutError, swapCandidates } from './shared/tableLayout';
+
+/** Escolha da mesa da reserva (ADR-018): só carrega o mapa de mesas enquanto está aberto. */
+function ReservationTablePicker({ reservation, onClose, onAssigned }: {
+  reservation: Reservation;
+  onClose: () => void;
+  onAssigned: () => void;
+}) {
+  const { data: tables } = useRestaurantTables();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <TablePickerSheet
+      visible
+      title={reservation.table_id ? 'Trocar a mesa da reserva' : 'Definir a mesa da reserva'}
+      subtitle={`${reservationCustomerName(reservation)} · ${reservation.party_size} pessoa(s)`}
+      mode="single"
+      candidates={swapCandidates(tables, { excludeId: reservation.table_id, needed: reservation.party_size })}
+      needed={reservation.party_size}
+      requireFit
+      saving={saving}
+      error={error}
+      confirmLabel="Definir mesa"
+      onClose={onClose}
+      onConfirm={(ids) => {
+        setSaving(true);
+        supabaseApiAdapter.assignReservationTable(reservation.id, ids[0])
+          .then(onAssigned)
+          .catch((err) => setError(describeLayoutError(err)))
+          .finally(() => setSaving(false));
+      }}
+    />
+  );
+}
 
 interface Reservation {
   id: string;
@@ -87,6 +123,7 @@ export default function ReservationsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('Todas');
+  const [assigning, setAssigning] = useState<Reservation | null>(null);
   const [acting, setActing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -269,6 +306,18 @@ export default function ReservationsScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+              {(res.status === 'confirmed' || res.status === 'pending') && (
+                <TouchableOpacity
+                  style={[styles.wideBtn, { backgroundColor: colors.backgroundSecondary, borderWidth: 1, borderColor: colors.border }]}
+                  onPress={() => setAssigning(res)}
+                  accessibilityRole="button"
+                  testID={`reservation-table-${res.id}`}
+                >
+                  <Text style={{ color: colors.foreground, fontWeight: '700', fontSize: 13 }}>
+                    {res.table_id ? `Trocar mesa (atual: ${res.table_number ?? '—'})` : 'Definir mesa'}
+                  </Text>
+                </TouchableOpacity>
+              )}
               {res.status === 'confirmed' && (
                 <TouchableOpacity
                   style={[styles.wideBtn, { backgroundColor: colors.primary, opacity: acting === res.id || !res.table_id ? 0.45 : 1 }]}
@@ -282,6 +331,13 @@ export default function ReservationsScreen() {
           );
         })}
       </ScrollView>
+      {assigning ? (
+        <ReservationTablePicker
+          reservation={assigning}
+          onClose={() => setAssigning(null)}
+          onAssigned={() => { setAssigning(null); void load(); }}
+        />
+      ) : null}
     </V2Shell>
   );
 }

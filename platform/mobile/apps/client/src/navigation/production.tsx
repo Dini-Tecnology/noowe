@@ -177,7 +177,7 @@ function DefaultMainTabs() {
   );
 }
 
-const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update', 'table_open_approved', 'table_open_update']);
+const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update', 'table_open_approved', 'table_open_update', 'table_moved']);
 
 
 /**

@@ -10,6 +10,7 @@ import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2FormSheet } from './shared/V2FormSheet';
 import { V2Shell } from './shared/V2Shell';
 import { TableComandaDialog } from './shared/TableComandaDialog';
+import { TableLayoutPanel } from './tables/TableLayoutPanel';
 import { useRestaurantTables, type V2Table } from './shared/useRestaurantOperations';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
@@ -110,7 +111,7 @@ export default function TablesScreen() {
 
   const openSeating = (table: V2Table, mode: SeatingMode) => {
     setGuestName(table.reservationName || table.guestName || '');
-    setGuestCount(String(table.reservationGuests || table.guests || Math.min(table.seats, 2)));
+    setGuestCount(String(table.reservationGuests || table.guests || Math.min(table.effectiveSeats, 2)));
     setFormError(null);
     setSeatingTable({ table, mode });
   };
@@ -129,8 +130,8 @@ export default function TablesScreen() {
       setFormError('Informe o nome do cliente ou responsável pela mesa.');
       return;
     }
-    if (!Number.isInteger(guests) || guests < 1 || guests > seatingTable.table.seats) {
-      setFormError(`Informe entre 1 e ${seatingTable.table.seats} pessoas para esta mesa.`);
+    if (!Number.isInteger(guests) || guests < 1 || guests > seatingTable.table.effectiveSeats) {
+      setFormError(`Informe entre 1 e ${seatingTable.table.effectiveSeats} pessoas para esta mesa.`);
       return;
     }
 
@@ -433,7 +434,7 @@ export default function TablesScreen() {
                     </View>
                   </View>
 
-                  {selectedTable.status === 'available' ? (
+                  {selectedTable.status === 'available' && !selectedTable.mergedIntoId ? (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Sentar cliente na mesa ${selectedTable.label}`}
@@ -445,7 +446,7 @@ export default function TablesScreen() {
                     </Pressable>
                   ) : null}
 
-                  {selectedTable.status === 'reserved' ? (
+                  {selectedTable.status === 'reserved' && !selectedTable.mergedIntoId ? (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Fazer check-in na mesa ${selectedTable.label}`}
@@ -493,12 +494,16 @@ export default function TablesScreen() {
                     </Pressable>
                   ) : null}
 
+                  {!isWaiterView ? (
+                    <TableLayoutPanel table={selectedTable} tables={tables} onChanged={refresh} onError={setActionError} />
+                  ) : null}
+
                   <Text style={[styles.actionLabel, { color: colors.foregroundSecondary }]}>ALTERAR STATUS</Text>
                   <View style={styles.statusActions}>
                     {(['available', 'reserved', 'cleaning', 'blocked'] as StatusKey[]).map((status) => {
                       const meta = STATUS_META[status];
                       const active = selectedTable.status === status;
-                      const disabled = isSubmitting || Boolean(selectedTable.sessionId);
+                      const disabled = isSubmitting || Boolean(selectedTable.sessionId) || Boolean(selectedTable.mergedIntoId);
                       return (
                         <Pressable
                           key={status}
@@ -706,7 +711,7 @@ const TableCell = React.memo(function TableCell({
       onPress={() => onSelect(table.id)}
       accessibilityRole="button"
       accessibilityState={{ selected: isSelected }}
-      accessibilityLabel={`Mesa ${table.label}, ${meta.label.toLowerCase()}, ${table.guestName || table.section}, ${table.seats} lugares`}
+      accessibilityLabel={`Mesa ${table.label}, ${meta.label.toLowerCase()}, ${table.guestName || table.section}, ${table.effectiveSeats} lugares${table.mergedIntoLabel ? `, unida à mesa ${table.mergedIntoLabel}` : ''}`}
       style={({ pressed }) => [{ width: size, height: Math.max(96, Math.min(size, 108)) }, pressed && styles.cellPressed]}
     >
       <Animated.View
@@ -732,7 +737,7 @@ const TableCell = React.memo(function TableCell({
             ? `${table.guests} ${table.guests === 1 ? 'pessoa' : 'pessoas'} · ${formatCurrency(table.totalSpent)}`
             : table.reservationGuests > 0
               ? `${table.reservationGuests} ${table.reservationGuests === 1 ? 'pessoa' : 'pessoas'}`
-              : `${table.seats} lugares`}
+              : table.mergedIntoId ? `unida à ${table.mergedIntoLabel}` : table.mergedChildren.length > 0 ? `${table.effectiveSeats} lugares · +${table.mergedChildren.map((child) => child.label).join(',')}` : `${table.seats} lugares`}
         </Text>
         <Text numberOfLines={1} style={[styles.tableGuest, { color: colors.foreground }]}>{table.guestName || ' '}</Text>
       </Animated.View>

@@ -25,6 +25,7 @@ const PRESENTATION: Record<string, { icon: keyof typeof Ionicons.glyphMap; color
   table_invite_update: { icon: 'people-outline', color: '#2563EB', background: '#EEF4FF' },
   table_open_approved: { icon: 'restaurant-outline', color: '#10B981', background: '#EAF9F1' },
   table_open_update: { icon: 'people-outline', color: '#2563EB', background: '#EEF4FF' },
+  table_moved: { icon: 'swap-horizontal-outline', color: '#2563EB', background: '#EEF4FF' },
 };
 
 /** The @username invite a notification points to, if any (ADR-011). */

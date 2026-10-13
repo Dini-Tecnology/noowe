@@ -70,12 +70,18 @@ type RawTable = {
   section?: string | null;
   shape?: string | null;
   qr_code?: string | null;
+  merged_into_id?: string | null;
+  merged_into_number?: string | null;
+  effective_seats?: number | string | null;
+  merged_children?: { id: string; table_number?: string | number | null; seats?: number | string | null }[] | null;
+  can_rearrange?: boolean | null;
   active_session?: {
     id?: string | null;
     guest_name?: string | null;
     guest_count?: number | string | null;
     started_at?: string | null;
     total_spent?: number | string | null;
+    headcount?: number | string | null;
   } | null;
   active_reservation?: {
     id?: string | null;
@@ -100,6 +106,16 @@ export type V2Table = {
   section: string;
   shape: string;
   hasQR: boolean;
+  /** Mesa principal à qual esta está unida (ADR-018); null se não for uma mesa filha. */
+  mergedIntoId: string | null;
+  mergedIntoLabel: string | null;
+  /** Soma dos lugares do grupo de mesas unidas; igual a `seats` numa mesa sozinha. */
+  effectiveSeats: number;
+  mergedChildren: { id: string; label: string; seats: number }[];
+  /** Pessoas que a sessão ativa acomoda (0 sem sessão). */
+  headcount: number;
+  /** O papel logado pode trocar, juntar e separar mesas (servidor decide). */
+  canRearrange: boolean;
 };
 
 export type DashboardSnapshot = {
@@ -254,6 +270,16 @@ export function mapTable(raw: RawTable): V2Table {
     section: raw.section || 'Salao',
     shape: raw.shape || 'rectangle',
     hasQR: Boolean(raw.qr_code),
+    mergedIntoId: raw.merged_into_id || null,
+    mergedIntoLabel: raw.merged_into_number ? String(raw.merged_into_number) : null,
+    effectiveSeats: toNumber(raw.effective_seats, toNumber(raw.seats, 1)),
+    mergedChildren: (raw.merged_children ?? []).map((child) => ({
+      id: child.id,
+      label: String(child.table_number ?? child.id.slice(0, 4)),
+      seats: toNumber(child.seats, 1),
+    })),
+    headcount: toNumber(raw.active_session?.headcount, sessionGuests),
+    canRearrange: raw.can_rearrange === true,
   };
 }
 

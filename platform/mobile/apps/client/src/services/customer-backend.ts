@@ -23,11 +23,15 @@ export type VisitSession = {
   tableNumber: string;
   serviceModel?: ServiceModel;
   waitlistEntryId?: string;
+  /** O check-in devolveu a visita atual porque a mesa do cliente foi trocada pela recepção (ADR-018). */
+  tableMoved?: boolean;
 };
 
 export type ServiceQrResolution =
   | { kind: 'counter'; restaurantId: string; serviceModel: 'quick_service'; counterLabel: string }
   | { kind: 'table'; restaurantId: string; serviceModel: 'fine_dining' | 'casual_dining'; tableId: string; tableQrId: string; allowedServiceModels: ServiceModel[]; seats?: number; hasActiveSession?: boolean; isParticipant?: boolean; /** false onde o grupo vem da reserva/fila (Fine). */ asksPartySize?: boolean };
+
+export type UserNotificationInsert = { type: string; metadata: Record<string, unknown> };
 
 export type TableInvite = { url: string; code: string; expiresAt: string };
 
@@ -689,6 +693,8 @@ export interface CustomerBackend {
   requestAccountDeletion(): Promise<void>;
   subscribeToWalletChanges(onChange: () => void): Promise<RealtimeChannel>;
   subscribeToUserChanges(onChange: () => void): Promise<RealtimeChannel>;
+  /** Cada notificação nova do usuário, com o conteúdo (usado para avisar troca de mesa). */
+  subscribeToUserNotifications(onInsert: (notification: UserNotificationInsert) => void): Promise<RealtimeChannel>;
   subscribeToWaitlistChanges(restaurantId: string, onChange: () => void): Promise<RealtimeChannel>;
   subscribeToOrderChanges(orderId: string, onChange: () => void): Promise<RealtimeChannel>;
   /** Invites addressed to me and, when given, every invite of that table session. */
@@ -2174,6 +2180,17 @@ export const customerBackend: CustomerBackend = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations', filter: `customer_id=eq.${userId}` }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'waitlist_entries', filter: `customer_id=eq.${userId}` }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, onChange)
+      .subscribe();
+  },
+
+  async subscribeToUserNotifications(onInsert) {
+    const userId = await requireUserId();
+    const channelName = `customer-notifications:${userId}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    return getSupabaseClient().channel(channelName)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (change) => {
+        const row = objectValue((change as { new?: unknown }).new);
+        onInsert({ type: String(row.notification_type ?? ''), metadata: objectValue(row.metadata) });
+      })
       .subscribe();
   },
 

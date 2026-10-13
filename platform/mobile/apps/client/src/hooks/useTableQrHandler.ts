@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { useCart } from '@/shared/contexts/CartContext';
 import logger from '@okinawa/shared/utils/logger';
 import { QrCheckInCancelled, useVisitSession } from '../contexts/VisitSessionContext';
@@ -133,7 +134,7 @@ export function useTableQrHandler() {
       if (code === 'P0011') return { ok: false, reason: 'table_too_small' };
       if (code === 'P0012') return { ok: false, reason: 'pickup_only' };
       if (isBookingRequiredError(error)) return { ok: false, reason: 'booking_required' };
-      if (code === 'P0005') return { ok: false, reason: 'table_unavailable' };
+      if (code === 'P0005' || code === 'P0013') return { ok: false, reason: 'table_unavailable' };
       if (code === 'P0008') {
         const detail = (error as { reason?: string }).reason;
         return {
@@ -156,6 +157,11 @@ export function useTableQrHandler() {
     }
 
     const restaurantId = visit.restaurantId;
+
+    // QR da mesa antiga depois de uma troca: o cliente segue na mesma sessão, na mesa nova.
+    if (visit.tableMoved) {
+      Toast.show({ type: 'info', text1: 'Sua mesa mudou', text2: `Sua mesa agora é a ${visit.tableNumber}` });
+    }
 
     // A seated table session already makes SessionCartSync drop a foreign cart;
     // the prompt only matters for counter QRs, which have no table session.
