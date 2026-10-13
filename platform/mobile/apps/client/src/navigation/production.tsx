@@ -1,3 +1,4 @@
+import { PartySizePromptHost } from '../components/table/PartySizePrompt';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -176,7 +177,7 @@ function DefaultMainTabs() {
   );
 }
 
-const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update']);
+const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update', 'table_open_approved', 'table_open_update']);
 
 
 /**
@@ -217,7 +218,12 @@ function MainTabs() {
   // creates a UITabBarController natively but it never becomes visible on-screen — confirmed via
   // device log (UITabBarController prefs lookups fire, but no bar renders). Needs a react-native-screens
   // fix/upgrade before this can replace the fallback.
-  return <DefaultMainTabs />;
+  return (
+    <>
+      <DefaultMainTabs />
+      <PartySizePromptHost />
+    </>
+  );
 }
 
 export default function ProductionNavigation() {

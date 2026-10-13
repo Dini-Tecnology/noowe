@@ -7,6 +7,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend, { type CustomerNotification, type TableUserInvite } from '../../services/customer-backend';
 import { useRespondToTableInvite } from '../../hooks/useRespondToTableInvite';
+import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { describeClosedInvite, tableInviteKeys, useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
 import { rootNavigate, StateView, useQueryRefreshControl } from './shared';
 
@@ -22,12 +23,21 @@ const PRESENTATION: Record<string, { icon: keyof typeof Ionicons.glyphMap; color
   system: { icon: 'notifications-outline', color: ORANGE, background: '#FFF0EA' },
   table_invite: { icon: 'people-outline', color: ORANGE, background: '#FFF0EA' },
   table_invite_update: { icon: 'people-outline', color: '#2563EB', background: '#EEF4FF' },
+  table_open_approved: { icon: 'restaurant-outline', color: '#10B981', background: '#EAF9F1' },
+  table_open_update: { icon: 'people-outline', color: '#2563EB', background: '#EEF4FF' },
 };
 
 /** The @username invite a notification points to, if any (ADR-011). */
 function tableUserInviteId(item: CustomerNotification): string | null {
   return item.metadata.kind === 'table_user_invite' && typeof item.metadata.invite_id === 'string'
     ? item.metadata.invite_id
+    : null;
+}
+
+/** The approved table-opening request a notification points to (ADR-016), if any. */
+function approvedOpenRequestId(item: CustomerNotification): string | null {
+  return item.type === 'table_open_approved' && typeof item.metadata.capacity_request_id === 'string'
+    ? item.metadata.capacity_request_id
     : null;
 }
 
@@ -105,6 +115,19 @@ export default function NotificationsScreen({ navigation }: any) {
     [tableInvites.data],
   );
   const { accept: acceptTableInvite, decline: declineTableInvite } = useRespondToTableInvite();
+  const { openFromApprovedRequest } = useVisitSession();
+  const [openingRequest, setOpeningRequest] = useState<string | null>(null);
+  const openApprovedTable = async (requestId: string) => {
+    setOpeningRequest(requestId);
+    try {
+      const visit = await openFromApprovedRequest(requestId);
+      rootNavigate(navigation, 'Menu', { restaurantId: visit.restaurantId });
+    } catch (error) {
+      Alert.alert('Não foi possível abrir a mesa', error instanceof Error ? error.message : 'Tente escanear o QR da mesa novamente.');
+    } finally {
+      setOpeningRequest(null);
+    }
+  };
   const [respondingInvite, setRespondingInvite] = useState<string | null>(null);
   const respondToTableInvite = async (invite: TableUserInvite, action: 'accept' | 'decline') => {
     setRespondingInvite(invite.id);
@@ -154,6 +177,7 @@ export default function NotificationsScreen({ navigation }: any) {
     const inviteToken = typeof item.metadata.invite_token === 'string' ? item.metadata.invite_token : null;
     const tableInviteId = tableUserInviteId(item);
     const tableInvite = tableInviteId ? invitesById.get(tableInviteId) : undefined;
+    const openRequestId = approvedOpenRequestId(item);
     return (
       <TouchableOpacity
         style={[styles.card, !item.isRead && styles.unread]}
@@ -178,6 +202,21 @@ export default function NotificationsScreen({ navigation }: any) {
               </TouchableOpacity>
               <TouchableOpacity style={styles.decline} onPress={() => read.mutate(item.id)} accessibilityRole="button">
                 <Text style={styles.declineText}>Recusar</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {openRequestId ? (
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={styles.accept}
+                onPress={() => void openApprovedTable(openRequestId)}
+                disabled={openingRequest === openRequestId}
+                accessibilityRole="button"
+                testID={`notification-open-table-${openRequestId}`}
+              >
+                {openingRequest === openRequestId
+                  ? <ActivityIndicator size="small" color="#FFFFFF" />
+                  : <Text style={styles.acceptText}>Abrir mesa</Text>}
               </TouchableOpacity>
             </View>
           ) : null}

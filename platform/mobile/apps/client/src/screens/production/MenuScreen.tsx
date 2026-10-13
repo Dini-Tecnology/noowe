@@ -8,6 +8,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useCart } from '@/shared/contexts/CartContext';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
+import { useJourneyModel } from '../../hooks/useJourneyModel';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import customerBackend, { type CustomerMenuItem, type TableDiner } from '../../services/customer-backend';
 import { dietaryTags, formatPrepTime } from './home-restaurant-ui';
@@ -38,7 +39,8 @@ export default function MenuScreen({ route, navigation }: any) {
   const restaurantId = route?.params?.restaurantId ?? visit.session?.restaurantId;
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [detailItem, setDetailItem] = useState<CustomerMenuItem | null>(null);
-  const { features, capabilities, policies, status: serviceTypeStatus } = useServiceTypeFor(restaurantId);
+  const journeyModel = useJourneyModel(restaurantId);
+  const { features, capabilities, policies, status: serviceTypeStatus } = useServiceTypeFor(restaurantId, journeyModel);
   // Journey decisions read server capabilities, never the model name.
   const tableService = capabilities?.tableSession === true;
   const perPersonComanda = capabilities?.consumptionUnit === 'per_person';

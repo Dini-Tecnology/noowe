@@ -1,3 +1,5 @@
+import type { ServiceModel } from '@okinawa/shared/config/capabilities';
+
 export const QUICK_RESTAURANT_ACTIONS = [
   { key: 'scan', label: 'Escanear', icon: 'qr-code-outline', route: 'QrScanner' },
   { key: 'reserve', label: 'Reservar', icon: 'calendar-outline', route: 'CreateReservation' },
@@ -15,6 +17,26 @@ export const SERVICE_TYPE_PRESENTATIONS = {
   casual_dining: { icon: 'restaurant-outline', label: 'Casual dining' },
   quick_service: { icon: 'fast-food-outline', label: 'Serviço rápido' },
 } as const;
+
+export type RestaurantExperience = { key: 'table' | 'pickup'; label: string; model: ServiceModel };
+
+/**
+ * As experiências que um restaurante oferece (ADR-017): as de salão (Fine/Casual)
+ * viram "Na mesa" e o Quick vira "Retirada". Só há o que escolher com duas ou mais.
+ */
+export function restaurantExperiences(models: readonly ServiceModel[]): RestaurantExperience[] {
+  const dine = models.find((model) => model !== 'quick_service');
+  const experiences: RestaurantExperience[] = [];
+  if (dine) experiences.push({ key: 'table', label: 'Na mesa', model: dine });
+  if (models.includes('quick_service')) experiences.push({ key: 'pickup', label: 'Retirada', model: 'quick_service' });
+  return experiences;
+}
+
+/** Rótulo do card: todas as categorias do restaurante, na ordem do tipo principal primeiro. */
+export function serviceTypesLabel(serviceType: string, models: readonly string[]): string {
+  const ordered = [serviceType, ...models.filter((model) => model !== serviceType)];
+  return ordered.map((model) => getServiceTypePresentation(model).label).join(' · ');
+}
 
 export function getServiceTypePresentation(serviceType: string) {
   return SERVICE_TYPE_PRESENTATIONS[serviceType as keyof typeof SERVICE_TYPE_PRESENTATIONS]

@@ -38,6 +38,7 @@ import {
   formatDistance,
   formatRating,
   getServiceTypePresentation,
+  serviceTypesLabel,
   hasRating,
 } from './home-restaurant-ui';
 import { DISCOVERY_FILTERS } from './casual-dining-ui';
@@ -211,7 +212,7 @@ export default function HomeScreen({ navigation }: any) {
   const refreshControl = useQueryRefreshControl([restaurants, unread]);
 
   const availableServiceTypes = useMemo(() => {
-    const present = new Set(serviceTypeCatalog.data?.data.map((r) => r.serviceType) ?? []);
+    const present = new Set<string>(serviceTypeCatalog.data?.data.flatMap((r) => r.serviceModels) ?? []);
     return SERVICE_TYPES.filter((type) => present.has(type.id));
   }, [serviceTypeCatalog.data]);
 
@@ -303,8 +304,10 @@ export default function HomeScreen({ navigation }: any) {
   const open = useCallback(
     (restaurant: CustomerRestaurant) => {
       const proceed = async () => {
-        await selectRestaurant(restaurant.id);
-        rootNavigate(navigation, 'Restaurant', { restaurantId: restaurant.id });
+        // A categoria do chip é o ponto de entrada (ADR-017); sem chip, o restaurante pergunta.
+        const chosen = restaurant.serviceModels.find((model) => model === selectedServiceType);
+        await selectRestaurant(restaurant.id, chosen);
+        rootNavigate(navigation, 'Restaurant', { restaurantId: restaurant.id, ...(chosen ? { serviceModel: chosen } : {}) });
       };
       const hasOtherActiveTable = !!session?.tableSessionId && session.restaurantId !== restaurant.id;
       if (hasOtherActiveTable) {
@@ -320,7 +323,7 @@ export default function HomeScreen({ navigation }: any) {
       }
       void proceed();
     },
-    [navigation, selectRestaurant, session],
+    [navigation, selectRestaurant, session, selectedServiceType],
   );
 
   const selectServiceType = useCallback((typeId: string) => {
@@ -710,7 +713,7 @@ export default function HomeScreen({ navigation }: any) {
           <>
             <Text style={styles.sectionTitle}>Perto de você</Text>
             {rows.map((item) => {
-              const serviceType = getServiceTypePresentation(item.serviceType);
+              const serviceType = { ...getServiceTypePresentation(item.serviceType), label: serviceTypesLabel(item.serviceType, item.serviceModels) };
               // Preço médio cadastrado pelo restaurante; sem cadastro, a linha não mostra preço.
               const subtitle = [
                 item.cuisineTypes[0] ?? serviceType.label,

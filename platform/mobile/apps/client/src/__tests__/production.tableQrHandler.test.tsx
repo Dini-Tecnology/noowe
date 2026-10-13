@@ -14,6 +14,11 @@ import { useTableQrHandler } from '../hooks/useTableQrHandler';
 
 const QR = 'noowe://t/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
+const mockRequestPartySize = jest.fn((_info: { seats: number | null }) => Promise.resolve<number | null>(1));
+jest.mock('../components/table/PartySizePrompt', () => ({
+  requestPartySize: (info: { seats: number | null }) => mockRequestPartySize(info),
+}));
+
 const mockOpenFromQr = jest.fn();
 jest.mock('../contexts/VisitSessionContext', () => {
   class QrCheckInCancelled extends Error {}
@@ -143,6 +148,82 @@ describe('useTableQrHandler — classifies customer_open_table_session errors', 
       outcome = await result.current.handleQrScanned(QR);
     });
     expect(outcome!).toEqual({ ok: false, reason: 'booking_required' });
+  });
+});
+
+describe('useTableQrHandler — check-in Casual por QR (ADR-016)', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it.each([
+    ['P0011', 'table_too_small'],
+    ['P0012', 'pickup_only'],
+  ])('%s vira o motivo %s', async (code, reason) => {
+    mockOpenFromQr.mockRejectedValueOnce({ code, message: 'x' });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => {
+      outcome = await result.current.handleQrScanned(QR);
+    });
+    expect(outcome!).toEqual({ ok: false, reason });
+  });
+
+  it.each([
+    ['queue_active', { ok: false, reason: 'awaiting_capacity', detail: 'queue_active' }],
+    ['capacity', { ok: false, reason: 'awaiting_capacity', detail: 'capacity' }],
+  ])('P0008 com motivo %s chega ao alerta', async (reason, expected) => {
+    mockOpenFromQr.mockRejectedValueOnce({ code: 'P0008', requestKind: 'open', reason, capacityRequestId: 'c1' });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => {
+      outcome = await result.current.handleQrScanned(QR);
+    });
+    expect(outcome!).toEqual(expected);
+  });
+
+  it('entrega ao contexto a pergunta de nº de pessoas', async () => {
+    mockOpenFromQr.mockResolvedValueOnce({ restaurantId: 'r1', tableId: 't1', tableSessionId: 's1', tableNumber: '10' });
+    const { result } = renderTableQrHandler();
+    await act(async () => {
+      await result.current.handleQrScanned(QR);
+    });
+    expect(mockOpenFromQr.mock.calls[0][1]).toEqual(expect.objectContaining({ askPartySize: expect.any(Function) }));
+  });
+});
+
+describe('useTableQrHandler — timeout não conta o tempo do prompt de pessoas', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => { jest.useRealTimers(); jest.clearAllMocks(); });
+
+  it('o cliente pode demorar mais que 15 s escolhendo; a chamada de rede é que tem prazo', async () => {
+    let answer: (size: number | null) => void = () => undefined;
+    mockRequestPartySize.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    mockOpenFromQr.mockImplementationOnce(async (_qr: string, options: { askPartySize: (i: { seats: number }) => Promise<number | null> }) => {
+      const size = await options.askPartySize({ seats: 4 });
+      return { restaurantId: 'r1', tableId: 't1', tableSessionId: 's1', tableNumber: String(size) };
+    });
+    const { result } = renderTableQrHandler();
+    let pending!: ReturnType<typeof result.current.handleQrScanned>;
+    await act(async () => { pending = result.current.handleQrScanned(QR); });
+    await act(async () => { jest.advanceTimersByTime(60_000); });
+    await act(async () => { answer(3); });
+    let outcome: Awaited<typeof pending>;
+    await act(async () => { outcome = await pending; });
+    expect(outcome!).toEqual({ ok: true, restaurantId: 'r1' });
+  });
+
+  it('depois da resposta, uma chamada que trava ainda estoura o prazo', async () => {
+    mockRequestPartySize.mockResolvedValueOnce(2);
+    mockOpenFromQr.mockImplementationOnce(async (_qr: string, options: { askPartySize: (i: { seats: number }) => Promise<number | null> }) => {
+      await options.askPartySize({ seats: 4 });
+      return new Promise(() => undefined);
+    });
+    const { result } = renderTableQrHandler();
+    let pending!: ReturnType<typeof result.current.handleQrScanned>;
+    await act(async () => { pending = result.current.handleQrScanned(QR); });
+    await act(async () => { jest.advanceTimersByTime(16_000); });
+    let outcome: Awaited<typeof pending>;
+    await act(async () => { outcome = await pending; });
+    expect(outcome!).toEqual({ ok: false, reason: 'network' });
   });
 });
 

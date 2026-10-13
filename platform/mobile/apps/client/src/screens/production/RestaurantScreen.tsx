@@ -9,6 +9,8 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend, { type CustomerRestaurant } from '../../services/customer-backend';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
+import { useJourneyModel } from '../../hooks/useJourneyModel';
+import { restaurantExperiences } from './home-restaurant-ui';
 import { useQuickReorder } from '../../hooks/useQuickReorder';
 import { useCart } from '@/shared/contexts/CartContext';
 import { isActiveQuickOrder, quickJourneyKeys } from './quick-service-ui';
@@ -65,13 +67,16 @@ function PhotoGalleryModal({
  */
 export default function RestaurantScreen({ route, navigation }: any) {
   const colors = useColors();
-  const { restaurantId } = route.params;
+  const { restaurantId, serviceModel: routeModel } = route.params;
   const queryClient = useQueryClient();
 
   const [galleryOpen, setGalleryOpen] = useState(false);
 
   const query = useQuery({ queryKey: ['restaurant', restaurantId], queryFn: () => customerBackend.getRestaurant(restaurantId) });
-  const serviceTypeFor = useServiceTypeFor(restaurantId);
+  const { session, selectRestaurant, leaveTable: leaveCurrentTable } = useVisitSession();
+  // A experiência vem da mesa aberta, do chip da descoberta ou do seletor desta página (ADR-017).
+  const journeyModel = useJourneyModel(restaurantId, routeModel);
+  const serviceTypeFor = useServiceTypeFor(restaurantId, journeyModel);
   const liveStatus = useQuery({
     queryKey: ['restaurant-live-status', restaurantId],
     queryFn: () => customerBackend.getRestaurantLiveStatus(restaurantId),
@@ -122,7 +127,6 @@ export default function RestaurantScreen({ route, navigation }: any) {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['favorites'] }),
   });
   const toggleFavorite = useCallback(() => favorite.mutate(!isFavorite), [favorite, isFavorite]);
-  const { session, leaveTable: leaveCurrentTable } = useVisitSession();
   const cart = useCart();
   const { reorder } = useQuickReorder(navigation);
 
@@ -211,6 +215,22 @@ export default function RestaurantScreen({ route, navigation }: any) {
 
   const activeSessionHere = session?.restaurantId === restaurantId && !!session?.tableSessionId;
 
+  // Seletor "Na mesa" | "Retirada": só em restaurante com mais de uma experiência e sem mesa aberta.
+  const experiences = useMemo(() => {
+    const options = restaurantExperiences(query.data?.serviceModels ?? []);
+    if (options.length < 2 || activeSessionHere) return undefined;
+    const current = journeyModel ?? query.data?.serviceType;
+    return options.map((option) => ({
+      key: option.key,
+      label: option.label,
+      selected: option.model === current || (option.key === 'table' && current !== 'quick_service'),
+      onPress: () => {
+        navigation.setParams({ serviceModel: option.model });
+        void selectRestaurant(restaurantId, option.model);
+      },
+    }));
+  }, [query.data, journeyModel, activeSessionHere, navigation, selectRestaurant, restaurantId]);
+
   const openDirections = useCallback(() => {
     const restaurant = query.data;
     if (!restaurant) return;
@@ -286,6 +306,7 @@ export default function RestaurantScreen({ route, navigation }: any) {
         isFavorite={isFavorite}
         favoritePending={favorite.isPending}
         journeyActions={journeyActions}
+        experiences={experiences}
         quickStatus={quickStatus.data}
         showQuickInfo={orderAhead}
         showOccupancy={serviceTypeFor.capabilities?.tableSession !== false}
