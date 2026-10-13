@@ -26,4 +26,4 @@ variáveis `GUEST_CODE_IP_LIMIT` e `GUEST_CODE_IP_WINDOW_MIN` da função.
 
 - Quem erra 5 vezes espera a janela passar, mesmo com o código certo.
 - O mesmo `join_by_invite` atende token e código.
-- Falta a tela de explicação de convite expirado (T-G2-07): hoje é um alerta.
+- Link ou QR de convite vencido, revogado ou de conta fechada abre a tela `InviteExpired` (T-G2-07) e não cria sessão. O código digitado continua em alerta, porque um código errado não se distingue de erro de digitação.

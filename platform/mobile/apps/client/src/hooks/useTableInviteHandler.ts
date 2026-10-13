@@ -50,6 +50,15 @@ export const INVITE_FAILURE_MESSAGES: Record<InviteFailureReason, { title: strin
 };
 
 /**
+ * T-G2-07: convite de link ou QR vencido, revogado ou de conta já fechada abre uma tela que explica
+ * (e nunca uma sessão nova). Os demais motivos continuam em alerta. O código digitado não usa a tela:
+ * um código errado é indistinguível de um erro de digitação (ADR-019).
+ */
+export function inviteLinkFailureDestination(reason: InviteFailureReason): 'InviteExpired' | 'alert' {
+  return reason === 'invalid' ? 'InviteExpired' : 'alert';
+}
+
+/**
  * Shared logic for every way a table-invite link can be opened: tapped
  * directly (Share sheet, Messages, WhatsApp) or opened cold via deep link.
  * Mirrors useTableQrHandler — see its comments for the cart-mismatch flow.

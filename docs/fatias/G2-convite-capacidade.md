@@ -16,8 +16,9 @@ alguém entra, e até quantos cabem.
 > (`private.join_by_invite`); o código de 6 dígitos com limite de tentativas ([ADR-019](../decisoes/ADR-019-codigo-de-convite-e-forca-bruta.md));
 > a troca e a junção de mesas ([ADR-018](../decisoes/ADR-018-troca-e-juncao-de-mesas.md)).
 >
-> **Ainda falta aqui:** a tela de explicação do convite expirado (T-G2-07) e o uso do convite em
-> `source` próprio para o código.
+> **Entregue (2026-10-14):** a tela de explicação do convite expirado (T-G2-07), para link e QR.
+>
+> **Ainda falta aqui:** o uso do convite em `source` próprio para o código.
 
 ## Entregáveis
 
