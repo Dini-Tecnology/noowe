@@ -9,6 +9,7 @@ export { default as OrderDetailScreen } from './OrderDetailScreen';
 export { default as OrderReadyScreen } from './OrderReadyScreen';
 export { default as QrScannerScreen } from './QrScannerScreen';
 export { default as TableCodeScreen } from './TableCodeScreen';
+export { default as InviteExpiredScreen } from './InviteExpiredScreen';
 export { default as CallWaiterScreen } from './CallWaiterScreen';
 export { default as HarmonizacaoScreen } from './HarmonizacaoScreen';
 export { default as FecharContaScreen } from './FecharContaScreen';
