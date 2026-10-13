@@ -34,6 +34,7 @@ begin
   ) where id = r;
   update public.restaurant_model_configs
   set service_models = array['fine_dining']::public.noowe_service_model[],
+      queue_as_primary_entry = false,
       reservation_enabled = true, queue_enabled = true, enforce_table_capacity = true
   where restaurant_id = r;
 
