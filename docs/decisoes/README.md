@@ -26,10 +26,12 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [012](ADR-012-preco-medio-e-horario-com-turnos.md) | Horário com turnos em `opening_hours`; check-in exige restaurante aberto (§1, preço médio calculado, substituída pelo ADR-014) | Aceito | Cliente vê "Fechado" com o restaurante aberto; mesa aberta fora do horário |
 | [013](ADR-013-jornada-quick-service-retirada.md) | Quick Service como totem no app: pedido antecipado, aceite, tolerância a partir de "pronto", Não retirado, estornos | **Provisório** | QS sem ações na tela; retirada sem validar o código; estorno sem rastro |
 | [014](ADR-014-preco-medio-cadastrado-pelo-restaurante.md) | Preço médio por pessoa cadastrado pelo restaurante (R$, centavos); sem cadastro, sem preço no app | Aceito | Cliente vê preço que o restaurante não declarou |
+| [016](ADR-016-casual-walk-in-por-qr.md) | Casual abre a mesa pelo QR sem reserva; fila ativa e grupo acima de `seats` viram solicitação ao maître | **Provisório** | Walk-in barrado no Casual; mesa aberta por cima de quem espera |
+| [017](ADR-017-descoberta-multi-modelo.md) | `restaurants.service_models`; categoria escolhida (ou seletor) define a experiência | **Provisório** | Restaurante multi-modelo invisível numa categoria |
 
 **Vocabulário:** os ADRs usam os nomes da spec. A tradução para o banco está em
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).
 
 **Pendente de revisão humana:** ADR-004 (estorno, documento fiscal já emitido e fraude por
-reabertura de conta) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
+reabertura de conta), ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
 o cliente).
