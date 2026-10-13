@@ -368,7 +368,7 @@ begin
   end if;
   if v_waitlist_id is not null then
     update public.waitlist_entries set status='seated',seated_at=now(),updated_at=now() where id=v_waitlist_id;
-    update public.orders set table_session_id=v_session_id,table_id=v_qr.table_id,
+    update public.orders set table_session_id=v_session_id,table_id=v_root,
       waitlist_entry_id=null,origin_type='table_session',updated_at=now()
       where waitlist_entry_id=v_waitlist_id and customer_id=auth.uid();
   end if;
