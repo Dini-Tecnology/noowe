@@ -599,7 +599,11 @@ export interface CustomerBackend {
   listReservations(): Promise<CustomerReservation[]>;
   createReservation(input: { restaurantId: string; reservationTime: string; partySize: number; specialRequests?: string }): Promise<CustomerReservation>;
   cancelReservation(id: string, reason?: string): Promise<CustomerReservation>;
-  listReservationAvailability(restaurantId: string, slots: string[]): Promise<{ slot: string; remaining: number }[]>;
+  /** `capacity` é null quando a RPC ainda não devolve a coluna (migration não aplicada). */
+  listReservationAvailability(
+    restaurantId: string,
+    slots: string[],
+  ): Promise<{ slot: string; remaining: number; capacity: number | null }[]>;
   createReservationInvite(id: string): Promise<string>;
   listReservationGuests(id: string): Promise<ReservationGuest[]>;
   acceptReservationInvite(token: string): Promise<void>;
@@ -1526,7 +1530,11 @@ export const customerBackend: CustomerBackend = {
     const rows = Array.isArray(data) ? data : [];
     return rows.map((raw) => {
       const row = raw as Record<string, unknown>;
-      return { slot: String(row.slot), remaining: Number(row.remaining ?? 0) };
+      return {
+        slot: String(row.slot),
+        remaining: Number(row.remaining ?? 0),
+        capacity: row.capacity == null ? null : Number(row.capacity),
+      };
     });
   },
 
