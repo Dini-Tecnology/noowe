@@ -32,6 +32,8 @@ begin
       'shifts', jsonb_build_array(jsonb_build_object('open', '00:00', 'close', '23:59'))))
     from unnest(array['sunday','monday','tuesday','wednesday','thursday','friday','saturday']) d
   ) where id = r;
+  -- O modelo que o resolve devolve vem de restaurants.service_type: aqui o restaurante é Fine de verdade.
+  update public.restaurants set service_type = 'fine_dining' where id = r;
   update public.restaurant_model_configs
   set service_models = array['fine_dining']::public.noowe_service_model[],
       queue_as_primary_entry = false,
