@@ -4227,6 +4227,7 @@ export type Database = {
           rating: number
           service_config: Json | null
           service_type: string
+          service_models: string[] | null
           settings: Json | null
           setup_progress: Json
           state: string
@@ -4268,6 +4269,7 @@ export type Database = {
           rating?: number
           service_config?: Json | null
           service_type: string
+          service_models?: string[] | null
           settings?: Json | null
           setup_progress?: Json
           state: string
@@ -4309,6 +4311,7 @@ export type Database = {
           rating?: number
           service_config?: Json | null
           service_type?: string
+          service_models?: string[] | null
           settings?: Json | null
           setup_progress?: Json
           state?: string
@@ -7353,6 +7356,13 @@ export type Database = {
         | "payment_failed"
         | "promotion"
         | "system"
+        | "table_invite"
+        | "table_invite_update"
+        | "table_open_approved"
+        | "table_open_update"
+        | "table_moved"
+        | "staff_table_check_in"
+        | "capacity_request_pending"
       notifications_related_type_enum:
         | "order"
         | "reservation"
@@ -7361,6 +7371,9 @@ export type Database = {
         | "review"
         | "restaurant"
         | "promotion"
+        | "table_session"
+        | "capacity_request"
+        | "table"
       order_items_status_enum:
         | "pending"
         | "preparing"
@@ -7545,6 +7558,13 @@ export const Constants = {
         "payment_failed",
         "promotion",
         "system",
+        "table_invite",
+        "table_invite_update",
+        "table_open_approved",
+        "table_open_update",
+        "table_moved",
+        "staff_table_check_in",
+        "capacity_request_pending",
       ],
       notifications_related_type_enum: [
         "order",
@@ -7554,6 +7574,9 @@ export const Constants = {
         "review",
         "restaurant",
         "promotion",
+        "table_session",
+        "capacity_request",
+        "table",
       ],
       order_items_status_enum: [
         "pending",
