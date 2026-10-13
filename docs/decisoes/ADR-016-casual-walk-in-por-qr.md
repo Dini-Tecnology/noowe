@@ -43,6 +43,13 @@ também no Casual. A implementação seguiu a segunda leitura e barrava todo wal
 10. QR de mesa em restaurante só de retirada é recusado com motivo próprio (P0012); o pedido é pelo app ou
     pelo QR de balcão (ADR-013).
 
+### Aviso à equipe
+
+11. O garçom da mesa é avisado do check-in do Fine (`private.check_in_notifies_waiter`); sem garçom atribuído,
+    o aviso vai para maître e gerente (`private.check_in_waiter_fallback_roles`, de `capacity_override_roles`).
+12. Quem decide sobre lotação recebe uma notificação a cada solicitação nova (trigger em `capacity_requests`);
+    o app do restaurante registra o push e o toque abre a Lotação ou o painel do garçom.
+
 Regras isoladas: `private.check_in_party_from_entry`, `private.over_capacity_blocks_check_in` (lidas da
 policy, hoje `reservation_required`).
 

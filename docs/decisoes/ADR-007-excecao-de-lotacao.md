@@ -4,6 +4,7 @@
 **Origem:** spec §8.1, sétima decisão em aberto ("se crianças de colo contam como assento e
 quem pode aprovar exceções")
 **Impacta:** Fatia G1 (check-in), Fatia G2 (capacidade)
+**Nota (2026-10-14):** `juncao_mesas` e `troca_de_mesa` passam a resolver a exceção de verdade (ADR-018).
 
 ## Questão
 

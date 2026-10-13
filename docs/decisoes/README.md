@@ -28,10 +28,12 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [014](ADR-014-preco-medio-cadastrado-pelo-restaurante.md) | Preço médio por pessoa cadastrado pelo restaurante (R$, centavos); sem cadastro, sem preço no app | Aceito | Cliente vê preço que o restaurante não declarou |
 | [016](ADR-016-casual-walk-in-por-qr.md) | Casual abre a mesa pelo QR sem reserva; fila ativa e grupo acima de `seats` viram solicitação ao maître | **Provisório** | Walk-in barrado no Casual; mesa aberta por cima de quem espera |
 | [017](ADR-017-descoberta-multi-modelo.md) | `restaurants.service_models`; categoria escolhida (ou seletor) define a experiência | **Provisório** | Restaurante multi-modelo invisível numa categoria |
+| [018](ADR-018-troca-e-juncao-de-mesas.md) | Junção de um nível (`merged_into_id`), capacidade efetiva única, troca de mesa e erros P0013/P0014/P0015 | **Provisório** | Grupo maior que a mesa sem saída; capacidade lida em lugares diferentes |
+| [019](ADR-019-codigo-de-convite-e-forca-bruta.md) | Código de convite de 6 dígitos guardado como HMAC, com limite de tentativas por usuário e IP | **Provisório** | Convite adivinhado por força bruta |
 
 **Vocabulário:** os ADRs usam os nomes da spec. A tradução para o banco está em
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).
 
 **Pendente de revisão humana:** ADR-004 (estorno, documento fiscal já emitido e fraude por
-reabertura de conta), ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
+reabertura de conta), ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência), ADR-018 (troca e junção de mesas), ADR-019 (código de convite) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
 o cliente).
