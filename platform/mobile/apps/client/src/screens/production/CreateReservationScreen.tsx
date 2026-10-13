@@ -114,7 +114,11 @@ export default function CreateReservationScreen({ route, navigation }: any) {
 
   const openDates = useMemo(() => upcomingOpenDates(openingHours), [openingHours]);
   const initialDateKey = openDates[0] ? toDateKey(openDates[0]) : toDateKey(new Date());
-  const [selectedDateKey, setSelectedDateKey] = useState<string>(initialDateKey);
+  // A data padrão é derivada a cada render: `openingHours` chega depois da
+  // primeira montagem, e um `useState(initialDateKey)` congelaria "hoje" mesmo
+  // quando hoje já não tem horário. Só a escolha explícita do cliente fica em estado.
+  const [pickedDateKey, setPickedDateKey] = useState<string | null>(null);
+  const selectedDateKey = pickedDateKey ?? initialDateKey;
   const [pickedTime, setPickedTime] = useState<string | null>(null);
   const [guests, setGuests] = useState('2');
   const [notes, setNotes] = useState('');
@@ -178,6 +182,14 @@ export default function CreateReservationScreen({ route, navigation }: any) {
     return candidateSlotIsoList.every((iso) => remainingByEpoch.has(Date.parse(iso)));
   }, [candidateSlotIsoList, availabilityQuery.data, remainingByEpoch]);
 
+  // Capacidade zero = o restaurante não tem nenhuma mesa cadastrada. Não é
+  // "lotado neste horário": trocar de data ou reduzir o grupo não resolve, então
+  // a tela diz isso em vez de mandar o cliente tentar dia após dia.
+  const hasNoReservableTables = useMemo(() => {
+    const rows = availabilityQuery.data ?? [];
+    return rows.length > 0 && rows.every((row) => row.capacity === 0);
+  }, [availabilityQuery.data]);
+
   const availableTimes = useMemo(() => {
     if (!availabilityMatchesCurrent) return [];
     return candidateTimes.filter((time) => {
@@ -237,7 +249,7 @@ export default function CreateReservationScreen({ route, navigation }: any) {
   });
 
   const handleDatePicked = (picked: Date) => {
-    setSelectedDateKey(toDateKey(picked));
+    setPickedDateKey(toDateKey(picked));
     setDatePickerOpen(false);
   };
 
@@ -295,6 +307,9 @@ export default function CreateReservationScreen({ route, navigation }: any) {
 
         {!restaurantId && <HintBanner message="Selecione um restaurante antes de reservar." />}
         {reservationsUnavailable && <HintBanner message="Este restaurante não aceita reservas pelo app." />}
+        {hasNoReservableTables && (
+          <HintBanner message="Este restaurante ainda não tem mesas disponíveis para reserva pelo app." />
+        )}
         {noOpenDates && (
           <HintBanner message="Este restaurante não tem horários disponíveis para reserva nas próximas semanas." />
         )}
@@ -308,17 +323,19 @@ export default function CreateReservationScreen({ route, navigation }: any) {
                   key={key}
                   label={dayLabel(date)}
                   selected={selectedDateKey === key}
-                  onPress={() => setSelectedDateKey(key)}
+                  onPress={() => setPickedDateKey(key)}
                 />
               );
             })}
-            {/* Chip que abre o calendário — dias que o restaurante estiver
-                fechado são bloqueados no `handleDatePicked`. */}
-            <SelectChip
-              label={isDateExplicitlyPresent ? 'Outra data' : dayLabel(selectedDate)}
-              selected={!isDateExplicitlyPresent}
-              onPress={() => setDatePickerOpen(true)}
-            />
+            {/* Data escolhida no calendário fora dos chips rápidos ganha chip
+                próprio; o "Outra data" continua visível ao lado para o cliente
+                perceber que pode escolher de novo. */}
+            {!isDateExplicitlyPresent && (
+              <SelectChip label={dayLabel(selectedDate)} selected onPress={() => setDatePickerOpen(true)} />
+            )}
+            {/* Chip que abre o calendário — dias fechados ficam desabilitados
+                no próprio calendário. */}
+            <SelectChip label="Outra data" selected={false} onPress={() => setDatePickerOpen(true)} />
           </View>
         </SelectionSection>
 
@@ -338,11 +355,13 @@ export default function CreateReservationScreen({ route, navigation }: any) {
             <Text style={styles.emptyTimes}>
               {selectedDayHours?.closed
                 ? 'Restaurante fechado nesta data.'
-                : candidateTimes.length === 0
-                  ? 'Nenhum horário disponível para reserva nesta data.'
-                  : !availabilityMatchesCurrent
-                    ? 'Verificando disponibilidade...'
-                    : `Sem mesas livres para ${partySize} ${partySize === 1 ? 'pessoa' : 'pessoas'} nesta data. Tente outro dia ou reduza o grupo.`}
+                : hasNoReservableTables
+                  ? 'Sem mesas cadastradas para reserva neste restaurante.'
+                  : candidateTimes.length === 0
+                    ? 'Nenhum horário disponível para reserva nesta data.'
+                    : !availabilityMatchesCurrent
+                      ? 'Verificando disponibilidade...'
+                      : `Sem mesas livres para ${partySize} ${partySize === 1 ? 'pessoa' : 'pessoas'} nesta data. Tente outro dia ou reduza o grupo.`}
             </Text>
           ) : (
             <View style={styles.timeGrid}>
