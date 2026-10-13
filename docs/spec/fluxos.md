@@ -132,7 +132,7 @@ flowchart TD
     C --> F[Pedidos de bebida durante a espera]
     E --> F
     F --> G[Check-in: mesa compatível<br/>com o tamanho do grupo]
-    G --> H[QR na mesa abre a jornada do grupo]
+    G --> H[QR na mesa abre a jornada do grupo<br/>walk-in sem reserva: ADR-016]
     H --> I[Link compartilhado:<br/>cada pessoa entra na comanda]
     I --> J[Modo família, aniversário e festas]
     J --> K[Comanda por pessoa e envio ao KDS]

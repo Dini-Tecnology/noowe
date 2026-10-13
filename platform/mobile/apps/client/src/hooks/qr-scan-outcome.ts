@@ -11,12 +11,14 @@ export type QrScanFailureReason =
   | 'expired'
   | 'table_unavailable'
   | 'awaiting_capacity'
+  | 'table_too_small'
+  | 'pickup_only'
   | 'active_account'
   | 'network';
 
 export type QrScanOutcome =
   | { ok: true; restaurantId: string }
-  | { ok: false; reason: QrScanFailureReason };
+  | { ok: false; reason: QrScanFailureReason; /** Para `awaiting_capacity`: por que a recepção precisa decidir. */ detail?: 'queue_active' | 'capacity' };
 
 export function showTableQrOutcome(
   outcome: QrScanOutcome,
@@ -100,10 +102,28 @@ export function showTableQrOutcome(
     );
     return;
   }
+  if (outcome.reason === 'table_too_small') {
+    Alert.alert(
+      'Mesa precisa de ajuste',
+      'Seu grupo é maior que esta mesa. Procure a recepção para juntar ou trocar a mesa antes do check-in.',
+      [{ text: 'Entendi', onPress: actions.onRetry }],
+    );
+    return;
+  }
+  if (outcome.reason === 'pickup_only') {
+    Alert.alert(
+      'Restaurante de retirada',
+      'Este restaurante não atende na mesa. Faça seu pedido para retirada pelo app ou pelo QR do balcão.',
+      [{ text: 'Entendi', onPress: actions.onRetry }],
+    );
+    return;
+  }
   if (outcome.reason === 'awaiting_capacity') {
     Alert.alert(
       'Aguardando liberação',
-      'A mesa atingiu a capacidade. A recepção recebeu sua solicitação e precisa liberar um lugar adicional.',
+      outcome.detail === 'queue_active'
+        ? 'Há grupos aguardando na fila. A recepção recebeu sua solicitação e vai liberar a mesa. Avisaremos você.'
+        : 'Seu grupo é maior que a mesa. A recepção recebeu sua solicitação e precisa liberar a entrada. Avisaremos você.',
       [{ text: 'Entendi', onPress: actions.onRetry }],
     );
     return;

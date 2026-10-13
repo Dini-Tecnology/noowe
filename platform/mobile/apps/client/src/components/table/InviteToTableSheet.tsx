@@ -17,7 +17,8 @@ import { Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
-import customerBackend, { type TableUserInvite, type TableUserSearchResult } from '../../services/customer-backend';
+import QRCode from 'react-native-qrcode-svg';
+import customerBackend, { type TableInvite, type TableUserInvite, type TableUserSearchResult } from '../../services/customer-backend';
 import {
   describeTableInviteError,
   TABLE_INVITE_STATUS_LABELS,
@@ -45,6 +46,16 @@ export type InviteToTableSheetProps = {
 };
 
 const OPEN_STATUSES = new Set(['pending', 'awaiting_capacity']);
+
+/** "123456" → "123 456": lido em voz alta, o código fica mais fácil de ditar. */
+export function formatInviteCode(code: string): string {
+  return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+}
+
+function formatInviteExpiry(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? 'o fim da validade' : date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
 
 export default function InviteToTableSheet({
   visible,
@@ -114,13 +125,21 @@ export default function InviteToTableSheet({
     onError: (error) => setFeedback({ tone: 'error', text: describeTableInviteError(error) }),
   });
 
-  const shareLink = useMutation({
+  // Convite por link, QR no próprio celular ou código de 6 dígitos (ADR-019): um convite serve a todos.
+  const [invite, setInvite] = useState<TableInvite | null>(null);
+  // Um convite vale pela sessão e pelo prazo; ao reabrir a folha gera-se outro, nunca reaproveita um velho.
+  useEffect(() => { if (!visible) setInvite(null); }, [visible]);
+  const createInvite = useMutation({
     mutationFn: () => customerBackend.createTableInvite(tableSessionId),
-    onSuccess: (url) => {
-      void Share.share({ message: `Vem pra minha mesa no ${restaurantName ?? 'restaurante'}! ${url}` });
-    },
+    onSuccess: (created) => { setInvite(created); setFeedback(null); },
     onError: (error) => setFeedback({ tone: 'error', text: describeTableInviteError(error) }),
   });
+  const shareInvite = () => {
+    if (!invite) return;
+    void Share.share({
+      message: `Vem pra minha mesa no ${restaurantName ?? 'restaurante'}! ${invite.url}\nOu digite o código ${formatInviteCode(invite.code)} no app.`,
+    });
+  };
 
   const styles = useMemo(() => StyleSheet.create({
     keyboard: { flex: 1, justifyContent: 'flex-end' },
@@ -156,6 +175,10 @@ export default function InviteToTableSheet({
     linkText: { color: colors.foregroundSecondary, fontSize: 13, lineHeight: 19 },
     linkButton: { minHeight: 48, borderRadius: 14, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
     linkButtonText: { color: colors.primaryForeground, fontSize: 14, fontWeight: '800' },
+    qrFrame: { alignSelf: 'center', padding: 12, borderRadius: 16, backgroundColor: '#FFFFFF' },
+    codeLabel: { textAlign: 'center', color: colors.foregroundSecondary, fontSize: 12, marginTop: 4 },
+    code: { textAlign: 'center', color: colors.foreground, fontSize: 34, fontWeight: '800', letterSpacing: 4 },
+    codeExpiry: { textAlign: 'center', color: colors.foregroundMuted, fontSize: 12 },
     empty: { paddingVertical: 18, color: colors.foregroundMuted, fontSize: 13, textAlign: 'center' },
   }), [colors]);
 
@@ -299,20 +322,33 @@ export default function InviteToTableSheet({
             ) : (
               <View style={styles.linkCard}>
                 <Text style={styles.linkText}>
-                  Quem abrir o link entra direto na sua mesa. Para quem já tem conta, prefira convidar pelo @: a pessoa confirma antes de entrar.
+                  Quem abrir o link, ler o QR ou digitar o código entra direto na sua mesa. Para quem já tem conta, prefira convidar pelo @: a pessoa confirma antes de entrar.
                 </Text>
+                {invite ? (
+                  <>
+                    <View style={styles.qrFrame} testID="invite-qr">
+                      <QRCode value={invite.url} size={168} backgroundColor="#FFFFFF" color="#111111" />
+                    </View>
+                    <Text style={styles.codeLabel}>Código do convite</Text>
+                    <Text style={styles.code} accessibilityLabel={`Código ${invite.code.split('').join(' ')}`} testID="invite-code">
+                      {formatInviteCode(invite.code)}
+                    </Text>
+                    <Text style={styles.codeExpiry}>Vale até {formatInviteExpiry(invite.expiresAt)} ou até a conta da mesa ser fechada.</Text>
+                  </>
+                ) : null}
                 <TouchableOpacity
                   style={styles.linkButton}
-                  onPress={() => shareLink.mutate()}
-                  disabled={shareLink.isPending}
+                  onPress={() => (invite ? shareInvite() : createInvite.mutate())}
+                  disabled={createInvite.isPending}
                   accessibilityRole="button"
+                  testID="invite-share"
                 >
-                  {shareLink.isPending
+                  {createInvite.isPending
                     ? <ActivityIndicator color={colors.primaryForeground} />
                     : (
                       <>
-                        <Ionicons name="share-outline" size={18} color={colors.primaryForeground} />
-                        <Text style={styles.linkButtonText}>Compartilhar link</Text>
+                        <Ionicons name={invite ? 'share-outline' : 'qr-code-outline'} size={18} color={colors.primaryForeground} />
+                        <Text style={styles.linkButtonText}>{invite ? 'Compartilhar link e código' : 'Gerar convite'}</Text>
                       </>
                     )}
                 </TouchableOpacity>

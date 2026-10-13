@@ -1,3 +1,4 @@
+import { PartySizePromptHost } from '../components/table/PartySizePrompt';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -24,7 +25,7 @@ import {
   HomeScreen, KidsActivitiesScreen, LoyaltyScreen,
   MenuScreen, ModoFamiliaScreen, NotificationsScreen, OrderDetailScreen, OrderReadyScreen, OrdersScreen, PaymentSuccessScreen, PrivacyScreen,
   PaymentMethodsScreen, ProfileScreen, PromotionsScreen, QrScannerScreen, QuickServiceCheckoutScreen, ReservationConfirmationScreen, ReservationRestaurantScreen,
-  ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TipPaymentScreen,
+  ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TableCodeScreen, TipPaymentScreen,
   WaitlistScreen,
 } from '../screens/production';
 
@@ -176,7 +177,7 @@ function DefaultMainTabs() {
   );
 }
 
-const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update']);
+const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update', 'table_open_approved', 'table_open_update', 'table_moved']);
 
 
 /**
@@ -217,7 +218,12 @@ function MainTabs() {
   // creates a UITabBarController natively but it never becomes visible on-screen — confirmed via
   // device log (UITabBarController prefs lookups fire, but no bar renders). Needs a react-native-screens
   // fix/upgrade before this can replace the fallback.
-  return <DefaultMainTabs />;
+  return (
+    <>
+      <DefaultMainTabs />
+      <PartySizePromptHost />
+    </>
+  );
 }
 
 export default function ProductionNavigation() {
@@ -309,6 +315,7 @@ export default function ProductionNavigation() {
     <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ headerShown: false }} />
     <Stack.Screen name="OrderReady" component={OrderReadyScreen} options={{ headerShown: false, gestureEnabled: false }} />
     <Stack.Screen name="QrScanner" component={QrScannerScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="TableCode" component={TableCodeScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Reservations" component={ReservationsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ReservationRestaurant" component={ReservationRestaurantScreen} options={{ headerShown: false }} />
     <Stack.Screen name="CreateReservation" component={CreateReservationScreen} options={{ headerShown: false }} />

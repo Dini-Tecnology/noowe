@@ -89,6 +89,7 @@ export default function QrScannerScreen({ navigation, route }: any) {
         cornerBR: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 8 },
         instruction: { color: '#FFFFFF', fontSize: 15, marginTop: 24, textAlign: 'center' },
         processing: { marginTop: 16 },
+        codeLink: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', textDecorationLine: 'underline', marginTop: 14, textAlign: 'center' },
       }),
     [colors],
   );
@@ -138,7 +139,10 @@ export default function QrScannerScreen({ navigation, route }: any) {
           <View style={[styles.corner, styles.cornerBL]} />
           <View style={[styles.corner, styles.cornerBR]} />
         </View>
-        <Text style={styles.instruction}>Aponte para o QR Code da mesa</Text>
+        <Text style={styles.instruction}>Aponte para o QR Code da mesa ou do convite</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('TableCode')} accessibilityRole="button" testID="scanner-table-code">
+          <Text style={styles.codeLink}>Tenho um código de convite</Text>
+        </TouchableOpacity>
         {testTableButton}
         {locked && <ActivityIndicator size="large" color={colors.primary} style={styles.processing} />}
       </View>

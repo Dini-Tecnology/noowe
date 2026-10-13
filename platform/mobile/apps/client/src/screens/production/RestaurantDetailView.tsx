@@ -54,6 +54,13 @@ export interface RestaurantJourneyAction {
   variant?: 'primary';
 }
 
+export interface RestaurantExperienceOption {
+  key: string;
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}
+
 export interface RestaurantDetailViewProps {
   restaurant: CustomerRestaurant;
   status: RestaurantLiveStatus | null | undefined;
@@ -61,6 +68,8 @@ export interface RestaurantDetailViewProps {
   favoritePending: boolean;
   /** Entry points enabled for this restaurant (QR, reserva, fila, garçom). */
   journeyActions: RestaurantJourneyAction[];
+  /** Experiências do restaurante ("Na mesa" | "Retirada", ADR-017); só vem com duas ou mais. */
+  experiences?: RestaurantExperienceOption[];
   /** Quick Service (ADR-013): status de pedidos, tempo de preparo e local de retirada. */
   quickStatus?: QuickServiceStatus | null;
   /** Mostra o card de pedido pelo app e o "Como funciona". */
@@ -88,6 +97,7 @@ export default function RestaurantDetailView({
   isFavorite,
   favoritePending,
   journeyActions,
+  experiences,
   quickStatus,
   showQuickInfo = false,
   showOccupancy = true,
@@ -193,6 +203,14 @@ export default function RestaurantDetailView({
           flexDirection: 'row', flexWrap: 'wrap', gap: ACTION_GAP,
           paddingHorizontal: PAGE_PADDING, marginTop: 22,
         },
+        experienceRow: { flexDirection: 'row', gap: 8, paddingHorizontal: PAGE_PADDING, marginTop: 22 },
+        experiencePill: {
+          flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14,
+          borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card,
+        },
+        experiencePillOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+        experienceText: { fontSize: 14, fontWeight: '700', color: colors.foreground },
+        experienceTextOn: { color: colors.primaryForeground },
         primaryBtn: {
           minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
           marginHorizontal: PAGE_PADDING, marginTop: 22, borderRadius: 18, backgroundColor: colors.primary,
@@ -389,6 +407,23 @@ export default function RestaurantDetailView({
               </Text>
             </View>
           </TouchableOpacity>
+        )}
+
+        {experiences && experiences.length > 1 && (
+          <View style={styles.experienceRow} testID="experience-selector">
+            {experiences.map((experience) => (
+              <TouchableOpacity
+                key={experience.key}
+                style={[styles.experiencePill, experience.selected && styles.experiencePillOn]}
+                onPress={experience.onPress}
+                accessibilityRole="button"
+                accessibilityState={{ selected: experience.selected }}
+                testID={`experience-${experience.key}`}
+              >
+                <Text style={[styles.experienceText, experience.selected && styles.experienceTextOn]}>{experience.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
 
         {primaryActions.map((action) => (

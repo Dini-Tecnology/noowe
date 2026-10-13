@@ -9,6 +9,9 @@ import {
   type CapacityRequest,
 } from '@okinawa/shared/services/supabase-api';
 import { useCapacityRequests } from './shared/useCapacityRequests';
+import { useRestaurantTables } from './shared/useRestaurantOperations';
+import { TablePickerSheet } from './shared/TablePickerSheet';
+import { describeLayoutError, joinCandidates, swapCandidates, type LayoutCandidate } from './shared/tableLayout';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2Shell } from './shared/V2Shell';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
@@ -17,14 +20,43 @@ import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 const ELAPSED_TICK_MS = 30_000;
 
 type Decision = { request: CapacityRequest } & (
-  | { approve: true; reason: CapacityApprovalReason }
+  | { approve: true; reason: 'cadeira_extra' | 'crianca_colo' | 'walk_in_liberado' }
+  | { approve: true; reason: 'troca_de_mesa'; targetTableId: string; chosen: LayoutCandidate[] }
+  | { approve: true; reason: 'juncao_mesas'; tableIds: string[]; chosen: LayoutCandidate[] }
   | { approve: false }
 );
+
+/** Troca e junção pedem as mesas antes de confirmar. */
+type LayoutPick = { request: CapacityRequest; reason: 'troca_de_mesa' | 'juncao_mesas' };
 
 const APPROVAL_LABELS: Record<CapacityApprovalReason, string> = {
   cadeira_extra: 'Aprovar · cadeira extra',
   crianca_colo: 'Aprovar · criança de colo',
+  walk_in_liberado: 'Liberar mesa',
+  troca_de_mesa: 'Trocar mesa',
+  juncao_mesas: 'Juntar mesas',
 };
+
+/** Motivos de aprovação de cada tipo de pedido: fila ativa só se libera; lotação escolhe o motivo. */
+export function approvalReasonsFor(request: Pick<CapacityRequest, 'requestKind' | 'reason'>): CapacityApprovalReason[] {
+  if (request.requestKind === 'open' && request.reason === 'queue_active') return ['walk_in_liberado'];
+  return ['cadeira_extra', 'crianca_colo', 'troca_de_mesa', 'juncao_mesas'];
+}
+
+/** Pessoas a acomodar: o grupo do pedido de abertura, ou quem já está na mesa mais quem quer entrar. */
+export function peopleToSeat(request: Pick<CapacityRequest, 'requestKind' | 'seatCount' | 'headcount' | 'occupiedSeats'>): number {
+  return request.requestKind === 'open' ? request.seatCount : (request.headcount ?? request.occupiedSeats) + request.seatCount;
+}
+
+/** Linha de contexto do cartão: o que o cliente quer e por que precisa da recepção. */
+export function describeRequest(request: Pick<CapacityRequest, 'requestKind' | 'reason' | 'seatCount' | 'tableNumber' | 'seats' | 'occupiedSeats'>): string {
+  if (request.requestKind === 'open') {
+    return request.reason === 'queue_active'
+      ? `Quer abrir a mesa ${request.tableNumber} com ${request.seatCount} pessoa(s), mas há grupos na fila`
+      : `Quer abrir a mesa ${request.tableNumber} com ${request.seatCount} pessoa(s); ela tem ${request.seats} lugares`;
+  }
+  return `Quer entrar na mesa ${request.tableNumber} (${request.occupiedSeats}/${request.seats} lugares)`;
+}
 
 function elapsedLabel(iso: string, now: number): string {
   const minutes = Math.floor((now - new Date(iso).getTime()) / 60_000);
@@ -37,7 +69,35 @@ function describeError(error: unknown): string {
   if (code === 'P0004') return 'O cliente tem conta em aberto em outra mesa. Peça para ele quitar antes de entrar.';
   if (code === '42501') return 'Seu papel não pode decidir sobre lotação neste restaurante.';
   if (code === '23514') return 'Outra pessoa da equipe já decidiu esta solicitação.';
+  if (code === 'P0013' || code === 'P0014' || code === 'P0015') return describeLayoutError(error);
   return userErrorMessage(error, 'Não foi possível registrar a decisão.');
+}
+
+/** Seletor de mesas: só carrega o mapa de mesas quando é aberto (evita assinar o realtime à toa). */
+function LayoutPickerHost({ pick, onClose, onConfirm }: {
+  pick: LayoutPick;
+  onClose: () => void;
+  onConfirm: (tableIds: string[], chosen: LayoutCandidate[]) => void;
+}) {
+  const { data: tables } = useRestaurantTables();
+  const needed = peopleToSeat(pick.request);
+  return (
+    <TablePickerSheet
+      visible
+      title={pick.reason === 'juncao_mesas' ? 'Juntar mesas' : 'Trocar de mesa'}
+      subtitle={`@${pick.request.requestedUser.username} · ${needed} pessoa(s)`}
+      mode={pick.reason === 'juncao_mesas' ? 'multi' : 'single'}
+      candidates={pick.reason === 'juncao_mesas'
+        ? joinCandidates(tables, pick.request.tableId)
+        : swapCandidates(tables, { excludeId: pick.request.tableId, needed })}
+      baseSeats={pick.request.seats}
+      needed={needed}
+      requireFit
+      confirmLabel="Continuar"
+      onClose={onClose}
+      onConfirm={onConfirm}
+    />
+  );
 }
 
 /**
@@ -52,6 +112,7 @@ export default function CapacityRequestsScreen() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<Decision | null>(null);
   const [acting, setActing] = useState<string | null>(null);
+  const [layoutPick, setLayoutPick] = useState<LayoutPick | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -75,7 +136,10 @@ export default function CapacityRequestsScreen() {
       const note = notes[request.id];
       await supabaseApiAdapter.resolveCapacityRequest(
         request.id,
-        pending.approve ? { approve: true, reason: pending.reason, note } : { approve: false, note },
+        !pending.approve ? { approve: false, note }
+          : pending.reason === 'troca_de_mesa' ? { approve: true, reason: 'troca_de_mesa', targetTableId: pending.targetTableId, note }
+          : pending.reason === 'juncao_mesas' ? { approve: true, reason: 'juncao_mesas', tableIds: pending.tableIds, note }
+          : { approve: true, reason: pending.reason, note },
       );
       setNotes((current) => ({ ...current, [request.id]: '' }));
     } catch (err) {
@@ -103,7 +167,7 @@ export default function CapacityRequestsScreen() {
             <Check size={32} color="#22C55E" />
             <Text style={{ color: colors.foreground, fontWeight: '700', marginTop: 10, fontSize: 16 }}>Nenhuma solicitação</Text>
             <Text style={{ color: colors.foregroundSecondary, marginTop: 4, textAlign: 'center' }}>
-              Quando alguém tentar entrar numa mesa cheia, aparece aqui.
+              Quando alguém tentar entrar numa mesa cheia ou abrir uma mesa que precisa da recepção, aparece aqui.
             </Text>
           </View>
         ) : null}
@@ -113,13 +177,18 @@ export default function CapacityRequestsScreen() {
             <View style={styles.cardHeader}>
               <Users size={18} color="#F59E0B" />
               <Text style={[styles.title, { color: colors.foreground }]}>
-                Mesa {request.tableNumber} · {request.occupiedSeats}/{request.seats} lugares
+                {request.requestKind === 'open'
+                  ? `Abrir mesa ${request.tableNumber} · ${request.seatCount} pessoa(s)`
+                  : `Mesa ${request.tableNumber} · ${request.occupiedSeats}/${request.seats} lugares`}
               </Text>
               <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>{elapsedLabel(request.createdAt, now)}</Text>
             </View>
             <Text style={[styles.detail, { color: colors.foregroundSecondary }]}>
               @{request.requestedUser.username} ({request.requestedUser.displayName})
               {request.invitedBy ? ` · convidado por @${request.invitedBy.username}` : ''}
+            </Text>
+            <Text style={[styles.detail, { color: colors.foregroundSecondary }]} testID={`capacity-context-${request.id}`}>
+              {describeRequest(request)}
             </Text>
 
             {request.canDecide ? (
@@ -134,11 +203,13 @@ export default function CapacityRequestsScreen() {
                   accessibilityLabel={`Observação da mesa ${request.tableNumber}`}
                 />
                 <View style={styles.actions}>
-                  {(Object.keys(APPROVAL_LABELS) as CapacityApprovalReason[]).map((reason) => (
+                  {approvalReasonsFor(request).map((reason) => (
                     <TouchableOpacity
                       key={reason}
                       style={[styles.btn, { backgroundColor: '#22C55E', opacity: acting === request.id ? 0.6 : 1 }]}
-                      onPress={() => setPending({ request, approve: true, reason })}
+                      onPress={() => (reason === 'troca_de_mesa' || reason === 'juncao_mesas'
+                        ? setLayoutPick({ request, reason })
+                        : setPending({ request, approve: true, reason }))}
                       disabled={acting === request.id}
                       accessibilityRole="button"
                     >
@@ -164,12 +235,32 @@ export default function CapacityRequestsScreen() {
         ))}
       </ScrollView>
 
+      {layoutPick ? (
+        <LayoutPickerHost
+          pick={layoutPick}
+          onClose={() => setLayoutPick(null)}
+          onConfirm={(tableIds, chosen) => {
+            const { request, reason } = layoutPick;
+            setLayoutPick(null);
+            setPending(reason === 'troca_de_mesa'
+              ? { request, approve: true, reason, targetTableId: tableIds[0], chosen }
+              : { request, approve: true, reason, tableIds, chosen });
+          }}
+        />
+      ) : null}
+
       <V2ConfirmDialog
         visible={!!pending}
         title={pending?.approve ? 'Liberar entrada?' : 'Recusar entrada?'}
         message={pending
           ? pending.approve
-            ? `@${pending.request.requestedUser.username} entra na mesa ${pending.request.tableNumber} acima da lotação (${APPROVAL_LABELS[pending.reason].replace('Aprovar · ', '')}). A decisão fica registrada.`
+            ? pending.reason === 'troca_de_mesa'
+              ? `@${pending.request.requestedUser.username} vai para a mesa ${pending.chosen[0]?.label ?? ''} (${pending.chosen[0]?.seats ?? '?'} lugares). A decisão fica registrada.`
+            : pending.reason === 'juncao_mesas'
+              ? `As mesas ${pending.chosen.map((table) => table.label).join(', ')} serão unidas à mesa ${pending.request.tableNumber} para @${pending.request.requestedUser.username}. A decisão fica registrada.`
+            : pending.request.requestKind === 'open'
+              ? `@${pending.request.requestedUser.username} abre a mesa ${pending.request.tableNumber} (${APPROVAL_LABELS[pending.reason].replace('Aprovar · ', '')}). A decisão fica registrada.`
+              : `@${pending.request.requestedUser.username} entra na mesa ${pending.request.tableNumber} acima da lotação (${APPROVAL_LABELS[pending.reason].replace('Aprovar · ', '')}). A decisão fica registrada.`
             : `@${pending.request.requestedUser.username} não entra na mesa ${pending.request.tableNumber}. A decisão fica registrada.`
           : ''}
         confirmLabel={pending?.approve ? 'Liberar' : 'Recusar'}
@@ -189,8 +280,8 @@ const styles = StyleSheet.create({
   title: { flex: 1, fontWeight: '700' },
   detail: { marginTop: 6, fontSize: 13 },
   note: { marginTop: 10, minHeight: 40, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, fontSize: 13 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  btn: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  btn: { flexGrow: 1, flexBasis: 140, paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
   reject: { marginTop: 8, backgroundColor: '#EF4444' },
   btnText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
   readOnly: { marginTop: 10, fontSize: 12, fontStyle: 'italic' },

@@ -67,6 +67,7 @@ create unique index one_open_session_per_table
   where status in ('open', 'billing');
 
 -- 2. Sessão só abre com origem de entrada rastreável  (ADR-008, spec §3.6)
+--    Vale só para o Fine; o Casual abre pelo QR (ADR-016), então a regra fica na RPC de check-in.
 alter table table_sessions add constraint session_needs_entry_origin
   check (reservation_id is not null or queue_entry_id is not null);
 

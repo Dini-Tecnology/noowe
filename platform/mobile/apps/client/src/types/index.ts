@@ -379,7 +379,7 @@ export type RootStackParamList = {
   TabScreen: { restaurantId?: string };
   TabPayment: { tabId?: string };
   Reservation: { restaurantId: string };
-  Restaurant: { restaurantId: string };
+  Restaurant: { restaurantId: string; serviceModel?: 'fine_dining' | 'casual_dining' | 'quick_service' };
   RestaurantVirtualQueue: { restaurantId?: string };
   RestaurantCallTeam: { restaurantId?: string; tableNumber?: number };
   RestaurantReserve: { restaurantId?: string };

@@ -12,11 +12,12 @@ alguém entra, e até quantos cabem.
 > - a regra única `private.table_session_capacity_check`;
 > - a tela "Lotação" no app da equipe, com aprovação por cadeira extra ou criança de colo e recusa.
 >
-> **Ainda falta aqui:**
-> - passar o link e o QR por essa mesma checagem (hoje entram sem checar lotação, divergência
->   registrada no ADR-011);
-> - ampliar `source`;
-> - resolver por troca ou junção de mesa.
+> **Entregue depois (2026-10-14):** link, QR e código passam pela checagem de lotação
+> (`private.join_by_invite`); o código de 6 dígitos com limite de tentativas ([ADR-019](../decisoes/ADR-019-codigo-de-convite-e-forca-bruta.md));
+> a troca e a junção de mesas ([ADR-018](../decisoes/ADR-018-troca-e-juncao-de-mesas.md)).
+>
+> **Ainda falta aqui:** a tela de explicação do convite expirado (T-G2-07) e o uso do convite em
+> `source` próprio para o código.
 
 ## Entregáveis
 

@@ -1,9 +1,12 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { useCart } from '@/shared/contexts/CartContext';
 import logger from '@okinawa/shared/utils/logger';
 import { QrCheckInCancelled, useVisitSession } from '../contexts/VisitSessionContext';
-import { classifyQrPayload } from './qr-payload';
+import { classifyQrPayload, extractInviteToken } from './qr-payload';
+import { classifyInviteError, confirmCartForRestaurant } from './useTableInviteHandler';
+import { requestPartySize } from '../components/table/PartySizePrompt';
 import type { QrScanOutcome } from './qr-scan-outcome';
 
 export type { QrScanOutcome } from './qr-scan-outcome';
@@ -16,7 +19,9 @@ const QR_REQUEST_TIMEOUT_MS = 15_000;
  *  22023 QR nunca gerado/assinatura inválida · P0002 QR não existe ou expirou na resolução ·
  *  P0006 substituído por um QR mais novo · P0007 vencido · P0004 já tem conta aberta ·
  *  P0005 mesa indisponível OU check-in sem reserva/fila (a mensagem diferencia) ·
- *  P0008 mesa lotada, aguardando a recepção · P0010 restaurante fechado.
+ *  P0008 mesa lotada, aguardando a recepção · P0010 restaurante fechado ·
+ *  P0011 grupo maior que a mesa onde a recepção ajusta a mesa antes (Fine) ·
+ *  P0012 QR de mesa num restaurante só de retirada.
  * Qualquer outra coisa (timeout, offline, 5xx) merece nova tentativa, não "QR inválido".
  */
 function errorCode(error: unknown): string | undefined {
@@ -33,12 +38,32 @@ function isBookingRequiredError(error: unknown): boolean {
   return errorCode(error) === 'P0005' && /reserva confirmada|fila/i.test(errorMessage(error));
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
+/**
+ * Timeout da chamada de QR. `pauseWhile` suspende o relógio enquanto o cliente decide
+ * algo na tela (ex.: quantas pessoas): o tempo de espera humana não é falha de rede.
+ */
+function withTimeout<T>(
+  run: (pauseWhile: <R>(work: Promise<R>) => Promise<R>) => Promise<T>,
+  ms: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let rejectTimeout: (reason: unknown) => void = () => undefined;
+  const arm = () => {
+    timer = setTimeout(() => rejectTimeout({ code: 'TIMEOUT', message: 'QR request timed out' }), ms);
+  };
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject({ code: 'TIMEOUT', message: 'QR request timed out' }), ms);
+    rejectTimeout = reject;
+    arm();
   });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  async function pauseWhile<R>(work: Promise<R>): Promise<R> {
+    clearTimeout(timer);
+    try {
+      return await work;
+    } finally {
+      arm();
+    }
+  }
+  return Promise.race([run(pauseWhile), timeout]).finally(() => clearTimeout(timer));
 }
 
 type ContextRestaurant = { id: string; name?: string | null };
@@ -53,7 +78,7 @@ type ContextRestaurant = { id: string; name?: string | null };
  * offers to switch: a QR printed for the wrong place is simply invalid here.
  */
 export function useTableQrHandler() {
-  const { openFromQr } = useVisitSession();
+  const { openFromQr, joinFromInvite } = useVisitSession();
   const cart = useCart();
 
   const handleQrScanned = useCallback(async (
@@ -64,14 +89,31 @@ export function useTableQrHandler() {
     // The camera occasionally hands back a trailing newline (batch printers embed
     // CR/LF), so classify and send the trimmed payload.
     const payload = qrData.trim();
+
+    // QR do convite no celular do anfitrião (ADR-019): entra na mesa dele, sem check-in próprio.
+    const inviteToken = extractInviteToken(payload);
+    if (inviteToken) {
+      try {
+        const visit = await withTimeout(() => joinFromInvite(inviteToken), QR_REQUEST_TIMEOUT_MS);
+        await confirmCartForRestaurant(cart, visit.restaurantId);
+        return { ok: true, restaurantId: visit.restaurantId };
+      } catch (error) {
+        const reason = classifyInviteError(error);
+        if (reason === 'invalid') return { ok: false, reason: 'invalid' };
+        if (reason === 'awaiting_capacity') return { ok: false, reason: 'awaiting_capacity', detail: 'capacity' };
+        return { ok: false, reason: 'network' };
+      }
+    }
+
     if (!classifyQrPayload(payload)) return { ok: false, reason: 'not_noowe' };
 
     const context = options?.contextRestaurant;
     let foreignRestaurant = false;
     let visit: Awaited<ReturnType<typeof openFromQr>>;
     try {
-      visit = await withTimeout(openFromQr(payload, {
+      visit = await withTimeout((pauseWhile) => openFromQr(payload, {
         dev: options?.dev,
+        askPartySize: (info) => pauseWhile(requestPartySize(info)),
         beforeCheckIn: context
           ? async (resolution) => {
               if (resolution.restaurantId === context.id) return true;
@@ -89,9 +131,18 @@ export function useTableQrHandler() {
       if (code === 'P0006') return { ok: false, reason: 'replaced' };
       if (code === 'P0007') return { ok: false, reason: 'expired' };
       if (code === 'P0010') return { ok: false, reason: 'closed' };
+      if (code === 'P0011') return { ok: false, reason: 'table_too_small' };
+      if (code === 'P0012') return { ok: false, reason: 'pickup_only' };
       if (isBookingRequiredError(error)) return { ok: false, reason: 'booking_required' };
-      if (code === 'P0005') return { ok: false, reason: 'table_unavailable' };
-      if (code === 'P0008') return { ok: false, reason: 'awaiting_capacity' };
+      if (code === 'P0005' || code === 'P0013') return { ok: false, reason: 'table_unavailable' };
+      if (code === 'P0008') {
+        const detail = (error as { reason?: string }).reason;
+        return {
+          ok: false,
+          reason: 'awaiting_capacity',
+          ...(detail === 'queue_active' || detail === 'capacity' ? { detail } : {}),
+        };
+      }
       if (code === 'P0004') return { ok: false, reason: 'active_account' };
       // Anything else lands in the network fallback. Log the shape so we can
       // tell an offline hiccup apart from an unrecognized error code the RPC
@@ -106,6 +157,11 @@ export function useTableQrHandler() {
     }
 
     const restaurantId = visit.restaurantId;
+
+    // QR da mesa antiga depois de uma troca: o cliente segue na mesma sessão, na mesa nova.
+    if (visit.tableMoved) {
+      Toast.show({ type: 'info', text1: 'Sua mesa mudou', text2: `Sua mesa agora é a ${visit.tableNumber}` });
+    }
 
     // A seated table session already makes SessionCartSync drop a foreign cart;
     // the prompt only matters for counter QRs, which have no table session.
@@ -124,7 +180,7 @@ export function useTableQrHandler() {
     }
 
     return { ok: true, restaurantId };
-  }, [openFromQr, cart]);
+  }, [openFromQr, joinFromInvite, cart]);
 
   return { handleQrScanned };
 }

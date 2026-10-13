@@ -28,7 +28,7 @@ import IncomingTableInviteBanner from '../../components/table/IncomingTableInvit
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { showTableQrOutcome } from '../../hooks/qr-scan-outcome';
 import { useTableQrHandler } from '../../hooks/useTableQrHandler';
-import { useTableInviteHandler } from '../../hooks/useTableInviteHandler';
+import { INVITE_FAILURE_MESSAGES, useTableInviteHandler } from '../../hooks/useTableInviteHandler';
 import { takePendingTableQr } from '../../utils/pending-table-qr';
 import { takePendingTableInvite } from '../../utils/pending-table-invite';
 import customerBackend, { type CustomerRestaurant } from '../../services/customer-backend';
@@ -38,6 +38,7 @@ import {
   formatDistance,
   formatRating,
   getServiceTypePresentation,
+  serviceTypesLabel,
   hasRating,
 } from './home-restaurant-ui';
 import { DISCOVERY_FILTERS } from './casual-dining-ui';
@@ -130,10 +131,9 @@ export default function HomeScreen({ navigation }: any) {
       const outcome = await handleInviteToken(token);
       if (outcome.ok) {
         rootNavigate(navigation, 'Menu', { restaurantId: outcome.restaurantId });
-      } else if (outcome.reason === 'invalid') {
-        Alert.alert('Convite inválido', 'Este link de convite não é válido ou expirou.');
       } else {
-        Alert.alert('Sem conexão', 'Não foi possível entrar na mesa agora. Tente novamente.');
+        const { title, message } = INVITE_FAILURE_MESSAGES[outcome.reason];
+        Alert.alert(title, message);
       }
     })();
     // Runs once per HomeScreen mount — a pending QR is one-shot by design.
@@ -211,7 +211,7 @@ export default function HomeScreen({ navigation }: any) {
   const refreshControl = useQueryRefreshControl([restaurants, unread]);
 
   const availableServiceTypes = useMemo(() => {
-    const present = new Set(serviceTypeCatalog.data?.data.map((r) => r.serviceType) ?? []);
+    const present = new Set<string>(serviceTypeCatalog.data?.data.flatMap((r) => r.serviceModels) ?? []);
     return SERVICE_TYPES.filter((type) => present.has(type.id));
   }, [serviceTypeCatalog.data]);
 
@@ -303,8 +303,10 @@ export default function HomeScreen({ navigation }: any) {
   const open = useCallback(
     (restaurant: CustomerRestaurant) => {
       const proceed = async () => {
-        await selectRestaurant(restaurant.id);
-        rootNavigate(navigation, 'Restaurant', { restaurantId: restaurant.id });
+        // A categoria do chip é o ponto de entrada (ADR-017); sem chip, o restaurante pergunta.
+        const chosen = restaurant.serviceModels.find((model) => model === selectedServiceType);
+        await selectRestaurant(restaurant.id, chosen);
+        rootNavigate(navigation, 'Restaurant', { restaurantId: restaurant.id, ...(chosen ? { serviceModel: chosen } : {}) });
       };
       const hasOtherActiveTable = !!session?.tableSessionId && session.restaurantId !== restaurant.id;
       if (hasOtherActiveTable) {
@@ -320,7 +322,7 @@ export default function HomeScreen({ navigation }: any) {
       }
       void proceed();
     },
-    [navigation, selectRestaurant, session],
+    [navigation, selectRestaurant, session, selectedServiceType],
   );
 
   const selectServiceType = useCallback((typeId: string) => {
@@ -710,7 +712,7 @@ export default function HomeScreen({ navigation }: any) {
           <>
             <Text style={styles.sectionTitle}>Perto de você</Text>
             {rows.map((item) => {
-              const serviceType = getServiceTypePresentation(item.serviceType);
+              const serviceType = { ...getServiceTypePresentation(item.serviceType), label: serviceTypesLabel(item.serviceType, item.serviceModels) };
               // Preço médio cadastrado pelo restaurante; sem cadastro, a linha não mostra preço.
               const subtitle = [
                 item.cuisineTypes[0] ?? serviceType.label,

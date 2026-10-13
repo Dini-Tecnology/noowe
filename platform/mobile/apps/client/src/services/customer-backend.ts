@@ -23,11 +23,17 @@ export type VisitSession = {
   tableNumber: string;
   serviceModel?: ServiceModel;
   waitlistEntryId?: string;
+  /** O check-in devolveu a visita atual porque a mesa do cliente foi trocada pela recepção (ADR-018). */
+  tableMoved?: boolean;
 };
 
 export type ServiceQrResolution =
   | { kind: 'counter'; restaurantId: string; serviceModel: 'quick_service'; counterLabel: string }
-  | { kind: 'table'; restaurantId: string; serviceModel: 'fine_dining' | 'casual_dining'; tableId: string; tableQrId: string; allowedServiceModels: ServiceModel[] };
+  | { kind: 'table'; restaurantId: string; serviceModel: 'fine_dining' | 'casual_dining'; tableId: string; tableQrId: string; allowedServiceModels: ServiceModel[]; seats?: number; hasActiveSession?: boolean; isParticipant?: boolean; /** false onde o grupo vem da reserva/fila (Fine). */ asksPartySize?: boolean };
+
+export type UserNotificationInsert = { type: string; metadata: Record<string, unknown> };
+
+export type TableInvite = { url: string; code: string; expiresAt: string };
 
 export type TableParticipant = {
   userId: string;
@@ -185,6 +191,8 @@ export type CustomerRestaurant = {
   serviceConfig: Record<string, unknown>;
   customerExperience: CustomerExperienceConfig | null;
   serviceType: string;
+  /** Todos os modelos do restaurante (ADR-017); sempre inclui o tipo principal. */
+  serviceModels: ServiceModel[];
 };
 
 export type CustomerMenuCategory = {
@@ -560,9 +568,11 @@ export interface CustomerBackend {
   getActiveVisit(): Promise<VisitSession | null>;
   openTableSession(qrData: string): Promise<VisitSession>;
   resolveServiceQr(qrData: string): Promise<ServiceQrResolution>;
-  checkIn(qrData: string, serviceModel: 'fine_dining' | 'casual_dining'): Promise<VisitSession>;
+  checkIn(qrData: string, serviceModel: 'fine_dining' | 'casual_dining', partySize?: number): Promise<VisitSession>;
+  /** Abre a mesa depois que a recepção liberou a abertura (solicitação do tipo `open`). */
+  checkInApproved(capacityRequestId: string): Promise<VisitSession>;
   /** Development only. Same as checkIn without the reservation/waitlist requirement; gated by the database dev flag. */
-  devCheckIn(qrData: string, serviceModel: 'fine_dining' | 'casual_dining'): Promise<VisitSession>;
+  devCheckIn(qrData: string, serviceModel: 'fine_dining' | 'casual_dining', partySize?: number): Promise<VisitSession>;
   /** Development only. Returns a real table QR so the emulator can open a comanda without the camera. */
   devPickTableQr(restaurantId?: string): Promise<{ qrCodeData: string; restaurantId: string; tableNumber: string }>;
   /** Development only. Marks the caller's order ready so the prep wait can be skipped. */
@@ -613,8 +623,11 @@ export interface CustomerBackend {
     actionLabel?: string;
     metadata?: Record<string, unknown>;
   }): Promise<unknown>;
-  createTableInvite(tableSessionId: string): Promise<string>;
+  /** Link, código de 6 dígitos e validade do convite (ADR-019). */
+  createTableInvite(tableSessionId: string): Promise<TableInvite>;
   joinTableInvite(token: string): Promise<VisitSession>;
+  /** Entra na mesa pelo código de 6 dígitos, via Edge Function com limite de tentativas. */
+  joinTableByCode(code: string): Promise<VisitSession>;
   getTableBill(tableSessionId: string): Promise<TableBill>;
   listTableDiners(tableSessionId: string): Promise<TableDiner[]>;
   addTableCompanion(input: {
@@ -680,6 +693,8 @@ export interface CustomerBackend {
   requestAccountDeletion(): Promise<void>;
   subscribeToWalletChanges(onChange: () => void): Promise<RealtimeChannel>;
   subscribeToUserChanges(onChange: () => void): Promise<RealtimeChannel>;
+  /** Cada notificação nova do usuário, com o conteúdo (usado para avisar troca de mesa). */
+  subscribeToUserNotifications(onInsert: (notification: UserNotificationInsert) => void): Promise<RealtimeChannel>;
   subscribeToWaitlistChanges(restaurantId: string, onChange: () => void): Promise<RealtimeChannel>;
   subscribeToOrderChanges(orderId: string, onChange: () => void): Promise<RealtimeChannel>;
   /** Invites addressed to me and, when given, every invite of that table session. */
@@ -732,7 +747,16 @@ function mapRestaurant(row: RestaurantRow): CustomerRestaurant {
       ? customerExperience as CustomerExperienceConfig
       : null,
     serviceType: String(row.service_type ?? ''),
+    serviceModels: serviceModelsOf(row),
   };
+}
+
+function serviceModelsOf(row: Record<string, unknown>): ServiceModel[] {
+  const raw = Array.isArray(row.service_models) ? row.service_models : [];
+  const models = raw.filter(isServiceModel);
+  const primary = String(row.service_type ?? '');
+  if (isServiceModel(primary) && !models.includes(primary)) models.unshift(primary);
+  return models;
 }
 
 function mapOrder(row: Record<string, unknown>): CustomerOrder {
@@ -1001,16 +1025,20 @@ async function rpcCheckIn(
   rpc: 'customer_check_in' | 'customer_dev_check_in',
   qrData: string,
   serviceModel: 'fine_dining' | 'casual_dining',
+  partySize?: number,
 ): Promise<VisitSession> {
   const { data, error } = await (getSupabaseClient() as any).rpc(rpc, {
     p_qr_data: qrData,
     p_service_model: serviceModel,
+    p_party_size: partySize ?? null,
   });
   if (error) throw error;
   if (!data?.tableSessionId && data?.status === 'awaiting_capacity') {
     throw Object.assign(new Error('A recepção precisa liberar um lugar adicional.'), {
       code: 'P0008',
       capacityRequestId: data.capacityRequestId,
+      requestKind: data.requestKind,
+      reason: data.reason,
     });
   }
   return data as VisitSession;
@@ -1116,11 +1144,11 @@ export const customerBackend: CustomerBackend = {
     const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
     let query = getSupabaseClient().from('restaurants').select('*')
       .eq('is_active', true)
-      .in('service_type', ['fine_dining', 'casual_dining', 'quick_service'])
+      .overlaps('service_models', ['fine_dining', 'casual_dining', 'quick_service'])
       .order('id', { ascending: true }).limit(limit + 1);
     if (input.search?.trim()) query = query.ilike('name', `%${input.search.trim()}%`);
     if (input.cuisine?.trim()) query = query.contains('cuisine_types', [input.cuisine.trim()]);
-    if (input.serviceType?.trim()) query = query.eq('service_type', input.serviceType.trim());
+    if (input.serviceType?.trim()) query = query.contains('service_models', [input.serviceType.trim()]);
     if (input.amenities?.length) {
       // Server-side AND filter: the restaurant must list every requested
       // amenity in service_config.amenities (GIN-indexed jsonb containment).
@@ -1300,12 +1328,20 @@ export const customerBackend: CustomerBackend = {
     return data as ServiceQrResolution;
   },
 
-  async checkIn(qrData, serviceModel) {
-    return rpcCheckIn('customer_check_in', qrData, serviceModel);
+  async checkIn(qrData, serviceModel, partySize) {
+    return rpcCheckIn('customer_check_in', qrData, serviceModel, partySize);
   },
 
-  async devCheckIn(qrData, serviceModel) {
-    return rpcCheckIn('customer_dev_check_in', qrData, serviceModel);
+  async checkInApproved(capacityRequestId) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('customer_check_in_approved', {
+      p_capacity_request_id: capacityRequestId,
+    });
+    if (error) throw error;
+    return data as VisitSession;
+  },
+
+  async devCheckIn(qrData, serviceModel, partySize) {
+    return rpcCheckIn('customer_dev_check_in', qrData, serviceModel, partySize);
   },
 
   async devPickTableQr(restaurantId) {
@@ -1633,7 +1669,28 @@ export const customerBackend: CustomerBackend = {
       p_table_session_id: tableSessionId,
     });
     if (error) throw error;
-    return data as unknown as string;
+    const raw = objectValue(data);
+    return { url: String(raw.url ?? ''), code: String(raw.code ?? ''), expiresAt: String(raw.expiresAt ?? '') };
+  },
+
+  async joinTableByCode(code) {
+    const { data, error } = await getSupabaseClient().functions.invoke('join-table-by-code', { body: { code } });
+    if (error) {
+      // A resposta HTTP do erro traz o motivo; sem ela é falha de rede.
+      const status = (error as { context?: { status?: number } }).context?.status;
+      if (status === 429) throw Object.assign(new Error('Muitas tentativas.'), { code: 'TOO_MANY_ATTEMPTS' });
+      if (status === 404) throw Object.assign(new Error('Convite inválido ou expirado.'), { code: 'P0001' });
+      if (status === 400) throw Object.assign(new Error('Código inválido.'), { code: '22023' });
+      throw error;
+    }
+    const visit = objectValue((data as { visit?: unknown } | null)?.visit);
+    if (!visit.tableSessionId && visit.status === 'awaiting_capacity') {
+      throw Object.assign(new Error('A recepção precisa liberar um lugar adicional.'), {
+        code: 'P0008',
+        capacityRequestId: visit.capacityRequestId,
+      });
+    }
+    return visit as unknown as VisitSession;
   },
 
   async joinTableInvite(token) {
@@ -2123,6 +2180,17 @@ export const customerBackend: CustomerBackend = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations', filter: `customer_id=eq.${userId}` }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'waitlist_entries', filter: `customer_id=eq.${userId}` }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, onChange)
+      .subscribe();
+  },
+
+  async subscribeToUserNotifications(onInsert) {
+    const userId = await requireUserId();
+    const channelName = `customer-notifications:${userId}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    return getSupabaseClient().channel(channelName)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (change) => {
+        const row = objectValue((change as { new?: unknown }).new);
+        onInsert({ type: String(row.notification_type ?? ''), metadata: objectValue(row.metadata) });
+      })
       .subscribe();
   },
 

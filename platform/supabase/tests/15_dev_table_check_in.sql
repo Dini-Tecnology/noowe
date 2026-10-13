@@ -31,16 +31,22 @@ begin
     from unnest(array['sunday','monday','tuesday','wednesday','thursday','friday','saturday']) d
   ) where id = r;
 
+  -- A exigência de reserva/fila é do Fine (reservation_required); o Casual abre por QR (ADR-016).
+  update public.restaurant_model_configs
+  set service_models = array['fine_dining','casual_dining']::public.noowe_service_model[],
+      reservation_enabled = true, queue_enabled = true
+  where restaurant_id = r;
+
   perform set_config('request.jwt.claims', jsonb_build_object('sub', customer_id, 'role', 'authenticated')::text, true);
   picked := public.customer_dev_pick_table_qr(r);
   resolved := public.customer_resolve_service_qr(picked->>'qrCodeData');
   model := (resolved->>'serviceModel')::public.noowe_service_model;
 
   begin
-    perform public.customer_check_in(picked->>'qrCodeData', model);
-    insert into dev_check_in_results values ('real check-in still requires a booking', false);
+    perform public.customer_check_in(picked->>'qrCodeData', 'fine_dining');
+    insert into dev_check_in_results values ('real fine dining check-in still requires a booking', false);
   exception when sqlstate 'P0005' then
-    insert into dev_check_in_results values ('real check-in still requires a booking', true);
+    insert into dev_check_in_results values ('real fine dining check-in still requires a booking', true);
   end;
 
   update private.dev_flags set enabled = false, updated_at = now() where key = 'simulate_table_scan';

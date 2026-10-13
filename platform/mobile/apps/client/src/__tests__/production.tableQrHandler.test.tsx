@@ -5,6 +5,8 @@ import { renderHook, act } from '@testing-library/react-native';
 // The shared logger transitively loads @sentry/react-native which is shipped
 // as ESM and blows up jest's CJS runtime. The hook only calls logger.error,
 // so a stub is enough here.
+jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
+import Toast from 'react-native-toast-message';
 jest.mock('@okinawa/shared/utils/logger', () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -14,10 +16,16 @@ import { useTableQrHandler } from '../hooks/useTableQrHandler';
 
 const QR = 'noowe://t/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
+const mockRequestPartySize = jest.fn((_info: { seats: number | null }) => Promise.resolve<number | null>(1));
+jest.mock('../components/table/PartySizePrompt', () => ({
+  requestPartySize: (info: { seats: number | null }) => mockRequestPartySize(info),
+}));
+
 const mockOpenFromQr = jest.fn();
+const mockJoinFromInvite = jest.fn();
 jest.mock('../contexts/VisitSessionContext', () => {
   class QrCheckInCancelled extends Error {}
-  return { QrCheckInCancelled, useVisitSession: () => ({ openFromQr: mockOpenFromQr }) };
+  return { QrCheckInCancelled, useVisitSession: () => ({ openFromQr: mockOpenFromQr, joinFromInvite: mockJoinFromInvite }) };
 });
 
 const mockGetRestaurant = jest.fn();
@@ -143,6 +151,130 @@ describe('useTableQrHandler — classifies customer_open_table_session errors', 
       outcome = await result.current.handleQrScanned(QR);
     });
     expect(outcome!).toEqual({ ok: false, reason: 'booking_required' });
+  });
+});
+
+describe('useTableQrHandler — check-in Casual por QR (ADR-016)', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it.each([
+    ['P0011', 'table_too_small'],
+    ['P0012', 'pickup_only'],
+  ])('%s vira o motivo %s', async (code, reason) => {
+    mockOpenFromQr.mockRejectedValueOnce({ code, message: 'x' });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => {
+      outcome = await result.current.handleQrScanned(QR);
+    });
+    expect(outcome!).toEqual({ ok: false, reason });
+  });
+
+  it.each([
+    ['queue_active', { ok: false, reason: 'awaiting_capacity', detail: 'queue_active' }],
+    ['capacity', { ok: false, reason: 'awaiting_capacity', detail: 'capacity' }],
+  ])('P0008 com motivo %s chega ao alerta', async (reason, expected) => {
+    mockOpenFromQr.mockRejectedValueOnce({ code: 'P0008', requestKind: 'open', reason, capacityRequestId: 'c1' });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => {
+      outcome = await result.current.handleQrScanned(QR);
+    });
+    expect(outcome!).toEqual(expected);
+  });
+
+  it('entrega ao contexto a pergunta de nº de pessoas', async () => {
+    mockOpenFromQr.mockResolvedValueOnce({ restaurantId: 'r1', tableId: 't1', tableSessionId: 's1', tableNumber: '10' });
+    const { result } = renderTableQrHandler();
+    await act(async () => {
+      await result.current.handleQrScanned(QR);
+    });
+    expect(mockOpenFromQr.mock.calls[0][1]).toEqual(expect.objectContaining({ askPartySize: expect.any(Function) }));
+  });
+});
+
+describe('useTableQrHandler — timeout não conta o tempo do prompt de pessoas', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => { jest.useRealTimers(); jest.clearAllMocks(); });
+
+  it('o cliente pode demorar mais que 15 s escolhendo; a chamada de rede é que tem prazo', async () => {
+    let answer: (size: number | null) => void = () => undefined;
+    mockRequestPartySize.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    mockOpenFromQr.mockImplementationOnce(async (_qr: string, options: { askPartySize: (i: { seats: number }) => Promise<number | null> }) => {
+      const size = await options.askPartySize({ seats: 4 });
+      return { restaurantId: 'r1', tableId: 't1', tableSessionId: 's1', tableNumber: String(size) };
+    });
+    const { result } = renderTableQrHandler();
+    let pending!: ReturnType<typeof result.current.handleQrScanned>;
+    await act(async () => { pending = result.current.handleQrScanned(QR); });
+    await act(async () => { jest.advanceTimersByTime(60_000); });
+    await act(async () => { answer(3); });
+    let outcome: Awaited<typeof pending>;
+    await act(async () => { outcome = await pending; });
+    expect(outcome!).toEqual({ ok: true, restaurantId: 'r1' });
+  });
+
+  it('depois da resposta, uma chamada que trava ainda estoura o prazo', async () => {
+    mockRequestPartySize.mockResolvedValueOnce(2);
+    mockOpenFromQr.mockImplementationOnce(async (_qr: string, options: { askPartySize: (i: { seats: number }) => Promise<number | null> }) => {
+      await options.askPartySize({ seats: 4 });
+      return new Promise(() => undefined);
+    });
+    const { result } = renderTableQrHandler();
+    let pending!: ReturnType<typeof result.current.handleQrScanned>;
+    await act(async () => { pending = result.current.handleQrScanned(QR); });
+    await act(async () => { jest.advanceTimersByTime(16_000); });
+    let outcome: Awaited<typeof pending>;
+    await act(async () => { outcome = await pending; });
+    expect(outcome!).toEqual({ ok: false, reason: 'network' });
+  });
+});
+
+describe('useTableQrHandler — mesa trocada pela recepção (ADR-018)', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it('QR da mesa antiga devolve a visita atual e avisa a mesa nova', async () => {
+    mockOpenFromQr.mockResolvedValueOnce({ restaurantId: 'r1', tableId: 't2', tableSessionId: 's1', tableNumber: '9', tableMoved: true });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => { outcome = await result.current.handleQrScanned(QR); });
+    expect(outcome!).toEqual({ ok: true, restaurantId: 'r1' });
+    expect(Toast.show).toHaveBeenCalledWith(expect.objectContaining({ text2: 'Sua mesa agora é a 9' }));
+  });
+
+  it('P0013 (mesa unida) não vira "sem conexão"', async () => {
+    mockOpenFromQr.mockRejectedValueOnce({ code: 'P0013', message: 'Mesa unida a outra' });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => { outcome = await result.current.handleQrScanned(QR); });
+    expect(outcome!).toEqual({ ok: false, reason: 'table_unavailable' });
+  });
+});
+
+describe('useTableQrHandler — QR do convite no celular do anfitrião (ADR-019)', () => {
+  afterEach(() => jest.clearAllMocks());
+  const INVITE = `https://noowebr.com/t/invite/${'a'.repeat(48)}`;
+
+  it('entra na mesa do anfitrião sem fazer check-in próprio', async () => {
+    mockJoinFromInvite.mockResolvedValueOnce({ restaurantId: 'r1', tableId: 't1', tableSessionId: 's1', tableNumber: '1' });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => { outcome = await result.current.handleQrScanned(INVITE); });
+    expect(outcome!).toEqual({ ok: true, restaurantId: 'r1' });
+    expect(mockJoinFromInvite).toHaveBeenCalledWith('a'.repeat(48));
+    expect(mockOpenFromQr).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ code: 'P0001' }, { ok: false, reason: 'invalid' }],
+    [{ code: 'P0008' }, { ok: false, reason: 'awaiting_capacity', detail: 'capacity' }],
+    [new Error('offline'), { ok: false, reason: 'network' }],
+  ])('classifica a falha %j', async (error, expected) => {
+    mockJoinFromInvite.mockRejectedValueOnce(error);
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => { outcome = await result.current.handleQrScanned(INVITE); });
+    expect(outcome!).toEqual(expected);
   });
 });
 

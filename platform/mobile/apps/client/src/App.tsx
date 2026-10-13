@@ -20,6 +20,7 @@ import { VisitSessionProvider } from './contexts/VisitSessionContext';
 import { ServiceTypeProvider } from './contexts/ServiceTypeContext';
 import { ServiceTypeSync } from './components/ServiceTypeSync';
 import { SessionCartSync } from './components/SessionCartSync';
+import { VisitTableSync } from './components/VisitTableSync';
 import { Notifications, registerCustomerPushToken, subscribeCustomerPushTokenChanges } from './services/customer-push';
 import { getSupabaseClient, isSupabaseConfigured } from '@/shared/services/supabase';
 
@@ -93,6 +94,7 @@ export default function App() {
                   <ServiceTypeSync />
                   <CartProvider>
                     <SessionCartSync />
+                    <VisitTableSync />
                     <PaperProvider theme={theme}>
                       <Navigation />
                       <StatusBar style="auto" />

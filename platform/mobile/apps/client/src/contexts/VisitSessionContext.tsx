@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { ServiceModel } from '@okinawa/shared/config/capabilities';
 import customerBackend, { type AcceptTableUserInviteResult, type ServiceQrResolution, type VisitSession } from '../services/customer-backend';
 
 const STORAGE_KEY = '@noowe/client/visit-session/v1';
@@ -19,6 +20,11 @@ export type OpenFromQrOptions = {
    * false cancela sem tocar no servidor nem na sessão atual.
    */
   beforeCheckIn?: (resolution: ServiceQrResolution) => Promise<boolean>;
+  /**
+   * Chamado só por quem vai ABRIR uma mesa (ainda sem sessão ativa); devolve o tamanho do
+   * grupo ou null para desistir (ADR-016). Quem entra numa mesa já aberta não é perguntado.
+   */
+  askPartySize?: (info: { seats: number | null }) => Promise<number | null>;
 };
 
 type VisitSessionContextValue = {
@@ -26,13 +32,18 @@ type VisitSessionContextValue = {
   restoring: boolean;
   /** `dev` uses the emulator check-in, which skips the reservation/waitlist requirement (database dev flag). */
   openFromQr: (qrData: string, options?: OpenFromQrOptions) => Promise<VisitSession>;
+  /** Abre a mesa depois que a recepção liberou a solicitação de abertura (ADR-016). */
+  openFromApprovedRequest: (capacityRequestId: string) => Promise<VisitSession>;
   joinFromInvite: (token: string) => Promise<VisitSession>;
+  /** Entra na mesa pelo código de 6 dígitos do convite (ADR-019). */
+  joinFromInviteCode: (code: string) => Promise<VisitSession>;
   /**
    * Accepts an @username invite (ADR-011). Only an `accepted` result moves the
    * visit; `awaiting_capacity` and closed invites leave the current table as is.
    */
   joinFromUserInvite: (inviteId: string) => Promise<AcceptTableUserInviteResult>;
-  selectRestaurant: (restaurantId: string) => Promise<void>;
+  /** `serviceModel` é a experiência escolhida na descoberta (ADR-017); ignorado com mesa aberta. */
+  selectRestaurant: (restaurantId: string, serviceModel?: ServiceModel) => Promise<void>;
   selectWaitlistJourney: (restaurantId: string, waitlistEntryId: string, serviceModel: 'fine_dining' | 'casual_dining') => Promise<void>;
   leaveTable: () => Promise<void>;
   clearSession: () => Promise<void>;
@@ -91,9 +102,24 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
           tableNumber: resolution.counterLabel,
           serviceModel: resolution.serviceModel,
         }
-      : options?.dev
-        ? await customerBackend.devCheckIn(qrData, resolution.serviceModel)
-        : await customerBackend.checkIn(qrData, resolution.serviceModel);
+      : await (async () => {
+          let partySize: number | undefined;
+          // Só quem abre a mesa responde, e só onde o grupo não vem da reserva/fila (Fine).
+          if (!resolution.hasActiveSession && resolution.asksPartySize !== false && options?.askPartySize) {
+            const asked = await options.askPartySize({ seats: resolution.seats ?? null });
+            if (asked == null) throw new QrCheckInCancelled();
+            partySize = asked;
+          }
+          return options?.dev
+            ? customerBackend.devCheckIn(qrData, resolution.serviceModel, partySize)
+            : customerBackend.checkIn(qrData, resolution.serviceModel, partySize);
+        })();
+    await persist(next);
+    return next;
+  }, [persist]);
+
+  const openFromApprovedRequest = useCallback(async (capacityRequestId: string) => {
+    const next = await customerBackend.checkInApproved(capacityRequestId);
     await persist(next);
     return next;
   }, [persist]);
@@ -104,17 +130,27 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
     return next;
   }, [persist]);
 
+  const joinFromInviteCode = useCallback(async (code: string) => {
+    const next = await customerBackend.joinTableByCode(code);
+    await persist(next);
+    return next;
+  }, [persist]);
+
   const joinFromUserInvite = useCallback(async (inviteId: string) => {
     const result = await customerBackend.acceptTableUserInvite(inviteId);
     if (result.status === 'accepted' && result.visit) await persist(result.visit);
     return result;
   }, [persist]);
 
-  const selectRestaurant = useCallback(async (restaurantId: string) => {
-    // Already browsing/seated at this restaurant: keep whatever table
-    // session is active instead of wiping it out from under the user.
-    if (session?.tableSessionId || session?.restaurantId === restaurantId) return;
-    await persist({ restaurantId, tableId: '', tableSessionId: '', tableNumber: '' });
+  const selectRestaurant = useCallback(async (restaurantId: string, serviceModel?: ServiceModel) => {
+    // Already seated: keep the table session (and its model) instead of wiping it out.
+    if (session?.tableSessionId) return;
+    // Browsing the same restaurant: only the chosen experience may change.
+    if (session?.restaurantId === restaurantId) {
+      if (serviceModel && session.serviceModel !== serviceModel) await persist({ ...session, serviceModel });
+      return;
+    }
+    await persist({ restaurantId, tableId: '', tableSessionId: '', tableNumber: '', ...(serviceModel ? { serviceModel } : {}) });
   }, [persist, session]);
 
   const selectWaitlistJourney = useCallback(async (
@@ -147,9 +183,9 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
   }, [persist, session]);
 
   const value = useMemo(() => ({
-    session, restoring, openFromQr, joinFromInvite, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
+    session, restoring, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromInviteCode, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
   }), [
-    session, restoring, openFromQr, joinFromInvite, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
+    session, restoring, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromInviteCode, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
   ]);
 
   return <VisitSessionContext.Provider value={value}>{children}</VisitSessionContext.Provider>;

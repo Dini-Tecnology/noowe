@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { enforceRateLimit } from "../_shared/rate-limit.ts";
 
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://noowebr.com",
@@ -8,8 +9,6 @@ const DEFAULT_ALLOWED_ORIGINS = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE_REGEX = /^\d{6}$/;
-
-type SupabaseAdmin = ReturnType<typeof createClient>;
 
 function getAllowedOrigins() {
   const configured = Deno.env.get("ALLOWED_ORIGINS");
@@ -45,70 +44,6 @@ function jsonResponse(req: Request, body: Record<string, unknown>, status = 200)
 
 function normalizeEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function getClientIp(req: Request) {
-  return (
-    req.headers.get("cf-connecting-ip") ??
-    req.headers.get("x-real-ip") ??
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    "unknown"
-  );
-}
-
-async function sha256(value: string) {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function enforceRateLimit(
-  supabase: SupabaseAdmin,
-  req: Request,
-  action: string,
-  identity: string,
-  limit: number,
-  windowSeconds: number,
-) {
-  const key = await sha256(`${action}:${getClientIp(req)}:${identity}`);
-  const now = new Date();
-  const { data, error } = await supabase
-    .from("edge_rate_limits")
-    .select("window_start, request_count")
-    .eq("key", key)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  if (data) {
-    const windowStart = new Date(data.window_start);
-    const inWindow = now.getTime() - windowStart.getTime() < windowSeconds * 1000;
-    if (inWindow && data.request_count >= limit) {
-      return false;
-    }
-
-    const { error: updateError } = await supabase
-      .from("edge_rate_limits")
-      .update({
-        window_start: inWindow ? data.window_start : now.toISOString(),
-        request_count: inWindow ? data.request_count + 1 : 1,
-        updated_at: now.toISOString(),
-      })
-      .eq("key", key);
-    if (updateError) throw updateError;
-    return true;
-  }
-
-  const { error: insertError } = await supabase.from("edge_rate_limits").insert({
-    key,
-    window_start: now.toISOString(),
-    request_count: 1,
-    updated_at: now.toISOString(),
-  });
-  if (insertError) throw insertError;
-  return true;
 }
 
 function createSupabaseAdmin() {

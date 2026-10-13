@@ -2,6 +2,7 @@
 
 **Status:** ACEITO (2026-09-14) — default mantido; escolha delegada pelo responsável do produto à recomendação técnica do plano de aderência
 **Origem:** spec §8.1, oitava decisão em aberto
+**Nota (2026-10-13):** a trava de origem da sessão vale só para o Fine; o Casual abre pelo QR (ADR-016)
 **Impacta:** Fatia F3 (config), Fatia E1 (reservas), Fatia E2 (fila)
 **Vocabulário:** no banco, `queue_entry_id` é `waitlist_entry_id` (ADR-009, `docs/arquitetura/05-glossario-spec-banco.md`)
 
@@ -21,7 +22,7 @@ desligá-la nunca libera consumo anônimo.**
    Não existe estado em que ambas estejam desligadas e a mesa aceite cliente.
 3. A trava real não é "tem reserva": é `table_sessions` só abrir com uma origem válida
    (`reservation_id` **ou** `queue_entry_id`). Essa constraint fica no banco e vale sempre,
-   independentemente da configuração.
+   independentemente da configuração (no Fine; o Casual segue o ADR-016).
 
 ## Por quê
 
@@ -37,6 +38,6 @@ de baixa), e um booleano global obriga alguém a lembrar de religar — o que ni
 
 - Constraint no banco: `table_sessions` exige `reservation_id IS NOT NULL OR queue_entry_id IS
   NOT NULL`. Este é o critério de aceite da spec §3.6 traduzido em invariante de dados, e vale
-  para Fine e Casual.
+  para o Fine (o Casual abre pelo QR, ADR-016).
 - A tela de configuração precisa impedir salvar reserva e fila ambas desligadas num modelo de
   sala. Erro de validação, não aviso.

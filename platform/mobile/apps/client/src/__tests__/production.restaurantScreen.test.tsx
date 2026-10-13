@@ -137,10 +137,10 @@ function buildContract(
   };
 }
 
-function renderScreen() {
+function renderScreen(params: { serviceModel?: ServiceModel } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const navigation = { navigate: jest.fn(), goBack: jest.fn() };
-  const route = { params: { restaurantId: 'r1' } };
+  const navigation = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn() };
+  const route = { params: { restaurantId: 'r1', ...params } };
   const utils = render(
     <SafeAreaProvider
       initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } }}
@@ -482,6 +482,51 @@ describe('RestaurantScreen — pop-up de horários', () => {
 
     fireEvent.press(await findByLabelText('Ver horários de funcionamento'));
     expect(await findByText('Horário não informado pelo restaurante.')).toBeTruthy();
+  });
+});
+
+describe('RestaurantScreen — restaurante com mais de uma experiência (ADR-017)', () => {
+  const dualRestaurant = () => ({ ...buildRestaurant('casual_dining'), serviceModels: ['casual_dining', 'quick_service'] });
+  const contractFor = (model: ServiceModel) => buildContract(model, model === 'quick_service'
+    ? { orderAhead: true, pickupSlots: true, tableSession: false, reservations: false, virtualQueue: false }
+    : {});
+
+  beforeEach(() => {
+    mockGetRestaurant.mockResolvedValue(dualRestaurant());
+    mockGetCapabilities.mockImplementation((_id: string, model: ServiceModel) => Promise.resolve(contractFor(model)));
+  });
+
+  it('sem categoria escolhida, abre no tipo principal e oferece o seletor Na mesa | Retirada', async () => {
+    const { findByTestId, queryByText } = renderScreen();
+
+    expect(await findByTestId('experience-table')).toBeTruthy();
+    expect(await findByTestId('experience-pickup')).toBeTruthy();
+    expect(mockGetCapabilities).toHaveBeenCalledWith('r1', 'casual_dining');
+    expect(queryByText('Fazer pedido')).toBeNull();
+  });
+
+  it('vindo do chip Quick, abre direto na jornada de retirada', async () => {
+    const { findByText } = renderScreen({ serviceModel: 'quick_service' });
+
+    expect(await findByText('Fazer pedido')).toBeTruthy();
+    expect(mockGetCapabilities).toHaveBeenCalledWith('r1', 'quick_service');
+  });
+
+  it('trocar o seletor para Retirada mostra as ações do Quick', async () => {
+    const { findByTestId, findByText, navigation } = renderScreen();
+
+    fireEvent.press(await findByTestId('experience-pickup'));
+
+    expect(await findByText('Fazer pedido')).toBeTruthy();
+    expect(navigation.setParams).toHaveBeenCalledWith({ serviceModel: 'quick_service' });
+  });
+
+  it('restaurante de uma experiência só não mostra seletor', async () => {
+    mockGetRestaurant.mockResolvedValue({ ...buildRestaurant('casual_dining'), serviceModels: ['casual_dining'] });
+    const { findByText, queryByTestId } = renderScreen();
+
+    expect(await findByText('Cardápio')).toBeTruthy();
+    expect(queryByTestId('experience-selector')).toBeNull();
   });
 });
 

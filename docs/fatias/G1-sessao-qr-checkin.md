@@ -32,7 +32,8 @@
    (spec §3.6).
 2. Dois clientes lendo o mesmo QR entram na **mesma** sessão; nunca é criada uma segunda
    comanda para a mesma mesa (spec §2.6, §3.4).
-3. Tentar abrir sessão sem reserva nem posição de fila é rejeitado pelo banco (ADR-008).
+3. No Fine, tentar abrir sessão sem reserva nem posição de fila é rejeitado (ADR-008). No Casual, o QR abre a
+   mesa sem reserva; fila ativa ou grupo acima de `seats` viram solicitação ao maître (ADR-016).
 4. Mesa em `billing` faz o QR abrir o fechamento (spec §3.4).
 5. Check-in muda a mesa para `occupied` e o garçom responsável recebe a mesa no painel.
 6. Concorrência: duas leituras simultâneas do mesmo QR não criam duas sessões — teste com duas

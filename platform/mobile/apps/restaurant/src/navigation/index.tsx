@@ -10,6 +10,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import * as WebBrowser from 'expo-web-browser';
 import { authService } from '@/shared/services/auth';
+import { StaffPushBridge } from './StaffPushBridge';
 import { socialAuthService } from '@/shared/services/social-auth';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { logger } from '@/shared/utils/logger';
@@ -628,6 +629,7 @@ function AuthenticatedGate() {
 function AuthenticatedRoot() {
   return (
     <RestaurantRoleProvider>
+      <StaffPushBridge />
       <AuthenticatedGate />
     </RestaurantRoleProvider>
   );

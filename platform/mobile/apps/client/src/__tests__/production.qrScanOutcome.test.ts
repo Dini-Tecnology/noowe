@@ -27,6 +27,28 @@ describe('showTableQrOutcome — novos motivos', () => {
     expect(alertSpy.mock.calls[0][0]).toBe('Reserva necessária');
   });
 
+  it('aguardando liberação explica a fila ativa', () => {
+    const { alertSpy } = run({ ok: false, reason: 'awaiting_capacity', detail: 'queue_active' });
+    expect(alertSpy.mock.calls[0][0]).toBe('Aguardando liberação');
+    expect(alertSpy.mock.calls[0][1]).toMatch(/fila/);
+  });
+
+  it('aguardando liberação explica o grupo maior que a mesa', () => {
+    const { alertSpy } = run({ ok: false, reason: 'awaiting_capacity', detail: 'capacity' });
+    expect(alertSpy.mock.calls[0][1]).toMatch(/maior que a mesa/);
+  });
+
+  it('Fine com grupo maior que a mesa manda à recepção, sem cadeira extra', () => {
+    const { alertSpy } = run({ ok: false, reason: 'table_too_small' });
+    expect(alertSpy.mock.calls[0][0]).toBe('Mesa precisa de ajuste');
+    expect(alertSpy.mock.calls[0][1]).toMatch(/juntar ou trocar a mesa/);
+  });
+
+  it('QR de mesa em restaurante só de retirada explica o pedido para retirada', () => {
+    const { alertSpy } = run({ ok: false, reason: 'pickup_only' });
+    expect(alertSpy.mock.calls[0][0]).toBe('Restaurante de retirada');
+  });
+
   it('cancelado pelo usuário destrava o scanner sem alerta', () => {
     const { alertSpy, actions } = run({ ok: false, reason: 'cancelled' });
     expect(alertSpy).not.toHaveBeenCalled();
