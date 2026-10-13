@@ -35,6 +35,8 @@ type VisitSessionContextValue = {
   /** Abre a mesa depois que a recepção liberou a solicitação de abertura (ADR-016). */
   openFromApprovedRequest: (capacityRequestId: string) => Promise<VisitSession>;
   joinFromInvite: (token: string) => Promise<VisitSession>;
+  /** Entra na mesa pelo código de 6 dígitos do convite (ADR-019). */
+  joinFromInviteCode: (code: string) => Promise<VisitSession>;
   /**
    * Accepts an @username invite (ADR-011). Only an `accepted` result moves the
    * visit; `awaiting_capacity` and closed invites leave the current table as is.
@@ -128,6 +130,12 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
     return next;
   }, [persist]);
 
+  const joinFromInviteCode = useCallback(async (code: string) => {
+    const next = await customerBackend.joinTableByCode(code);
+    await persist(next);
+    return next;
+  }, [persist]);
+
   const joinFromUserInvite = useCallback(async (inviteId: string) => {
     const result = await customerBackend.acceptTableUserInvite(inviteId);
     if (result.status === 'accepted' && result.visit) await persist(result.visit);
@@ -175,9 +183,9 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
   }, [persist, session]);
 
   const value = useMemo(() => ({
-    session, restoring, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
+    session, restoring, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromInviteCode, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
   }), [
-    session, restoring, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
+    session, restoring, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromInviteCode, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
   ]);
 
   return <VisitSessionContext.Provider value={value}>{children}</VisitSessionContext.Provider>;

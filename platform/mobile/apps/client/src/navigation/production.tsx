@@ -25,7 +25,7 @@ import {
   HomeScreen, KidsActivitiesScreen, LoyaltyScreen,
   MenuScreen, ModoFamiliaScreen, NotificationsScreen, OrderDetailScreen, OrderReadyScreen, OrdersScreen, PaymentSuccessScreen, PrivacyScreen,
   PaymentMethodsScreen, ProfileScreen, PromotionsScreen, QrScannerScreen, QuickServiceCheckoutScreen, ReservationConfirmationScreen, ReservationRestaurantScreen,
-  ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TipPaymentScreen,
+  ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TableCodeScreen, TipPaymentScreen,
   WaitlistScreen,
 } from '../screens/production';
 
@@ -315,6 +315,7 @@ export default function ProductionNavigation() {
     <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ headerShown: false }} />
     <Stack.Screen name="OrderReady" component={OrderReadyScreen} options={{ headerShown: false, gestureEnabled: false }} />
     <Stack.Screen name="QrScanner" component={QrScannerScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="TableCode" component={TableCodeScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Reservations" component={ReservationsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="ReservationRestaurant" component={ReservationRestaurantScreen} options={{ headerShown: false }} />
     <Stack.Screen name="CreateReservation" component={CreateReservationScreen} options={{ headerShown: false }} />

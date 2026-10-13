@@ -83,7 +83,7 @@ test('Fechar Conta keeps the share link for restaurants with only the link enabl
   mockCapabilities = { guestLink: true, userInvite: false };
   const { view, client } = renderScreen();
   fireEvent.press(await view.findByTestId('fechar-conta-invite-chip'));
-  expect(view.getByText('Compartilhar link')).toBeTruthy();
+  expect(view.getByText('Gerar convite')).toBeTruthy();
   expect(view.queryByTestId('invite-search-input')).toBeNull();
   client.clear();
 });

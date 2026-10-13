@@ -35,6 +35,11 @@ verify_jwt = false
 [functions.verify-demo-code]
 verify_jwt = false
 
+[functions.join-table-by-code]
+# O usuário é validado dentro da função (admin.auth.getUser); o gateway legado não
+# verifica chaves de assinatura assimétricas.
+verify_jwt = false
+
 [functions.register-with-resend]
 verify_jwt = false
 

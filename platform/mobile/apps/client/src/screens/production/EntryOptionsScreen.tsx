@@ -231,6 +231,25 @@ export default function EntryOptionsScreen({ route, navigation }: any) {
             </View>
           </View>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => rootNavigate(navigation, 'TableCode')}
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel="Tenho um código de convite"
+          testID="entry-table-code"
+        >
+          <View style={styles.cardRow}>
+            <View style={styles.cardIcon}>
+              <Ionicons name="keypad-outline" size={22} color={colors.foreground} />
+            </View>
+            <View style={styles.cardTextWrap}>
+              <Text style={styles.cardTitle}>Tenho um código de convite</Text>
+              <Text style={styles.cardSubtitle}>Entre na mesa de quem te convidou</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>
   );

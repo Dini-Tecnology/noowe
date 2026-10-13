@@ -3,7 +3,8 @@ import { Alert } from 'react-native';
 import { useCart } from '@/shared/contexts/CartContext';
 import logger from '@okinawa/shared/utils/logger';
 import { QrCheckInCancelled, useVisitSession } from '../contexts/VisitSessionContext';
-import { classifyQrPayload } from './qr-payload';
+import { classifyQrPayload, extractInviteToken } from './qr-payload';
+import { classifyInviteError, confirmCartForRestaurant } from './useTableInviteHandler';
 import { requestPartySize } from '../components/table/PartySizePrompt';
 import type { QrScanOutcome } from './qr-scan-outcome';
 
@@ -76,7 +77,7 @@ type ContextRestaurant = { id: string; name?: string | null };
  * offers to switch: a QR printed for the wrong place is simply invalid here.
  */
 export function useTableQrHandler() {
-  const { openFromQr } = useVisitSession();
+  const { openFromQr, joinFromInvite } = useVisitSession();
   const cart = useCart();
 
   const handleQrScanned = useCallback(async (
@@ -87,6 +88,22 @@ export function useTableQrHandler() {
     // The camera occasionally hands back a trailing newline (batch printers embed
     // CR/LF), so classify and send the trimmed payload.
     const payload = qrData.trim();
+
+    // QR do convite no celular do anfitrião (ADR-019): entra na mesa dele, sem check-in próprio.
+    const inviteToken = extractInviteToken(payload);
+    if (inviteToken) {
+      try {
+        const visit = await withTimeout(() => joinFromInvite(inviteToken), QR_REQUEST_TIMEOUT_MS);
+        await confirmCartForRestaurant(cart, visit.restaurantId);
+        return { ok: true, restaurantId: visit.restaurantId };
+      } catch (error) {
+        const reason = classifyInviteError(error);
+        if (reason === 'invalid') return { ok: false, reason: 'invalid' };
+        if (reason === 'awaiting_capacity') return { ok: false, reason: 'awaiting_capacity', detail: 'capacity' };
+        return { ok: false, reason: 'network' };
+      }
+    }
+
     if (!classifyQrPayload(payload)) return { ok: false, reason: 'not_noowe' };
 
     const context = options?.contextRestaurant;
@@ -157,7 +174,7 @@ export function useTableQrHandler() {
     }
 
     return { ok: true, restaurantId };
-  }, [openFromQr, cart]);
+  }, [openFromQr, joinFromInvite, cart]);
 
   return { handleQrScanned };
 }

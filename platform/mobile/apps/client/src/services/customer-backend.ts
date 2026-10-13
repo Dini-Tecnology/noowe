@@ -29,6 +29,8 @@ export type ServiceQrResolution =
   | { kind: 'counter'; restaurantId: string; serviceModel: 'quick_service'; counterLabel: string }
   | { kind: 'table'; restaurantId: string; serviceModel: 'fine_dining' | 'casual_dining'; tableId: string; tableQrId: string; allowedServiceModels: ServiceModel[]; seats?: number; hasActiveSession?: boolean; isParticipant?: boolean; /** false onde o grupo vem da reserva/fila (Fine). */ asksPartySize?: boolean };
 
+export type TableInvite = { url: string; code: string; expiresAt: string };
+
 export type TableParticipant = {
   userId: string;
   displayName: string | null;
@@ -617,8 +619,11 @@ export interface CustomerBackend {
     actionLabel?: string;
     metadata?: Record<string, unknown>;
   }): Promise<unknown>;
-  createTableInvite(tableSessionId: string): Promise<string>;
+  /** Link, código de 6 dígitos e validade do convite (ADR-019). */
+  createTableInvite(tableSessionId: string): Promise<TableInvite>;
   joinTableInvite(token: string): Promise<VisitSession>;
+  /** Entra na mesa pelo código de 6 dígitos, via Edge Function com limite de tentativas. */
+  joinTableByCode(code: string): Promise<VisitSession>;
   getTableBill(tableSessionId: string): Promise<TableBill>;
   listTableDiners(tableSessionId: string): Promise<TableDiner[]>;
   addTableCompanion(input: {
@@ -736,14 +741,10 @@ function mapRestaurant(row: RestaurantRow): CustomerRestaurant {
       ? customerExperience as CustomerExperienceConfig
       : null,
     serviceType: String(row.service_type ?? ''),
+    serviceModels: serviceModelsOf(row),
   };
 }
 
-function mapOrder(row: Record<string, unknown>): CustomerOrder {
-    serviceModels: serviceModelsOf(row),
-  const restaurant = objectValue(row.restaurant);
-  const table = objectValue(row.table);
-  const rawItems = Array.isArray(row.order_items) ? row.order_items : [];
 function serviceModelsOf(row: Record<string, unknown>): ServiceModel[] {
   const raw = Array.isArray(row.service_models) ? row.service_models : [];
   const models = raw.filter(isServiceModel);
@@ -752,6 +753,10 @@ function serviceModelsOf(row: Record<string, unknown>): ServiceModel[] {
   return models;
 }
 
+function mapOrder(row: Record<string, unknown>): CustomerOrder {
+  const restaurant = objectValue(row.restaurant);
+  const table = objectValue(row.table);
+  const rawItems = Array.isArray(row.order_items) ? row.order_items : [];
   const reviews = Array.isArray(row.reviews) ? row.reviews : [];
   const review = reviews.length ? objectValue(reviews[0]) : {};
   return {
@@ -1014,24 +1019,24 @@ async function rpcCheckIn(
   rpc: 'customer_check_in' | 'customer_dev_check_in',
   qrData: string,
   serviceModel: 'fine_dining' | 'casual_dining',
+  partySize?: number,
 ): Promise<VisitSession> {
   const { data, error } = await (getSupabaseClient() as any).rpc(rpc, {
     p_qr_data: qrData,
     p_service_model: serviceModel,
-  partySize?: number,
+    p_party_size: partySize ?? null,
   });
   if (error) throw error;
   if (!data?.tableSessionId && data?.status === 'awaiting_capacity') {
     throw Object.assign(new Error('A recepção precisa liberar um lugar adicional.'), {
-    p_party_size: partySize ?? null,
       code: 'P0008',
       capacityRequestId: data.capacityRequestId,
+      requestKind: data.requestKind,
+      reason: data.reason,
     });
   }
   return data as VisitSession;
 }
-      requestKind: data.requestKind,
-      reason: data.reason,
 
 export const customerBackend: CustomerBackend = {
   async restoreAuth() {
@@ -1658,7 +1663,28 @@ export const customerBackend: CustomerBackend = {
       p_table_session_id: tableSessionId,
     });
     if (error) throw error;
-    return data as unknown as string;
+    const raw = objectValue(data);
+    return { url: String(raw.url ?? ''), code: String(raw.code ?? ''), expiresAt: String(raw.expiresAt ?? '') };
+  },
+
+  async joinTableByCode(code) {
+    const { data, error } = await getSupabaseClient().functions.invoke('join-table-by-code', { body: { code } });
+    if (error) {
+      // A resposta HTTP do erro traz o motivo; sem ela é falha de rede.
+      const status = (error as { context?: { status?: number } }).context?.status;
+      if (status === 429) throw Object.assign(new Error('Muitas tentativas.'), { code: 'TOO_MANY_ATTEMPTS' });
+      if (status === 404) throw Object.assign(new Error('Convite inválido ou expirado.'), { code: 'P0001' });
+      if (status === 400) throw Object.assign(new Error('Código inválido.'), { code: '22023' });
+      throw error;
+    }
+    const visit = objectValue((data as { visit?: unknown } | null)?.visit);
+    if (!visit.tableSessionId && visit.status === 'awaiting_capacity') {
+      throw Object.assign(new Error('A recepção precisa liberar um lugar adicional.'), {
+        code: 'P0008',
+        capacityRequestId: visit.capacityRequestId,
+      });
+    }
+    return visit as unknown as VisitSession;
   },
 
   async joinTableInvite(token) {

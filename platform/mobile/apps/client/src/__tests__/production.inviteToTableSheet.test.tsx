@@ -14,6 +14,7 @@ const mockListSession = jest.fn();
 const mockCreateLink = jest.fn();
 const mockSubscribe = jest.fn();
 let mockRealtimeCallback: ((change: unknown) => void) | null = null;
+jest.mock('react-native-qrcode-svg', () => 'QRCode');
 jest.mock('../services/customer-backend', () => ({ __esModule: true, default: {
   searchUsersForTable: (...args: unknown[]) => mockSearch(...args),
   sendTableUserInvite: (...args: unknown[]) => mockSend(...args),
@@ -82,17 +83,23 @@ describe('Convidar para a mesa · quem convida', () => {
     const { view, client } = renderSheet({ userInviteEnabled: false });
     expect(view.queryByText('Por @usuário')).toBeNull();
     expect(view.queryByTestId('invite-search-input')).toBeNull();
-    expect(view.getByText('Compartilhar link')).toBeTruthy();
+    expect(view.getByText('Gerar convite')).toBeTruthy();
     client.clear();
   });
 
-  it('shares the link through the existing RPC', async () => {
+  it('shows link, QR and 6-digit code after creating the invite, then shares link and code', async () => {
     const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
-    mockCreateLink.mockResolvedValue('https://noowebr.com/t/invite/abc');
+    mockCreateLink.mockResolvedValue({ url: 'https://noowebr.com/t/invite/abc', code: '123456', expiresAt: '2026-10-13T20:00:00.000Z' });
     const { view, client } = renderSheet({ userInviteEnabled: false });
-    fireEvent.press(view.getByText('Compartilhar link'));
-    await waitFor(() => expect(share).toHaveBeenCalledWith({ message: 'Vem pra minha mesa no Noowe! https://noowebr.com/t/invite/abc' }));
+    fireEvent.press(view.getByText('Gerar convite'));
+    await waitFor(() => expect(view.getByTestId('invite-code').props.children).toBe('123 456'));
+    expect(view.getByTestId('invite-qr')).toBeTruthy();
     expect(mockCreateLink).toHaveBeenCalledWith('s1');
+    expect(share).not.toHaveBeenCalled();
+    fireEvent.press(view.getByText('Compartilhar link e código'));
+    await waitFor(() => expect(share).toHaveBeenCalledWith({
+      message: 'Vem pra minha mesa no Noowe! https://noowebr.com/t/invite/abc\nOu digite o código 123 456 no app.',
+    }));
     client.clear();
   });
 

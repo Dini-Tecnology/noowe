@@ -20,9 +20,10 @@ jest.mock('../components/table/PartySizePrompt', () => ({
 }));
 
 const mockOpenFromQr = jest.fn();
+const mockJoinFromInvite = jest.fn();
 jest.mock('../contexts/VisitSessionContext', () => {
   class QrCheckInCancelled extends Error {}
-  return { QrCheckInCancelled, useVisitSession: () => ({ openFromQr: mockOpenFromQr }) };
+  return { QrCheckInCancelled, useVisitSession: () => ({ openFromQr: mockOpenFromQr, joinFromInvite: mockJoinFromInvite }) };
 });
 
 const mockGetRestaurant = jest.fn();
@@ -224,6 +225,33 @@ describe('useTableQrHandler — timeout não conta o tempo do prompt de pessoas'
     let outcome: Awaited<typeof pending>;
     await act(async () => { outcome = await pending; });
     expect(outcome!).toEqual({ ok: false, reason: 'network' });
+  });
+});
+
+describe('useTableQrHandler — QR do convite no celular do anfitrião (ADR-019)', () => {
+  afterEach(() => jest.clearAllMocks());
+  const INVITE = `https://noowebr.com/t/invite/${'a'.repeat(48)}`;
+
+  it('entra na mesa do anfitrião sem fazer check-in próprio', async () => {
+    mockJoinFromInvite.mockResolvedValueOnce({ restaurantId: 'r1', tableId: 't1', tableSessionId: 's1', tableNumber: '1' });
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => { outcome = await result.current.handleQrScanned(INVITE); });
+    expect(outcome!).toEqual({ ok: true, restaurantId: 'r1' });
+    expect(mockJoinFromInvite).toHaveBeenCalledWith('a'.repeat(48));
+    expect(mockOpenFromQr).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ code: 'P0001' }, { ok: false, reason: 'invalid' }],
+    [{ code: 'P0008' }, { ok: false, reason: 'awaiting_capacity', detail: 'capacity' }],
+    [new Error('offline'), { ok: false, reason: 'network' }],
+  ])('classifica a falha %j', async (error, expected) => {
+    mockJoinFromInvite.mockRejectedValueOnce(error);
+    const { result } = renderTableQrHandler();
+    let outcome: Awaited<ReturnType<typeof result.current.handleQrScanned>>;
+    await act(async () => { outcome = await result.current.handleQrScanned(INVITE); });
+    expect(outcome!).toEqual(expected);
   });
 });
 

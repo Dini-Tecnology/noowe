@@ -28,7 +28,7 @@ import IncomingTableInviteBanner from '../../components/table/IncomingTableInvit
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { showTableQrOutcome } from '../../hooks/qr-scan-outcome';
 import { useTableQrHandler } from '../../hooks/useTableQrHandler';
-import { useTableInviteHandler } from '../../hooks/useTableInviteHandler';
+import { INVITE_FAILURE_MESSAGES, useTableInviteHandler } from '../../hooks/useTableInviteHandler';
 import { takePendingTableQr } from '../../utils/pending-table-qr';
 import { takePendingTableInvite } from '../../utils/pending-table-invite';
 import customerBackend, { type CustomerRestaurant } from '../../services/customer-backend';
@@ -131,10 +131,9 @@ export default function HomeScreen({ navigation }: any) {
       const outcome = await handleInviteToken(token);
       if (outcome.ok) {
         rootNavigate(navigation, 'Menu', { restaurantId: outcome.restaurantId });
-      } else if (outcome.reason === 'invalid') {
-        Alert.alert('Convite inválido', 'Este link de convite não é válido ou expirou.');
       } else {
-        Alert.alert('Sem conexão', 'Não foi possível entrar na mesa agora. Tente novamente.');
+        const { title, message } = INVITE_FAILURE_MESSAGES[outcome.reason];
+        Alert.alert(title, message);
       }
     })();
     // Runs once per HomeScreen mount — a pending QR is one-shot by design.
