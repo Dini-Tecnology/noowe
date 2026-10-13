@@ -150,7 +150,8 @@ begin
 end $$;
 
 -- Entrada por código: só a Edge Function (service_role) chama, com o usuário já validado pelo JWT.
--- Erros: 22023 código malformado · P0001 inválido/expirado · P0016 tentativas demais.
+-- Código malformado: 22023. Código errado e bloqueio por tentativas DEVOLVEM {status:'invalid'|'locked'}
+-- em vez de lançar erro: uma exceção desfaria o registro da tentativa e o limite nunca acumularia.
 create or replace function public.service_join_table_by_code(p_user_id uuid, p_code text, p_ip_hash text default null)
 returns jsonb language plpgsql security definer
 set search_path = public, private, extensions, pg_temp as $$
@@ -162,12 +163,12 @@ begin
   select value into v_window from private.app_settings where key = 'guest_code_attempt_window_min';
   select count(*) into v_failures from private.table_invite_code_attempts a
     where a.user_id = p_user_id and not a.ok and a.created_at > now() - make_interval(mins => v_window);
-  if v_failures >= v_max then raise exception 'Muitas tentativas' using errcode = 'P0016'; end if;
+  if v_failures >= v_max then return jsonb_build_object('status', 'locked'); end if;
   select * into v_invite from public.table_session_invites
     where short_code_hash = private.guest_code_hash(p_code) and revoked_at is null and expires_at > now()
       and (max_uses is null or uses < max_uses);
   insert into private.table_invite_code_attempts(user_id, ip_hash, ok) values (p_user_id, p_ip_hash, v_invite.id is not null);
-  if v_invite.id is null then raise exception 'Invalid or expired invitation' using errcode = 'P0001'; end if;
+  if v_invite.id is null then return jsonb_build_object('status', 'invalid'); end if;
   return private.join_by_invite(v_invite.id, p_user_id);
 end $$;
 revoke all on function public.service_join_table_by_code(uuid, text, text) from public, anon, authenticated;

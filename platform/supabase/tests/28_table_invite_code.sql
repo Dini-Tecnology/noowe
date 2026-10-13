@@ -13,10 +13,13 @@ $$;
 create function pg_temp.id(p_key text) returns uuid language sql as $$ select v from _c where k = p_key; $$;
 create function pg_temp.state_of(p_sql text) returns text language plpgsql as $$
 begin execute p_sql; return 'ok'; exception when others then return sqlstate; end $$;
+-- 'ok' | 'P0001' (inválido/expirado) | 'P0016' (bloqueado) | sqlstate de erro | 'awaiting_capacity'.
 create function pg_temp.join_code(p_user text, p_code text) returns text language plpgsql as $$
+declare res jsonb;
 begin
-  perform public.service_join_table_by_code(pg_temp.id(p_user), p_code, 'ip-test');
-  return 'ok';
+  res := public.service_join_table_by_code(pg_temp.id(p_user), p_code, 'ip-test');
+  return case res->>'status' when 'invalid' then 'P0001' when 'locked' then 'P0016'
+    when 'awaiting_capacity' then 'awaiting_capacity' else 'ok' end;
 exception when others then return sqlstate; end $$;
 
 do $$

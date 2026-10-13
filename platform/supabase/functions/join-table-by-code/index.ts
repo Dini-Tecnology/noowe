@@ -66,12 +66,13 @@ serve(async (req) => {
       p_ip_hash: await sha256(getClientIp(req)),
     });
     if (error) {
-      if (error.code === "P0016") return json(req, { error: "too_many_attempts" }, 429);
-      if (error.code === "P0001") return json(req, { error: "invalid_or_expired" }, 404);
       if (error.code === "22023") return json(req, { error: "invalid_code_format" }, 400);
       console.error("join-table-by-code rpc error:", error);
       return json(req, { error: "internal_error" }, 500);
     }
+    // Código errado e bloqueio chegam como status (e não como erro) para a tentativa ficar registrada.
+    if (data?.status === "locked") return json(req, { error: "too_many_attempts" }, 429);
+    if (data?.status === "invalid") return json(req, { error: "invalid_or_expired" }, 404);
     return json(req, { visit: data });
   } catch (err) {
     console.error("join-table-by-code error:", err);

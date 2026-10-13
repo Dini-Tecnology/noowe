@@ -48,8 +48,8 @@ begin
   t := public.restaurant_create_table(r, 'sn-fb', 4); insert into _sq values ('fb', t->>'qr_code'); fb := (t->>'id')::uuid;
   update public.tables set assigned_waiter_id = pg_temp.id('waiter') where id = fa;
 
-  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status) values
-    (r, pg_temp.id('custa'), now(), 2, 'confirmed'), (r, pg_temp.id('custb'), now(), 2, 'confirmed');
+  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status, service_model) values
+    (r, pg_temp.id('custa'), now(), 2, 'confirmed', 'fine_dining'), (r, pg_temp.id('custb'), now(), 2, 'confirmed', 'fine_dining');
 
   -- 1. Fine, mesa com garçom atribuído: só o garçom é avisado.
   perform pg_temp.act(pg_temp.id('custa'));

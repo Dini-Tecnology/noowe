@@ -45,8 +45,8 @@ begin
   insert into _fq values ('b', t->>'qr_code');
 
   -- 1. Titular com reserva de 3: o grupo vem da reserva, não do que o app mandar.
-  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status)
-  values (r, pg_temp.id('host'), now(), 3, 'confirmed') returning id into resv;
+  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status, service_model)
+  values (r, pg_temp.id('host'), now(), 3, 'confirmed', 'fine_dining') returning id into resv;
   insert into public.reservation_guests(reservation_id, guest_user_id, status, is_host, invited_at, has_arrived)
   values (resv, pg_temp.id('guest'), 'accepted', false, now(), false);
 
@@ -75,8 +75,8 @@ begin
   end;
 
   -- 4. Reserva maior que a mesa: barrado até a recepção ajustar, sem solicitação de cadeira extra.
-  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status)
-  values (r, pg_temp.id('big'), now(), 6, 'confirmed');
+  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status, service_model)
+  values (r, pg_temp.id('big'), now(), 6, 'confirmed', 'fine_dining');
   perform pg_temp.act(pg_temp.id('big'));
   begin
     perform public.customer_check_in(pg_temp.qr('b'), 'fine_dining', 2);
