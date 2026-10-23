@@ -14,6 +14,10 @@ revoke insert, update, delete, truncate on public.gateway_transactions from anon
 revoke all on public.gateway_transactions from anon;
 
 drop policy if exists "gateway_transactions_staff" on public.gateway_transactions;
+-- Policies de escrita herdadas do bootstrap (existem no banco remoto).
+drop policy if exists authenticated_insert_by_restaurant_manager on public.gateway_transactions;
+drop policy if exists authenticated_update_by_restaurant_manager on public.gateway_transactions;
+drop policy if exists authenticated_delete_by_restaurant_manager on public.gateway_transactions;
 drop policy if exists gateway_transactions_select_staff on public.gateway_transactions;
 drop policy if exists gateway_transactions_select_own on public.gateway_transactions;
 
