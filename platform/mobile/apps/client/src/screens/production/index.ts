@@ -25,6 +25,7 @@ export { default as ModoFamiliaScreen } from './ModoFamiliaScreen';
 export { default as KidsActivitiesScreen } from './KidsActivitiesScreen';
 export { default as SplitBillScreen } from './SplitBillScreen';
 export { default as TipPaymentScreen } from './TipPaymentScreen';
+export { default as SharePaymentScreen } from './SharePaymentScreen';
 export { default as PaymentSuccessScreen } from './PaymentSuccessScreen';
 export { default as ReviewScreen } from './ReviewScreen';
 export { default as DigitalReceiptScreen } from './DigitalReceiptScreen';

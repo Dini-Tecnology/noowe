@@ -4,102 +4,92 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
+import { useBillShares } from '../../hooks/useBillShares';
 import customerBackend from '../../services/customer-backend';
-import { money, StateView } from './shared';
-
-type SplitMode = 'mine' | 'equal' | 'byItem' | 'fixed';
+import { billShares, SPLIT_ERRORS, type SplitMode } from '../../services/bill-shares';
+import { money, moneyCents, StateView } from './shared';
 
 const MODES: { id: SplitMode; label: string; subtitle: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
-  { id: 'mine', label: 'Meus Itens', subtitle: 'Cada um paga o que pediu', icon: 'person-outline' },
+  { id: 'by_owner', label: 'Meus Itens', subtitle: 'Cada um paga o que pediu', icon: 'person-outline' },
   { id: 'equal', label: 'Partes Iguais', subtitle: 'Divide igualmente', icon: 'people-outline' },
-  { id: 'byItem', label: 'Por Item', subtitle: 'Escolha itens específicos', icon: 'receipt-outline' },
-  { id: 'fixed', label: 'Valor Fixo', subtitle: 'Defina quanto pagar', icon: 'cash-outline' },
+  { id: 'by_item', label: 'Por Item', subtitle: 'Escolha itens específicos', icon: 'receipt-outline' },
+  { id: 'fixed_amount', label: 'Valor Fixo', subtitle: 'Defina quanto pagar', icon: 'cash-outline' },
 ];
 
-const AVATAR_TONES = ['#EA580C', '#DB2777', '#2563EB', '#9333EA', '#0D9488', '#CA8A04'];
+function errorMessage(error: unknown): string {
+  const code = (error as { code?: string } | null)?.code ?? '';
+  return SPLIT_ERRORS[code] ?? (error instanceof Error ? error.message : 'Não foi possível calcular a divisão.');
+}
 
 export default function SplitBillScreen({ route, navigation }: any) {
   const colors = useColors();
+  const queryClient = useQueryClient();
   const { session } = useVisitSession();
   const tableSessionId: string | undefined = route?.params?.tableSessionId ?? session?.tableSessionId;
   const restaurantName: string | undefined = route?.params?.restaurantName;
-  const [mode, setMode] = useState<SplitMode>('mine');
-  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [fixedAmount, setFixedAmount] = useState('');
+  const [mode, setMode] = useState<SplitMode>('by_owner');
+  // O campo de valor é uma máscara de centavos: só dígitos, sem ponto flutuante.
+  const [fixedDigits, setFixedDigits] = useState('');
+  const fixedCents = fixedDigits ? parseInt(fixedDigits, 10) : 0;
   const { capabilities } = useServiceTypeFor(session?.restaurantId, session?.serviceModel);
-  const enabledModes = useMemo(() => {
-    const mapping: Record<string, SplitMode> = {
-      by_owner: 'mine', equal: 'equal', by_item: 'byItem', fixed_amount: 'fixed',
-    };
-    return new Set((capabilities?.splitModes ?? []).map((item) => mapping[item]).filter(Boolean));
-  }, [capabilities?.splitModes]);
-
-  const activeMode = enabledModes.has(mode) ? mode : ([...enabledModes][0] ?? mode);
+  const enabledModes = useMemo(() => new Set((capabilities?.splitModes ?? []) as string[]), [capabilities?.splitModes]);
+  const activeMode = enabledModes.has(mode) ? mode : ((MODES.find((m) => enabledModes.has(m.id))?.id) ?? mode);
 
   const bill = useQuery({
     queryKey: ['table-bill', tableSessionId],
     queryFn: () => customerBackend.getTableBill(tableSessionId!),
     enabled: !!tableSessionId,
   });
+  const { claims } = useBillShares(tableSessionId);
 
-  const perPerson = useMemo(() => {
-    const items = bill.data?.items ?? [];
-    const byDiner = new Map<string, { name: string; isMe: boolean; subtotal: number }>();
-    for (const item of items) {
-      const key = item.dinerId ?? item.placedBy;
-      const existing = byDiner.get(key);
-      const name = item.placedByIsMe && !item.dinerId ? 'Você' : item.dinerName;
-      const isMe = item.placedByIsMe && (!item.dinerId || item.dinerName === item.placedByName);
-      if (existing) existing.subtotal += item.totalPrice;
-      else byDiner.set(key, { name, isMe, subtotal: item.totalPrice });
-    }
-    return [...byDiner.entries()].map(([id, value]) => ({ dinerId: id, ...value }))
-      .sort((a, b) => (a.isMe === b.isMe ? 0 : a.isMe ? -1 : 1));
+  const me = bill.data?.participants.find((p) => p.isMe);
+  const nameOf = useCallback((participantId: string) => {
+    const diner = bill.data?.participants.find((p) => p.dinerId === participantId);
+    return diner?.isMe ? 'Você' : (diner?.displayName ?? 'Convidado');
   }, [bill.data]);
 
-  const feePct = bill.data?.serviceFeePercent ?? 10;
-  const subtotal = bill.data?.subtotal ?? 0;
-  const participantCount = Math.max(bill.data?.participants.length ?? 0, new Set(bill.data?.items.map((item) => item.placedBy)).size, 1);
+  const previewParams = activeMode === 'fixed_amount' ? { amountCents: fixedCents } : {};
+  const previewEnabled = !!tableSessionId && (activeMode !== 'fixed_amount' || fixedCents > 0);
+  const preview = useQuery({
+    queryKey: ['bill-split-preview', tableSessionId, activeMode, previewParams, claims.dataUpdatedAt],
+    queryFn: () => billShares.preview(tableSessionId!, activeMode, previewParams),
+    enabled: previewEnabled,
+    retry: false,
+  });
 
-  // The raw item-level subtotal for whichever mode is selected — no service
-  // fee or tip yet, both of which get decided on the next screen (Gorjeta &
-  // Pagamento) and applied there against this same base amount.
-  const baseAmount = useMemo(() => {
-    if (!bill.data) return 0;
-    if (activeMode === 'mine') return bill.data.items.filter((item) => item.placedByIsMe).reduce((sum, item) => sum + item.totalPrice, 0);
-    if (activeMode === 'equal') return Math.ceil(Math.round(subtotal * 100) / participantCount) / 100;
-    if (activeMode === 'byItem') {
-      return bill.data.items
-        .filter((item) => selectedItemIds.includes(item.orderItemId))
-        .reduce((sum, item) => sum + item.totalPrice, 0);
-    }
-    return Number(fixedAmount.replace(',', '.')) || 0;
-  }, [activeMode, bill.data, subtotal, participantCount, selectedItemIds, fixedAmount]);
+  const toggleClaim = useMutation({
+    mutationFn: ({ itemId, claimed }: { itemId: string; claimed: boolean }) => billShares.claimItem(itemId, claimed),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['bill-claims', tableSessionId] }),
+    onError: (error) => Alert.alert('Não foi possível marcar o item', errorMessage(error)),
+  });
 
-  const toggleItem = useCallback((id: string) => {
-    setSelectedItemIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
-  }, []);
+  const commit = useMutation({
+    mutationFn: () => billShares.commit({
+      tableSessionId: tableSessionId!, mode: activeMode, params: previewParams, version: preview.data!.version,
+    }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['bill-shares', tableSessionId] });
+      navigation.navigate('SharePayment', { tableSessionId, restaurantName });
+    },
+    onError: (error) => {
+      Alert.alert('Divisão não confirmada', errorMessage(error));
+      void preview.refetch();
+    },
+  });
 
-  const proceedToPayment = useCallback(() => {
-    if (baseAmount <= 0) {
-      Alert.alert('Selecione um valor', 'Escolha itens ou informe um valor maior que zero para continuar.');
-      return;
-    }
-    navigation.navigate('TipPayment', {
-      tableSessionId,
-      restaurantName,
-      baseAmount,
-      serviceFeePercent: feePct,
-      splitMode: activeMode,
-      itemIds: activeMode === 'byItem' ? selectedItemIds : undefined,
-    });
-  }, [navigation, tableSessionId, restaurantName, baseAmount, feePct, activeMode, selectedItemIds]);
+  const proceed = useCallback(() => {
+    if (!preview.data || commit.isPending) return;
+    commit.mutate();
+  }, [preview.data, commit]);
+
+  const plan = preview.data;
+  const needsItems = activeMode === 'by_item' && !(claims.data ?? []).length;
 
   const styles = useMemo(
     () =>
@@ -151,6 +141,12 @@ export default function SplitBillScreen({ route, navigation }: any) {
         payCard: { borderRadius: 16, padding: 16, backgroundColor: colors.backgroundSecondary, borderWidth: 1, borderColor: colors.primaryLight, gap: 4 },
         payLabel: { fontSize: 13, color: colors.foregroundSecondary },
         payValue: { fontSize: 26, fontWeight: '800', color: colors.primary },
+        planRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+        planName: { fontSize: 13, color: colors.foreground },
+        planValue: { fontSize: 13, fontWeight: '700', color: colors.foreground },
+        hint: { fontSize: 12, color: colors.foregroundSecondary },
+        errorText: { fontSize: 12, color: colors.error ?? '#DC2626' },
+        itemClaimedBy: { fontSize: 11, color: colors.foregroundSecondary },
         cta: { paddingVertical: 16, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center' },
         ctaDisabled: { opacity: 0.6 },
         ctaText: { color: colors.primaryForeground, fontSize: 16, fontWeight: '700' },
@@ -177,13 +173,13 @@ export default function SplitBillScreen({ route, navigation }: any) {
             <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
           </TouchableOpacity>
           <View>
-            <Text style={styles.headerTotalLabel}>Total da mesa</Text>
-            <Text style={styles.headerTotalValue}>{money(subtotal)}</Text>
+            <Text style={styles.headerTotalLabel}>Falta pagar</Text>
+            <Text style={styles.headerTotalValue}>{plan ? moneyCents(plan.totalRemCents) : '—'}</Text>
           </View>
         </View>
         <Text style={styles.headerTitle}>Dividir Conta</Text>
         <Text style={styles.headerSub}>
-          {restaurantName ?? 'Restaurante'} · {participantCount} pessoa{participantCount > 1 ? 's' : ''}
+          {restaurantName ?? 'Restaurante'} · {bill.data?.participants.length ?? 1} pessoa{(bill.data?.participants.length ?? 1) > 1 ? 's' : ''}
         </Text>
       </LinearGradient>
 
@@ -192,21 +188,6 @@ export default function SplitBillScreen({ route, navigation }: any) {
 
         {bill.data && (
           <>
-            <View>
-              <Text style={styles.sectionTitle}>Na mesa</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.peopleRow}>
-                {perPerson.map((person, index) => (
-                  <View key={person.dinerId} style={styles.person}>
-                    <View style={[styles.personAvatar, { backgroundColor: AVATAR_TONES[index % AVATAR_TONES.length] }]}>
-                      <Text style={styles.personAvatarText}>{person.name.charAt(0).toLocaleUpperCase('pt-BR')}</Text>
-                    </View>
-                    <Text style={styles.personName} numberOfLines={1}>{person.isMe ? 'Você' : person.name}</Text>
-                    <Text style={styles.personValue}>{money(person.subtotal)}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-
             <View>
               <Text style={styles.sectionTitle}>Como dividir?</Text>
               <View style={styles.modeGrid}>
@@ -232,33 +213,37 @@ export default function SplitBillScreen({ route, navigation }: any) {
               </View>
             </View>
 
-            {activeMode === 'byItem' && (
+            {activeMode === 'by_item' && (
               <View>
-                <Text style={styles.sectionTitle}>Selecione os itens</Text>
+                <Text style={styles.sectionTitle}>Marque o que você vai pagar</Text>
                 {bill.data.items.map((item) => {
-                  const checked = selectedItemIds.includes(item.orderItemId);
+                  const itemClaims = (claims.data ?? []).filter((claim) => claim.orderItemId === item.orderItemId);
+                  const checked = !!me && itemClaims.some((claim) => claim.participantId === me.dinerId);
+                  const others = itemClaims.filter((claim) => claim.participantId !== me?.dinerId).map((claim) => nameOf(claim.participantId));
                   return (
                     <TouchableOpacity
                       key={item.orderItemId}
                       style={styles.itemRow}
-                      onPress={() => toggleItem(item.orderItemId)}
+                      onPress={() => toggleClaim.mutate({ itemId: item.orderItemId, claimed: !checked })}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked }}
                     >
                       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
                         {checked && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
                       </View>
-                      <Text style={styles.itemName} numberOfLines={1}>
-                        {item.quantity}x {item.name} · {item.dinerName}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.itemName} numberOfLines={1}>{item.quantity}x {item.name} · {item.dinerName}</Text>
+                        {others.length > 0 && <Text style={styles.itemClaimedBy}>Também: {others.join(', ')}</Text>}
+                      </View>
                       <Text style={styles.itemPrice}>{money(item.totalPrice)}</Text>
                     </TouchableOpacity>
                   );
                 })}
+                {needsItems && <Text style={styles.hint}>Marque ao menos um item. Itens marcados por mais de uma pessoa são divididos entre elas.</Text>}
               </View>
             )}
 
-            {activeMode === 'fixed' && (
+            {activeMode === 'fixed_amount' && (
               <View>
                 <Text style={styles.sectionTitle}>Quanto você quer pagar?</Text>
                 <View style={styles.fixedInputWrap}>
@@ -267,32 +252,45 @@ export default function SplitBillScreen({ route, navigation }: any) {
                     style={styles.fixedInput}
                     placeholder="0,00"
                     placeholderTextColor={colors.foregroundMuted}
-                    keyboardType="decimal-pad"
-                    value={fixedAmount}
-                    onChangeText={setFixedAmount}
+                    keyboardType="number-pad"
+                    value={fixedCents > 0 ? moneyCents(fixedCents).replace(/^R\$\s?/, '') : ''}
+                    onChangeText={(text) => setFixedDigits(text.replace(/\D/g, '').replace(/^0+/, '').slice(0, 9))}
                     accessibilityLabel="Valor a pagar"
                   />
                 </View>
               </View>
             )}
 
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>{money(subtotal)}</Text>
-            </View>
+            {preview.isError && previewEnabled && !needsItems && (
+              <Text style={styles.errorText}>{errorMessage(preview.error)}</Text>
+            )}
 
-            <View style={styles.payCard}>
-              <Text style={styles.payLabel}>Você paga:</Text>
-              <Text style={styles.payValue}>{money(baseAmount)}</Text>
-            </View>
+            {plan && (
+              <View>
+                <Text style={styles.sectionTitle}>Como fica</Text>
+                {plan.shares.map((share) => (
+                  <View key={share.participantId} style={styles.planRow}>
+                    <Text style={styles.planName}>{nameOf(share.participantId)}</Text>
+                    <Text style={styles.planValue}>{moneyCents(share.amountCents)}</Text>
+                  </View>
+                ))}
+                {plan.unassignedCents > 0 && (
+                  <View style={styles.planRow}>
+                    <Text style={styles.hint}>Continua em aberto na mesa</Text>
+                    <Text style={styles.hint}>{moneyCents(plan.unassignedCents)}</Text>
+                  </View>
+                )}
+                <Text style={styles.hint}>Valores já incluem a taxa de serviço. A gorjeta é escolhida na próxima tela.</Text>
+              </View>
+            )}
 
             <TouchableOpacity
-              style={[styles.cta, baseAmount <= 0 && styles.ctaDisabled]}
-              onPress={proceedToPayment}
-              disabled={baseAmount <= 0}
+              style={[styles.cta, (!plan || commit.isPending) && styles.ctaDisabled]}
+              onPress={proceed}
+              disabled={!plan || commit.isPending}
               accessibilityRole="button"
             >
-              <Text style={styles.ctaText}>Ir para Gorjeta & Pagamento</Text>
+              <Text style={styles.ctaText}>{commit.isPending ? 'Confirmando…' : 'Confirmar e ir para o pagamento'}</Text>
             </TouchableOpacity>
           </>
         )}

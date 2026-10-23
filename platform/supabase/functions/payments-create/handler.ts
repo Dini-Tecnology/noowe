@@ -14,16 +14,22 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
   const body = await req.json().catch(() => null);
   const purpose = body?.purpose;
   const method = body?.method;
-  if (purpose === "bill_share") return json({ error: "not_implemented" }, 501);
-  if (purpose !== "order" || !UUID.test(body?.targetId ?? "") || !UUID.test(body?.idempotencyKey ?? "")
+  if ((purpose !== "order" && purpose !== "bill_share") || !UUID.test(body?.targetId ?? "") || !UUID.test(body?.idempotencyKey ?? "")
     || (method !== "pix" && method !== "credit_card")) {
     return json({ error: "invalid_request" }, 400);
   }
   const document = typeof body?.payerCpfCnpj === "string" ? body.payerCpfCnpj.replace(/\D/g, "") : "";
 
-  const reserved = await deps.rpc("service_payment_reserve_order", {
-    p_user_id: user.id, p_order_id: body.targetId, p_payment_method: method, p_idempotency_key: body.idempotencyKey,
-  });
+  // A gorjeta da parcela é em centavos e o servidor valida o teto; o valor da parcela nunca vem do app.
+  const tip = body?.tipCents == null ? null : Number(body.tipCents);
+  if (tip !== null && (!Number.isSafeInteger(tip) || tip < 0)) return json({ error: "invalid_request" }, 400);
+  const reserved = purpose === "bill_share"
+    ? await deps.rpc("service_pay_share", {
+      p_user_id: user.id, p_share_id: body.targetId, p_method: method, p_tip_cents: tip, p_idempotency_key: body.idempotencyKey,
+    })
+    : await deps.rpc("service_payment_reserve_order", {
+      p_user_id: user.id, p_order_id: body.targetId, p_payment_method: method, p_idempotency_key: body.idempotencyKey,
+    });
   if (reserved.error) {
     const mapped = mapRpcError(reserved.error.code);
     if (mapped.status === 500) console.error("payments-create reserve error:", reserved.error);
@@ -67,7 +73,7 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
       charge = await deps.provider.createCharge(apiKey, {
         customer: customerId, billingType: method === "pix" ? "PIX" : "CREDIT_CARD",
         valueCents: r.amountCents, dueDate: saoPauloDate(deps.now?.() ?? new Date()),
-        externalReference: r.paymentId, description: "Pedido NOOWE",
+        externalReference: r.paymentId, description: purpose === "bill_share" ? "Conta da mesa NOOWE" : "Pedido NOOWE",
         split: deps.env("NOOWE_ASAAS_WALLET_ID") && r.platformFeeCents > 0
           ? { walletId: deps.env("NOOWE_ASAAS_WALLET_ID")!, feeCents: r.platformFeeCents } : null,
         successUrl: returnUrl ? `${returnUrl}?pid=${r.paymentId}` : null,

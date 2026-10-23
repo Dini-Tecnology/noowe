@@ -16,7 +16,7 @@ function setup(over: { reserved?: any; reserveError?: any; customerId?: string |
   const deps: PaymentDeps = {
     rpc: async (fn, args) => {
       calls.push({ fn, args });
-      if (fn === "service_payment_reserve_order") {
+      if (fn === "service_payment_reserve_order" || fn === "service_pay_share") {
         if (over.reserveError) return { data: null, error: over.reserveError };
         return { data: over.reserved ?? { paymentId: PAY, orderId: ORDER, status: "creating", method: "pix", amountCents: 5000,
           platformFeeCents: 250, paymentAccountId: ACCT, providerRef: null, pixPayload: null, expiresAt: null, alreadyPaid: false }, error: null };
@@ -50,12 +50,13 @@ function req(body: any, token = "tok") {
 }
 const valid = { purpose: "order", targetId: ORDER, method: "pix", idempotencyKey: KEY, payerCpfCnpj: "123.456.789-09" };
 
-test("sem JWT válido: 401; corpo inválido: 400; bill_share ainda não implementado: 501", async () => {
+test("sem JWT válido: 401; corpo inválido: 400; gorjeta inválida: 400", async () => {
   const { deps } = setup();
   assert.equal((await handleCreate(req(valid, "ruim"), deps)).status, 401);
   assert.equal((await handleCreate(req({ ...valid, method: "apple_pay" }), deps)).status, 400);
   assert.equal((await handleCreate(req({ ...valid, idempotencyKey: "x" }), deps)).status, 400);
-  assert.equal((await handleCreate(req({ ...valid, purpose: "bill_share" }), deps)).status, 501);
+  assert.equal((await handleCreate(req({ ...valid, purpose: "bill_share", tipCents: -5 }), deps)).status, 400);
+  assert.equal((await handleCreate(req({ ...valid, purpose: "bill_share", tipCents: 1.5 }), deps)).status, 400);
 });
 
 test("PIX: cria cliente, cobrança com split NOOWE e QR; devolve pendente (nunca confirmado)", async () => {
@@ -129,4 +130,15 @@ test("erros da reserva viram status HTTP; pedido já pago não cobra de novo", a
   const res = await handleCreate(req(valid), paid.deps);
   assert.equal((await res.json()).alreadyPaid, true);
   assert.equal(paid.provider.length, 0);
+});
+
+test("parcela da conta: reserva por service_pay_share com gorjeta em centavos e cobra no provedor", async () => {
+  const { deps, calls, provider } = setup({ customerId: "cus_1" });
+  const res = await handleCreate(req({ ...valid, purpose: "bill_share", tipCents: 300 }), deps);
+  assert.equal(res.status, 200);
+  const reserve = calls.find((c) => c.fn === "service_pay_share");
+  assert.ok(reserve && reserve.args.p_share_id === ORDER && reserve.args.p_tip_cents === 300 && reserve.args.p_user_id === USER);
+  assert.ok(!calls.some((c) => c.fn === "service_payment_reserve_order"));
+  assert.equal((await res.json()).status, "pending");
+  assert.ok(provider.includes("createCharge"));
 });

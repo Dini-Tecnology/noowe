@@ -25,7 +25,7 @@ import {
   HomeScreen, KidsActivitiesScreen, LoyaltyScreen,
   MenuScreen, ModoFamiliaScreen, NotificationsScreen, OrderDetailScreen, OrderReadyScreen, OrdersScreen, PaymentSuccessScreen, PrivacyScreen,
   PaymentMethodsScreen, ProfileScreen, PromotionsScreen, QrScannerScreen, QuickServiceCheckoutScreen, ReservationConfirmationScreen, ReservationRestaurantScreen,
-  ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TableCodeScreen, InviteExpiredScreen, TipPaymentScreen,
+  ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TableCodeScreen, InviteExpiredScreen, TipPaymentScreen, SharePaymentScreen,
   WaitlistScreen,
 } from '../screens/production';
 
@@ -328,6 +328,7 @@ export default function ProductionNavigation() {
     <Stack.Screen name="KidsActivities" component={KidsActivitiesScreen} options={{ headerShown: false }} />
     <Stack.Screen name="SplitBill" component={SplitBillScreen} options={{ headerShown: false }} />
     <Stack.Screen name="TipPayment" component={TipPaymentScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="SharePayment" component={SharePaymentScreen} options={{ headerShown: false }} />
     <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ headerShown: false, gestureEnabled: false }} />
     <Stack.Screen name="Review" component={ReviewScreen} options={{ headerShown: false }} />
     <Stack.Screen name="DigitalReceipt" component={DigitalReceiptScreen} options={{ headerShown: false }} />

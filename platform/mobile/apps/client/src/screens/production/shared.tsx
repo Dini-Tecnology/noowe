@@ -41,6 +41,9 @@ export const restaurantRowStyles = (colors: ReturnType<typeof useColors>) => ({
 export const money = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
+/** Exibição de valores que o servidor entrega em centavos (conta dividida). Só formata. */
+export const moneyCents = (cents: number) => money(cents / 100);
+
 /**
  * Mapeia mensagens de erro conhecidas dos RPCs (em inglês) para textos
  * amigáveis em pt-BR antes de exibir ao cliente. Se a mensagem já vier em
