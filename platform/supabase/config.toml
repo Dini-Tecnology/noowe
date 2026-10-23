@@ -53,3 +53,15 @@ verify_jwt = false
 # The function additionally requires the service_role claim, but gateway JWT
 # verification must remain enabled so that claim cannot be forged.
 verify_jwt = true
+
+[functions.payments-create]
+# O usuário é validado dentro da função (admin.auth.getUser).
+verify_jwt = false
+
+[functions.payments-sync]
+verify_jwt = false
+
+[functions.payments-webhook-asaas]
+# Chamado pelo Asaas, sem JWT do Supabase: autenticado pelo token da subconta
+# (cabeçalho asaas-access-token comparado com o hash em restaurant_payment_accounts).
+verify_jwt = false

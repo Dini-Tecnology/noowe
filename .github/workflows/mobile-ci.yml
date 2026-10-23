@@ -68,3 +68,14 @@ jobs:
       - run: supabase test db
       - if: always()
         run: supabase stop --no-backup
+
+  edge-functions:
+    name: Edge Functions — payments tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno test --no-check platform/supabase/functions/_shared/payments platform/supabase/functions/payments-create platform/supabase/functions/payments-sync platform/supabase/functions/payments-webhook-asaas
