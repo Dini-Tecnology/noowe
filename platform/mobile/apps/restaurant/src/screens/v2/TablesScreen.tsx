@@ -58,6 +58,7 @@ export default function TablesScreen() {
   const [deleteTable, setDeleteTable] = useState<V2Table | null>(null);
   const [seatingTable, setSeatingTable] = useState<{ table: V2Table; mode: SeatingMode } | null>(null);
   const [closeAccountTable, setCloseAccountTable] = useState<V2Table | null>(null);
+  const [closeReason, setCloseReason] = useState('');
   const [comandaTable, setComandaTable] = useState<V2Table | null>(null);
   const [tableNumber, setTableNumber] = useState('');
   const [seats, setSeats] = useState('2');
@@ -166,8 +167,9 @@ export default function TablesScreen() {
     setIsSubmitting(true);
     setActionError(null);
     try {
-      await supabaseApiAdapter.closeTableSession(closeAccountTable.sessionId);
+      await supabaseApiAdapter.closeTableSession(closeAccountTable.sessionId, closeReason.trim());
       setCloseAccountTable(null);
+      setCloseReason('');
       await refresh();
     } catch (err) {
       setCloseAccountTable(null);
@@ -620,10 +622,13 @@ export default function TablesScreen() {
 
       <V2ConfirmDialog
         visible={closeAccountTable !== null}
-        title="Fechar a conta?"
-        message={`A conta da mesa ${closeAccountTable?.label ?? ''} está em ${formatCurrency(closeAccountTable?.totalSpent ?? 0)}. Confirme somente após concluir o pagamento. A mesa ficará aguardando liberação.`}
-        confirmLabel="Fechar conta"
-        onCancel={() => setCloseAccountTable(null)}
+        title="Encerrar a comanda?"
+        message={`A conta da mesa ${closeAccountTable?.label ?? ''} está em ${formatCurrency(closeAccountTable?.totalSpent ?? 0)}. O cliente é avisado e a mesa fica aguardando liberação. Informe o motivo.`}
+        confirmLabel="Encerrar comanda"
+        reasonLabel="Motivo (ex.: pagou na maquininha)"
+        reason={closeReason}
+        onReasonChange={setCloseReason}
+        onCancel={() => { setCloseAccountTable(null); setCloseReason(''); }}
         onConfirm={() => void confirmCloseAccount()}
       />
 
@@ -712,7 +717,7 @@ const TableCell = React.memo(function TableCell({
       accessibilityRole="button"
       accessibilityState={{ selected: isSelected }}
       accessibilityLabel={`Mesa ${table.label}, ${meta.label.toLowerCase()}, ${table.guestName || table.section}, ${table.effectiveSeats} lugares${table.mergedIntoLabel ? `, unida à mesa ${table.mergedIntoLabel}` : ''}`}
-      style={({ pressed }) => [{ width: size, height: Math.max(96, Math.min(size, 108)) }, pressed && styles.cellPressed]}
+      style={({ pressed }) => [{ width: size, height: Math.max(112, Math.min(size, 124)) }, pressed && styles.cellPressed]}
     >
       <Animated.View
         style={[
@@ -740,12 +745,26 @@ const TableCell = React.memo(function TableCell({
               : table.mergedIntoId ? `unida à ${table.mergedIntoLabel}` : table.mergedChildren.length > 0 ? `${table.effectiveSeats} lugares · +${table.mergedChildren.map((child) => child.label).join(',')}` : `${table.seats} lugares`}
         </Text>
         <Text numberOfLines={1} style={[styles.tableGuest, { color: colors.foreground }]}>{table.guestName || ' '}</Text>
+        {table.originLabel ? (
+          <Text numberOfLines={1} testID={`table-origin-${table.id}`} style={[styles.originChip, { color: colors.foregroundSecondary }]}>{table.originLabel}</Text>
+        ) : null}
+        {table.idleMinutes != null ? (
+          <Text numberOfLines={1} testID={`table-idle-${table.id}`} style={styles.idleBadge}>Parada há {formatIdle(table.idleMinutes)}</Text>
+        ) : null}
       </Animated.View>
     </Pressable>
   );
 });
 
+function formatIdle(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} h ${minutes % 60} min`;
+}
+
 const styles = StyleSheet.create({
+  originChip: { fontSize: 10, fontWeight: '700', marginTop: 1 },
+  idleBadge: { fontSize: 10, fontWeight: '800', color: '#B45309', marginTop: 1 },
   scrollContent: { paddingBottom: 24 },
   headerActions: { flexDirection: 'row', gap: 8 },
   qrButton: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 13 },

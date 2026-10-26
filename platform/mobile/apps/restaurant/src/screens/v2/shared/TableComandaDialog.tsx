@@ -24,6 +24,16 @@ interface ComandaDiner {
   isHost: boolean;
   isKid: boolean;
   isCompanion: boolean;
+  paidCents?: number;
+}
+
+/** Estado do item na cozinha/bar, em português; valores desconhecidos aparecem como vieram. */
+export function itemStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    pending: 'Recebido', received: 'Recebido', confirmed: 'Recebido', preparing: 'Preparando',
+    ready: 'Pronto', delivered: 'Entregue', served: 'Entregue', cancelled: 'Cancelado',
+  };
+  return labels[status] ?? status;
 }
 
 function formatCurrency(value: number): string {
@@ -52,6 +62,7 @@ export function TableComandaDialog({
   const [diners, setDiners] = useState<ComandaDiner[]>([]);
   const [items, setItems] = useState<ComandaItem[]>([]);
   const [subtotal, setSubtotal] = useState(0);
+  const [paidCents, setPaidCents] = useState(0);
 
   useEffect(() => {
     if (!visible || !tableId) return;
@@ -64,6 +75,7 @@ export function TableComandaDialog({
         setDiners(Array.isArray(data?.diners) ? data.diners : []);
         setItems(Array.isArray(data?.items) ? data.items : []);
         setSubtotal(Number(data?.subtotal ?? 0));
+        setPaidCents(Number(data?.paidCents ?? 0));
       })
       .catch((err) => {
         if (!cancelled) setError(userErrorMessage(err, 'Erro ao carregar comanda'));
@@ -71,7 +83,17 @@ export function TableComandaDialog({
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    // Sem realtime no diálogo: atualiza a cada 15 s enquanto aberto, sem piscar o carregando.
+    const timer = setInterval(() => {
+      supabaseApiAdapter.getTableComanda(tableId).then((data: any) => {
+        if (cancelled) return;
+        setDiners(Array.isArray(data?.diners) ? data.diners : []);
+        setItems(Array.isArray(data?.items) ? data.items : []);
+        setSubtotal(Number(data?.subtotal ?? 0));
+        setPaidCents(Number(data?.paidCents ?? 0));
+      }).catch(() => undefined);
+    }, 15000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [visible, tableId]);
 
   const groups = useMemo(() => {
@@ -97,7 +119,7 @@ export function TableComandaDialog({
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: colors.foreground }]}>Comanda · {tableLabel}</Text>
               <Text style={[styles.subtitle, { color: colors.foregroundSecondary }]}>
-                {diners.length} pessoa{diners.length === 1 ? '' : 's'} · {formatCurrency(subtotal)}
+                {diners.length} pessoa{diners.length === 1 ? '' : 's'} · {formatCurrency(subtotal)} · pago {formatCurrency(paidCents / 100)}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} accessibilityLabel="Fechar" hitSlop={8}>
@@ -136,6 +158,9 @@ export function TableComandaDialog({
                       <Text style={[styles.itemName, { color: colors.foreground }]} numberOfLines={1}>
                         {item.quantity}x {item.name}
                       </Text>
+                      <Text style={[styles.itemStatus, { color: colors.foregroundSecondary }]} testID={`comanda-item-status-${item.orderItemId}`}>
+                        {itemStatusLabel(item.status)}
+                      </Text>
                       <Text style={[styles.itemPrice, { color: colors.foregroundSecondary }]}>
                         {formatCurrency(item.totalPrice)}
                       </Text>
@@ -170,4 +195,5 @@ const styles = StyleSheet.create({
   },
   itemName: { flex: 1, fontSize: 13, marginRight: 8 },
   itemPrice: { fontSize: 13, fontWeight: '600' },
+  itemStatus: { fontSize: 11, fontWeight: '700', marginRight: 8, alignSelf: 'center' },
 });

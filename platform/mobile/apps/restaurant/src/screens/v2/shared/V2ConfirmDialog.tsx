@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, View, TouchableOpacity, StyleSheet } from 'react-native';
+import { Modal, View, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 
@@ -10,6 +10,10 @@ interface V2ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  /** Quando informado, pede um motivo obrigatório: o botão de confirmar só habilita com texto. */
+  reasonLabel?: string;
+  reason?: string;
+  onReasonChange?: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -21,10 +25,14 @@ export function V2ConfirmDialog({
   confirmLabel = 'Confirmar',
   cancelLabel = 'Cancelar',
   destructive = false,
+  reasonLabel,
+  reason = '',
+  onReasonChange,
   onConfirm,
   onCancel,
 }: V2ConfirmDialogProps) {
   const colors = useColors();
+  const reasonMissing = reasonLabel !== undefined && reason.trim().length === 0;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -32,6 +40,18 @@ export function V2ConfirmDialog({
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>
           <Text style={[styles.message, { color: colors.foregroundSecondary }]}>{message}</Text>
+          {reasonLabel !== undefined && (
+            <TextInput
+              value={reason}
+              onChangeText={onReasonChange}
+              placeholder={reasonLabel}
+              placeholderTextColor={colors.foregroundMuted}
+              multiline
+              accessibilityLabel={reasonLabel}
+              testID="confirm-dialog-reason"
+              style={[styles.reasonInput, { color: colors.foreground, borderColor: colors.border }]}
+            />
+          )}
           <View style={styles.actions}>
             <TouchableOpacity
               onPress={onCancel}
@@ -41,9 +61,12 @@ export function V2ConfirmDialog({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={onConfirm}
+              disabled={reasonMissing}
+              testID="confirm-dialog-confirm"
               style={[
                 styles.btn,
                 { backgroundColor: destructive ? '#EF4444' : colors.primary },
+                reasonMissing && styles.btnDisabled,
               ]}
             >
               <Text style={{ color: '#FFF', fontWeight: '700' }}>{confirmLabel}</Text>
@@ -89,6 +112,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
+  },
+  btnDisabled: { opacity: 0.45 },
+  reasonInput: {
+    minHeight: 64, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 20, fontSize: 14, textAlignVertical: 'top',
   },
   cancelBtn: {
     borderWidth: 1,

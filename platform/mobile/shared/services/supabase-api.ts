@@ -272,6 +272,14 @@ export type QuickPanel = {
 };
 
 /** Campos editáveis da política do Quick (o servidor valida as faixas). */
+export type RoomPolicy = {
+  reservationNoShowMin: number;
+  queueCallToleranceMin: number;
+  sessionIdleAlertMin: number;
+  /** Fixo em 5 min (ADR-021); só leitura. */
+  reservationCheckInLeadMin: number;
+};
+
 export type QuickPolicyPatch = Partial<{
   pickupExpiryMin: number;
   pickupCapacityPerSlot: number | null;
@@ -317,7 +325,8 @@ export interface SupabaseApiAdapter {
   getMyTables(restaurantId?: string): Promise<any>;
   openTableSession(tableId: string, guestName?: string, guestCount?: number): Promise<any>;
   checkInReservation(reservationId: string, tableId: string, guestName?: string, guestCount?: number): Promise<any>;
-  closeTableSession(sessionId: string): Promise<any>;
+  /** Encerramento manual da comanda (ADR-021): o motivo é obrigatório e fica no audit_log. */
+  closeTableSession(sessionId: string, reason: string): Promise<any>;
   // ── KDS ──────────────────────────────────────────────────────────────────────
   getKdsQueue(restaurantId?: string, stationId?: string): Promise<any>;
   getBarQueue(restaurantId?: string): Promise<any>;
@@ -336,6 +345,9 @@ export interface SupabaseApiAdapter {
   recallQuickPickup(orderId: string): Promise<any>;
   setQuickOrdersPaused(restaurantId: string, paused: boolean): Promise<any>;
   updateQuickServicePolicy(restaurantId: string, patch: QuickPolicyPatch): Promise<any>;
+  /** Política do salão (ADR-021): tolerâncias de reserva e fila e alerta de comanda parada. */
+  getRoomPolicy(restaurantId: string): Promise<RoomPolicy>;
+  updateRoomPolicy(restaurantId: string, patch: Partial<Omit<RoomPolicy, 'reservationCheckInLeadMin'>>): Promise<RoomPolicy>;
   fireCourse(orderId: string, course: string): Promise<any>;
   getCookStations(restaurantId?: string): Promise<any>;
   createCookStation(restaurantId: string, data: Record<string, unknown>): Promise<any>;
@@ -710,6 +722,23 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
+  async getRoomPolicy(restaurantId: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_get_room_policy', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return data as RoomPolicy;
+  },
+
+  async updateRoomPolicy(restaurantId: string, patch: Partial<Omit<RoomPolicy, 'reservationCheckInLeadMin'>>) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_update_room_policy', {
+      p_restaurant_id: restaurantId,
+      p_reservation_no_show_min: patch.reservationNoShowMin ?? null,
+      p_queue_call_tolerance_min: patch.queueCallToleranceMin ?? null,
+      p_session_idle_alert_min: patch.sessionIdleAlertMin ?? null,
+    });
+    if (error) throw error;
+    return data as RoomPolicy;
+  },
+
   async updateQuickServicePolicy(restaurantId: string, patch: QuickPolicyPatch) {
     const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_update_quick_service_policy', {
       p_restaurant_id: restaurantId, p_patch: patch,
@@ -1007,9 +1036,10 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
-  async closeTableSession(sessionId: string) {
+  async closeTableSession(sessionId: string, reason: string) {
     const { data, error } = await getSupabaseClient().rpc('restaurant_close_table_session', {
       p_session_id: sessionId,
+      p_reason: reason,
     });
     if (error) throw error;
     return data;

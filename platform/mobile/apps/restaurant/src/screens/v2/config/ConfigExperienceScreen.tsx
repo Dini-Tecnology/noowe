@@ -29,6 +29,7 @@ import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from '../shared/V2Shell';
 import type { CustomerExperiencePrefs } from '../shared/v2Types';
 import { ConfigSectionCard } from './ConfigSectionCard';
+import { RoomPolicyCard } from './RoomPolicyCard';
 import type { IconComponent } from './configTypes';
 import {
   getDefaultCustomerExperience,
@@ -424,17 +425,7 @@ export default function ConfigExperienceScreen() {
                   onChange={(maxAdvanceDays) => updatePrefs({ maxAdvanceDays })}
                   showDivider
                 />
-                <StepperRow
-                  label="Tolerância (min)"
-                  value={prefs.toleranceMinutes}
-                  suffix="min"
-                  min={0}
-                  max={120}
-                  step={5}
-                  colors={colors}
-                  onChange={(toleranceMinutes) => updatePrefs({ toleranceMinutes })}
-                  showDivider
-                />
+                <RoomPolicyCard />
                 <ToggleRow
                   item={{
                     key: 'requireDeposit',

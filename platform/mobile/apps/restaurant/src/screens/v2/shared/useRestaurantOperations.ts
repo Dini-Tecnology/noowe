@@ -82,6 +82,9 @@ type RawTable = {
     started_at?: string | null;
     total_spent?: number | string | null;
     headcount?: number | string | null;
+    origin?: string | null;
+    origin_name?: string | null;
+    idle_since?: string | null;
   } | null;
   active_reservation?: {
     id?: string | null;
@@ -89,6 +92,22 @@ type RawTable = {
     party_size?: number | string | null;
   } | null;
 };
+
+export type SessionOrigin = 'qr' | 'reservation' | 'queue' | 'staff';
+
+const ORIGIN_LABELS: Record<SessionOrigin, string> = { qr: 'QR', reservation: 'Reserva', queue: 'Fila', staff: 'Equipe' };
+
+/** Texto do chip de origem; a reserva mostra o nome do cliente. */
+export function originChipLabel(origin: SessionOrigin | null, name: string | null): string | null {
+  if (!origin) return null;
+  return origin === 'reservation' && name ? `Reserva · ${name}` : ORIGIN_LABELS[origin];
+}
+
+export function idleMinutesSince(idleSince: string | null | undefined, now: Date = new Date()): number | null {
+  if (!idleSince) return null;
+  const ms = now.getTime() - new Date(idleSince).getTime();
+  return Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 60000) : null;
+}
 
 export type V2Table = {
   id: string;
@@ -116,6 +135,11 @@ export type V2Table = {
   headcount: number;
   /** O papel logado pode trocar, juntar e separar mesas (servidor decide). */
   canRearrange: boolean;
+  /** De onde veio a comanda (ADR-021): QR, reserva (com nome), fila ou aberta pela equipe. */
+  origin: SessionOrigin | null;
+  originLabel: string | null;
+  /** Há quanto tempo a comanda está parada, em minutos; null se ainda dentro do tempo do alerta. */
+  idleMinutes: number | null;
 };
 
 export type DashboardSnapshot = {
@@ -280,6 +304,14 @@ export function mapTable(raw: RawTable): V2Table {
     })),
     headcount: toNumber(raw.active_session?.headcount, sessionGuests),
     canRearrange: raw.can_rearrange === true,
+    origin: (['qr', 'reservation', 'queue', 'staff'] as const).find((o) => o === raw.active_session?.origin) ?? null,
+    originLabel: raw.active_session
+      ? originChipLabel(
+        (['qr', 'reservation', 'queue', 'staff'] as const).find((o) => o === raw.active_session?.origin) ?? null,
+        raw.active_session.origin_name?.trim() || null,
+      )
+      : null,
+    idleMinutes: idleMinutesSince(raw.active_session?.idle_since),
   };
 }
 
