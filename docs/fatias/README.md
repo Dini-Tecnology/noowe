@@ -56,6 +56,7 @@ porta de entrada produz um check-in que a constraint do banco vai rejeitar.
 | [G2](G2-convite-capacidade.md) | Convite por link e capacidade | Fine, Casual | G1 |
 | [G2b](G2b-convite-por-username.md) | Convite por @username com aceite (ADR-011) | Fine, Casual | G1 |
 | [G3](G3-split-pagamento-parcial.md) | Divisão de conta e pagamento parcial | Fine, Casual | G2, N4 |
+| [G4](G4-comanda-casa.md) | Comanda como casa do cliente (ADR-021) | Fine, Casual | G1, G2, G3, E1, E2, S1 |
 | [S1](S1-chamados-acoes-garcom.md) | Chamados e ações do garçom na mesa | Fine, Casual | G1 |
 | [Q1](Q1-quick-service.md) | Quick Service completo | Quick | N4 |
 | [C1](C1-casual-familia-festas.md) | Modo família, aniversário e festas | Casual | G1 |

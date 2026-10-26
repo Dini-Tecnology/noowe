@@ -50,6 +50,9 @@ export function capabilitiesFor(config: EstablishmentConfig, model: ServiceModel
 | `queue_as_primary_entry` | bool | true em Casual | Casual |
 | `queue_call_tolerance_min` | int | 8 | Fine, Casual |
 | `reservation_no_show_min` | int | 15 | Fine, Casual |
+| `queue_second_call_behavior` | enum | `drop` (ADR-002) | Fine, Casual |
+| `reservation_check_in_lead_min` | int | 5 (ADR-021; fixo na UI) | Fine, Casual |
+| `session_idle_alert_min` | int | definido na migration G4 | Fine, Casual (ADR-021) |
 | `family_mode_enabled` | bool | false | Casual |
 | `guest_link_enabled` | bool | true | Fine, Casual |
 | `guest_link_ttl_min` | int | 180 | Fine, Casual |

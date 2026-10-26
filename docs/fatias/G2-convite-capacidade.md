@@ -60,7 +60,7 @@ alguém entra, e até quantos cabem.
    `guest_link_ttl_min`.
 7. Força bruta no código de 6 dígitos é bloqueada após 5 tentativas; tentativas ficam
    registradas.
-8. Convidado que sai antes do pagamento: o saldo volta para a mesa e fica sinalizado ao garçom
+8. *(Substituído em 2026-10-25 pelo ADR-021: sair da mesa exige a parte paga; com saldo, "Pagar minha parte".)* Convidado que sai antes do pagamento: o saldo volta para a mesa e fica sinalizado ao garçom
    (spec §2.6).
 9. Gerar o convite a partir da mesa leva **no máximo dois toques** (spec §4.6).
 

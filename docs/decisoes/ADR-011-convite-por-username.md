@@ -65,7 +65,7 @@ Escolhas do responsável do produto:
   da expiração preguiçosa, e não há `pg_cron`.
   - As exceções são falha de autenticação, convite alheio (`P0002`) e saldo em aberto em outra mesa
     (`P0004`). Nesses casos o convite continua `pending` de propósito.
-- **Convidado em outra mesa:** vale a mesma regra do QR. Com saldo em aberto lá, `P0004`; sem
+- **Convidado em outra mesa:** *(Nota 2026-10-25: substituído pelo [ADR-021](ADR-021-comanda-como-casa.md); com comanda ativa em outra mesa o servidor recusa, não há troca silenciosa.)* Vale a mesma regra do QR. Com saldo em aberto lá, `P0004`; sem
   saldo, sai de lá e entra aqui. Quem convida não fica sabendo da outra mesa.
 - **Ciclo de vida por trigger:**
   - quem convidou saiu: convites pendentes dele caem com `inviter_left`;

@@ -30,10 +30,11 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [017](ADR-017-descoberta-multi-modelo.md) | `restaurants.service_models`; categoria escolhida (ou seletor) define a experiência | **Provisório** | Restaurante multi-modelo invisível numa categoria |
 | [018](ADR-018-troca-e-juncao-de-mesas.md) | Junção de um nível (`merged_into_id`), capacidade efetiva única, troca de mesa e erros P0013/P0014/P0015 | **Provisório** | Grupo maior que a mesa sem saída; capacidade lida em lugares diferentes |
 | [019](ADR-019-codigo-de-convite-e-forca-bruta.md) | Código de convite de 6 dígitos guardado como HMAC, com limite de tentativas por usuário e IP | **Provisório** | Convite adivinhado por força bruta |
+| [021](ADR-021-comanda-como-casa.md) | A comanda é a casa do cliente: uma ativa por cliente, nunca encerra por tempo, encerramento manual com motivo | **Provisório** | App volta ao restaurante, cliente em duas mesas, comanda encerrada sem rastro |
 
 **Vocabulário:** os ADRs usam os nomes da spec. A tradução para o banco está em
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).
 
 **Pendente de revisão humana:** ADR-004 (estorno, documento fiscal já emitido e fraude por
-reabertura de conta), ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência), ADR-018 (troca e junção de mesas), ADR-019 (código de convite) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
+reabertura de conta), ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência), ADR-018 (troca e junção de mesas), ADR-019 (código de convite), ADR-021 (comanda como casa) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
 o cliente).
