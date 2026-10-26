@@ -325,22 +325,23 @@ begin
     'quem convida não fica sabendo da outra mesa';
 
   perform pg_temp.act(pg_temp.id('caio'));
-  assert pg_temp.state_of(format('select public.customer_accept_table_user_invite(%L)', inv->>'id')) = 'P0004',
-    'com saldo em outra mesa não troca';
+  assert pg_temp.state_of(format('select public.customer_accept_table_user_invite(%L)', inv->>'id')) = 'P0016',
+    'ADR-021: com comanda ativa em outra mesa o aceite é recusado';
   assert (select status::text from public.table_session_user_invites where id = (inv->>'id')::uuid) = 'pending',
     'convite continua pendente para tentar depois';
   assert exists (select 1 from public.table_session_participants where table_session_id = sid2 and user_id = pg_temp.id('caio')),
     'continua na mesa antiga';
 
-  -- Quitou (aqui: pedido cancelado) — agora troca de mesa.
+  -- Sem consumo (aqui: pedido cancelado) ele pode sair da mesa antiga; só então aceita.
   update public.orders set status = 'cancelled' where id = o;
+  assert pg_temp.state_of(format('select public.customer_accept_table_user_invite(%L)', inv->>'id')) = 'P0016',
+    'quitar não move o cliente: continua recusado até sair da mesa';
+  perform public.customer_leave_table_session(sid2);
   res := public.customer_accept_table_user_invite((inv->>'id')::uuid);
-  assert res->>'status' = 'accepted', 'sem saldo aceita';
-  assert not exists (select 1 from public.table_session_participants where table_session_id = sid2 and user_id = pg_temp.id('caio')),
-    'saiu da mesa antiga';
+  assert res->>'status' = 'accepted', 'depois de sair, aceita';
   assert (public.customer_get_active_visit()->>'tableSessionId')::uuid = sid, 'visita ativa é a nova mesa';
 end $$;
-select pass('convidado em outra mesa: P0004 mantem pendente; sem saldo troca de mesa');
+select pass('convidado em outra mesa: P0016 mantem pendente; entra so depois de sair');
 
 -- ---------------------------------------------------------------------------
 -- 7. Quem convidou saiu / sessão encerrada / entrou por outro caminho

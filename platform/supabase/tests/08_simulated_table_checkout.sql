@@ -30,8 +30,8 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub',a,'role','authenticated')::text,true);
   begin
     perform public.customer_open_table_session(t2->>'qr_code');
-    raise exception 'unpaid diner was allowed to switch tables';
-  exception when sqlstate 'P0004' then null; end;
+    raise exception 'diner with an active comanda was allowed to open another table';
+  exception when sqlstate 'P0016' then null; end; -- ADR-021: uma comanda ativa por cliente
   begin
     perform public.customer_leave_table_session(sid);
     raise exception 'unpaid diner was allowed to leave';
@@ -52,8 +52,11 @@ begin
   assert not (result->>'tableClosed')::boolean, 'other diners remain active';
   assert (select status::text from public.orders where id=o1)='completed', 'own order finalized';
   assert (select status::text from public.orders where id=o2)<>'completed', 'other order unchanged';
-  replay := public.customer_pay_table_bill(sid,10,'pix',15,'mine',key2);
-  assert replay->>'receiptId'=result->>'receiptId', 'replay works after leaving';
+  -- Quem já saiu não é mais participante: o reenvio da mesma chave é recusado (assert_split_mode_enabled, 20260929).
+  begin
+    perform public.customer_pay_table_bill(sid,10,'pix',15,'mine',key2);
+    raise exception 'replay after leaving was accepted';
+  exception when sqlstate 'P0001' then null; end;
   assert public.customer_get_active_visit() is null, 'no stale visit after payment';
   assert (public.customer_get_receipt((result->>'receiptId')::uuid)->>'simulated')::boolean, 'receipt records simulation';
   visit := public.customer_open_table_session(t2->>'qr_code');
