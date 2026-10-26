@@ -68,7 +68,9 @@ export function pastWaitlistEntries<T extends { restaurantId: string; status: st
  * today's opening time ("HH:MM") even after today's shift has ended, so it is
  * only quoted while it is still ahead.
  */
-export function closedQueueMessage(opensAt: string | null, now: Date = new Date()): string {
+export function closedQueueMessage(opensAt: string | null, now: Date = new Date(), opensWhen?: string | null): string {
+  // Próxima abertura em outro dia ("amanhã às 10:00", "sex às 19:00"): já vem pronta do servidor.
+  if (opensWhen && !opensWhen.startsWith('às ')) return `A fila virtual abre junto com o restaurante, ${opensWhen}.`;
   const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   return opensAt && opensAt > current
     ? `A fila virtual abre junto com o restaurante, hoje às ${opensAt}.`

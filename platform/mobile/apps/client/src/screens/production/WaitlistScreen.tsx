@@ -14,6 +14,7 @@ import { registerCustomerPushToken } from '../../services/customer-push';
 import customerBackend, { type CustomerWaitlistEntry, type WaitlistOccupancyLevel } from '../../services/customer-backend';
 import { StateView, rootNavigate, useQueryRefreshControl, tableLabel } from './shared';
 import { formatCountdown } from './reservation-ui';
+import { opensWhenLabel } from './casual-dining-ui';
 import {
   ANY_SECTION,
   closedQueueMessage,
@@ -522,7 +523,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
               <View style={styles.closedCard}>
                 <Ionicons name="moon-outline" size={26} color={colors.foregroundSecondary} />
                 <Text style={styles.closedTitle}>Restaurante fechado agora</Text>
-                <Text style={styles.closedSub}>{closedQueueMessage(liveStatus.data?.opensAt ?? null)}</Text>
+                <Text style={styles.closedSub}>{closedQueueMessage(liveStatus.data?.opensAt ?? null, new Date(), opensWhenLabel(liveStatus.data))}</Text>
               </View>
             ) : (
               <>

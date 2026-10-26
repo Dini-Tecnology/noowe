@@ -106,9 +106,27 @@ export function waitLabel(status: RestaurantLiveStatus | undefined | null): stri
   return `~${status.estimatedWaitMinutes} min de espera`;
 }
 
+const WEEKDAY_SHORT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+/**
+ * Quando o restaurante fechado abre de novo: "às 19:00", "amanhã às 10:00" ou "sex às 19:00".
+ * A próxima abertura vem do servidor (até 7 dias à frente); null só quando não há horário cadastrado.
+ */
+export function opensWhenLabel(status: RestaurantLiveStatus | undefined | null): string | null {
+  if (!status || status.isOpen || !status.opensAt) return null;
+  const days = status.opensInDays ?? 0;
+  if (days <= 0) return `às ${status.opensAt}`;
+  if (days === 1) return `amanhã às ${status.opensAt}`;
+  const weekday = status.opensWeekday != null ? WEEKDAY_SHORT[status.opensWeekday] : undefined;
+  return weekday ? `${weekday} às ${status.opensAt}` : `às ${status.opensAt}`;
+}
+
 export function openLabel(status: RestaurantLiveStatus | undefined | null): string | null {
   if (!status) return null;
-  if (!status.isOpen) return status.opensAt ? `Fechado · abre ${status.opensAt}` : 'Fechado agora';
+  if (!status.isOpen) {
+    const when = opensWhenLabel(status);
+    return when ? `Fechado · abre ${when}` : 'Fechado agora';
+  }
   return status.closesAt ? `Aberto até ${status.closesAt}` : 'Aberto';
 }
 
@@ -159,7 +177,8 @@ export function restaurantEntryState(input: {
 
 /** Legenda das portas de um restaurante fechado: "Abre às 19:00". */
 export function closedCaption(status: RestaurantLiveStatus | undefined | null): string {
-  return status?.opensAt ? `Abre às ${status.opensAt}` : 'Fechado';
+  const when = opensWhenLabel(status);
+  return when ? `Abre ${when}` : 'Fechado';
 }
 
 /**

@@ -18,6 +18,7 @@ import {
   amenityChipLimitForWidth,
   casualDiningConfigOf,
   occupancyTone,
+  opensWhenLabel,
   restaurantAmenityChips,
 } from './casual-dining-ui';
 import { OpeningHoursSheet } from './OpeningHoursSheet';
@@ -453,7 +454,7 @@ export default function RestaurantDetailView({
               <Text style={[styles.statusValue, { color: status.isOpen ? colors.success : colors.foregroundMuted }]}>
                 {status.isOpen
                   ? (status.closesAt ? `Aberto até ${status.closesAt}` : 'Aberto')
-                  : (status.opensAt ? `Fechado · abre às ${status.opensAt}` : 'Fechado')}
+                  : (opensWhenLabel(status) ? `Fechado · abre ${opensWhenLabel(status)}` : 'Fechado')}
               </Text>
             </View>
           </TouchableOpacity>

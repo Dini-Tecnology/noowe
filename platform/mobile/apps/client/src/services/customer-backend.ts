@@ -395,6 +395,10 @@ export type RestaurantLiveStatus = {
   restaurantId: string;
   isOpen: boolean;
   opensAt: string | null;
+  /** Em quantos dias é a próxima abertura (0 = hoje, 1 = amanhã...); null com o restaurante aberto. */
+  opensInDays: number | null;
+  /** Dia da semana da próxima abertura (0 = domingo). */
+  opensWeekday: number | null;
   closesAt: string | null;
   groupsWaiting: number;
   estimatedWaitMinutes: number;
@@ -901,6 +905,8 @@ function mapLiveStatus(value: unknown): RestaurantLiveStatus | null {
     restaurantId: String(row.restaurantId),
     isOpen: Boolean(row.isOpen),
     opensAt: optionalString(row.opensAt),
+    opensInDays: row.opensInDays == null ? null : numberValue(row.opensInDays),
+    opensWeekday: row.opensWeekday == null ? null : numberValue(row.opensWeekday),
     closesAt: optionalString(row.closesAt),
     groupsWaiting: numberValue(row.groupsWaiting),
     estimatedWaitMinutes: numberValue(row.estimatedWaitMinutes),

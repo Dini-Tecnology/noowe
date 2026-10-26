@@ -1,4 +1,4 @@
-import { closedCaption, restaurantEntryState } from '../screens/production/casual-dining-ui';
+import { closedCaption, openLabel, opensWhenLabel, restaurantEntryState } from '../screens/production/casual-dining-ui';
 import { shouldShowActiveTableBar } from '../components/table/ActiveTableBar';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -40,6 +40,30 @@ describe('restaurantEntryState (ADR-021)', () => {
 
   it('sem status ainda, não bloqueia', () => {
     expect(restaurantEntryState({ activeHere: false, activeElsewhere: false, status: undefined })).toBe('open');
+  });
+});
+
+describe('próxima abertura de um restaurante fechado', () => {
+  const closed = (over: Record<string, unknown>) => status({ isOpen: false, ...over });
+
+  it('hoje, amanhã e dias depois (com o dia da semana)', () => {
+    expect(opensWhenLabel(closed({ opensAt: '19:00', opensInDays: 0, opensWeekday: 1 }))).toBe('às 19:00');
+    expect(opensWhenLabel(closed({ opensAt: '10:00', opensInDays: 1, opensWeekday: 2 }))).toBe('amanhã às 10:00');
+    expect(opensWhenLabel(closed({ opensAt: '19:00', opensInDays: 4, opensWeekday: 5 }))).toBe('sex às 19:00');
+    expect(opensWhenLabel(closed({ opensAt: '12:30', opensInDays: 6, opensWeekday: 0 }))).toBe('dom às 12:30');
+  });
+
+  it('sem dias no payload antigo, assume hoje; aberto ou sem horário não tem texto', () => {
+    expect(opensWhenLabel(closed({ opensAt: '19:00' }))).toBe('às 19:00');
+    expect(opensWhenLabel(status({ isOpen: true }))).toBeNull();
+    expect(opensWhenLabel(closed({ opensAt: null }))).toBeNull();
+  });
+
+  it('a legenda das portas e o card de status usam o mesmo texto', () => {
+    const tomorrow = closed({ opensAt: '10:00', opensInDays: 1, opensWeekday: 2 });
+    expect(closedCaption(tomorrow)).toBe('Abre amanhã às 10:00');
+    expect(openLabel(tomorrow)).toBe('Fechado · abre amanhã às 10:00');
+    expect(openLabel(closed({ opensAt: null }))).toBe('Fechado agora');
   });
 });
 

@@ -128,3 +128,13 @@ describe('waitlist preference = setores do mapa de mesas', () => {
     );
   });
 });
+
+test('fila fechada: a próxima abertura em outro dia vem pronta do servidor', () => {
+  const at = (hours: number, minutes: number) => new Date(2026, 9, 26, hours, minutes);
+  expect(closedQueueMessage('10:00', at(14, 0), 'amanhã às 10:00'))
+    .toBe('A fila virtual abre junto com o restaurante, amanhã às 10:00.');
+  expect(closedQueueMessage('19:00', at(14, 0), 'sex às 19:00'))
+    .toBe('A fila virtual abre junto com o restaurante, sex às 19:00.');
+  // Hoje ainda vale a regra antiga (só cita o horário se ele ainda está à frente).
+  expect(closedQueueMessage('19:00', at(15, 8), 'às 19:00')).toBe('A fila virtual abre junto com o restaurante, hoje às 19:00.');
+});
