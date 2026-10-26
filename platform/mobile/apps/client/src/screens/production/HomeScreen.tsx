@@ -506,7 +506,7 @@ export default function HomeScreen({ navigation }: any) {
         </View>
 
         <DevTableScanButton
-          onOpened={(restaurantId) => rootNavigate(navigation, 'Menu', { restaurantId })}
+          onOpened={() => enterComanda(navigation)}
           onOpenAccount={(tableSessionId) => rootNavigate(navigation, 'FecharConta', { tableSessionId })}
         />
 
