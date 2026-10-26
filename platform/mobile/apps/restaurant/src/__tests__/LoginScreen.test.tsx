@@ -17,36 +17,44 @@ import { render, fireEvent, waitFor, screen } from '@testing-library/react-nativ
 
 const mockNavigate = vi.fn();
 const mockReplace = vi.fn();
+const mockLogin = vi.fn();
+const mockValidateForm = vi.fn((...args: any[]) => ({ success: true, errors: {} }));
+const mockHaptic = {
+  successNotification: vi.fn(),
+  errorNotification: vi.fn(),
+};
 
-vi.mock('@react-navigation/native', () => ({
+// `vi` é só um alias de `jest` neste projeto (vitest-shim): apenas `jest.mock` é içado acima dos
+// imports. Com `vi.mock` a tela carregava os módulos reais. As fábricas só tocam os espiões na hora
+// da chamada, porque os `const` acima ainda não existem quando a fábrica roda.
+jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
-    navigate: mockNavigate,
-    replace: mockReplace,
-    goBack: vi.fn(),
-    setOptions: vi.fn(),
-    addListener: vi.fn(),
+    navigate: (...a: unknown[]) => mockNavigate(...a),
+    replace: (...a: unknown[]) => mockReplace(...a),
+    goBack: jest.fn(),
+    setOptions: jest.fn(),
+    addListener: jest.fn(),
   }),
   useRoute: () => ({ params: {} }),
-  useFocusEffect: vi.fn(),
+  useFocusEffect: jest.fn(),
 }));
 
-const mockLogin = vi.fn();
-vi.mock('@/shared/services/auth', () => ({
+jest.mock('@/shared/services/auth', () => ({
   authService: {
-    login: mockLogin,
-    logout: vi.fn(),
-    getCurrentUser: vi.fn(),
+    login: (...a: unknown[]) => mockLogin(...a),
+    logout: jest.fn(),
+    getCurrentUser: jest.fn(),
   },
 }));
 
-vi.mock('@/shared/services/secure-storage', () => ({
+jest.mock('@/shared/services/secure-storage', () => ({
   secureStorage: {
-    getBiometricEnabled: vi.fn().mockResolvedValue(false),
-    setUserEmail: vi.fn(),
+    getBiometricEnabled: jest.fn().mockResolvedValue(false),
+    setUserEmail: jest.fn(),
   },
 }));
 
-vi.mock('@/shared/hooks/useBiometricAuth', () => ({
+jest.mock('@/shared/hooks/useBiometricAuth', () => ({
   useBiometricAuth: () => ({
     isAvailable: false,
     isEnrolled: false,
@@ -54,47 +62,43 @@ vi.mock('@/shared/hooks/useBiometricAuth', () => ({
   }),
 }));
 
-vi.mock('@okinawa/shared/utils/logger', () => ({
+jest.mock('@okinawa/shared/utils/logger', () => ({
+  __esModule: true,
   default: {
-    error: vi.fn(),
+    error: jest.fn(),
   },
 }));
 
-vi.mock('@/shared/hooks/useI18n', () => ({
+jest.mock('@/shared/hooks/useI18n', () => ({
   useI18n: () => ({
     t: (key: string) => key,
     language: 'pt-BR',
   }),
 }));
 
-vi.mock('@okinawa/shared/contexts/ThemeContext', () => ({
-  useColors: () => ({
-    background: '#FFFFFF',
-    foreground: '#111827',
-    foregroundSecondary: '#6B7280',
-    mutedForeground: '#6B7280',
-    card: '#F9FAFB',
-    primary: '#EA580C',
-    border: '#E5E7EB',
-    error: '#DC2626',
-  }),
-}));
-
-const mockValidateForm = vi.fn((...args: any[]) => ({ success: true, errors: {} }));
-vi.mock('@/shared/validation/schemas', () => ({
+jest.mock('@/shared/validation/schemas', () => ({
   loginSchema: {},
-  validateForm: (...args: any[]) => mockValidateForm(...args),
+  validateForm: (...args: unknown[]) => mockValidateForm(...args),
 }));
 
-const mockHaptic = {
-  successNotification: vi.fn(),
-  errorNotification: vi.fn(),
-};
-vi.mock('@/shared/utils/haptics', () => ({
-  default: mockHaptic,
+jest.mock('@/shared/utils/haptics', () => ({
+  __esModule: true,
+  default: {
+    successNotification: (...a: unknown[]) => mockHaptic.successNotification(...a),
+    errorNotification: (...a: unknown[]) => mockHaptic.errorNotification(...a),
+  },
 }));
 
+import { ThemeProvider } from '@okinawa/shared/contexts/ThemeContext';
 import LoginScreen from '../screens/auth/LoginScreen';
+
+// A tela lê o tema de componentes compartilhados: precisa do provedor real.
+// O setup troca o HelperText do react-native-paper por um elemento simples: o texto fica na árvore,
+// mas não em um Text nativo, então getByText não o encontra.
+const hasText = (text: string) => JSON.stringify(screen.toJSON()).includes(JSON.stringify(text).slice(1, -1));
+
+const renderLogin = (props: React.ComponentProps<typeof LoginScreen>) =>
+  render(<ThemeProvider defaultMode="light"><LoginScreen {...props} /></ThemeProvider>);
 
 // ============================================================
 // TESTS
@@ -119,33 +123,33 @@ describe('Restaurant LoginScreen', () => {
   // ---- Rendering ----
 
   it('renders the restaurant auth title', () => {
-    render(<LoginScreen {...defaultProps} />);
+    renderLogin(defaultProps);
     expect(screen.getByText('NOOWE Restaurant')).toBeTruthy();
   });
 
   it('renders email and password inputs with accessibility labels', () => {
-    render(<LoginScreen {...defaultProps} />);
-    expect(screen.getByLabelText('Email address')).toBeTruthy();
-    expect(screen.getByLabelText('Password')).toBeTruthy();
+    renderLogin(defaultProps);
+    expect(screen.getByLabelText('auth.a11y.email')).toBeTruthy();
+    expect(screen.getByLabelText('auth.a11y.password')).toBeTruthy();
   });
 
   it('renders login button with accessibility role', () => {
-    render(<LoginScreen {...defaultProps} />);
-    expect(screen.getByLabelText('Log in')).toBeTruthy();
+    renderLogin(defaultProps);
+    expect(screen.getByLabelText('auth.a11y.login')).toBeTruthy();
   });
 
   // ---- Field interaction ----
 
   it('updates email input value', () => {
-    render(<LoginScreen {...defaultProps} />);
-    const emailInput = screen.getByLabelText('Email address');
+    renderLogin(defaultProps);
+    const emailInput = screen.getByLabelText('auth.a11y.email');
     fireEvent.changeText(emailInput, 'manager@restaurant.com');
     expect(emailInput.props.value).toBe('manager@restaurant.com');
   });
 
   it('updates password input value', () => {
-    render(<LoginScreen {...defaultProps} />);
-    const passwordInput = screen.getByLabelText('Password');
+    renderLogin(defaultProps);
+    const passwordInput = screen.getByLabelText('auth.a11y.password');
     fireEvent.changeText(passwordInput, 'StaffPass99');
     expect(passwordInput.props.value).toBe('StaffPass99');
   });
@@ -158,11 +162,11 @@ describe('Restaurant LoginScreen', () => {
       errors: { email: 'Email is required' },
     });
 
-    render(<LoginScreen {...defaultProps} />);
-    fireEvent.press(screen.getByLabelText('Log in'));
+    renderLogin(defaultProps);
+    fireEvent.press(screen.getByLabelText('auth.a11y.login'));
 
     await waitFor(() => {
-      expect(screen.getByText('Email is required')).toBeTruthy();
+      expect(hasText('Email is required')).toBe(true);
     });
   });
 
@@ -172,8 +176,8 @@ describe('Restaurant LoginScreen', () => {
       errors: { password: 'Password is required' },
     });
 
-    render(<LoginScreen {...defaultProps} />);
-    fireEvent.press(screen.getByLabelText('Log in'));
+    renderLogin(defaultProps);
+    fireEvent.press(screen.getByLabelText('auth.a11y.login'));
 
     await waitFor(() => {
       expect(mockHaptic.errorNotification).toHaveBeenCalled();
@@ -186,8 +190,8 @@ describe('Restaurant LoginScreen', () => {
       errors: { email: 'Invalid email' },
     });
 
-    render(<LoginScreen {...defaultProps} />);
-    fireEvent.press(screen.getByLabelText('Log in'));
+    renderLogin(defaultProps);
+    fireEvent.press(screen.getByLabelText('auth.a11y.login'));
 
     await waitFor(() => {
       expect(mockLogin).not.toHaveBeenCalled();
@@ -196,35 +200,35 @@ describe('Restaurant LoginScreen', () => {
 
   // ---- Login success ----
 
-  it('calls authService.login and navigates to Main on success', async () => {
+  it('calls authService.login with the typed credentials on success', async () => {
     mockLogin.mockResolvedValueOnce({
       user: { id: 'staff-1', email: 'staff@rest.com' },
       access_token: 'token',
     });
 
-    render(<LoginScreen {...defaultProps} />);
+    renderLogin(defaultProps);
 
-    fireEvent.changeText(screen.getByLabelText('Email address'), 'staff@rest.com');
-    fireEvent.changeText(screen.getByLabelText('Password'), 'ValidPass1');
-    fireEvent.press(screen.getByLabelText('Log in'));
+    fireEvent.changeText(screen.getByLabelText('auth.a11y.email'), 'staff@rest.com');
+    fireEvent.changeText(screen.getByLabelText('auth.a11y.password'), 'ValidPass1');
+    fireEvent.press(screen.getByLabelText('auth.a11y.login'));
 
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith('staff@rest.com', 'ValidPass1');
     });
 
-    await waitFor(() => {
-      expect(defaultProps.navigation.replace).toHaveBeenCalledWith('Main');
-    });
+    // A tela não navega: a troca para o app principal vem do listener de sessão (ProductionNavigation).
+    await waitFor(() => expect(mockHaptic.successNotification).toHaveBeenCalled());
+    expect(defaultProps.navigation.replace).not.toHaveBeenCalled();
   });
 
   it('triggers success haptic on successful login', async () => {
     mockLogin.mockResolvedValueOnce({ user: { id: '1' } });
 
-    render(<LoginScreen {...defaultProps} />);
+    renderLogin(defaultProps);
 
-    fireEvent.changeText(screen.getByLabelText('Email address'), 'a@b.com');
-    fireEvent.changeText(screen.getByLabelText('Password'), 'Pass1');
-    fireEvent.press(screen.getByLabelText('Log in'));
+    fireEvent.changeText(screen.getByLabelText('auth.a11y.email'), 'a@b.com');
+    fireEvent.changeText(screen.getByLabelText('auth.a11y.password'), 'Pass1');
+    fireEvent.press(screen.getByLabelText('auth.a11y.login'));
 
     await waitFor(() => {
       expect(mockHaptic.successNotification).toHaveBeenCalled();
@@ -238,28 +242,28 @@ describe('Restaurant LoginScreen', () => {
       response: { data: { message: 'Account suspended' } },
     });
 
-    render(<LoginScreen {...defaultProps} />);
+    renderLogin(defaultProps);
 
-    fireEvent.changeText(screen.getByLabelText('Email address'), 'bad@rest.com');
-    fireEvent.changeText(screen.getByLabelText('Password'), 'wrong');
-    fireEvent.press(screen.getByLabelText('Log in'));
+    fireEvent.changeText(screen.getByLabelText('auth.a11y.email'), 'bad@rest.com');
+    fireEvent.changeText(screen.getByLabelText('auth.a11y.password'), 'wrong');
+    fireEvent.press(screen.getByLabelText('auth.a11y.login'));
 
     await waitFor(() => {
-      expect(screen.getByText('Account suspended')).toBeTruthy();
+      expect(hasText('Account suspended')).toBe(true);
     });
   });
 
   it('shows generic error when server provides no message', async () => {
-    mockLogin.mockRejectedValueOnce(new Error('Timeout'));
+    mockLogin.mockRejectedValueOnce(new Error(''));
 
-    render(<LoginScreen {...defaultProps} />);
+    renderLogin(defaultProps);
 
-    fireEvent.changeText(screen.getByLabelText('Email address'), 'a@b.com');
-    fireEvent.changeText(screen.getByLabelText('Password'), 'pass');
-    fireEvent.press(screen.getByLabelText('Log in'));
+    fireEvent.changeText(screen.getByLabelText('auth.a11y.email'), 'a@b.com');
+    fireEvent.changeText(screen.getByLabelText('auth.a11y.password'), 'pass');
+    fireEvent.press(screen.getByLabelText('auth.a11y.login'));
 
     await waitFor(() => {
-      expect(screen.getByText('auth.loginFailed')).toBeTruthy();
+      expect(hasText('Falha no login')).toBe(true);
     });
   });
 
@@ -271,18 +275,18 @@ describe('Restaurant LoginScreen', () => {
       errors: { email: 'Email is required' },
     });
 
-    render(<LoginScreen {...defaultProps} />);
-    fireEvent.press(screen.getByLabelText('Log in'));
+    renderLogin(defaultProps);
+    fireEvent.press(screen.getByLabelText('auth.a11y.login'));
 
     await waitFor(() => {
-      expect(screen.getByText('Email is required')).toBeTruthy();
+      expect(hasText('Email is required')).toBe(true);
     });
 
     // Type in email to clear error
-    fireEvent.changeText(screen.getByLabelText('Email address'), 'new@email.com');
+    fireEvent.changeText(screen.getByLabelText('auth.a11y.email'), 'new@email.com');
 
     await waitFor(() => {
-      expect(screen.queryByText('Email is required')).toBeNull();
+      expect(hasText('Email is required')).toBe(false);
     });
   });
 });
