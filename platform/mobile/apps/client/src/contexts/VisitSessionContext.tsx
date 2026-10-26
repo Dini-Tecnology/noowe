@@ -30,6 +30,11 @@ export type OpenFromQrOptions = {
 type VisitSessionContextValue = {
   session: VisitSession | null;
   restoring: boolean;
+  /**
+   * ADR-021: sem internet a comanda continua visível (guardada no aparelho) e nada novo pode ser
+   * pedido. `true` enquanto a sessão mostrada não pôde ser confirmada no servidor.
+   */
+  offline: boolean;
   /** `dev` uses the emulator check-in, which skips the reservation/waitlist requirement (database dev flag). */
   openFromQr: (qrData: string, options?: OpenFromQrOptions) => Promise<VisitSession>;
   /** Abre a mesa depois que a recepção liberou a solicitação de abertura (ADR-016). */
@@ -56,14 +61,17 @@ const VisitSessionContext = createContext<VisitSessionContextValue | null>(null)
 export function VisitSessionProvider({ children }: React.PropsWithChildren) {
   const [session, setSession] = useState<VisitSession | null>(null);
   const [restoring, setRestoring] = useState(true);
+  const [offline, setOffline] = useState(false);
   const currentSession = useRef<VisitSession | null>(null);
   const version = useRef(0);
 
   useEffect(() => {
+    let cachedTable: VisitSession | null = null;
     AsyncStorage.getItem(STORAGE_KEY)
       .then((stored) => {
         if (!stored) return;
         const parsed = JSON.parse(stored) as VisitSession;
+        if (parsed.restaurantId && parsed.tableSessionId) cachedTable = parsed;
         // A cached table membership must be confirmed by the server.
         if (parsed.restaurantId && !parsed.tableSessionId && version.current === 0) {
           currentSession.current = parsed;
@@ -79,7 +87,15 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
         if (active) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(active));
         else await AsyncStorage.removeItem(STORAGE_KEY);
       })
-      .catch(() => { /* Offline: do not resurrect an unverified table. */ })
+      .catch(() => {
+        // Sem internet: a comanda guardada continua visível, marcada como não confirmada. O servidor
+        // é a fonte da verdade e a reconfirma assim que a conexão voltar (ADR-021).
+        if (cachedTable && version.current === 0) {
+          currentSession.current = cachedTable;
+          setSession(cachedTable);
+          setOffline(true);
+        }
+      })
       .finally(() => setRestoring(false));
   }, []);
 
@@ -87,6 +103,7 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
     version.current += 1;
     currentSession.current = next;
     setSession(next);
+    setOffline(false);
     if (next) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     else await AsyncStorage.removeItem(STORAGE_KEY);
   }, []);
@@ -165,7 +182,14 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
   const clearSession = useCallback(() => persist(null), [persist]);
 
   const refreshSession = useCallback(async () => {
-    const active = await customerBackend.getActiveVisit();
+    let active: VisitSession | null;
+    try {
+      active = await customerBackend.getActiveVisit();
+    } catch (error) {
+      // Não conseguiu confirmar: mantém a comanda que está na tela e avisa que está sem conexão.
+      if (currentSession.current?.tableSessionId) setOffline(true);
+      throw error;
+    }
     await persist(active);
     return active;
   }, [persist]);
@@ -183,9 +207,9 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
   }, [persist, session]);
 
   const value = useMemo(() => ({
-    session, restoring, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromInviteCode, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
+    session, restoring, offline, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromInviteCode, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
   }), [
-    session, restoring, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromInviteCode, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
+    session, restoring, offline, openFromQr, openFromApprovedRequest, joinFromInvite, joinFromInviteCode, joinFromUserInvite, selectRestaurant, selectWaitlistJourney, leaveTable, clearSession, refreshSession, completeCheckout,
   ]);
 
   return <VisitSessionContext.Provider value={value}>{children}</VisitSessionContext.Provider>;

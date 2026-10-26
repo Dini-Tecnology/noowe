@@ -129,6 +129,40 @@ export function occupancyTone(status: RestaurantLiveStatus | undefined | null): 
 }
 
 /**
+ * Nenhuma mesa livre: o "Escanear QR" fica desativado e o cliente vai para a fila virtual.
+ * Sem status, ou restaurante sem mesas cadastradas, não bloqueia: na dúvida, deixa ler.
+ * Antes da migration de `tablesAvailable`, cai para total menos ocupadas.
+ */
+export function hasNoFreeTable(status: RestaurantLiveStatus | undefined | null): boolean {
+  if (!status || status.tablesTotal <= 0) return false;
+  const free = status.tablesAvailable ?? status.tablesTotal - status.tablesOccupied;
+  return free <= 0;
+}
+
+/**
+ * Em que estado está a porta de entrada do restaurante para este cliente (ADR-021). A ordem importa:
+ * comanda aqui ou em outro restaurante vence o horário, e o horário vence a lotação.
+ */
+export type RestaurantEntryState = 'in_comanda_here' | 'in_comanda_elsewhere' | 'closed' | 'full' | 'open';
+
+export function restaurantEntryState(input: {
+  activeHere: boolean;
+  activeElsewhere: boolean;
+  status: RestaurantLiveStatus | undefined | null;
+}): RestaurantEntryState {
+  if (input.activeHere) return 'in_comanda_here';
+  if (input.activeElsewhere) return 'in_comanda_elsewhere';
+  if (input.status && !input.status.isOpen) return 'closed';
+  if (hasNoFreeTable(input.status)) return 'full';
+  return 'open';
+}
+
+/** Legenda das portas de um restaurante fechado: "Abre às 19:00". */
+export function closedCaption(status: RestaurantLiveStatus | undefined | null): string {
+  return status?.opensAt ? `Abre às ${status.opensAt}` : 'Fechado';
+}
+
+/**
  * Badges over the photo of a discovery card — only the two family-facing
  * amenities, so the card stays readable at a glance.
  */

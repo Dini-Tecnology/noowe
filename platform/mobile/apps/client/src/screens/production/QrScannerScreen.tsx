@@ -1,3 +1,4 @@
+import { enterComanda, goToComanda } from '../../navigation/comanda';
 import React, { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -43,8 +44,9 @@ export default function QrScannerScreen({ navigation, route }: any) {
     // Falha de rede se resolve tentando o mesmo código de novo; o resto não.
     lastRejected.current = !outcome.ok && outcome.reason !== 'network' ? { data, at: Date.now() } : null;
     showTableQrOutcome(outcome, {
-      onOpened: (restaurantId) => navigation.replace('Menu', { restaurantId }),
+      onOpened: () => enterComanda(navigation),
       onRetry: unlock,
+      onOpenComanda: () => goToComanda(navigation),
       onOpenAccount: () => {
         void (async () => {
           try {
@@ -64,7 +66,7 @@ export default function QrScannerScreen({ navigation, route }: any) {
     <DevTableScanButton
       variant={permission?.granted ? 'dark' : 'light'}
       restaurantId={contextRestaurantId}
-      onOpened={(restaurantId) => navigation.replace('Menu', { restaurantId })}
+      onOpened={() => enterComanda(navigation)}
       onOpenAccount={(tableSessionId) => navigation.replace('FecharConta', { tableSessionId })}
     />
   );

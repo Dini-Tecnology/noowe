@@ -45,7 +45,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    registerCustomerPushToken().catch(() => undefined);
+    registerCustomerPushToken({ askPermission: false }).catch(() => undefined);
     const unsubscribeToken = subscribeCustomerPushTokenChanges();
     const received = Notifications.addNotificationReceivedListener(() => {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
@@ -60,7 +60,7 @@ export default function App() {
       };
     }
     const { data } = getSupabaseClient().auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN') registerCustomerPushToken().catch(() => undefined);
+      if (event === 'SIGNED_IN') registerCustomerPushToken({ askPermission: false }).catch(() => undefined);
     });
     return () => {
       data.subscription.unsubscribe();

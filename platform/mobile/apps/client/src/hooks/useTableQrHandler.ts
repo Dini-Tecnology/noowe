@@ -17,7 +17,7 @@ const QR_REQUEST_TIMEOUT_MS = 15_000;
 /**
  * Códigos que o servidor devolve para o fluxo de QR:
  *  22023 QR nunca gerado/assinatura inválida · P0002 QR não existe ou expirou na resolução ·
- *  P0006 substituído por um QR mais novo · P0007 vencido · P0004 já tem conta aberta ·
+ *  P0006 substituído por um QR mais novo · P0007 vencido · P0004 já tem conta aberta · P0016 já está em outra comanda ·
  *  P0005 mesa indisponível OU check-in sem reserva/fila (a mensagem diferencia) ·
  *  P0008 mesa lotada, aguardando a recepção · P0010 restaurante fechado ·
  *  P0011 grupo maior que a mesa onde a recepção ajusta a mesa antes (Fine) ·
@@ -144,6 +144,7 @@ export function useTableQrHandler() {
         };
       }
       if (code === 'P0004') return { ok: false, reason: 'active_account' };
+      if (code === 'P0016') return { ok: false, reason: 'active_comanda' };
       // Anything else lands in the network fallback. Log the shape so we can
       // tell an offline hiccup apart from an unrecognized error code the RPC
       // will start throwing when the schema grows — those need to become

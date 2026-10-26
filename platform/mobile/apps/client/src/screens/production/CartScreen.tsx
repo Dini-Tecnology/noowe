@@ -43,7 +43,7 @@ function estimatedTimeFromCartItems(items: CartItem[]): number | null {
 export default function CartScreen({ navigation, route }: any) {
   const colors = useColors();
   const cart = useCart();
-  const { session } = useVisitSession();
+  const { session, offline } = useVisitSession();
   const queryClient = useQueryClient();
   // The comanda belongs to whichever restaurant the customer is seated at —
   // that's the session, not the (possibly empty) draft cart.
@@ -420,7 +420,7 @@ export default function CartScreen({ navigation, route }: any) {
                       })
                     : place.mutate()
                 }
-                disabled={ctaDisabled || quickIncomplete || place.isPending}
+                disabled={ctaDisabled || quickIncomplete || place.isPending || offline}
                 accessibilityState={{ disabled: ctaDisabled || quickIncomplete }}
                 accessibilityRole="button"
               >

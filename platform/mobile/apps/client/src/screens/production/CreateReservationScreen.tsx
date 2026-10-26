@@ -1,3 +1,4 @@
+import { registerCustomerPushToken } from '../../services/customer-push';
 import React, { useMemo, useState } from 'react';
 import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -232,6 +233,8 @@ export default function CreateReservationScreen({ route, navigation }: any) {
       });
     },
     onSuccess: async (reservation) => {
+      // ADR-021: lembrete e aviso de check-in dependem de notificação; pede a permissão aqui.
+      void registerCustomerPushToken().catch(() => undefined);
       void queryClient.invalidateQueries({ queryKey: ['reservations'] });
       void queryClient.invalidateQueries({ queryKey: ['reservation-availability', restaurantId] });
       let inviteUrl: string | undefined;

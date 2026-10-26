@@ -46,7 +46,6 @@ describe('customer lists are scoped to the signed-in user', () => {
 
   it.each([
     ['orders', () => customerBackend.listOrders(), ['customer_id', 'user-1']],
-    ['reservations', () => customerBackend.listReservations(), ['customer_id', 'user-1']],
     ['favorites', () => customerBackend.listFavorites(), ['user_id', 'user-1']],
     ['loyalty_programs', () => customerBackend.listLoyalty(), ['user_id', 'user-1']],
   ] as const)('%s', async (table, load, expectedFilter) => {
@@ -56,6 +55,12 @@ describe('customer lists are scoped to the signed-in user', () => {
 
   // The queue list goes through an RPC scoped to auth.uid() server-side (it also
   // computes the live position), never through a staff-visible table select.
+  it('reservations passam por RPC escopada em auth.uid() (ADR-021)', async () => {
+    await customerBackend.listReservations();
+    expect(mockRpc).toHaveBeenCalledWith('customer_list_reservations');
+    expect(mockFromCalls.find((entry) => entry.table === 'reservations')).toBeUndefined();
+  });
+
   it('waitlist_entries', async () => {
     await customerBackend.listMyWaitlist();
     expect(mockRpc).toHaveBeenCalledWith('customer_my_waitlist');

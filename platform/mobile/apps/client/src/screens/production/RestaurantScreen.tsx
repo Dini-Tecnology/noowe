@@ -11,13 +11,20 @@ import customerBackend, { type CustomerRestaurant } from '../../services/custome
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { useJourneyModel } from '../../hooks/useJourneyModel';
 import { restaurantExperiences } from './home-restaurant-ui';
+import { closedCaption, hasNoFreeTable, restaurantEntryState } from './casual-dining-ui';
+import { goToComanda, openInComanda } from '../../navigation/comanda';
+import { useLeaveTable } from '../../hooks/useLeaveTable';
 import { useQuickReorder } from '../../hooks/useQuickReorder';
 import { useCart } from '@/shared/contexts/CartContext';
 import { isActiveQuickOrder, quickJourneyKeys } from './quick-service-ui';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { FloatingCartBar } from '../../components/cart/FloatingCartBar';
 import { StateView, useQueryRefreshControl, tableLabel } from './shared';
-import RestaurantDetailView, { type RestaurantJourneyAction } from './RestaurantDetailView';
+import RestaurantDetailView, { type RestaurantComandaCard, type RestaurantEntryNotice, type RestaurantJourneyAction } from './RestaurantDetailView';
+
+const FULL_TITLE = 'Restaurante lotado';
+const FULL_MESSAGE = 'Todas as mesas estão ocupadas, então não dá para abrir mesa pelo QR Code agora.';
+const FULL_QUEUE_HINT = ' Entre na fila virtual e avisamos quando sua mesa estiver pronta.';
 
 /** Full-bleed viewer for the photos a restaurant actually published. */
 function PhotoGalleryModal({
@@ -73,7 +80,7 @@ export default function RestaurantScreen({ route, navigation }: any) {
   const [galleryOpen, setGalleryOpen] = useState(false);
 
   const query = useQuery({ queryKey: ['restaurant', restaurantId], queryFn: () => customerBackend.getRestaurant(restaurantId) });
-  const { session, selectRestaurant, leaveTable: leaveCurrentTable } = useVisitSession();
+  const { session, selectRestaurant } = useVisitSession();
   // A experiência vem da mesa aberta, do chip da descoberta ou do seletor desta página (ADR-017).
   const journeyModel = useJourneyModel(restaurantId, routeModel);
   const serviceTypeFor = useServiceTypeFor(restaurantId, journeyModel);
@@ -130,7 +137,6 @@ export default function RestaurantScreen({ route, navigation }: any) {
   const cart = useCart();
   const { reorder } = useQuickReorder(navigation);
 
-  const openMenu = useCallback(() => navigation.navigate('Menu', { restaurantId }), [navigation, restaurantId]);
   const openReserve = useCallback(
     () =>
       navigation.navigate('CreateReservation', {
@@ -145,24 +151,6 @@ export default function RestaurantScreen({ route, navigation }: any) {
     () => navigation.navigate('QrScanner', { contextRestaurantId: restaurantId, contextRestaurantName: query.data?.name }),
     [navigation, restaurantId, query.data?.name],
   );
-  const leaveTable = useCallback(() => {
-    Alert.alert(
-      'Sair da mesa',
-      `Encerrar sua sessão na ${tableLabel(session?.tableNumber)}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: () => {
-            void leaveCurrentTable().catch(() => {
-              Alert.alert('Não foi possível sair', 'Verifique sua conexão e tente novamente.');
-            });
-          },
-        },
-      ],
-    );
-  }, [session, leaveCurrentTable]);
 
   const startQuickOrder = useCallback((intent: 'now' | 'scheduled') => {
     const state = quickStatus.data;
@@ -181,19 +169,87 @@ export default function RestaurantScreen({ route, navigation }: any) {
   const activeQuickOrder = orders.find(isActiveQuickOrder);
   const lastQuickOrder = orders[0];
 
+  const openMenu = useCallback(() => {
+    // Com comanda aqui o cardápio é filho dela: o "voltar" cai na comanda, não nesta página.
+    if (session?.restaurantId === restaurantId && session?.tableSessionId) openInComanda(navigation, 'Menu', { restaurantId });
+    else navigation.navigate('Menu', { restaurantId });
+  }, [navigation, restaurantId, session?.restaurantId, session?.tableSessionId]);
+  const activeSessionHere = session?.restaurantId === restaurantId && !!session?.tableSessionId;
+  const activeElsewhere = !!session?.tableSessionId && session.restaurantId !== restaurantId;
+  // ADR-021: comanda aqui ou noutro restaurante vence o horário, e o horário vence a lotação.
+  // Sem mesa livre, o QR não abre mesa: o "Escanear QR" fica apagado e a saída é a fila virtual.
+  const entryState = restaurantEntryState({ activeHere: activeSessionHere, activeElsewhere, status: liveStatus.data });
+  const noFreeTable = entryState === 'full';
+  const closedLabel = closedCaption(liveStatus.data);
+  const { run: leaveTable, label: leaveLabel } = useLeaveTable(navigation);
+  const queueEnabled = serviceTypeFor.features.virtualQueue;
+  const fullMessage = FULL_MESSAGE + (queueEnabled ? FULL_QUEUE_HINT : '');
+
+  // O status ao vivo pode ter até um minuto: confirma no servidor antes de explicar o bloqueio.
+  const explainNoFreeTable = useCallback(async () => {
+    const fresh = await liveStatus.refetch();
+    if (!hasNoFreeTable(fresh.data)) {
+      openScanner();
+      return;
+    }
+    Alert.alert(
+      FULL_TITLE,
+      fullMessage,
+      queueEnabled
+        ? [{ text: 'Agora não', style: 'cancel' }, { text: 'Entrar na fila', onPress: openWaitlist }]
+        : [{ text: 'OK' }],
+    );
+  }, [liveStatus, openScanner, openWaitlist, fullMessage, queueEnabled]);
+
+  const entryNotice = useMemo<RestaurantEntryNotice | undefined>(() => {
+    if (!noFreeTable || !serviceTypeFor.features.qrOrdering) return undefined;
+    return queueEnabled
+      ? { title: FULL_TITLE, message: fullMessage, actionLabel: 'Entrar na fila virtual', onAction: openWaitlist }
+      : { title: FULL_TITLE, message: fullMessage };
+  }, [noFreeTable, serviceTypeFor.features.qrOrdering, queueEnabled, fullMessage, openWaitlist]);
+
   // Escanear QR · Reservar · Fila Virtual — each one appears only where the
   // restaurant's capabilities enable that entry point. Chamar garçom não entra
   // aqui: é ação de quem já está sentado, não de quem está decidindo entrar.
+  const explainClosed = useCallback(() => {
+    Alert.alert('Restaurante fechado', `${closedLabel}.${serviceTypeFor.features.reservations ? ' Você ainda pode reservar uma mesa.' : ''}`);
+  }, [closedLabel, serviceTypeFor.features.reservations]);
+  const explainActiveComanda = useCallback(() => {
+    const where = session?.restaurantName ? ` da ${session.restaurantName}` : '';
+    Alert.alert(
+      'Você já está em uma comanda',
+      `Você já está na ${tableLabel(session?.tableNumber)}${where}. Encerre a comanda para continuar.`,
+      [{ text: 'Agora não', style: 'cancel' }, { text: 'Ver minha comanda', onPress: () => goToComanda(navigation) }],
+    );
+  }, [session?.restaurantName, session?.tableNumber, navigation]);
+
   const journeyActions = useMemo(() => {
     const actions: RestaurantJourneyAction[] = [];
-    if (serviceTypeFor.features.qrOrdering) {
-      actions.push({ key: 'scan', icon: 'qr-code-outline', label: 'Escanear QR', onPress: openScanner });
+    // ADR-021: com comanda aqui as três portas somem (o card "Ver minha comanda" ocupa o lugar).
+    const doors = entryState !== 'in_comanda_here';
+    if (doors && serviceTypeFor.features.qrOrdering) {
+      if (entryState === 'closed') {
+        actions.push({ key: 'scan', icon: 'qr-code-outline', label: 'Escanear QR', caption: closedLabel, disabled: true, onPress: explainClosed });
+      } else if (entryState === 'in_comanda_elsewhere') {
+        actions.push({ key: 'scan', icon: 'qr-code-outline', label: 'Escanear QR', caption: 'Comanda ativa', disabled: true, onPress: explainActiveComanda });
+      } else if (noFreeTable) {
+        actions.push({ key: 'scan', icon: 'qr-code-outline', label: 'Escanear QR', caption: 'Lotado', disabled: true, onPress: () => { void explainNoFreeTable(); } });
+      } else {
+        actions.push({ key: 'scan', icon: 'qr-code-outline', label: 'Escanear QR', highlighted: true, onPress: openScanner });
+      }
     }
-    if (serviceTypeFor.features.reservations) {
-      actions.push({ key: 'reserve', icon: 'calendar-outline', label: 'Reservar', onPress: openReserve });
+    if (doors && serviceTypeFor.features.reservations) {
+      // Reservar continua valendo fechado ou com comanda em outro lugar: é um compromisso futuro.
+      actions.push({ key: 'reserve', icon: 'calendar-outline', label: 'Reservar', highlighted: entryState === 'closed', onPress: openReserve });
     }
-    if (serviceTypeFor.features.virtualQueue) {
-      actions.push({ key: 'waitlist', icon: 'timer-outline', label: 'Fila Virtual', onPress: openWaitlist });
+    if (doors && serviceTypeFor.features.virtualQueue) {
+      if (entryState === 'closed') {
+        actions.push({ key: 'waitlist', icon: 'timer-outline', label: 'Fila Virtual', caption: closedLabel, disabled: true, onPress: explainClosed });
+      } else if (entryState === 'in_comanda_elsewhere') {
+        actions.push({ key: 'waitlist', icon: 'timer-outline', label: 'Fila Virtual', caption: 'Comanda ativa', disabled: true, onPress: explainActiveComanda });
+      } else {
+        actions.push({ key: 'waitlist', icon: 'timer-outline', label: 'Fila Virtual', highlighted: noFreeTable, onPress: openWaitlist });
+      }
     }
     // Quick Service (ADR-013): as ações do "totem no app" vêm das capabilities orderAhead /
     // pickupSlots, nunca do nome do modelo.
@@ -211,9 +267,16 @@ export default function RestaurantScreen({ route, navigation }: any) {
       }
     }
     return actions;
-  }, [serviceTypeFor.features, openScanner, openReserve, openWaitlist, orderAhead, pickupSlots, activeQuickOrder, lastQuickOrder, startQuickOrder, navigation, reorder]);
+  }, [serviceTypeFor.features, entryState, closedLabel, explainClosed, explainActiveComanda, noFreeTable, explainNoFreeTable, openScanner, openReserve, openWaitlist, orderAhead, pickupSlots, activeQuickOrder, lastQuickOrder, startQuickOrder, navigation, reorder]);
 
-  const activeSessionHere = session?.restaurantId === restaurantId && !!session?.tableSessionId;
+  const comandaCard = useMemo<RestaurantComandaCard | undefined>(() => {
+    if (!activeSessionHere) return undefined;
+    return {
+      title: `Você está na ${tableLabel(session?.tableNumber)}`,
+      actionLabel: 'Ver minha comanda',
+      onPress: () => goToComanda(navigation),
+    };
+  }, [activeSessionHere, session?.tableNumber, navigation]);
 
   // Seletor "Na mesa" | "Retirada": só em restaurante com mais de uma experiência e sem mesa aberta.
   const experiences = useMemo(() => {
@@ -306,10 +369,13 @@ export default function RestaurantScreen({ route, navigation }: any) {
         isFavorite={isFavorite}
         favoritePending={favorite.isPending}
         journeyActions={journeyActions}
+        entryNotice={entryNotice}
+        comandaCard={comandaCard}
+        leaveLabel={leaveLabel}
         experiences={experiences}
         quickStatus={quickStatus.data}
         showQuickInfo={orderAhead}
-        showOccupancy={serviceTypeFor.capabilities?.tableSession !== false}
+        showOccupancy={serviceTypeFor.capabilities?.tableSession !== false && liveStatus.data?.isOpen !== false}
         activeSessionHere={activeSessionHere}
         tableNumber={session?.tableNumber}
         refreshControl={refreshControl}

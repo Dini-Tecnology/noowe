@@ -1,4 +1,9 @@
 import { PartySizePromptHost } from '../components/table/PartySizePrompt';
+import { ActiveTableBar } from '../components/table/ActiveTableBar';
+import { OfflineNotice } from '../components/table/OfflineNotice';
+import { goToComanda, openInComanda } from './comanda';
+import { useResumeActiveComanda } from './useComandaResume';
+import { useVisitSession } from '../contexts/VisitSessionContext';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -25,7 +30,7 @@ import {
   HomeScreen, KidsActivitiesScreen, LoyaltyScreen,
   MenuScreen, ModoFamiliaScreen, NotificationsScreen, OrderDetailScreen, OrderReadyScreen, OrdersScreen, PaymentSuccessScreen, PrivacyScreen,
   PaymentMethodsScreen, ProfileScreen, PromotionsScreen, QrScannerScreen, QuickServiceCheckoutScreen, ReservationConfirmationScreen, ReservationRestaurantScreen,
-  ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TableCodeScreen, InviteExpiredScreen, TipPaymentScreen, SharePaymentScreen,
+  ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TableCodeScreen, TableWelcomeScreen, InviteExpiredScreen, TipPaymentScreen, SharePaymentScreen,
   WaitlistScreen,
 } from '../screens/production';
 
@@ -177,6 +182,7 @@ function DefaultMainTabs() {
   );
 }
 
+const COMANDA_PUSH_TYPES = new Set(['table_moved', 'table_session_closed']);
 const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update', 'table_open_approved', 'table_open_update', 'table_moved']);
 
 
@@ -187,6 +193,10 @@ const TABLE_INVITE_PUSH_TYPES = new Set(['table_invite', 'table_invite_update', 
  */
 function useOpenTableInviteFromPush() {
   const navigation = useNavigation<any>();
+  const { session } = useVisitSession();
+  const hasComanda = !!session?.tableSessionId;
+  const hasComandaRef = React.useRef(hasComanda);
+  hasComandaRef.current = hasComanda;
   useEffect(() => {
     const handled = new Set<string>();
     const open = (response: Notifications.NotificationResponse | null) => {
@@ -199,10 +209,19 @@ function useOpenTableInviteFromPush() {
       const orderId = orderIdFromPush(data);
       if (orderId) {
         handled.add(id);
-        navigation.navigate('OrderDetail', { orderId });
+        // Com comanda ativa o pedido é filho dela: o "voltar" cai na comanda (ADR-021).
+        if (hasComandaRef.current) openInComanda(navigation, 'OrderDetail', { orderId });
+        else navigation.navigate('OrderDetail', { orderId });
         return;
       }
-      if (typeof type !== 'string' || !TABLE_INVITE_PUSH_TYPES.has(type)) return;
+      if (typeof type !== 'string') return;
+      // Mesa trocada ou encerrada pela equipe: o destino é a comanda ativa, quando houver.
+      if (COMANDA_PUSH_TYPES.has(type) && hasComandaRef.current) {
+        handled.add(id);
+        goToComanda(navigation);
+        return;
+      }
+      if (!TABLE_INVITE_PUSH_TYPES.has(type)) return;
       handled.add(id);
       navigation.navigate('Notifications');
     };
@@ -214,16 +233,12 @@ function useOpenTableInviteFromPush() {
 
 function MainTabs() {
   useOpenTableInviteFromPush();
+  useResumeActiveComanda(useNavigation<any>());
   // TODO: LiquidGlassMainTabs (native BottomTabs/BottomTabsScreen from react-native-screens)
   // creates a UITabBarController natively but it never becomes visible on-screen — confirmed via
   // device log (UITabBarController prefs lookups fire, but no bar renders). Needs a react-native-screens
   // fix/upgrade before this can replace the fallback.
-  return (
-    <>
-      <DefaultMainTabs />
-      <PartySizePromptHost />
-    </>
-  );
+  return <DefaultMainTabs />;
 }
 
 export default function ProductionNavigation() {
@@ -304,7 +319,20 @@ export default function ProductionNavigation() {
   }
 
   if (!authenticated) return <AuthNavigator />;
-  return <Stack.Navigator screenOptions={{ headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false }}>
+  // O "Quantas pessoas?" fica fora da pilha: dentro de uma tela (era a Main), o Modal só
+  // aparece quando essa tela volta ao topo. Com o scanner por cima, a leitura girava para
+  // sempre e o seletor surgia só depois de fechar a câmera.
+  return <>
+  <Stack.Navigator
+    screenOptions={{ headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false }}
+    screenLayout={({ children, route, navigation }) => (
+      <View style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>{children}</View>
+        <OfflineNotice />
+        <ActiveTableBar route={route} navigation={navigation} />
+      </View>
+    )}
+  >
     <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
     <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Restaurant" component={RestaurantScreen} options={{ headerShown: false }} />
@@ -315,6 +343,7 @@ export default function ProductionNavigation() {
     <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ headerShown: false }} />
     <Stack.Screen name="OrderReady" component={OrderReadyScreen} options={{ headerShown: false, gestureEnabled: false }} />
     <Stack.Screen name="QrScanner" component={QrScannerScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="TableWelcome" component={TableWelcomeScreen} options={{ headerShown: false, gestureEnabled: false }} />
     <Stack.Screen name="TableCode" component={TableCodeScreen} options={{ headerShown: false }} />
     <Stack.Screen name="InviteExpired" component={InviteExpiredScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Reservations" component={ReservationsScreen} options={{ headerShown: false }} />
@@ -343,7 +372,9 @@ export default function ProductionNavigation() {
     <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Support" component={SupportScreen} options={{ headerShown: false }} />
-  </Stack.Navigator>;
+  </Stack.Navigator>
+  <PartySizePromptHost />
+  </>;
 }
 
 const authStyles = StyleSheet.create({

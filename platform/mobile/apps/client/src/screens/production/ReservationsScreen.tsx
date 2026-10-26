@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Image, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,10 +7,12 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend, { type CustomerReservation } from '../../services/customer-backend';
 import { rootNavigate, StateView, useQueryRefreshControl } from './shared';
+import { formatClock, formatCountdown, reservationCardState } from './reservation-ui';
+import { describeTableInviteError } from '../../hooks/useTableUserInvites';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Aguardando confirmação', confirmed: 'Confirmada', seated: 'Na mesa',
-  completed: 'Concluída', cancelled: 'Cancelada', no_show: 'Não compareceu',
+  completed: 'Concluída', cancelled: 'Cancelada', no_show: 'Reserva expirada',
 };
 
 // Finished reservations read as history, not as something needing attention.
@@ -41,6 +43,25 @@ export default function ReservationsScreen({ navigation }: any) {
         { text: 'Cancelar reserva', style: 'destructive', onPress: () => cancel.mutate(reservation.id) },
       ],
     );
+  // Reavalia a janela de check-in sem precisar reabrir a tela.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const checkIn = useMutation({
+    mutationFn: (reservation: CustomerReservation) => customerBackend.checkInReservation(reservation.id)
+      .then((result) => ({ result, reservation })),
+    onSuccess: ({ result, reservation }) => {
+      void queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      if (result.tableReady) {
+        rootNavigate(navigation, 'QrScanner', { contextRestaurantId: reservation.restaurantId, contextRestaurantName: reservation.restaurantName });
+        return;
+      }
+      Alert.alert('Check-in feito', 'Sua mesa ainda não está pronta. Avisamos você assim que for liberada.');
+    },
+    onError: (error: unknown) => Alert.alert('Não foi possível fazer o check-in', describeTableInviteError(error)),
+  });
   const invite = useMutation({
     mutationFn: (id: string) => customerBackend.createReservationInvite(id),
     onSuccess: (url) => Share.share({ message: `Participe da minha reserva na Noowe: ${url}`, url }),
@@ -75,6 +96,7 @@ export default function ReservationsScreen({ navigation }: any) {
   const startReservation = () => rootNavigate(navigation, 'ReservationRestaurant');
   const renderReservation = ({ item }: { item: CustomerReservation }) => {
     const date = new Date(item.reservationTime);
+    const state = reservationCardState(item, now);
     return (
       <TouchableOpacity
         style={styles.card}
@@ -94,9 +116,29 @@ export default function ReservationsScreen({ navigation }: any) {
             <Text style={[styles.status, INACTIVE_STATUSES.includes(item.status) && { color: colors.foregroundMuted }]}>
               {STATUS_LABELS[item.status] ?? item.status}
             </Text>
+            {state.kind === 'upcoming' ? (
+              <Text style={styles.meta} testID={`reservation-hint-${item.id}`}>
+                Check-in disponível a partir das {formatClock(state.opensAt)} · faltam {formatCountdown(state.msUntilOpen)}
+              </Text>
+            ) : null}
+            {state.kind === 'waiting_table' ? <Text style={styles.status} testID={`reservation-hint-${item.id}`}>Aguardando sua mesa</Text> : null}
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.foregroundMuted} />
         </View>
+        {state.kind === 'check_in' ? (
+          <View style={styles.actions}>
+            <TouchableOpacity onPress={() => checkIn.mutate(item)} disabled={checkIn.isPending} accessibilityRole="button" testID={`reservation-check-in-${item.id}`}>
+              <Text style={styles.action}>Fazer check-in</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {state.kind === 'expired' ? (
+          <View style={styles.actions}>
+            <TouchableOpacity onPress={() => rootNavigate(navigation, 'Waitlist', { restaurantId: item.restaurantId })} accessibilityRole="button" testID={`reservation-join-queue-${item.id}`}>
+              <Text style={styles.action}>Entrar na fila</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         {['pending', 'confirmed'].includes(item.status) && date > new Date() ? (
           <View style={styles.actions}>
             <TouchableOpacity onPress={() => invite.mutate(item.id)} accessibilityRole="button"><Text style={styles.action}>Convidar</Text></TouchableOpacity>

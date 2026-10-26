@@ -25,7 +25,12 @@ export type VisitSession = {
   waitlistEntryId?: string;
   /** O check-in devolveu a visita atual porque a mesa do cliente foi trocada pela recepção (ADR-018). */
   tableMoved?: boolean;
+  /** Vêm de `customer_get_active_visit` (ADR-021) para o app se reconstruir sozinho no cold start. */
+  restaurantName?: string;
+  billingStatus?: 'open' | 'billing';
 };
+
+export type MyTableBalance = { owedCents: number; hasConsumption: boolean };
 
 export type ServiceQrResolution =
   | { kind: 'counter'; restaurantId: string; serviceModel: 'quick_service'; counterLabel: string }
@@ -316,6 +321,11 @@ export type CustomerReservation = {
   specialRequests: string | null;
   status: string;
   createdAt: string;
+  /** Janela de check-in calculada no servidor (ADR-021); null em reservas lidas sem ela. */
+  checkInOpensAt: string | null;
+  checkInClosesAt: string | null;
+  /** O cliente já registrou a chegada e aguarda a mesa. */
+  checkedInAt: string | null;
 };
 
 export type KidActivity = {
@@ -337,6 +347,10 @@ export type CustomerWaitlistEntry = {
   estimatedWaitMinutes: number | null;
   tableNumber: string | null;
   createdAt: string;
+  /** Até quando o cliente chamado pode se apresentar (ADR-021); null fora do estado `called`. */
+  presentUntil: string | null;
+  /** Quantas vezes perdeu o prazo; a segunda falta tira da fila (ADR-002). */
+  missedCalls: number;
 };
 
 export type WaitlistOccupancyLevel = 'baixa' | 'media' | 'alta' | 'indisponivel';
@@ -389,6 +403,8 @@ export type RestaurantLiveStatus = {
   occupancyPercent: number | null;
   tablesTotal: number;
   tablesOccupied: number;
+  /** Mesas `available`; null enquanto a RPC ainda não devolve o campo (migration não aplicada). */
+  tablesAvailable: number | null;
 };
 
 export type CustomerNotification = {
@@ -578,6 +594,8 @@ export interface CustomerBackend {
   /** Development only. Marks the caller's order ready so the prep wait can be skipped. */
   devSkipPrep(orderId: string): Promise<void>;
   leaveTableSession(tableSessionId: string): Promise<void>;
+  /** Quanto a pessoa ainda deve na mesa (ADR-021); o servidor calcula, o app só exibe. */
+  getMyTableBalance(tableSessionId: string): Promise<MyTableBalance>;
   placeOrder(input: PlaceOrderInput): Promise<CustomerOrder>;
   startPayment(input: { orderId: string; paymentMethod: string; idempotencyKey?: string }): Promise<{
     transactionId: string; orderId: string; paymentStatus: CustomerPaymentStatus; idempotentReplay: boolean; simulated: boolean;
@@ -597,6 +615,8 @@ export interface CustomerBackend {
   getOrder(id: string): Promise<CustomerOrder>;
   cancelOrder(id: string, reason?: string): Promise<CustomerOrder>;
   listReservations(): Promise<CustomerReservation[]>;
+  /** Registra a chegada dentro da janela (ADR-021). `tableReady` diz se já dá para ler o QR da mesa. */
+  checkInReservation(id: string): Promise<{ reservationId: string; restaurantId: string; tableReady: boolean }>;
   createReservation(input: { restaurantId: string; reservationTime: string; partySize: number; specialRequests?: string }): Promise<CustomerReservation>;
   cancelReservation(id: string, reason?: string): Promise<CustomerReservation>;
   /** `capacity` é null quando a RPC ainda não devolve a coluna (migration não aplicada). */
@@ -840,6 +860,9 @@ function mapReservation(row: Record<string, unknown>): CustomerReservation {
     specialRequests: typeof row.special_requests === 'string' ? row.special_requests : null,
     status: String(row.status),
     createdAt: String(row.created_at),
+    checkInOpensAt: optionalString(row.check_in_opens_at) ?? null,
+    checkInClosesAt: optionalString(row.check_in_closes_at) ?? null,
+    checkedInAt: optionalString(row.checked_in_at) ?? null,
   };
 }
 
@@ -855,6 +878,8 @@ function mapWaitlist(row: Record<string, unknown>): CustomerWaitlistEntry {
     estimatedWaitMinutes: row.estimated_wait_minutes == null ? null : numberValue(row.estimated_wait_minutes),
     tableNumber: typeof row.table_number === 'string' ? row.table_number : null,
     createdAt: String(row.created_at),
+    presentUntil: typeof row.present_until === 'string' ? row.present_until : null,
+    missedCalls: numberValue(row.missed_calls),
   };
 }
 
@@ -884,6 +909,7 @@ function mapLiveStatus(value: unknown): RestaurantLiveStatus | null {
     occupancyPercent: row.occupancyPercent == null ? null : numberValue(row.occupancyPercent),
     tablesTotal: numberValue(row.tablesTotal),
     tablesOccupied: numberValue(row.tablesOccupied),
+    tablesAvailable: row.tablesAvailable == null ? null : numberValue(row.tablesAvailable),
   };
 }
 
@@ -950,6 +976,10 @@ function mapVisitSession(value: unknown): VisitSession | null {
     tableId: String(row.tableId ?? ''),
     tableSessionId: String(row.tableSessionId),
     tableNumber: String(row.tableNumber ?? ''),
+    ...(row.serviceModel === 'fine_dining' || row.serviceModel === 'casual_dining' || row.serviceModel === 'quick_service'
+      ? { serviceModel: row.serviceModel as ServiceModel } : {}),
+    ...(typeof row.restaurantName === 'string' ? { restaurantName: row.restaurantName } : {}),
+    ...(row.billingStatus === 'billing' || row.billingStatus === 'open' ? { billingStatus: row.billingStatus } : {}),
   };
 }
 
@@ -1376,6 +1406,15 @@ export const customerBackend: CustomerBackend = {
     if (error) throw error;
   },
 
+  async getMyTableBalance(tableSessionId) {
+    const { data, error } = await getSupabaseClient().rpc('customer_my_table_balance', {
+      p_table_session_id: tableSessionId,
+    });
+    if (error) throw error;
+    const row = objectValue(data);
+    return { owedCents: numberValue(row.owedCents), hasConsumption: Boolean(row.hasConsumption) };
+  },
+
   async placeOrder(input) {
     const items = input.items.map((item) => ({
       menu_item_id: item.menuItemId, quantity: item.quantity,
@@ -1491,12 +1530,17 @@ export const customerBackend: CustomerBackend = {
   },
 
   async listReservations() {
-    const userId = await requireUserId();
-    const { data, error } = await getSupabaseClient().from('reservations')
-      .select('*, restaurant:restaurants(name, logo_url, banner_url)').eq('customer_id', userId)
-      .order('reservation_time', { ascending: false });
+    // RPC escopada em auth.uid(): expira reservas vencidas e devolve a janela de check-in (ADR-021).
+    const { data, error } = await (getSupabaseClient() as any).rpc('customer_list_reservations');
     if (error) throw error;
-    return (data ?? []).map((row) => mapReservation(row as unknown as Record<string, unknown>));
+    return (Array.isArray(data) ? data : []).map((row) => mapReservation(row as Record<string, unknown>));
+  },
+
+  async checkInReservation(id) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('customer_reservation_check_in', { p_reservation_id: id });
+    if (error) throw error;
+    const row = objectValue(data);
+    return { reservationId: String(row.reservationId ?? id), restaurantId: String(row.restaurantId ?? ''), tableReady: Boolean(row.tableReady) };
   },
 
   async createReservation(input) {

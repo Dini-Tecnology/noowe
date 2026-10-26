@@ -10,7 +10,7 @@ import { useVisitSession } from '../contexts/VisitSessionContext';
  * ao cliente onde sentar. Também atualiza ao voltar ao app, caso o evento tenha se perdido.
  */
 export function VisitTableSync() {
-  const { session, refreshSession } = useVisitSession();
+  const { session, refreshSession, offline } = useVisitSession();
   const tableSessionId = session?.tableSessionId ?? null;
 
   useEffect(() => {
@@ -18,7 +18,14 @@ export function VisitTableSync() {
     let active = true;
     let channel: { unsubscribe?: () => unknown } | null = null;
     void customerBackend.subscribeToUserNotifications((notification) => {
-      if (notification.type !== 'table_moved' || notification.metadata.table_session_id !== tableSessionId) return;
+      if (notification.metadata.table_session_id !== tableSessionId) return;
+      if (notification.type === 'table_session_closed') {
+        // ADR-021: a equipe encerrou a comanda. O servidor já não devolve visita ativa; o app volta ao normal.
+        void refreshSession().catch(() => undefined);
+        Toast.show({ type: 'info', text1: 'Comanda encerrada', text2: 'O restaurante encerrou a sua comanda.' });
+        return;
+      }
+      if (notification.type !== 'table_moved') return;
       void refreshSession().catch(() => undefined);
       Toast.show({
         type: 'info',
@@ -38,6 +45,13 @@ export function VisitTableSync() {
       appState.remove();
     };
   }, [tableSessionId, refreshSession]);
+
+  // Sem conexão a comanda guardada continua na tela; tenta reconfirmar com o servidor a cada 15 s (ADR-021).
+  useEffect(() => {
+    if (!offline) return undefined;
+    const timer = setInterval(() => { void refreshSession().catch(() => undefined); }, 15 * 1000);
+    return () => clearInterval(timer);
+  }, [offline, refreshSession]);
 
   return null;
 }

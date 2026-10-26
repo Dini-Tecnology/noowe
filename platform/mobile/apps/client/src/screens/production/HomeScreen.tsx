@@ -1,5 +1,7 @@
 /* Hallmark · pre-emit critique: P5 H5 E4 S5 R4 V5 */
 /* Hallmark · macrostructure: Photographic · tone: warm utilitarian · anchor hue: orange */
+import { enterComanda, goToComanda } from '../../navigation/comanda';
+import { useLeaveTable } from '../../hooks/useLeaveTable';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -80,7 +82,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null
 export default function HomeScreen({ navigation }: any) {
   useRestorePaymentConfirmation(navigation);
   const colors = useColors();
-  const { session, selectRestaurant, refreshSession, leaveTable: leaveCurrentTable } = useVisitSession();
+  const { session, selectRestaurant, refreshSession } = useVisitSession();
   const { handleQrScanned } = useTableQrHandler();
   const { handleInviteToken } = useTableInviteHandler();
   const [search, setSearch] = useState('');
@@ -104,8 +106,9 @@ export default function HomeScreen({ navigation }: any) {
       if (!pending) return;
       const outcome = await handleQrScanned(pending);
       showTableQrOutcome(outcome, {
-        onOpened: (restaurantId) => rootNavigate(navigation, 'Menu', { restaurantId }),
+        onOpened: () => enterComanda(navigation),
         onRetry: () => {},
+        onOpenComanda: () => goToComanda(navigation),
         onOpenAccount: () => {
           void (async () => {
             try {
@@ -130,7 +133,7 @@ export default function HomeScreen({ navigation }: any) {
       if (!token) return;
       const outcome = await handleInviteToken(token);
       if (outcome.ok) {
-        rootNavigate(navigation, 'Menu', { restaurantId: outcome.restaurantId });
+        enterComanda(navigation);
       } else if (inviteLinkFailureDestination(outcome.reason) === 'InviteExpired') {
         rootNavigate(navigation, 'InviteExpired');
       } else {
@@ -142,24 +145,7 @@ export default function HomeScreen({ navigation }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const leaveTable = useCallback(() => {
-    Alert.alert(
-      'Sair da mesa',
-      `Encerrar sua sessão na ${tableLabel(session?.tableNumber)}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: () => {
-            void leaveCurrentTable().catch(() => {
-              Alert.alert('Não foi possível sair', 'Verifique sua conexão e tente novamente.');
-            });
-          },
-        },
-      ],
-    );
-  }, [session, leaveCurrentTable]);
+  const { run: leaveTable, mustPay: mustPayBeforeLeaving } = useLeaveTable(navigation);
 
   const isCasualDining = selectedServiceType === 'casual_dining';
   const isFineDiningTab = selectedServiceType === 'fine_dining';
@@ -525,21 +511,21 @@ export default function HomeScreen({ navigation }: any) {
         />
 
         <IncomingTableInviteBanner
-          onJoined={(visit) => rootNavigate(navigation, 'Menu', { restaurantId: visit.restaurantId })}
+          onJoined={() => enterComanda(navigation)}
         />
 
         {session?.tableSessionId && (
           <View style={styles.tableBanner}>
             <TouchableOpacity
               style={styles.tableBannerMain}
-              onPress={() => rootNavigate(navigation, 'Restaurant', { restaurantId: session.restaurantId })}
+              onPress={() => goToComanda(navigation)}
               accessibilityRole="button"
             >
               <Ionicons name="restaurant-outline" size={18} color={colors.primary} />
-              <Text style={styles.tableBannerText}>{tableLabel(session.tableNumber)} aberta</Text>
+              <Text style={styles.tableBannerText}>{tableLabel(session.tableNumber)} · Ver minha comanda</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={leaveTable} accessibilityRole="button" hitSlop={8}>
-              <Text style={styles.tableBannerLeave}>Sair</Text>
+              <Text style={styles.tableBannerLeave}>{mustPayBeforeLeaving ? 'Pagar' : 'Sair'}</Text>
             </TouchableOpacity>
           </View>
         )}

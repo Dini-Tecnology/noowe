@@ -1,13 +1,14 @@
 import React from 'react';
-import { Dimensions } from 'react-native';
+import { Alert, Dimensions } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { CommonActions } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@okinawa/shared/contexts/ThemeContext';
 import type { RestaurantCapabilityContract, ServiceModel } from '@okinawa/shared/config/capabilities';
 import { VisitSessionProvider } from '../contexts/VisitSessionContext';
 import { ServiceTypeProvider } from '../contexts/ServiceTypeContext';
-import { amenityChipLimitForWidth, restaurantAmenityChips } from '../screens/production/casual-dining-ui';
+import { amenityChipLimitForWidth, hasNoFreeTable, restaurantAmenityChips } from '../screens/production/casual-dining-ui';
 import RestaurantScreen from '../screens/production/RestaurantScreen';
 import { journeyButtonWidth } from '../screens/production/RestaurantDetailView';
 
@@ -23,6 +24,8 @@ const mockGetLiveStatus = jest.fn();
 const mockListFavorites = jest.fn();
 const mockGetQuickStatus = jest.fn();
 const mockListOrders = jest.fn();
+const mockGetActiveVisit = jest.fn();
+const mockGetMyBalance = jest.fn();
 
 jest.mock('../services/customer-backend', () => ({
   __esModule: true,
@@ -33,6 +36,8 @@ jest.mock('../services/customer-backend', () => ({
     listFavorites: (...args: unknown[]) => mockListFavorites(...args),
     getQuickServiceStatus: (...args: unknown[]) => mockGetQuickStatus(...args),
     listOrders: (...args: unknown[]) => mockListOrders(...args),
+    getActiveVisit: (...args: unknown[]) => mockGetActiveVisit(...args),
+    getMyTableBalance: (...args: unknown[]) => mockGetMyBalance(...args),
     getMenu: jest.fn(),
     setFavorite: jest.fn(),
   },
@@ -139,7 +144,11 @@ function buildContract(
 
 function renderScreen(params: { serviceModel?: ServiceModel } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const navigation = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn() };
+  const main = { name: 'Main', key: 'Main-1' };
+  const navigation = {
+    navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn(), dispatch: jest.fn(), getParent: () => undefined,
+    getState: () => ({ routeNames: ['Main', 'Cart', 'Menu', 'Restaurant', 'FecharConta'], routes: [main, { name: 'Restaurant' }] }),
+  };
   const route = { params: { restaurantId: 'r1', ...params } };
   const utils = render(
     <SafeAreaProvider
@@ -162,6 +171,8 @@ function renderScreen(params: { serviceModel?: ServiceModel } = {}) {
 const SERVICE_MODELS: ServiceModel[] = ['fine_dining', 'casual_dining', 'quick_service'];
 
 beforeEach(() => {
+  mockGetActiveVisit.mockResolvedValue(null);
+  mockGetMyBalance.mockResolvedValue({ owedCents: 0, hasConsumption: false });
   mockGetLiveStatus.mockResolvedValue(null);
   mockListFavorites.mockResolvedValue([]);
   mockGetQuickStatus.mockResolvedValue({
@@ -537,5 +548,214 @@ describe('RestaurantDetailView — journey buttons stay on one row', () => {
     const available = width - 16 * 2;
     expect(Number.isInteger(itemWidth)).toBe(true);
     expect(itemWidth * 3 + 10 * 2).toBeLessThanOrEqual(available);
+  });
+});
+
+describe('hasNoFreeTable — sem mesa livre, o QR não abre mesa', () => {
+  const base = {
+    restaurantId: 'r1', isOpen: true, opensAt: null, closesAt: null, groupsWaiting: 0,
+    estimatedWaitMinutes: 0, occupancyLevel: 'alta' as const, occupancyRatio: 1, occupancyPercent: 100,
+  };
+
+  it('sem status ou sem mesas cadastradas não bloqueia a leitura', () => {
+    expect(hasNoFreeTable(null)).toBe(false);
+    expect(hasNoFreeTable(undefined)).toBe(false);
+    expect(hasNoFreeTable({ ...base, tablesTotal: 0, tablesOccupied: 0, tablesAvailable: 0 })).toBe(false);
+  });
+
+  it('bloqueia quando nenhuma mesa está livre, contando reservada e em limpeza como indisponível', () => {
+    expect(hasNoFreeTable({ ...base, tablesTotal: 5, tablesOccupied: 5, tablesAvailable: 0 })).toBe(true);
+    expect(hasNoFreeTable({ ...base, tablesTotal: 5, tablesOccupied: 3, tablesAvailable: 0 })).toBe(true);
+    expect(hasNoFreeTable({ ...base, tablesTotal: 5, tablesOccupied: 4, tablesAvailable: 1 })).toBe(false);
+  });
+
+  it('antes da migration (tablesAvailable null) usa total menos ocupadas', () => {
+    expect(hasNoFreeTable({ ...base, tablesTotal: 5, tablesOccupied: 5, tablesAvailable: null })).toBe(true);
+    expect(hasNoFreeTable({ ...base, tablesTotal: 5, tablesOccupied: 4, tablesAvailable: null })).toBe(false);
+  });
+});
+
+describe('RestaurantScreen — restaurante lotado desativa o Escanear QR', () => {
+  const live = (tablesAvailable: number) => ({
+    restaurantId: 'r1', isOpen: true, opensAt: null, closesAt: '23:00', groupsWaiting: 2,
+    estimatedWaitMinutes: 20, occupancyLevel: 'alta', occupancyRatio: 1, occupancyPercent: 100,
+    tablesTotal: 4, tablesOccupied: 4 - tablesAvailable, tablesAvailable,
+  });
+  let alertSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('casual_dining'));
+  });
+  afterEach(() => alertSpy.mockRestore());
+
+  it('com mesa livre, o QR abre o scanner e não há aviso', async () => {
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+    mockGetLiveStatus.mockResolvedValue(live(1));
+
+    const { findByTestId, queryByTestId, queryByText, navigation } = renderScreen();
+
+    fireEvent.press(await findByTestId('journey-action-scan'));
+    expect(navigation.navigate).toHaveBeenCalledWith('QrScanner', expect.objectContaining({ contextRestaurantId: 'r1' }));
+    expect(queryByTestId('restaurant-entry-notice')).toBeNull();
+    expect(queryByText('Lotado')).toBeNull();
+  });
+
+  it('sem mesa livre, apaga o QR com "Lotado", avisa e leva para a fila virtual', async () => {
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+    mockGetLiveStatus.mockResolvedValue(live(0));
+
+    const { findByText, getByTestId, navigation } = renderScreen();
+
+    expect(await findByText('Lotado')).toBeTruthy();
+    expect(getByTestId('journey-action-scan').props.accessibilityLabel).toBe('Escanear QR, Lotado');
+    expect(await findByText('Restaurante lotado')).toBeTruthy();
+    expect(await findByText(/Todas as mesas estão ocupadas/)).toBeTruthy();
+
+    fireEvent.press(getByTestId('restaurant-entry-notice-action'));
+    expect(navigation.navigate).toHaveBeenCalledWith('Waitlist', { restaurantId: 'r1' });
+  });
+
+  it('tocar no QR apagado confirma no servidor, explica e oferece a fila — nunca abre o scanner', async () => {
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+    mockGetLiveStatus.mockResolvedValue(live(0));
+
+    const { findByText, getByTestId, navigation } = renderScreen();
+    await findByText('Lotado');
+    const callsBefore = mockGetLiveStatus.mock.calls.length;
+
+    fireEvent.press(getByTestId('journey-action-scan'));
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    expect(mockGetLiveStatus.mock.calls.length).toBeGreaterThan(callsBefore);
+    const [title, , buttons] = alertSpy.mock.calls[0];
+    expect(title).toBe('Restaurante lotado');
+    buttons.find((button: { text: string }) => button.text === 'Entrar na fila').onPress();
+    expect(navigation.navigate).toHaveBeenCalledWith('Waitlist', { restaurantId: 'r1' });
+    expect(navigation.navigate).not.toHaveBeenCalledWith('QrScanner', expect.anything());
+  });
+
+  it('se uma mesa liberou desde a última leitura, o toque já abre o scanner', async () => {
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+    mockGetLiveStatus.mockResolvedValue(live(0));
+
+    const { findByText, getByTestId, navigation } = renderScreen();
+    await findByText('Lotado');
+    mockGetLiveStatus.mockResolvedValue(live(1));
+
+    fireEvent.press(getByTestId('journey-action-scan'));
+
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('QrScanner', expect.anything()));
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('sem fila virtual, avisa que está lotado sem oferecer a fila', async () => {
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining', { virtualQueue: false }));
+    mockGetLiveStatus.mockResolvedValue(live(0));
+
+    const { findByText, queryByTestId, queryByText } = renderScreen();
+
+    expect(await findByText('Restaurante lotado')).toBeTruthy();
+    expect(queryByTestId('restaurant-entry-notice-action')).toBeNull();
+    expect(queryByText(/fila virtual/)).toBeNull();
+  });
+});
+
+describe('RestaurantScreen — a comanda é a casa do cliente (ADR-021)', () => {
+  const live = (over: Record<string, unknown> = {}) => ({
+    restaurantId: 'r1', isOpen: true, opensAt: null, closesAt: '23:00', groupsWaiting: 0,
+    estimatedWaitMinutes: 0, occupancyLevel: 'baixa', occupancyRatio: 0.13, occupancyPercent: 13,
+    tablesTotal: 10, tablesOccupied: 1, tablesAvailable: 9, ...over,
+  });
+  const visitHere = { restaurantId: 'r1', tableId: 't1', tableSessionId: 's1', tableNumber: 'Salão 1' };
+  const main = { name: 'Main', key: 'Main-1' };
+  let alertSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('casual_dining'));
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+  });
+  afterEach(() => alertSpy.mockRestore());
+
+  it('fechado: QR e Fila desabilitados com "Abre às 19:00", só Reservar ativo, sem lotação', async () => {
+    mockGetLiveStatus.mockResolvedValue(live({ isOpen: false, opensAt: '19:00', closesAt: null }));
+
+    const { findAllByText, getByTestId, queryByText, navigation } = renderScreen();
+
+    expect((await findAllByText('Abre às 19:00')).length).toBeGreaterThanOrEqual(2);
+    expect(getByTestId('journey-action-scan').props.accessibilityLabel).toBe('Escanear QR, Abre às 19:00');
+    expect(getByTestId('journey-action-waitlist').props.accessibilityLabel).toBe('Fila Virtual, Abre às 19:00');
+    expect(queryByText('Lotação:')).toBeNull();
+
+    fireEvent.press(getByTestId('journey-action-scan'));
+    expect(alertSpy.mock.calls[0][0]).toBe('Restaurante fechado');
+    expect(navigation.navigate).not.toHaveBeenCalledWith('QrScanner', expect.anything());
+
+    fireEvent.press(getByTestId('journey-action-reserve'));
+    expect(navigation.navigate).toHaveBeenCalledWith('CreateReservation', expect.objectContaining({ restaurantId: 'r1' }));
+  });
+
+  it('com comanda aqui: as três portas somem e "Ver minha comanda" leva à comanda', async () => {
+    mockGetLiveStatus.mockResolvedValue(live());
+    mockGetActiveVisit.mockResolvedValue(visitHere);
+
+    const { findByTestId, queryByTestId, navigation } = renderScreen();
+
+    fireEvent.press(await findByTestId('restaurant-comanda-card'));
+    expect(queryByTestId('journey-action-scan')).toBeNull();
+    expect(queryByTestId('journey-action-reserve')).toBeNull();
+    expect(queryByTestId('journey-action-waitlist')).toBeNull();
+    expect(navigation.dispatch).toHaveBeenCalledWith(
+      CommonActions.reset({ index: 1, routes: [main, { name: 'Cart' }] }),
+    );
+  });
+
+  it('com comanda aqui, o Cardápio abre dentro da comanda: o voltar cai nela', async () => {
+    mockGetLiveStatus.mockResolvedValue(live());
+    mockGetActiveVisit.mockResolvedValue(visitHere);
+
+    const { findByTestId, findByText, navigation } = renderScreen();
+    await findByTestId('restaurant-comanda-card');
+
+    fireEvent.press(await findByText('Cardápio'));
+    expect(navigation.dispatch).toHaveBeenCalledWith(
+      CommonActions.reset({ index: 2, routes: [main, { name: 'Cart' }, { name: 'Menu', params: { restaurantId: 'r1' } }] }),
+    );
+    expect(navigation.navigate).not.toHaveBeenCalledWith('Menu', expect.anything());
+  });
+
+  it('sem saldo: "Mesa · Sair da mesa"; com saldo: "Pagar minha parte" leva à conta, sem sair', async () => {
+    mockGetLiveStatus.mockResolvedValue(live());
+    mockGetActiveVisit.mockResolvedValue(visitHere);
+
+    const first = renderScreen();
+    expect(await first.findByText('Mesa Salão 1 · Sair da mesa')).toBeTruthy();
+    first.unmount();
+
+    mockGetMyBalance.mockResolvedValue({ owedCents: 4500, hasConsumption: true });
+    const { findByText, navigation } = renderScreen();
+    fireEvent.press(await findByText('Mesa Salão 1 · Pagar minha parte'));
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(navigation.dispatch).toHaveBeenCalledWith(
+      CommonActions.reset({ index: 2, routes: [main, { name: 'Cart' }, { name: 'FecharConta', params: { tableSessionId: 's1' } }] }),
+    );
+  });
+
+  it('comanda em outro restaurante: QR e Fila bloqueados e a mensagem leva à comanda atual', async () => {
+    mockGetLiveStatus.mockResolvedValue(live());
+    mockGetActiveVisit.mockResolvedValue({ ...visitHere, restaurantId: 'r2', restaurantName: 'Parrilaria Noowe' });
+
+    const { findByTestId, getByTestId, navigation } = renderScreen();
+    const scan = await findByTestId('journey-action-scan');
+    await waitFor(() => expect(scan.props.accessibilityLabel).toBe('Escanear QR, Comanda ativa'));
+    expect(getByTestId('journey-action-reserve').props.accessibilityLabel).toBe('Reservar');
+
+    fireEvent.press(scan);
+    const [title, message, buttons] = alertSpy.mock.calls[0];
+    expect(title).toBe('Você já está em uma comanda');
+    expect(message).toBe('Você já está na Mesa Salão 1 da Parrilaria Noowe. Encerre a comanda para continuar.');
+    buttons.find((button: { text: string }) => button.text === 'Ver minha comanda').onPress();
+    expect(navigation.dispatch).toHaveBeenCalled();
   });
 });

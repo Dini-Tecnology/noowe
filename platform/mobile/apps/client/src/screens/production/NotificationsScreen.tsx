@@ -1,3 +1,4 @@
+import { enterComanda } from '../../navigation/comanda';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -121,8 +122,8 @@ export default function NotificationsScreen({ navigation }: any) {
   const openApprovedTable = async (requestId: string) => {
     setOpeningRequest(requestId);
     try {
-      const visit = await openFromApprovedRequest(requestId);
-      rootNavigate(navigation, 'Menu', { restaurantId: visit.restaurantId });
+      await openFromApprovedRequest(requestId);
+      enterComanda(navigation);
     } catch (error) {
       Alert.alert('Não foi possível abrir a mesa', error instanceof Error ? error.message : 'Tente escanear o QR da mesa novamente.');
     } finally {
@@ -134,7 +135,7 @@ export default function NotificationsScreen({ navigation }: any) {
     setRespondingInvite(invite.id);
     try {
       const outcome = action === 'accept' ? await acceptTableInvite(invite) : await declineTableInvite(invite);
-      if (outcome.kind === 'joined') rootNavigate(navigation, 'Menu', { restaurantId: outcome.visit.restaurantId });
+      if (outcome.kind === 'joined') enterComanda(navigation);
     } finally {
       setRespondingInvite(null);
     }

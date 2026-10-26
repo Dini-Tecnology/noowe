@@ -52,6 +52,27 @@ export interface RestaurantJourneyAction {
   onPress: () => void;
   /** `primary` ocupa a largura toda acima da linha de ações (ex.: "Fazer pedido" no Quick Service). */
   variant?: 'primary';
+  /** Aparece apagado, mas o toque continua chegando em `onPress` para explicar o motivo. */
+  disabled?: boolean;
+  /** Linha curta sob o rótulo, ex.: "Lotado". */
+  caption?: string;
+  /** A porta que o restaurante quer em destaque agora (aberto: QR; lotado: fila; fechado: reserva). */
+  highlighted?: boolean;
+}
+
+/** Card de destaque de quem já está numa comanda neste restaurante (ADR-021): substitui as portas. */
+export interface RestaurantComandaCard {
+  title: string;
+  actionLabel: string;
+  onPress: () => void;
+}
+
+/** Aviso sobre as ações de entrada, ex.: restaurante sem mesa livre. */
+export interface RestaurantEntryNotice {
+  title: string;
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 export interface RestaurantExperienceOption {
@@ -68,6 +89,10 @@ export interface RestaurantDetailViewProps {
   favoritePending: boolean;
   /** Entry points enabled for this restaurant (QR, reserva, fila, garçom). */
   journeyActions: RestaurantJourneyAction[];
+  entryNotice?: RestaurantEntryNotice;
+  comandaCard?: RestaurantComandaCard;
+  /** Rótulo da saída da mesa: "Sair da mesa" ou, com saldo, "Pagar minha parte". */
+  leaveLabel?: string;
   /** Experiências do restaurante ("Na mesa" | "Retirada", ADR-017); só vem com duas ou mais. */
   experiences?: RestaurantExperienceOption[];
   /** Quick Service (ADR-013): status de pedidos, tempo de preparo e local de retirada. */
@@ -97,6 +122,9 @@ export default function RestaurantDetailView({
   isFavorite,
   favoritePending,
   journeyActions,
+  entryNotice,
+  comandaCard,
+  leaveLabel = 'Sair da mesa',
   experiences,
   quickStatus,
   showQuickInfo = false,
@@ -242,6 +270,28 @@ export default function RestaurantDetailView({
         journeyLabel: {
           fontSize: 12, fontWeight: '600', color: colors.foreground, textAlign: 'center',
         },
+        journeyBtnHighlighted: { borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.card },
+        comandaCard: {
+          flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: PAGE_PADDING, marginTop: 22,
+          padding: 16, borderRadius: 16, backgroundColor: colors.primary,
+        },
+        comandaCardText: { flex: 1, gap: 2 },
+        comandaCardTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
+        comandaCardAction: { fontSize: 13, fontWeight: '600', color: '#fff', textDecorationLine: 'underline' },
+        journeyLabelDisabled: { color: colors.foregroundMuted },
+        journeyCaption: { marginTop: -4, fontSize: 11, fontWeight: '700', color: colors.error, textAlign: 'center' },
+        noticeCard: {
+          marginHorizontal: PAGE_PADDING, marginTop: 22, padding: 14, borderRadius: 16, gap: 6,
+          backgroundColor: colors.backgroundSecondary, borderWidth: 1, borderColor: colors.warning,
+        },
+        noticeHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        noticeTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground },
+        noticeMessage: { fontSize: 13, lineHeight: 18, color: colors.foregroundSecondary },
+        noticeAction: {
+          marginTop: 6, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 9,
+          borderRadius: 12, backgroundColor: colors.primary,
+        },
+        noticeActionText: { fontSize: 14, fontWeight: '700', color: colors.primaryForeground },
         sheetBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
         sheet: {
           backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24,
@@ -327,7 +377,7 @@ export default function RestaurantDetailView({
           {activeSessionHere && (
             <TouchableOpacity onPress={onLeaveTable} accessibilityRole="button" style={styles.leaveTableRow}>
               <Ionicons name="exit-outline" size={14} color={colors.foregroundSecondary} />
-              <Text style={styles.leaveTableText}>{tableLabel(tableNumber)} · Sair da mesa</Text>
+              <Text style={styles.leaveTableText}>{tableLabel(tableNumber)} · {leaveLabel}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -386,7 +436,7 @@ export default function RestaurantDetailView({
               <Ionicons name="chevron-forward" size={14} color={colors.primary} />
             </View>
             <View style={styles.statusRow}>
-              {showOccupancy && (
+              {showOccupancy && status.isOpen && (
                 <View style={styles.statusItem}>
                   <Text style={styles.statusLabel}>Lotação:</Text>
                   <Text style={[styles.statusValue, { color: occupancyTone(status) }]}>
@@ -394,7 +444,7 @@ export default function RestaurantDetailView({
                   </Text>
                 </View>
               )}
-              {showOccupancy && config.estimatedWaitDisplay && (
+              {showOccupancy && status.isOpen && config.estimatedWaitDisplay && (
                 <View style={styles.statusItem}>
                   <Text style={styles.statusLabel}>Espera:</Text>
                   <Text style={[styles.statusValue, { color: colors.foreground }]}>{waitText}</Text>
@@ -472,21 +522,62 @@ export default function RestaurantDetailView({
           </View>
         )}
 
+        {entryNotice && (
+          <View style={styles.noticeCard} accessibilityRole="alert" testID="restaurant-entry-notice">
+            <View style={styles.noticeHeader}>
+              <Ionicons name="alert-circle-outline" size={18} color={colors.warning} />
+              <Text style={styles.noticeTitle}>{entryNotice.title}</Text>
+            </View>
+            <Text style={styles.noticeMessage}>{entryNotice.message}</Text>
+            {entryNotice.actionLabel && entryNotice.onAction && (
+              <TouchableOpacity
+                style={styles.noticeAction}
+                onPress={entryNotice.onAction}
+                accessibilityRole="button"
+                testID="restaurant-entry-notice-action"
+              >
+                <Text style={styles.noticeActionText}>{entryNotice.actionLabel}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {comandaCard && (
+          <TouchableOpacity
+            style={styles.comandaCard}
+            onPress={comandaCard.onPress}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            testID="restaurant-comanda-card"
+          >
+            <Ionicons name="restaurant" size={22} color="#fff" />
+            <View style={styles.comandaCardText}>
+              <Text style={styles.comandaCardTitle}>{comandaCard.title}</Text>
+              <Text style={styles.comandaCardAction}>{comandaCard.actionLabel}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#fff" />
+          </TouchableOpacity>
+        )}
+
         {rowActions.length > 0 && (
           <View style={styles.journeyRow}>
             {rowActions.map((action) => (
               <TouchableOpacity
                 key={action.key}
-                style={[styles.journeyBtn, { width: journeyItemWidth }]}
+                style={[styles.journeyBtn, action.highlighted && styles.journeyBtnHighlighted, { width: journeyItemWidth }]}
                 onPress={action.onPress}
                 activeOpacity={0.85}
                 accessibilityRole="button"
-                accessibilityLabel={action.label}
+                // Sem accessibilityState.disabled: o TouchableOpacity o trata como `disabled` e engoliria
+                // o toque que explica o bloqueio. O motivo vai no rótulo.
+                accessibilityLabel={action.caption ? `${action.label}, ${action.caption}` : action.label}
+                testID={`journey-action-${action.key}`}
               >
-                <Ionicons name={action.icon} size={25} color={colors.primary} />
-                <Text style={styles.journeyLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                <Ionicons name={action.icon} size={25} color={action.disabled ? colors.foregroundMuted : colors.primary} />
+                <Text style={[styles.journeyLabel, action.disabled && styles.journeyLabelDisabled]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {action.label}
                 </Text>
+                {action.caption ? <Text style={styles.journeyCaption} numberOfLines={1}>{action.caption}</Text> : null}
               </TouchableOpacity>
             ))}
           </View>

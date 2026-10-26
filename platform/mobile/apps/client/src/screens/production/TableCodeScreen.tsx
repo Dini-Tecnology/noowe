@@ -1,3 +1,4 @@
+import { enterComanda } from '../../navigation/comanda';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
@@ -28,7 +29,7 @@ export default function TableCodeScreen({ navigation }: any) {
     const outcome = await handleInviteCode(value);
     setBusy(false);
     if (outcome.ok) {
-      rootNavigate(navigation, 'Menu', { restaurantId: outcome.restaurantId });
+      enterComanda(navigation);
       return;
     }
     setFailed(true);

@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { CommonActions } from '@react-navigation/native';
 import IncomingTableInviteBanner from '../components/table/IncomingTableInviteBanner';
 import NotificationsScreen from '../screens/production/NotificationsScreen';
 
@@ -228,14 +229,22 @@ describe('Convite recebido · Notificações', () => {
     client.clear();
   });
 
-  it('accepting from the notification opens the table menu', async () => {
+  it('accepting from the notification enters the comanda through the welcome screen (ADR-021)', async () => {
     mockListNotifications.mockResolvedValue({ data: [notification('n1', 'inv1')], nextCursor: null });
     mockGetInvites.mockResolvedValue([invite({ id: 'inv1' })]);
     mockJoin.mockResolvedValue({ status: 'accepted', visit: visit9, capacityRequestId: null, invite: null, idempotentReplay: false });
-    const navigate = jest.fn();
-    const { view, client } = renderWithClient(<NotificationsScreen navigation={{ goBack: jest.fn(), navigate, getParent: () => undefined }} />);
+    const dispatch = jest.fn();
+    const main = { name: 'Main', key: 'Main-1' };
+    const navigation = {
+      goBack: jest.fn(), navigate: jest.fn(), getParent: () => undefined, dispatch,
+      getState: () => ({ routeNames: ['Main', 'Cart', 'TableWelcome'], routes: [main] }),
+    };
+    const { view, client } = renderWithClient(<NotificationsScreen navigation={navigation} />);
     fireEvent.press(await view.findByTestId('notification-accept-inv1'));
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('Menu', { restaurantId: 'r9' }));
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith(
+      CommonActions.reset({ index: 1, routes: [main, { name: 'TableWelcome' }] }),
+    ));
+    expect(navigation.navigate).not.toHaveBeenCalledWith('Menu', expect.anything());
     client.clear();
   });
 });

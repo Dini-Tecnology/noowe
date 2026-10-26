@@ -113,3 +113,54 @@ test('the test-table shortcut checks in without a booking; a real scan still req
   expect(mockCheckIn).toHaveBeenCalledWith('qr-real', 'casual_dining');
   expect(mockDevCheckIn).toHaveBeenCalledTimes(1);
 });
+
+describe('sem internet (ADR-021)', () => {
+  test('a comanda guardada continua visível e marcada como não confirmada', async () => {
+    await AsyncStorage.setItem(key, JSON.stringify(oldVisit));
+    mockActive.mockRejectedValue(new Error('Network request failed'));
+    const { result } = setup();
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+    expect(result.current.session).toEqual(oldVisit);
+    expect(result.current.offline).toBe(true);
+  });
+
+  test('sem comanda guardada, offline não inventa uma mesa', async () => {
+    mockActive.mockRejectedValue(new Error('Network request failed'));
+    const { result } = setup();
+    await waitFor(() => expect(result.current.restoring).toBe(false));
+    expect(result.current.session).toBeNull();
+    expect(result.current.offline).toBe(false);
+  });
+
+  test('quando a conexão volta, o servidor reconfirma e o aviso some', async () => {
+    await AsyncStorage.setItem(key, JSON.stringify(oldVisit));
+    mockActive.mockRejectedValue(new Error('Network request failed'));
+    const { result } = setup();
+    await waitFor(() => expect(result.current.offline).toBe(true));
+    mockActive.mockResolvedValue(oldVisit);
+    await act(async () => { await result.current.refreshSession(); });
+    expect(result.current.offline).toBe(false);
+    expect(result.current.session).toEqual(oldVisit);
+  });
+
+  test('refresh que falha mantém a comanda na tela e liga o aviso', async () => {
+    mockActive.mockResolvedValue(oldVisit);
+    const { result } = setup();
+    await waitFor(() => expect(result.current.session).toEqual(oldVisit));
+    mockActive.mockRejectedValue(new Error('Network request failed'));
+    await act(async () => { await result.current.refreshSession().catch(() => undefined); });
+    expect(result.current.session).toEqual(oldVisit);
+    expect(result.current.offline).toBe(true);
+  });
+
+  test('o servidor dizendo que a comanda acabou limpa a sessão guardada', async () => {
+    await AsyncStorage.setItem(key, JSON.stringify(oldVisit));
+    mockActive.mockRejectedValue(new Error('offline'));
+    const { result } = setup();
+    await waitFor(() => expect(result.current.offline).toBe(true));
+    mockActive.mockResolvedValue(null);
+    await act(async () => { await result.current.refreshSession(); });
+    expect(result.current.session).toBeNull();
+    expect(result.current.offline).toBe(false);
+  });
+});

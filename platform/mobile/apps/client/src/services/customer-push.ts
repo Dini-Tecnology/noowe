@@ -14,7 +14,12 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function registerCustomerPushToken(): Promise<void> {
+/**
+ * `askPermission: false` só registra o token quando o usuário já autorizou. A permissão é pedida na
+ * abertura da comanda (ADR-021: "Para avisarmos sobre seus pedidos e sua mesa"), não no boot do app.
+ */
+export async function registerCustomerPushToken(options: { askPermission?: boolean } = {}): Promise<void> {
+  const { askPermission = true } = options;
   if (!Device.isDevice || Platform.OS === 'web') return;
   const { data } = await getSupabaseClient().auth.getSession();
   if (!data.session) return;
@@ -28,7 +33,7 @@ export async function registerCustomerPushToken(): Promise<void> {
     });
   }
   const current = await Notifications.getPermissionsAsync();
-  const permission = current.status === 'granted' ? current : await Notifications.requestPermissionsAsync();
+  const permission = current.status === 'granted' || !askPermission ? current : await Notifications.requestPermissionsAsync();
   if (permission.status !== 'granted') return;
 
   // Expo Push works on both platforms and avoids coupling Android delivery to
@@ -49,7 +54,7 @@ export function subscribeCustomerPushTokenChanges() {
   if (!Device.isDevice || Platform.OS === 'web') return () => undefined;
   const subscription = Notifications.addPushTokenListener(() => {
     // Re-resolve the Expo token whenever the underlying native token rotates.
-    void registerCustomerPushToken();
+    void registerCustomerPushToken({ askPermission: false });
   });
   return () => subscription.remove();
 }

@@ -14,6 +14,7 @@ export type QrScanFailureReason =
   | 'table_too_small'
   | 'pickup_only'
   | 'active_account'
+  | 'active_comanda'
   | 'network';
 
 export type QrScanOutcome =
@@ -26,6 +27,8 @@ export function showTableQrOutcome(
     onOpened: (restaurantId: string) => void;
     onRetry: () => void;
     onOpenAccount: () => void;
+    /** ADR-021: leva à comanda ativa (outra mesa). Sem ela, o alerta só volta ao scanner. */
+    onOpenComanda?: () => void;
   },
 ): void {
   if (outcome.ok) {
@@ -125,6 +128,18 @@ export function showTableQrOutcome(
         ? 'Há grupos aguardando na fila. A recepção recebeu sua solicitação e vai liberar a mesa. Avisaremos você.'
         : 'Seu grupo é maior que a mesa. A recepção recebeu sua solicitação e precisa liberar a entrada. Avisaremos você.',
       [{ text: 'Entendi', onPress: actions.onRetry }],
+    );
+    return;
+  }
+  if (outcome.reason === 'active_comanda') {
+    // ADR-021: uma comanda ativa por cliente. Nada é movido nem aberto; a saída é encerrar a atual.
+    Alert.alert(
+      'Você já está em uma comanda',
+      'Encerre a comanda atual para escanear outra mesa.',
+      [
+        { text: 'Voltar', style: 'cancel', onPress: actions.onRetry },
+        ...(actions.onOpenComanda ? [{ text: 'Ver minha comanda', onPress: actions.onOpenComanda }] : []),
+      ],
     );
     return;
   }

@@ -117,6 +117,7 @@ export function describeTableInviteError(error: unknown): string {
   const message = error instanceof Error ? error.message : (error as { message?: string } | null)?.message;
   switch (code) {
     case 'P0004': return 'Quite sua conta na mesa atual antes de entrar em outra.';
+    case 'P0016': return 'Você já está em uma comanda. Encerre a comanda atual para entrar em outra mesa.';
     case 'P0009': return 'Este restaurante não aceita convites por @.';
     case 'P0002': return message && /usu[aá]rio/i.test(message) ? 'Não encontramos ninguém com esse @.' : 'Convite não encontrado.';
     default: return message || 'Não foi possível concluir agora. Tente novamente.';

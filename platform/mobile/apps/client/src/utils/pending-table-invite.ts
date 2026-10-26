@@ -18,3 +18,8 @@ export async function takePendingTableInvite(): Promise<string | null> {
   if (value) await AsyncStorage.removeItem(STORAGE_KEY);
   return value;
 }
+
+/** Só olha, sem limpar: quem decide se há uma entrada pendente antes de retomar a comanda. */
+export async function hasPendingTableInvite(): Promise<boolean> {
+  return !!(await AsyncStorage.getItem(STORAGE_KEY));
+}

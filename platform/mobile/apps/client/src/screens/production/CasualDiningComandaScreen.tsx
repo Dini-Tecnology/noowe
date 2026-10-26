@@ -40,7 +40,7 @@ type PersonGroup = {
 export default function CasualDiningComandaScreen({ navigation }: any) {
   const colors = useColors();
   const cart = useCart();
-  const { session } = useVisitSession();
+  const { session, offline } = useVisitSession();
   // Chamar garçom é ação de quem já está em atendimento — aqui, sentado com a
   // comanda aberta. Continua saindo de capability, nunca do modelo de serviço.
   const { features, capabilities, policies } = useServiceTypeFor(session?.restaurantId);
@@ -343,11 +343,11 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
               <TouchableOpacity
                 style={styles.sendBtn}
                 onPress={() => send.mutate()}
-                disabled={send.isPending}
+                disabled={send.isPending || offline}
                 accessibilityRole="button"
               >
                 <Ionicons name="paper-plane-outline" size={16} color={colors.primaryForeground} />
-                <Text style={styles.sendBtnText}>{send.isPending ? 'Enviando…' : 'Enviar para a cozinha'}</Text>
+                <Text style={styles.sendBtnText}>{send.isPending ? 'Enviando…' : offline ? 'Sem conexão' : 'Enviar para a cozinha'}</Text>
               </TouchableOpacity>
             </View>
           )}

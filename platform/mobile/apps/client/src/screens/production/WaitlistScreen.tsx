@@ -10,8 +10,10 @@ import { SelectChip, SelectionSection } from '../../components/restaurant/Select
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { FeatureUnavailableMessage } from '../../components/ServiceTypeAdapter';
+import { registerCustomerPushToken } from '../../services/customer-push';
 import customerBackend, { type CustomerWaitlistEntry, type WaitlistOccupancyLevel } from '../../services/customer-backend';
 import { StateView, rootNavigate, useQueryRefreshControl, tableLabel } from './shared';
+import { formatCountdown } from './reservation-ui';
 import {
   ANY_SECTION,
   closedQueueMessage,
@@ -119,10 +121,17 @@ export default function WaitlistScreen({ route, navigation }: any) {
     if (!preferenceOptions.some((option) => option.id === preference)) setPreference(ANY_SECTION);
   }, [preferenceOptions, preference]);
 
+  // Contagem até o fim do prazo de apresentação (ADR-021).
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 15 * 1000);
+    return () => clearInterval(timer);
+  }, []);
   const myEntry: CustomerWaitlistEntry | undefined = useMemo(
     () => (query.data ?? []).find((entry) => entry.restaurantId === restaurantId && isActiveWaitlistStatus(entry.status)),
     [query.data, restaurantId],
   );
+  const presentMs = myEntry?.status === 'called' && myEntry.presentUntil ? new Date(myEntry.presentUntil).getTime() - nowMs : null;
 
   // The maitre calls/seats the customer from the restaurant panel — without
   // Realtime the "Sua mesa está pronta!" banner only showed after a manual pull.
@@ -162,6 +171,8 @@ export default function WaitlistScreen({ route, navigation }: any) {
   const join = useMutation({
     mutationFn: () => customerBackend.joinWaitlist({ restaurantId, partySize: party === '5+' ? 5 : Number(party), preference }),
     onSuccess: () => {
+      // ADR-021: o aviso "sua mesa está pronta" precisa de notificação; pede a permissão aqui.
+      void registerCustomerPushToken().catch(() => undefined);
       queryClient.invalidateQueries({ queryKey: ['waitlist'] });
       queryClient.invalidateQueries({ queryKey: ['waitlist-stats', restaurantId] });
     },
@@ -361,6 +372,21 @@ export default function WaitlistScreen({ route, navigation }: any) {
                 <Text style={styles.readySub}>
                   {myEntry.tableNumber ? `${tableLabel(myEntry.tableNumber)} · ` : ''}Dirija-se à recepção
                 </Text>
+                {presentMs != null && (
+                  <Text style={styles.readySub} testID="waitlist-present-countdown">
+                    {presentMs > 0 ? `Você tem ${formatCountdown(presentMs)} para se apresentar` : 'O prazo para se apresentar acabou'}
+                  </Text>
+                )}
+                {myEntry.missedCalls > 0 && (
+                  <Text style={styles.readySub}>Esta é a sua última chamada: perder o prazo tira você da fila.</Text>
+                )}
+                <TouchableOpacity
+                  onPress={() => rootNavigate(navigation, 'QrScanner', { contextRestaurantId: myEntry.restaurantId })}
+                  accessibilityRole="button"
+                  testID="waitlist-scan-table"
+                >
+                  <Text style={[styles.readyText, { textDecorationLine: 'underline' }]}>Escanear QR da mesa</Text>
+                </TouchableOpacity>
               </View>
             )}
 

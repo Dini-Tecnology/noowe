@@ -96,10 +96,10 @@ export default function ReservationConfirmationScreen({ route, navigation }: any
         ) : (
           <View style={styles.success}><Ionicons name="checkmark" size={34} color="#19A66F" /></View>
         )}
-        <Text style={styles.title}>{isCancelled ? 'Reserva Cancelada' : 'Reserva Confirmada!'}</Text>
+        <Text style={styles.title}>{isCancelled ? 'Reserva Cancelada' : reservation.status === 'no_show' ? 'Reserva Expirada' : reservation.status === 'completed' ? 'Reserva Concluída' : 'Reserva Confirmada!'}</Text>
         <Text style={styles.subtitle}>
           {reservation.restaurantName} · {date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} às {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}{'\n'}
-          {reservation.partySize} {reservation.partySize === 1 ? 'pessoa' : 'pessoas'} · {isCancelled ? 'Reserva cancelada' : 'Reserva confirmada'}
+          {reservation.partySize} {reservation.partySize === 1 ? 'pessoa' : 'pessoas'} · {isCancelled ? 'Reserva cancelada' : reservation.status === 'no_show' ? 'Reserva expirada' : reservation.status === 'completed' ? 'Reserva concluída' : 'Reserva confirmada'}
         </Text>
 
         <View style={styles.codeCard}><Text style={styles.codeLabel}>Código de confirmação</Text><Text style={styles.code}>{reservation.confirmationCode}</Text></View>
