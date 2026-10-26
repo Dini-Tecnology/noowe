@@ -38,7 +38,12 @@ export type SharePayment = {
   checkoutUrl: string | null;
   pix: { payload: string; expiresAt: string | null } | null;
   alreadyPaid: boolean;
+  /** Cobrado no cartão salvo: não há página para abrir; a confirmação chega pelo webhook. */
+  savedCard: boolean;
 };
+
+/** Cartão salvo que dá para usar em um toque: o app vê bandeira e final, nunca o token. */
+export type SavedCard = { id: string; brand: string | null; lastFour: string; isDefault: boolean };
 
 type RpcClient = {
   rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
@@ -131,10 +136,15 @@ export const billShares = {
    * Cria a cobrança da parcela no provedor. Quem confirma é o webhook (a parcela vira `paid`
    * por Realtime); a resposta aqui nunca significa "pago", só "cobrança criada".
    */
-  async pay(input: { shareId: string; method: 'pix' | 'credit_card'; tipCents: number; idempotencyKey: string; payerCpfCnpj?: string }): Promise<SharePayment> {
+  async pay(input: {
+    shareId: string; method: 'pix' | 'credit_card'; tipCents: number; idempotencyKey: string; payerCpfCnpj?: string;
+    /** Só com cartão: salvar o cartão digitado no Asaas (consentimento) ou usar um cartão já salvo. */
+    saveCard?: boolean; paymentMethodId?: string;
+  }): Promise<SharePayment> {
     const { data, error } = await getSupabaseClient().functions.invoke('payments-create', {
       body: { purpose: 'bill_share', targetId: input.shareId, method: input.method, tipCents: input.tipCents,
-        idempotencyKey: input.idempotencyKey, payerCpfCnpj: input.payerCpfCnpj },
+        idempotencyKey: input.idempotencyKey, payerCpfCnpj: input.payerCpfCnpj,
+        ...(input.saveCard ? { saveCard: true } : {}), ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId } : {}) },
     });
     if (error) {
       const response = (error as { context?: Response }).context;
@@ -152,7 +162,16 @@ export const billShares = {
       checkoutUrl: typeof raw.checkoutUrl === 'string' ? raw.checkoutUrl : null,
       pix: typeof pix.payload === 'string' ? { payload: pix.payload, expiresAt: typeof pix.expiresAt === 'string' ? pix.expiresAt : null } : null,
       alreadyPaid: raw.alreadyPaid === true,
+      savedCard: raw.savedCard === true,
     };
+  },
+
+  async listSavedCards(): Promise<SavedCard[]> {
+    const data = await rpc('customer_list_saved_cards', {});
+    return (Array.isArray(data) ? data : []).map((value) => {
+      const row = obj(value);
+      return { id: String(row.id), brand: typeof row.brand === 'string' ? row.brand : null, lastFour: String(row.lastFour ?? ''), isDefault: row.isDefault === true };
+    });
   },
 
   subscribe(tableSessionId: string, onChange: () => void): RealtimeChannel {
@@ -169,6 +188,7 @@ const PAYMENT_ERRORS: Record<string, string> = {
   payments_unavailable: 'Este restaurante ainda não aceita pagamento online.',
   payment_not_allowed: 'Esta parcela não pode ser paga agora. Atualize a conta.',
   not_found: 'Parcela não encontrada.',
+  card_not_found: 'Cartão salvo não encontrado. Escolha outro cartão.',
   invalid_request: 'Dados de pagamento inválidos.',
   provider_unavailable: 'O provedor de pagamento está indisponível. Tente novamente em instantes.',
 };

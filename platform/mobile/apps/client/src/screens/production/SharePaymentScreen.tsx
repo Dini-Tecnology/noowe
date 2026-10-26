@@ -1,6 +1,6 @@
 /* Hallmark · macrostructure: Form · tone: warm utilitarian · anchor hue: orange */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, Share, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, ScrollView, Share, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Crypto from 'expo-crypto';
@@ -37,6 +37,9 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   const [payment, setPayment] = useState<SharePayment | null>(null);
   const [needsDocument, setNeedsDocument] = useState(false);
   const [document, setDocument] = useState('');
+  // Cartão (F6): usar um cartão salvo, ou digitar um novo na página do Asaas e, se quiser, salvá-lo.
+  const [savedCardId, setSavedCardId] = useState<string | null>(null);
+  const [saveCard, setSaveCard] = useState(false);
   // Uma chave por (parcela, forma, gorjeta): repetir o toque retoma a mesma cobrança, nunca cria outra.
   const keys = useRef(new Map<string, string>());
 
@@ -56,6 +59,20 @@ export default function SharePaymentScreen({ route, navigation }: any) {
     return diner?.isMe ? 'Você' : (diner?.displayName ?? 'Convidado');
   };
 
+  const savedCards = useQuery({
+    queryKey: ['saved-cards'],
+    queryFn: () => billShares.listSavedCards(),
+    enabled: method === 'credit_card',
+    staleTime: 30 * 1000,
+  });
+  const cards = savedCards.data ?? [];
+  // Com cartão salvo, o padrão já vem escolhido: é o pagamento em um toque.
+  useEffect(() => {
+    if (method !== 'credit_card' || savedCardId !== null || !cards.length) return;
+    setSavedCardId((cards.find((c) => c.isDefault) ?? cards[0]).id);
+  }, [method, cards, savedCardId]);
+  const activeSavedCard = method === 'credit_card' ? cards.find((c) => c.id === savedCardId) ?? null : null;
+
   const tips = useQuery({
     queryKey: ['share-tip-options', myOpen?.id, myOpen?.amountCents],
     queryFn: () => billShares.tipOptions(myOpen!.id, TIP_PERCENTS),
@@ -66,21 +83,23 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   const pay = useMutation({
     mutationFn: async () => {
       if (!myOpen || !selectedTip) throw new Error('Parcela indisponível.');
-      const slot = `${myOpen.id}:${method}:${selectedTip.cents}`;
+      const slot = `${myOpen.id}:${method}:${selectedTip.cents}:${activeSavedCard?.id ?? (saveCard ? 'save' : 'new')}`;
       if (!keys.current.has(slot)) keys.current.set(slot, Crypto.randomUUID());
       return billShares.pay({
         shareId: myOpen.id, method, tipCents: selectedTip.cents, idempotencyKey: keys.current.get(slot)!,
         payerCpfCnpj: document.replace(/\D/g, '') || undefined,
+        ...(activeSavedCard ? { paymentMethodId: activeSavedCard.id } : method === 'credit_card' && saveCard ? { saveCard: true } : {}),
       });
     },
     onSuccess: async (result) => {
       setPayment(result);
       setNeedsDocument(false);
       void queryClient.invalidateQueries({ queryKey: ['bill-shares', tableSessionId] });
-      if (method === 'credit_card' && result.checkoutUrl) await WebBrowser.openBrowserAsync(result.checkoutUrl).catch(() => undefined);
+      if (method === 'credit_card' && !result.savedCard && result.checkoutUrl) await WebBrowser.openBrowserAsync(result.checkoutUrl).catch(() => undefined);
     },
     onError: (error) => {
       if ((error as { code?: string }).code === 'payer_document_required') { setNeedsDocument(true); return; }
+      if ((error as { code?: string }).code === 'card_not_found') { setSavedCardId(null); void queryClient.invalidateQueries({ queryKey: ['saved-cards'] }); }
       Alert.alert('Pagamento não iniciado', error.message);
     },
   });
@@ -127,6 +146,8 @@ export default function SharePaymentScreen({ route, navigation }: any) {
     totalLabel: { fontSize: 15, fontWeight: '700', color: colors.foreground },
     totalValue: { fontSize: 20, fontWeight: '800', color: colors.primary },
     input: { height: 48, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, backgroundColor: colors.backgroundTertiary, color: colors.foreground },
+    cardChoices: { gap: 10 },
+    saveCardRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
     cta: { paddingVertical: 16, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center' },
     ctaDisabled: { opacity: 0.6 },
     ctaText: { color: colors.primaryForeground, fontSize: 16, fontWeight: '700' },
@@ -230,6 +251,46 @@ export default function SharePaymentScreen({ route, navigation }: any) {
                   <Text style={[styles.chipLabel, method === option.id && styles.chipLabelActive]}>{option.label}</Text>
                 </TouchableOpacity>
               ))}
+              {method === 'credit_card' && (
+                <View style={styles.cardChoices} testID="saved-card-choices">
+                  {cards.map((card) => (
+                    <TouchableOpacity
+                      key={card.id}
+                      style={[styles.method, activeSavedCard?.id === card.id && styles.chipActive]}
+                      onPress={() => setSavedCardId(card.id)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: activeSavedCard?.id === card.id }}
+                      testID={`saved-card-${card.id}`}
+                    >
+                      <Ionicons name="card" size={20} color={activeSavedCard?.id === card.id ? colors.primary : colors.foregroundSecondary} />
+                      <Text style={[styles.chipLabel, activeSavedCard?.id === card.id && styles.chipLabelActive]}>
+                        {(card.brand ?? 'Cartão').toUpperCase()} •••• {card.lastFour}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {cards.length > 0 && (
+                    <TouchableOpacity
+                      style={[styles.method, !activeSavedCard && styles.chipActive]}
+                      onPress={() => setSavedCardId('')}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: !activeSavedCard }}
+                      testID="new-card-choice"
+                    >
+                      <Ionicons name="add-circle-outline" size={20} color={!activeSavedCard ? colors.primary : colors.foregroundSecondary} />
+                      <Text style={[styles.chipLabel, !activeSavedCard && styles.chipLabelActive]}>Usar outro cartão</Text>
+                    </TouchableOpacity>
+                  )}
+                  {!activeSavedCard && (
+                    <View style={styles.saveCardRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.chipLabel}>Salvar este cartão</Text>
+                        <Text style={styles.hint}>Você digita os dados na página segura do Asaas; guardamos só um código para os próximos pagamentos.</Text>
+                      </View>
+                      <Switch value={saveCard} onValueChange={setSaveCard} accessibilityLabel="Salvar este cartão" testID="save-card-switch" />
+                    </View>
+                  )}
+                </View>
+              )}
               {needsDocument && (
                 <>
                   <Text style={styles.hint}>Informe seu CPF para gerar a cobrança (só na primeira vez).</Text>

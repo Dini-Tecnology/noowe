@@ -86,7 +86,9 @@ export class AsaasClient implements PaymentProvider {
       split: input.split && input.split.feeCents > 0
         ? [{ walletId: input.split.walletId, fixedValue: centsToAsaasValue(input.split.feeCents) }]
         : undefined,
-      callback: input.successUrl ? { successUrl: input.successUrl, autoRedirect: true } : undefined,
+      callback: input.successUrl && !input.creditCardToken ? { successUrl: input.successUrl, autoRedirect: true } : undefined,
+      creditCardToken: input.creditCardToken ?? undefined,
+      remoteIp: input.creditCardToken ? input.remoteIp ?? undefined : undefined,
     });
   }
 

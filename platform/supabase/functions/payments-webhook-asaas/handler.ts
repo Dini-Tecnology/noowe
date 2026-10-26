@@ -58,6 +58,7 @@ export async function handleWebhook(req: Request, deps: PaymentDeps): Promise<Re
 
   // Defesa em profundidade: o corpo do webhook não basta. O status real vem do Asaas.
   let amountCents: number | null = null;
+  let confirmedCard: { token: string; brand: string | null; last4: string } | null = null;
   if (mapped.outcome === "confirmed") {
     const apiKey: string | undefined = account.apiKey;
     if (!apiKey) return orphan("no_api_key");
@@ -66,6 +67,12 @@ export async function handleWebhook(req: Request, deps: PaymentDeps): Promise<Re
       const actualMapped = mapAsaasPaymentStatus(actual.status);
       if (actualMapped?.outcome !== "confirmed") return orphan("status_recheck_disagrees");
       amountCents = asaasValueToCents(actual.value);
+      // O cartão vem da resposta do Asaas (reconsulta), nunca do corpo do webhook.
+      const card = actual.creditCard;
+      const last4 = typeof card?.creditCardNumber === "string" ? card.creditCardNumber.replace(/\D/g, "").slice(-4) : "";
+      if (typeof card?.creditCardToken === "string" && card.creditCardToken && last4.length === 4) {
+        confirmedCard = { token: card.creditCardToken, brand: card.creditCardBrand ?? null, last4 };
+      }
     } catch (err) {
       // Não conseguimos reconferir: não confirmamos e deixamos o payments-sync tentar depois.
       console.error("payments-webhook-asaas recheck failed:", err);
@@ -78,5 +85,12 @@ export async function handleWebhook(req: Request, deps: PaymentDeps): Promise<Re
     p_outcome: mapped.outcome, p_amount_cents: amountCents, p_payload: event, p_gateway_status: mapped.gatewayStatus ?? null,
   });
   if (applied.error) console.error("payments-webhook-asaas apply error:", applied.error);
+  // F6: guarda o token só se o cliente consentiu (a função confere). Falhar aqui nunca derruba o webhook.
+  if (!applied.error && confirmedCard) {
+    const saved = await deps.rpc("service_payment_save_card", {
+      p_payment_id: paymentId, p_token: confirmedCard.token, p_brand: confirmedCard.brand, p_last4: confirmedCard.last4,
+    }).catch((err: unknown) => ({ data: null, error: { message: String(err) } }));
+    if (saved.error) console.error("payments-webhook-asaas save card error:", saved.error.message);
+  }
   return json({ ok: true, ...(applied.data?.ignored ? { ignored: applied.data.ignored } : {}) });
 }

@@ -18,6 +18,13 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
     || (method !== "pix" && method !== "credit_card")) {
     return json({ error: "invalid_request" }, 400);
   }
+  // Cartão (F6): "salvar este cartão" (consentimento) ou "usar um cartão salvo", nunca os dois.
+  const saveCard = body?.saveCard === true;
+  const paymentMethodId: string | null = body?.paymentMethodId == null ? null : String(body.paymentMethodId);
+  if ((saveCard || paymentMethodId !== null) && method !== "credit_card") return json({ error: "invalid_request" }, 400);
+  if (paymentMethodId !== null && (!UUID.test(paymentMethodId) || saveCard)) return json({ error: "invalid_request" }, 400);
+  const remoteIp = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("cf-connecting-ip") || "";
+  if (paymentMethodId !== null && !remoteIp) return json({ error: "invalid_request" }, 400);
   const document = typeof body?.payerCpfCnpj === "string" ? body.payerCpfCnpj.replace(/\D/g, "") : "";
 
   // A gorjeta da parcela é em centavos e o servidor valida o teto; o valor da parcela nunca vem do app.
@@ -44,6 +51,17 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
   });
   if (r.providerRef) return view({ idempotentReplay: true });
 
+  if (method === "credit_card") {
+    const options = await deps.rpc("service_payment_set_card_options", {
+      p_payment_id: r.paymentId, p_user_id: user.id, p_save_card: saveCard, p_payment_method_id: paymentMethodId,
+    });
+    if (options.error) {
+      if (options.error.code === "P0002") return json({ error: "card_not_found" }, 404);
+      console.error("payments-create card options error:", options.error);
+      return json({ error: "internal_error" }, 500);
+    }
+  }
+
   const secrets = await deps.rpc("service_payment_account_secrets", { p_account_id: r.paymentAccountId });
   const apiKey: string | undefined = secrets.data?.apiKey;
   if (secrets.error || !apiKey) {
@@ -66,6 +84,16 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
       });
     }
 
+    // Cartão salvo: o token só existe no servidor e só vale para o mesmo usuário e a mesma subconta.
+    let creditCardToken: string | null = null;
+    if (paymentMethodId !== null) {
+      const stored = await deps.rpc("service_payment_card_token", {
+        p_user_id: user.id, p_payment_method_id: paymentMethodId, p_account_id: r.paymentAccountId,
+      });
+      creditCardToken = typeof stored.data === "string" && stored.data ? stored.data : null;
+      if (!creditCardToken) return json({ error: "card_not_found" }, 404);
+    }
+
     // Se uma tentativa anterior caiu depois do Asaas responder, a cobrança já existe.
     let charge = await deps.provider.findChargeByExternalRef(apiKey, r.paymentId);
     if (!charge) {
@@ -77,6 +105,7 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
         split: deps.env("NOOWE_ASAAS_WALLET_ID") && r.platformFeeCents > 0
           ? { walletId: deps.env("NOOWE_ASAAS_WALLET_ID")!, feeCents: r.platformFeeCents } : null,
         successUrl: returnUrl ? `${returnUrl}?pid=${r.paymentId}` : null,
+        creditCardToken, remoteIp: creditCardToken ? remoteIp : null,
       });
     }
 
@@ -94,7 +123,9 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
     if (attached.error) throw new Error(`attach: ${attached.error.message}`);
     return json({
       paymentId: r.paymentId, status: "pending", method, amountCents: r.amountCents, expiresAt: pixExpires,
-      checkoutUrl: charge.invoiceUrl ?? null, pix: pixPayload ? { payload: pixPayload, expiresAt: pixExpires } : null,
+      checkoutUrl: creditCardToken ? null : charge.invoiceUrl ?? null,
+      pix: pixPayload ? { payload: pixPayload, expiresAt: pixExpires } : null,
+      ...(creditCardToken ? { savedCard: true } : {}),
     });
   } catch (err) {
     console.error("payments-create provider error:", err instanceof AsaasError ? { status: err.status, body: err.body } : err);

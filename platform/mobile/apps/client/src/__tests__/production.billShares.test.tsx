@@ -30,11 +30,13 @@ const mockCommit = jest.fn();
 const mockList = jest.fn();
 const mockPay = jest.fn();
 const mockTips = jest.fn();
+const mockSavedCards = jest.fn();
 jest.mock('../services/bill-shares', () => ({
   SPLIT_ERRORS: { P0012: 'A conta mudou. Confira os valores atualizados.' },
   billShares: {
     preview: (...a: unknown[]) => mockPreview(...a), commit: (...a: unknown[]) => mockCommit(...a),
     list: (...a: unknown[]) => mockList(...a), listClaims: async () => [], claimItem: jest.fn(),
+    listSavedCards: (...a: unknown[]) => mockSavedCards(...a),
     tipOptions: (...a: unknown[]) => mockTips(...a), pay: (...a: unknown[]) => mockPay(...a), abandon: jest.fn(),
     subscribe: () => ({ unsubscribe: jest.fn() }),
   },
@@ -132,4 +134,82 @@ test('pagamento: CPF exigido na primeira cobrança é pedido e reenviado', async
   fireEvent.changeText(await screen.findByLabelText('CPF do pagador'), '12345678909');
   fireEvent.press(screen.getByText('Gerar PIX'));
   await waitFor(() => expect(mockPay).toHaveBeenLastCalledWith(expect.objectContaining({ payerCpfCnpj: '12345678909' })));
+});
+
+// ---- F6: cartão salvo (checkout hospedado do Asaas) ----------------------------------------
+const cardPaid = { paymentId: 'pay1', status: 'pending', amountCents: 5344, expiresAt: null, checkoutUrl: null, pix: null, alreadyPaid: false };
+
+test('cartão salvo: o padrão já vem escolhido e a cobrança vai com o id do cartão, sem abrir a página do Asaas', async () => {
+  const openBrowser = require('expo-web-browser').openBrowserAsync as jest.Mock;
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue(tips);
+  mockSavedCards.mockResolvedValue([{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }, { id: 'c2', brand: 'mastercard', lastFour: '1111', isDefault: false }]);
+  mockPay.mockResolvedValue({ ...cardPaid, savedCard: true });
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  fireEvent.press(screen.getByText('Cartão de crédito'));
+  expect(await screen.findByText(/VISA •••• 4242/)).toBeTruthy();
+  expect(screen.queryByTestId('save-card-switch')).toBeNull();
+  fireEvent.press(screen.getByText('Pagar com cartão'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ method: 'credit_card', paymentMethodId: 'c1' })));
+  expect(mockPay.mock.calls[0][0].saveCard).toBeUndefined();
+  expect(openBrowser).not.toHaveBeenCalled();
+});
+
+test('cartão salvo: escolher outro cartão salvo troca o id enviado', async () => {
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue(tips);
+  mockSavedCards.mockResolvedValue([{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }, { id: 'c2', brand: 'mastercard', lastFour: '1111', isDefault: false }]);
+  mockPay.mockResolvedValue({ ...cardPaid, savedCard: true });
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  fireEvent.press(screen.getByText('Cartão de crédito'));
+  fireEvent.press(await screen.findByTestId('saved-card-c2'));
+  fireEvent.press(screen.getByText('Pagar com cartão'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ paymentMethodId: 'c2' })));
+});
+
+test('cartão novo: sem consentimento não salva; com o interruptor ligado pede para salvar; abre a página do Asaas', async () => {
+  const openBrowser = require('expo-web-browser').openBrowserAsync as jest.Mock;
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue(tips);
+  mockSavedCards.mockResolvedValue([]);
+  mockPay.mockResolvedValue({ ...cardPaid, checkoutUrl: 'https://asaas/i/1', savedCard: false });
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  fireEvent.press(screen.getByText('Cartão de crédito'));
+  await screen.findByText('Salvar este cartão');
+  fireEvent.press(screen.getByText('Pagar com cartão'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledTimes(1));
+  expect(mockPay.mock.calls[0][0].saveCard).toBeUndefined();
+  expect(mockPay.mock.calls[0][0].paymentMethodId).toBeUndefined();
+  await waitFor(() => expect(openBrowser).toHaveBeenCalledWith('https://asaas/i/1'));
+});
+
+test('cartão novo: com o interruptor "Salvar este cartão" ligado, a cobrança pede para salvar', async () => {
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue(tips);
+  mockSavedCards.mockResolvedValue([]);
+  mockPay.mockResolvedValue({ ...cardPaid, checkoutUrl: 'https://asaas/i/1', savedCard: false });
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  fireEvent.press(screen.getByText('Cartão de crédito'));
+  fireEvent(await screen.findByTestId('save-card-switch'), 'valueChange', true);
+  fireEvent.press(screen.getByText('Pagar com cartão'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ method: 'credit_card', saveCard: true })));
+  expect(mockPay.mock.calls[0][0].paymentMethodId).toBeUndefined();
+});
+
+test('cartão salvo que sumiu (404): volta para a escolha e recarrega a lista', async () => {
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue(tips);
+  mockSavedCards.mockResolvedValue([{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }]);
+  mockPay.mockRejectedValue(Object.assign(new Error('Cartão salvo não encontrado. Escolha outro cartão.'), { code: 'card_not_found' }));
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  fireEvent.press(screen.getByText('Cartão de crédito'));
+  await screen.findByText(/VISA •••• 4242/);
+  const before = mockSavedCards.mock.calls.length;
+  fireEvent.press(screen.getByText('Pagar com cartão'));
+  await waitFor(() => expect(mockSavedCards.mock.calls.length).toBeGreaterThan(before));
 });

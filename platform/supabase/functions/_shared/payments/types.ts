@@ -5,9 +5,13 @@ export interface AsaasChargeInput {
   customer: string; billingType: "PIX" | "CREDIT_CARD"; valueCents: number; dueDate: string;
   externalReference: string; description: string;
   split?: { walletId: string; feeCents: number } | null; successUrl?: string | null;
+  // Cobrança em um toque com cartão salvo (F6): o token vem da nossa tabela privada, nunca do app.
+  creditCardToken?: string | null; remoteIp?: string | null;
 }
 export interface AsaasPayment {
   id: string; status: string; value: number; invoiceUrl?: string; externalReference?: string | null;
+  // Em pagamentos com cartão o Asaas devolve o token, a bandeira e o final (creditCardNumber = 4 dígitos).
+  creditCard?: { creditCardToken?: string | null; creditCardBrand?: string | null; creditCardNumber?: string | null } | null;
 }
 export interface AsaasPix { payload: string; expirationDate?: string | null }
 

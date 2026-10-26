@@ -10,7 +10,7 @@ const KEY = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const PAY = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const ACCT = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
-function setup(over: { reserved?: any; reserveError?: any; customerId?: string | null; existing?: any; createThrows?: boolean } = {}) {
+function setup(over: { reserved?: any; reserveError?: any; customerId?: string | null; existing?: any; createThrows?: boolean; cardToken?: string | null; optionsError?: any } = {}) {
   const calls: { fn: string; args: any }[] = [];
   const provider: string[] = [];
   const deps: PaymentDeps = {
@@ -21,6 +21,8 @@ function setup(over: { reserved?: any; reserveError?: any; customerId?: string |
         return { data: over.reserved ?? { paymentId: PAY, orderId: ORDER, status: "creating", method: "pix", amountCents: 5000,
           platformFeeCents: 250, paymentAccountId: ACCT, providerRef: null, pixPayload: null, expiresAt: null, alreadyPaid: false }, error: null };
       }
+      if (fn === "service_payment_set_card_options") return { data: null, error: over.optionsError ?? null };
+      if (fn === "service_payment_card_token") return { data: over.cardToken ?? null, error: null };
       if (fn === "service_payment_account_secrets") return { data: { apiKey: "ak" }, error: null };
       if (fn === "service_payment_customer") return { data: { providerCustomerId: over.customerId ?? null, name: "Ana", email: "a@x.com", phone: null }, error: null };
       return { data: null, error: null };
@@ -141,4 +143,75 @@ test("parcela da conta: reserva por service_pay_share com gorjeta em centavos e 
   assert.ok(!calls.some((c) => c.fn === "service_payment_reserve_order"));
   assert.equal((await res.json()).status, "pending");
   assert.ok(provider.includes("createCharge"));
+});
+
+// ---- F6: cartão salvo (checkout hospedado do Asaas) ----------------------------------------
+const card = { ...valid, method: "credit_card" };
+const SAVED = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+function reqIp(body: any, ip: string | null = "203.0.113.7") {
+  const headers: Record<string, string> = { authorization: "Bearer tok", "content-type": "application/json" };
+  if (ip) headers["x-forwarded-for"] = `${ip}, 10.0.0.1`;
+  return new Request("https://f/payments-create", { method: "POST", headers, body: JSON.stringify(body) });
+}
+
+test("cartão: salvar/usar cartão só vale com método cartão e nunca os dois juntos", async () => {
+  const { deps } = setup();
+  assert.equal((await handleCreate(req({ ...valid, saveCard: true }), deps)).status, 400);
+  assert.equal((await handleCreate(req({ ...valid, paymentMethodId: SAVED }), deps)).status, 400);
+  assert.equal((await handleCreate(reqIp({ ...card, saveCard: true, paymentMethodId: SAVED }), deps)).status, 400);
+  assert.equal((await handleCreate(reqIp({ ...card, paymentMethodId: "nao-e-uuid" }), deps)).status, 400);
+  assert.equal((await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }, null), deps)).status, 400);
+});
+
+test("cartão novo com consentimento: marca a cobrança para salvar e segue pela página do Asaas", async () => {
+  const { deps, calls, provider } = setup();
+  const res = await handleCreate(reqIp({ ...card, saveCard: true }), deps);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.status, "pending");
+  assert.equal(body.checkoutUrl, "https://asaas/i/1");
+  assert.equal(body.savedCard, undefined);
+  const options = calls.find((c) => c.fn === "service_payment_set_card_options")!;
+  assert.deepEqual(options.args, { p_payment_id: PAY, p_user_id: USER, p_save_card: true, p_payment_method_id: null });
+  const input = (provider as any).input;
+  assert.equal(input.creditCardToken, null);
+  assert.equal(input.remoteIp, null);
+  assert.equal(calls.filter((c) => c.fn === "service_payment_card_token").length, 0);
+});
+
+test("cartão novo sem consentimento: não marca para salvar", async () => {
+  const { deps, calls } = setup();
+  await handleCreate(reqIp(card), deps);
+  assert.equal(calls.find((c) => c.fn === "service_payment_set_card_options")!.args.p_save_card, false);
+});
+
+test("cartão salvo: cobra com o token do servidor, sem página do Asaas, e devolve pendente", async () => {
+  const { deps, calls, provider } = setup({ cardToken: "tok_secreto_1", customerId: "cus_1" });
+  const res = await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }), deps);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.status, "pending");
+  assert.equal(body.savedCard, true);
+  assert.equal(body.checkoutUrl, null);
+  const input = (provider as any).input;
+  assert.equal(input.creditCardToken, "tok_secreto_1");
+  assert.equal(input.remoteIp, "203.0.113.7");
+  assert.equal(input.billingType, "CREDIT_CARD");
+  assert.equal(JSON.stringify(body).includes("tok_secreto_1"), false);
+  assert.deepEqual(calls.find((c) => c.fn === "service_payment_card_token")!.args,
+    { p_user_id: USER, p_payment_method_id: SAVED, p_account_id: ACCT });
+  assert.equal(calls.find((c) => c.fn === "service_payment_set_card_options")!.args.p_payment_method_id, SAVED);
+});
+
+test("cartão salvo inexistente, de outro usuário ou removido: 404 e nada é cobrado", async () => {
+  const none = setup({ cardToken: null, customerId: "cus_1" });
+  const res = await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }), none.deps);
+  assert.equal(res.status, 404);
+  assert.equal((await res.json()).error, "card_not_found");
+  assert.equal(none.provider.includes("createCharge"), false);
+
+  const rejected = setup({ optionsError: { code: "P0002", message: "Payment method not found" } });
+  const res2 = await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }), rejected.deps);
+  assert.equal(res2.status, 404);
+  assert.equal(rejected.provider.includes("createCharge"), false);
 });
