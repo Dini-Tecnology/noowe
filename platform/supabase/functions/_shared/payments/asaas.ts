@@ -14,7 +14,8 @@ export class AsaasError extends Error {
 }
 
 export interface AsaasClientOptions {
-  baseUrl: string;
+  /** URL fixa, ou resolvida pela chave (ver environment.ts). */
+  baseUrl: string | ((apiKey: string) => string);
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   maxRetries?: number;
@@ -43,7 +44,8 @@ export class AsaasClient implements PaymentProvider {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
-        const res = await this.fetchImpl(`${this.opts.baseUrl}${path}`, {
+        const base = typeof this.opts.baseUrl === "function" ? this.opts.baseUrl(apiKey) : this.opts.baseUrl;
+        const res = await this.fetchImpl(`${base}${path}`, {
           method,
           headers: { access_token: apiKey, "Content-Type": "application/json", "User-Agent": "noowe-payments/1.0" },
           body: body === undefined ? undefined : JSON.stringify(body),

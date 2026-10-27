@@ -85,3 +85,29 @@ test("createCharge envia valor em reais exato, split e callback", async () => {
   assert.deepEqual(sent.callback, { successUrl: "https://app/return", autoRedirect: true });
   assert.equal(sent.externalReference, "ext");
 });
+
+import { asaasBaseUrlForKey } from "./environment.ts";
+
+test("ambiente do Asaas vem da chave: sandbox e produção usam segredos distintos", () => {
+  const env = (n: string) => ({
+    ASAAS_SANDBOX_API_BASE_URL: "https://api-sandbox.asaas.com/v3/", ASAAS_PRODUCTION_API_BASE_URL: "https://api.asaas.com/v3",
+  } as Record<string, string>)[n];
+  assert.equal(asaasBaseUrlForKey("$aact_hmlg_abc", env), "https://api-sandbox.asaas.com/v3");
+  assert.equal(asaasBaseUrlForKey("$aact_prod_abc", env), "https://api.asaas.com/v3");
+});
+
+test("ambiente do Asaas: chave desconhecida, segredo ausente ou URL não-https falham fechado", () => {
+  const env = (n: string) => ({ ASAAS_SANDBOX_API_BASE_URL: "http://inseguro", ASAAS_PRODUCTION_API_BASE_URL: undefined } as Record<string, string | undefined>)[n];
+  assert.throws(() => asaasBaseUrlForKey("chave-sem-prefixo", env), /ambiente reconhecível/);
+  assert.throws(() => asaasBaseUrlForKey("$aact_hmlg_x", env), /ASAAS_SANDBOX_API_BASE_URL/);
+  assert.throws(() => asaasBaseUrlForKey("$aact_prod_x", env), /ASAAS_PRODUCTION_API_BASE_URL/);
+});
+
+test("AsaasClient resolve a URL pela chave a cada chamada", async () => {
+  const urls: string[] = [];
+  const fetchImpl = (async (url: string) => { urls.push(url); return new Response("{}", { status: 200 }); }) as unknown as typeof fetch;
+  const client = new AsaasClient({ baseUrl: (k) => (k.includes("_hmlg_") ? "https://sb" : "https://prod"), fetchImpl });
+  await client.getCharge("$aact_hmlg_1", "p1");
+  await client.getCharge("$aact_prod_1", "p2");
+  assert.deepEqual(urls, ["https://sb/payments/p1", "https://prod/payments/p2"]);
+});
