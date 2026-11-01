@@ -114,8 +114,8 @@ end $$;
 select pass('pedido nasce com código aleatório do dia, nome para chamada e política aceita');
 
 select is(
-  pg_temp.state_of($q$insert into public.orders(restaurant_id, service_model, pickup_code, pickup_code_day)
-    select restaurant_id, service_model, pickup_code, pickup_code_day from public.orders
+  pg_temp.state_of($q$insert into public.orders(restaurant_id, customer_id, service_model, pickup_code, pickup_code_day)
+    select restaurant_id, customer_id, service_model, pickup_code, pickup_code_day from public.orders
     where id = (select v from _qs where k = 'o1')$q$),
   '23505', 'o código de retirada é único por restaurante por dia');
 

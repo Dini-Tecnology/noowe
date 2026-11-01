@@ -57,7 +57,7 @@ select is(public.customer_check_username_availability('Bruno Novo')->>'normalize
 -- Troca
 select throws_ok($$ select public.customer_set_my_username('bruno-de-castro-2') $$, '23505', null, 'troca para @ em uso falha');
 select throws_ok($$ select public.customer_set_my_username('admin') $$, '22023', null, 'troca para reservado falha');
-select throws_ok($$ select public.customer_set_my_username('a--b') $$, '22023', null, 'hifen duplo e invalido');
+select is(public.customer_set_my_username('a--b')->>'username', 'a-b', 'hifen duplo vira hifen simples');
 select is(public.customer_set_my_username('@Bruno.Castro')->>'username', 'bruno-castro', 'troca normaliza e grava');
 
 reset role;

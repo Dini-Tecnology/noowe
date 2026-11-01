@@ -87,7 +87,7 @@ begin
 
   -- Simulado desligado: nenhum cliente confirma o próprio pagamento (invariante 6)
   assert pg_temp.state_of(format($q$select public.customer_pay_share(%L, 'pix', %L)$q$, sh.id, gen_random_uuid())) = '42501', 'pagamento simulado só com a flag';
-  update private.dev_flags set enabled = true where key = 'simulate_share_payment';
+  update private.dev_flags f set enabled = true where f.key = 'simulate_share_payment';
 
   perform public.customer_set_share_tip(sh.id, 300);
   res := public.customer_pay_share(sh.id, 'pix', key);

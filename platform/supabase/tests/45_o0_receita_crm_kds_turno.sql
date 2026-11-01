@@ -4,9 +4,10 @@
 --  * "hoje" é o dia do restaurante (America/Sao_Paulo), não o do servidor;
 --  * Clientes lista quem pagou ou reservou, sem depender de programa de pontos;
 --  * garçom e maître leem o KDS e veem item pronto;
---  * o turno do dia aparece na Equipe pelo dia do restaurante.
+--  * o turno do dia aparece na Equipe pelo dia do restaurante;
+--  * pedido só entregue não é receita; entregar não manda para Limpeza a mesa com comanda aberta.
 begin;
-select plan(10);
+select plan(15);
 
 create temp table o0_results(label text primary key, ok boolean not null);
 
@@ -25,6 +26,11 @@ declare
   base_summary numeric;
   base_dashboard numeric;
   base_cents bigint;
+  base_paid bigint;
+  session_table uuid;
+  session_order uuid := gen_random_uuid();
+  free_table uuid;
+  free_order uuid := gen_random_uuid();
   snap jsonb;
   customers jsonb;
   staff jsonb;
@@ -55,12 +61,14 @@ begin
   base_summary := (public.restaurant_get_financial_summary(r)->>'total_revenue')::numeric;
   base_dashboard := (public.restaurant_get_financial_dashboard(r)->>'gross_revenue')::numeric;
   base_cents := private.revenue_cents(r, day0, day0 + interval '1 day');
+  base_paid := (public.restaurant_get_dashboard_snapshot(r)->>'paid_orders_today')::bigint;
 
-  -- R$ 100 entregue; R$ 190 pago por parcela mas ainda em preparo; R$ 50 cancelado.
+  -- R$ 100 entregue e pago; R$ 190 pago por parcela, ainda em preparo; R$ 50 cancelado; R$ 77 entregue sem pagar.
   insert into public.orders(id, restaurant_id, customer_id, status, payment_status, total_amount, total_cents) values
-    (paid_order, r, buyer, 'delivered', 'pending', 100, 10000),
+    (paid_order, r, buyer, 'delivered', 'confirmed', 100, 10000),
     (gen_random_uuid(), r, buyer, 'preparing', 'confirmed', 190, 19000),
-    (gen_random_uuid(), r, buyer, 'cancelled', 'confirmed', 50, 5000);
+    (gen_random_uuid(), r, buyer, 'cancelled', 'confirmed', 50, 5000),
+    (gen_random_uuid(), r, buyer, 'delivered', 'pending', 77, 7700);
   -- R$ 700 de ontem à noite (antes do começo do dia do restaurante): fora de "hoje".
   insert into public.orders(restaurant_id, customer_id, status, payment_status, total_amount, total_cents, created_at)
     values (r, buyer, 'delivered', 'confirmed', 700, 70000, day0 - interval '30 minutes');
@@ -76,6 +84,8 @@ begin
     and (public.restaurant_get_financial_dashboard(r)->>'gross_revenue')::numeric - base_dashboard = 290);
   insert into o0_results values ('revenue_cents é bigint em centavos e bate com o painel',
     private.revenue_cents(r, day0, day0 + interval '1 day') - base_cents = 29000);
+  insert into o0_results values ('o ticket do painel divide pelos pedidos pagos, não por todos',
+    (snap->>'paid_orders_today')::bigint - base_paid = 2);
   insert into o0_results values ('o dia do restaurante começa em horário de Brasília',
     (day0 at time zone 'America/Sao_Paulo')::time = '00:00'::time);
 
@@ -88,6 +98,10 @@ begin
             where (c->>'user_id')::uuid = buyer and (c->>'total_spent')::numeric = 990));
   insert into o0_results values ('clientes lista quem só reservou',
     exists (select 1 from jsonb_array_elements(customers->'customers') c where (c->>'user_id')::uuid = booker));
+
+  insert into o0_results values ('reserva futura não conta como visita nem como última visita',
+    exists (select 1 from jsonb_array_elements(customers->'customers') c
+            where (c->>'user_id')::uuid = booker and (c->>'total_visits')::int = 0 and c->>'last_visit' is null));
 
   -- KDS: um item pronto de pedido em andamento aparece para o garçom e para o maître.
   insert into public.orders(id, restaurant_id, customer_id, status, payment_status, total_amount, total_cents)
@@ -104,6 +118,15 @@ begin
   insert into o0_results values ('maître lê o KDS',
     jsonb_typeof(public.restaurant_get_kds_queue(r)) = 'array');
 
+  -- Fila do bar: bebida pronta continua visível até ser entregue.
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  insert into public.menu_items(restaurant_id, name, price, course) values (r, 'Bebida O0', 10, 'drink') returning id into item;
+  insert into public.order_items(order_id, menu_item_id, quantity, status)
+    select o.id, item, 1, 'ready' from public.orders o
+    where o.restaurant_id = r and o.customer_id = buyer and o.status = 'ready';
+  insert into o0_results values ('a fila do bar mostra a bebida pronta',
+    exists (select 1 from jsonb_array_elements(public.restaurant_get_bar_queue(r)) b where b->>'status' = 'ready'));
+
   -- Cobrar: pedido só entregue não é pago; pagamento confirmado (parcela) é; cancelado nunca.
   perform set_config('request.jwt.claims', jsonb_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
   select id into table_id from public.tables where restaurant_id = r limit 1;
@@ -116,6 +139,20 @@ begin
     (select (b->>'is_paid')::boolean from jsonb_array_elements(bills) b where (b->>'order_id')::uuid = bill_delivered) = false
     and (select (b->>'is_paid')::boolean from jsonb_array_elements(bills) b where (b->>'order_id')::uuid = bill_split_paid) = true
     and (select (b->>'is_paid')::boolean from jsonb_array_elements(bills) b where (b->>'order_id')::uuid = bill_cancelled) = false);
+
+  -- Entregar um prato: com comanda aberta a mesa segue ocupada; sem comanda, vai para Limpeza.
+  insert into public.tables(restaurant_id, table_number, seats, status) values (r, 'O0-A', 2, 'occupied') returning id into session_table;
+  insert into public.table_sessions(restaurant_id, table_id, status) values (r, session_table, 'active');
+  insert into public.tables(restaurant_id, table_number, seats, status) values (r, 'O0-B', 2, 'occupied') returning id into free_table;
+  insert into public.orders(id, restaurant_id, customer_id, table_id, status, total_amount, total_cents) values
+    (session_order, r, buyer, session_table, 'ready', 10, 1000),
+    (free_order, r, buyer, free_table, 'ready', 10, 1000);
+  perform public.restaurant_update_order_status(session_order, 'delivered');
+  perform public.restaurant_update_order_status(free_order, 'delivered');
+  insert into o0_results values ('prato entregue não manda para Limpeza a mesa com comanda aberta',
+    (select status from public.tables where id = session_table) = 'occupied');
+  insert into o0_results values ('sem comanda aberta, a mesa vai para Limpeza',
+    (select status from public.tables where id = free_table) = 'cleaning');
 
   -- Turno do dia: marcado para o começo do dia do restaurante, aparece na Equipe.
   perform set_config('request.jwt.claims', jsonb_build_object('sub', owner_id, 'role', 'authenticated')::text, true);

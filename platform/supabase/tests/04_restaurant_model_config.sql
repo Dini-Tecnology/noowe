@@ -66,7 +66,7 @@ select ok(
 
 select ok(
   has_function_privilege(
-    'anon',
+    'authenticated',
     'public.get_restaurant_model_capabilities(uuid,public.noowe_service_model)',
     'execute'
   ),

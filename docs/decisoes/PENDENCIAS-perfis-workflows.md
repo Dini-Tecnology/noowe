@@ -19,3 +19,5 @@ Os itens em **negrito** bloqueiam a fatia indicada: não implementar antes da re
 | 12 | Cozinheiro com "só o botão Pronto" | O PDF também prevê pedir ajuda e solicitar indisponível | Pronto no card; os outros dois num menu secundário | 024 | — |
 | 13 | QR com fila ativa | ADR-016 item 4 manda ao Maître; o documento fala só em mesa reservada | Mantém o item 4 enquanto a mesa estiver segurada | 026 | — |
 | 14 | Etapas do Quick mostradas ao cliente | ADR-013 e PDF usam nomes diferentes | Mantém as do ADR-013 | 024 | — |
+| 15 | Receita do dia | A avaliação não define; a validação no app mostrou pedido entregue e não pago somando na receita | Receita é o que foi pago: pagamento confirmado ou pedido concluído (`private.counts_as_revenue`) | 024 | — |
+| 16 | **Valor fixo depois de dividir por item** | Com parcelas abertas cobrindo tudo, o servidor recusa com "Conta já quitada" (teste `36_bill_shares_flow`, propriedade) | Comportamento mantido; mexe em dinheiro | 010 | **O8** |

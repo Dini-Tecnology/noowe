@@ -9,6 +9,8 @@
 create extension if not exists pgtap with schema extensions;
 
 create schema if not exists _test;
+-- Os helpers são chamados também depois de `as_user`, com o papel do cliente.
+grant usage on schema _test to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Congelamento, derivado — não é lista fixa.

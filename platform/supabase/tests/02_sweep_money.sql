@@ -52,8 +52,6 @@ insert into _sweep_money_allowlist (table_name, column_name, category) values
   -- ATENÇÃO na conversão: estas duas JÁ se chamam `_cents` mas são `numeric`.
   -- Multiplicá-las por 100 como as demais multiplicaria o histórico de
   -- transações por 100.  Só retipar: `using round(amount_cents)::bigint`.
-  ('gateway_transactions','amount_cents','dinheiro'),
-  ('gateway_transactions','refunded_amount_cents','dinheiro'),
   -- `amount` em reais, acrescentada por `alter table` em 20260624211000_payment_rpc.sql:7
   -- e redeclarada em 20260624213000.  Convive com `amount_cents`: a conversão decide
   -- qual das duas sobrevive, em vez de converter as duas.
