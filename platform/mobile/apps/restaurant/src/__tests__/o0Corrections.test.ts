@@ -2,7 +2,7 @@
 // que vive no app; os critérios de receita, CRM, KDS e turno estão em platform/supabase/tests/45_*.
 import { formatTableLabel } from '../screens/v2/shared/tableLabel';
 import { cashRegisterStatus, isOpenCall, isTableInService, ACTIVE_CALL_STATUSES } from '../screens/v2/shared/liveStatus';
-import { advanceItems, mapBarQueueRow } from '../screens/v2/shared/kdsItems';
+import { advanceItems, kdsCardStatus, mapBarQueueRow } from '../screens/v2/shared/kdsItems';
 import { toShiftStaffOptions } from '../screens/v2/shared/shiftStaff';
 import { flattenMenuRows } from '../screens/v2/shared/menuRows';
 import { CONFIG_MODULES, VISIBLE_SERVICE_TYPES } from '../screens/v2/config/configTypes';
@@ -57,8 +57,27 @@ describe('critério 9: marcar pronto vai pelo item e mostra o erro', () => {
   it('avança todos os itens do card', async () => {
     const calls: Array<[string, string]> = [];
     const api = { updateOrderItemStatus: async (id: string, status: string) => { calls.push([id, status]); } };
-    await advanceItems(api, ['a', 'b'], 'ready');
+    await advanceItems(api, [{ id: 'a', status: 'preparing' }, { id: 'b', status: 'preparing' }], 'ready');
     expect(calls).toEqual([['a', 'ready'], ['b', 'ready']]);
+  });
+
+  it('num card misto, cada item anda só os passos que faltam (o servidor não aceita recebido → pronto)', async () => {
+    const calls: Array<[string, string]> = [];
+    const api = { updateOrderItemStatus: async (id: string, status: string) => { calls.push([id, status]); } };
+    await advanceItems(api, [
+      { id: 'novo', status: 'pending' },
+      { id: 'fazendo', status: 'preparing' },
+      { id: 'pronto', status: 'ready' },
+    ], 'ready');
+    expect(calls.filter(([id]) => id === 'novo').map(([, s]) => s)).toEqual(['preparing', 'ready']);
+    expect(calls.filter(([id]) => id === 'fazendo').map(([, s]) => s)).toEqual(['ready']);
+    expect(calls.filter(([id]) => id === 'pronto')).toEqual([]);
+  });
+
+  it('o card só fica pronto com todos os itens prontos', () => {
+    expect(kdsCardStatus([{ id: 'a', status: 'ready' }, { id: 'b', status: 'pending' }])).toBe('preparing');
+    expect(kdsCardStatus([{ id: 'a', status: 'ready' }, { id: 'b', status: 'ready' }])).toBe('ready');
+    expect(kdsCardStatus([{ id: 'a', status: 'pending' }])).toBe('queue');
   });
 
   it('propaga a falha em vez de engolir', async () => {
@@ -67,7 +86,7 @@ describe('critério 9: marcar pronto vai pelo item e mostra o erro', () => {
         if (id === 'b') throw new Error('recusado');
       },
     };
-    await expect(advanceItems(api, ['a', 'b'], 'ready')).rejects.toThrow('recusado');
+    await expect(advanceItems(api, [{ id: 'a', status: 'preparing' }, { id: 'b', status: 'preparing' }], 'ready')).rejects.toThrow('recusado');
   });
 
   it('a fila do bar usa os campos que a RPC devolve', () => {

@@ -10,6 +10,7 @@ import { V2StatusBadge } from './shared/V2StatusBadge';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2DetailDialog } from './shared/V2DetailDialog';
 import { useKdsOrders } from './shared/useRestaurantOperations';
+import { advanceItems } from './shared/kdsItems';
 import { kdsStatusLabel, kdsStatusTone } from './shared/v2Types';
 import type { KdsFilter, KdsOrder, KdsStatus } from './shared/v2Types';
 
@@ -50,7 +51,7 @@ export default function KitchenDisplayScreen() {
     try {
       const order = orders.find((item) => item.id === pendingAction.orderId);
       if (!order) return;
-      await Promise.all(order.itemIds.map((itemId) => supabaseApiAdapter.updateOrderItemStatus(itemId, newStatus)));
+      await advanceItems(supabaseApiAdapter, order.itemStates, newStatus === 'ready' ? 'ready' : 'preparing');
       await refresh();
       setPendingAction(null);
     } finally {

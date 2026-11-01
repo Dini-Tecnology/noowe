@@ -1,3 +1,4 @@
+import type { KdsItemState } from './kdsItems';
 import { V2Tone } from './v2Theme';
 
 export type OrderStatus = 'new' | 'preparing' | 'ready';
@@ -35,6 +36,8 @@ export interface HubOrder {
 export interface KdsOrder {
   id: string;
   itemIds: string[];
+  /** Estado de cada item do card: "marcar pronto" anda só os passos que faltam em cada um. */
+  itemStates: KdsItemState[];
   table: string;
   meta: string;
   status: KdsStatus;

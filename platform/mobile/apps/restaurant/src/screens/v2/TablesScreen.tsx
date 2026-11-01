@@ -305,6 +305,7 @@ export default function TablesScreen() {
         >
           <View style={styles.legend} accessibilityLabel="Legenda de status das mesas">
             <Legend meta={STATUS_META.available} label="Livre" />
+            <Legend meta={STATUS_META.payment} label="Conta" />
             <Legend meta={STATUS_META.occupied} label="Ocupada" />
             <Legend meta={STATUS_META.reserved} label="Reservada" />
             <Legend meta={STATUS_META.cleaning} label="Limpeza" />

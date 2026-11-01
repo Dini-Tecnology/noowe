@@ -62,7 +62,7 @@ import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import type { TableBill, ServiceCall } from './shared/useRestaurantOperations';
 import { formatTableLabel } from './shared/tableLabel';
 import { cashRegisterStatus, isOpenCall, isTableInService } from './shared/liveStatus';
-import { advanceItems, mapBarQueueRow, type BarQueueItem } from './shared/kdsItems';
+import { advanceItems, mapBarQueueRow, type BarQueueItem, type KdsItemState } from './shared/kdsItems';
 import {
   elapsedLabel,
   customerDisplayName,
@@ -458,7 +458,7 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
   const primaryActions: { title: string; detail: string; screen: string; icon: IconComponent }[] = [
     { title: 'Cardápio', detail: 'Itens e preços', screen: 'Menu', icon: UtensilsCrossed },
     { title: 'Equipe', detail: 'Staff e turnos', screen: 'Staff', icon: Users },
-    { title: 'Financeiro', detail: 'Receita e custos', screen: 'Financial', icon: CreditCardIcon },
+    { title: 'Financeiro', detail: 'Receita e composição', screen: 'Financial', icon: CreditCardIcon },
     { title: 'Integrações', detail: 'Delivery', screen: 'Integrations', icon: Plug },
   ];
   const secondaryActions: { title: string; screen: string; icon: IconComponent }[] = [
@@ -470,8 +470,8 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
   const occupancy = snapshot?.tables.total
     ? Math.round((snapshot.tables.occupied / snapshot.tables.total) * 100)
     : 0;
-  const averageTicket = snapshot?.orders_today
-    ? snapshot.revenue_today / snapshot.orders_today
+  const averageTicket = snapshot?.paid_orders_today
+    ? snapshot.revenue_today / snapshot.paid_orders_today
     : 0;
   const alerts = React.useMemo(() => {
     const orderAlerts = recentOrders
@@ -481,7 +481,7 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
         message: `Novo pedido na ${order.table} — ${customerDisplayName(order.customerName)}`,
         createdAt: order.createdAt,
       }));
-    const callAlerts = (serviceFeatures.callWaiter ? serviceCalls : []).map((call) => ({
+    const callAlerts = (serviceFeatures.callWaiter ? serviceCalls.filter((call) => isOpenCall(call.status)) : []).map((call) => ({
       id: `call-${call.id}`,
       message: call.tableNumber
         ? `${formatTableLabel(call.tableNumber)} chamou o garçom`
@@ -688,12 +688,12 @@ function CookContent({
 
 /** Avança os itens do card pelo status do item e mostra o erro; o do pedido é recusado enquanto houver item pendente. */
 async function advanceKdsOrder(
-  itemIds: string[],
+  items: KdsItemState[],
   status: 'preparing' | 'ready',
   refresh: () => Promise<void> | void,
 ) {
   try {
-    await advanceItems(supabaseApiAdapter, itemIds, status);
+    await advanceItems(supabaseApiAdapter, items, status);
   } catch (err) {
     Alert.alert('Não foi possível atualizar o item', userErrorMessage(err, 'Tente novamente.'));
   }
@@ -746,7 +746,7 @@ function CookQueueView({
             {!isReady && (
               <TouchableOpacity
                 style={[styles.wideAction, { backgroundColor: actionColor }]}
-                onPress={() => void advanceKdsOrder(order.itemIds, isPreparing ? 'ready' : 'preparing', refresh)}
+                onPress={() => void advanceKdsOrder(order.itemStates, isPreparing ? 'ready' : 'preparing', refresh)}
               >
                 <Text style={[styles.wideActionText, { color: '#FFF' }]}>{actionLabel}</Text>
               </TouchableOpacity>
@@ -783,8 +783,8 @@ function BarmanQueueView({
     void loadBar();
   }, [loadBar]);
 
-  const advanceBarItem = async (itemId: string, status: 'preparing' | 'ready') => {
-    await advanceKdsOrder([itemId], status, loadBar);
+  const advanceBarItem = async (item: BarQueueItem, status: 'preparing' | 'ready') => {
+    await advanceKdsOrder([{ id: item.id, status: item.status }], status, loadBar);
   };
 
   const queueCount = barOrders.filter((o) => o.status === 'confirmed' || o.status === 'pending').length;
@@ -829,7 +829,7 @@ function BarmanQueueView({
             {!isReady && (
               <TouchableOpacity
                 style={[styles.wideAction, { backgroundColor: actionColor }]}
-                onPress={() => void advanceBarItem(item.id, isPreparing ? 'ready' : 'preparing')}
+                onPress={() => void advanceBarItem(item, isPreparing ? 'ready' : 'preparing')}
               >
                 <Text style={[styles.wideActionText, { color: '#FFF' }]}>{actionLabel}</Text>
               </TouchableOpacity>
@@ -897,7 +897,7 @@ function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
             {!isReady && (
               <TouchableOpacity
                 style={[styles.wideAction, { backgroundColor: actionColor }]}
-                onPress={() => void advanceKdsOrder(order.itemIds, isPreparing ? 'ready' : 'preparing', refresh)}
+                onPress={() => void advanceKdsOrder(order.itemStates, isPreparing ? 'ready' : 'preparing', refresh)}
               >
                 <Text style={[styles.wideActionText, { color: actionTextColor }]}>{actionLabel}</Text>
               </TouchableOpacity>
@@ -1062,6 +1062,7 @@ function MaitreReservationsView({ colors }: { colors: ReturnType<typeof useColor
 
 function MaitreFlowView({ colors }: { colors: ReturnType<typeof useColors> }) {
   const navigation = useNavigation<any>();
+  const { capabilities } = useRestaurantRole();
   const { data: reservations, loading, error, refresh } = useReservations();
   const freeTables = useFreeTableCount();
   const upcoming = reservations.filter((r) => r.status === 'pending' || r.status === 'confirmed').slice(0, 4);
@@ -1069,14 +1070,16 @@ function MaitreFlowView({ colors }: { colors: ReturnType<typeof useColors> }) {
   return (
     <View style={styles.section}>
       {/* A fila virtual já tinha tela (WaitlistScreen) mas nenhum perfil chegava a ela. */}
-      <TouchableOpacity
-        style={[styles.wideAction, { backgroundColor: colors.primary }]}
-        onPress={() => navigation.navigate('Waitlist')}
-        accessibilityRole="button"
-        accessibilityLabel="Abrir a fila virtual"
-      >
-        <Text style={[styles.wideActionText, { color: '#FFF' }]}>Abrir a fila virtual</Text>
-      </TouchableOpacity>
+      {capabilities?.capabilities.virtualQueue ? (
+        <TouchableOpacity
+          style={[styles.wideAction, { backgroundColor: colors.primary }]}
+          onPress={() => navigation.navigate('Waitlist')}
+          accessibilityRole="button"
+          accessibilityLabel="Abrir a fila virtual"
+        >
+          <Text style={[styles.wideActionText, { color: '#FFF' }]}>Abrir a fila virtual</Text>
+        </TouchableOpacity>
+      ) : null}
       <View style={styles.metricGrid}>
         <Metric value={String(freeTables)} label="Mesas livres" tone="success" />
         <Metric value={loading ? '—' : String(upcoming.length)} label="Próximas reservas" tone="warning" />
@@ -1504,7 +1507,7 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
       </View>
       <View style={[styles.cashSummary, { borderColor: session?.isOpen ? '#A7F3D0' : colors.border, backgroundColor: session?.isOpen ? '#F0FDF4' : colors.card }]}>
         <View style={styles.cashStatusRow}>
-          <View style={styles.statusDot} />
+          <View style={[styles.statusDot, cashRegisterStatus(session) === 'closed' && { backgroundColor: colors.foregroundSecondary }]} />
           <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{session?.isOpen ? 'Caixa Aberto' : 'Caixa Fechado'}</Text>
         </View>
         {session?.isOpen && (

@@ -10,6 +10,7 @@ import { saoPauloDateKey } from './calendarDate';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { formatTableLabel } from './tableLabel';
 import { ACTIVE_CALL_STATUSES } from './liveStatus';
+import { kdsCardStatus } from './kdsItems';
 import { flattenMenuRows, type MenuItemSummary } from './menuRows';
 
 export { flattenMenuRows, type MenuItemSummary };
@@ -151,6 +152,8 @@ export type DashboardSnapshot = {
   restaurant_id?: string;
   generated_at?: string;
   orders_today: number;
+  /** Pedidos pagos no dia: a base do ticket médio. */
+  paid_orders_today: number;
   active_orders: number;
   revenue_today: number;
   tables: {
@@ -197,12 +200,6 @@ function mapOrderStatus(status?: string): OrderStatus {
   if (status === 'ready') return 'ready';
   if (status === 'preparing' || status === 'open_for_additions') return 'preparing';
   return 'new';
-}
-
-function mapKdsStatus(status?: string, orderStatus?: string): KdsStatus {
-  if (status === 'ready' || orderStatus === 'ready') return 'ready';
-  if (status === 'preparing' || orderStatus === 'preparing') return 'preparing';
-  return 'queue';
 }
 
 function itemLabel(item: RawOrderItem | RawKdsItem): string {
@@ -257,17 +254,19 @@ export function mapKdsRowsToOrders(rows: RawKdsItem[]): KdsOrder[] {
     if (existing) {
       existing.items.push(item);
       existing.itemIds.push(row.id);
-      if (existing.status === 'queue') existing.status = mapKdsStatus(row.status, row.order_status);
+      existing.itemStates.push({ id: row.id, status: row.status ?? 'pending' });
+      existing.status = kdsCardStatus(existing.itemStates);
       continue;
     }
 
     grouped.set(row.order_id, {
       id: row.order_id,
       itemIds: [row.id],
+      itemStates: [{ id: row.id, status: row.status ?? 'pending' }],
       // Pedido sem mesa (retirada): quem a cozinha chama é o nome do cliente.
       table: row.table_number ? `${formatTableLabel(row.table_number)}` : row.customer_name ? `Sem mesa · ${row.customer_name}` : 'Sem mesa',
       meta: `${elapsedLabel(row.order_created_at || row.created_at)} na fila`,
-      status: mapKdsStatus(row.status, row.order_status),
+      status: kdsCardStatus([{ id: row.id, status: row.status ?? 'pending' }]),
       items: [item],
       time: clockLabel(row.order_created_at || row.created_at),
       customerName: row.customer_name || undefined,
@@ -594,6 +593,7 @@ export function useDashboardSnapshot(): AsyncState<DashboardSnapshot | null> {
         restaurant_id: raw?.restaurant_id,
         generated_at: raw?.generated_at,
         orders_today: toNumber(raw?.orders_today),
+        paid_orders_today: toNumber(raw?.paid_orders_today),
         active_orders: toNumber(raw?.active_orders),
         revenue_today: toNumber(raw?.revenue_today),
         tables: {

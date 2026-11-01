@@ -38,7 +38,10 @@ export function TableLayoutPanel({ table, tables, onChanged, onError }: Props) {
   const canJoin = !isChild && ['available', 'reserved', 'occupied'].includes(table.status);
   const needed = Math.max(table.headcount, 0);
 
-  const close = () => { setMode(null); setSheetError(null); };
+  // Sem nenhuma ação disponível (ex.: mesa em cobrança sem sessão), o título ficaria sozinho na tela.
+  if (!isChild && !hasChildren && !canSwap && !canJoin) return null;
+
+  const close =() => { setMode(null); setSheetError(null); };
   const run = async (action: () => Promise<unknown>, afterError: 'sheet' | 'banner') => {
     setSaving(true);
     try {

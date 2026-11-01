@@ -42,14 +42,39 @@ export function mapBarQueueRow(raw: RawBarQueueRow, now: number = Date.now()): B
   };
 }
 
+export type KdsItemState = { id: string; status: string };
+
 type ItemStatusApi = { updateOrderItemStatus(itemId: string, status: string): Promise<unknown> };
 
+/** O servidor só aceita recebido → em preparo → pronto, um passo de cada vez. */
+function stepsTo(current: string, target: 'preparing' | 'ready'): string[] {
+  if (current === 'pending' || current === 'received' || current === 'confirmed') {
+    return target === 'ready' ? ['preparing', 'ready'] : ['preparing'];
+  }
+  if (current === 'preparing' && target === 'ready') return ['ready'];
+  return [];
+}
+
 /**
- * Avança todos os itens de um card de pedido. O servidor só aceita `ready` no pedido quando todos os itens
- * estão prontos, então chamar o status do pedido falhava em silêncio; o status do item é o caminho certo.
+ * Avança os itens de um card de pedido. O servidor só aceita `ready` no pedido quando todos os itens estão
+ * prontos, então chamar o status do pedido falhava em silêncio; o status do item é o caminho certo. Num mesmo
+ * card pode haver item em estados diferentes: cada um anda só os passos que faltam.
  */
-export async function advanceItems(api: ItemStatusApi, itemIds: string[], status: string): Promise<void> {
-  const results = await Promise.allSettled(itemIds.map((id) => api.updateOrderItemStatus(id, status)));
+export async function advanceItems(api: ItemStatusApi, items: KdsItemState[], target: 'preparing' | 'ready'): Promise<void> {
+  const results = await Promise.allSettled(
+    items.map(async (item) => {
+      for (const step of stepsTo(item.status, target)) {
+        await api.updateOrderItemStatus(item.id, step);
+      }
+    }),
+  );
   const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
   if (failed) throw failed.reason;
+}
+
+/** Estado do card: pronto só com todos os itens prontos; em preparo se algum já começou. */
+export function kdsCardStatus(items: KdsItemState[]): 'queue' | 'preparing' | 'ready' {
+  if (items.length > 0 && items.every((item) => item.status === 'ready')) return 'ready';
+  if (items.some((item) => item.status === 'preparing' || item.status === 'ready')) return 'preparing';
+  return 'queue';
 }

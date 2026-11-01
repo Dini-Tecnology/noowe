@@ -26,20 +26,13 @@ type FeatureMap = Record<string, Record<string, boolean>>;
 
 const FEATURE_KEYS: Partial<Record<ServiceType, Record<string, ServiceTypeFeatureKey>>> = {
   fine_dining: {
-    'Reservas Online': 'reservations',
-    'Wine Pairing': 'aiPairing',
-    Sommelier: 'aiPairing',
-    'Split por item': 'splitPayment',
-    'Course-by-Course': 'menuPersonalization',
+    // O que define o serviço não tem interruptor (aditivo §7.2): chave ausente vale ligada.
+    'Harmonização (sommelier digital)': 'aiPairing',
   },
   casual_dining: {
     'Smart Waitlist': 'virtualQueue',
     'Modo Família': 'guestInvitations',
     Grupos: 'guestInvitations',
-  },
-  quick_service: {
-    'Skip the Line': 'ordering',
-    'Acompanhamento por etapas': 'orderTracking',
   },
 };
 
@@ -325,6 +318,7 @@ export default function ServiceConfigScreen() {
                             </Text>
                           </TouchableOpacity>
                         ) : null}
+                        {type.features.length > 0 ? (
                         <View style={[styles.featureCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
                           {type.features.map((feature, index) => {
                             const enabled = featureStates[type.id]?.[feature] ?? true;
@@ -360,6 +354,7 @@ export default function ServiceConfigScreen() {
                             );
                           })}
                         </View>
+                        ) : null}
                       </>
                     ) : null}
                   </View>
