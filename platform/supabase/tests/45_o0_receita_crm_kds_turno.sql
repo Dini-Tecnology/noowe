@@ -6,7 +6,7 @@
 --  * garçom e maître leem o KDS e veem item pronto;
 --  * o turno do dia aparece na Equipe pelo dia do restaurante.
 begin;
-select plan(9);
+select plan(10);
 
 create temp table o0_results(label text primary key, ok boolean not null);
 
@@ -30,6 +30,11 @@ declare
   staff jsonb;
   kds jsonb;
   day0 timestamptz := private.restaurant_day_start();
+  table_id uuid;
+  bills jsonb;
+  bill_delivered uuid := gen_random_uuid();
+  bill_split_paid uuid := gen_random_uuid();
+  bill_cancelled uuid := gen_random_uuid();
 begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
 
@@ -98,6 +103,19 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub', maitre, 'role', 'authenticated')::text, true);
   insert into o0_results values ('maître lê o KDS',
     jsonb_typeof(public.restaurant_get_kds_queue(r)) = 'array');
+
+  -- Cobrar: pedido só entregue não é pago; pagamento confirmado (parcela) é; cancelado nunca.
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
+  select id into table_id from public.tables where restaurant_id = r limit 1;
+  insert into public.orders(id, restaurant_id, customer_id, table_id, status, payment_status, total_amount, total_cents)
+    values (bill_delivered, r, buyer, table_id, 'delivered', 'pending', 40, 4000),
+           (bill_split_paid, r, buyer, table_id, 'preparing', 'confirmed', 60, 6000),
+           (bill_cancelled, r, buyer, table_id, 'cancelled', 'confirmed', 20, 2000);
+  bills := public.restaurant_get_table_bills(r);
+  insert into o0_results values ('cobrar: entregue sem pagamento não é pago; parcela confirmada é; cancelado não',
+    (select (b->>'is_paid')::boolean from jsonb_array_elements(bills) b where (b->>'order_id')::uuid = bill_delivered) = false
+    and (select (b->>'is_paid')::boolean from jsonb_array_elements(bills) b where (b->>'order_id')::uuid = bill_split_paid) = true
+    and (select (b->>'is_paid')::boolean from jsonb_array_elements(bills) b where (b->>'order_id')::uuid = bill_cancelled) = false);
 
   -- Turno do dia: marcado para o começo do dia do restaurante, aparece na Equipe.
   perform set_config('request.jwt.claims', jsonb_build_object('sub', owner_id, 'role', 'authenticated')::text, true);
