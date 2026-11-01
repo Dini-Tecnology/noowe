@@ -211,18 +211,6 @@ export default function FinancialScreen() {
                   trendPositive={revenueChange != null ? revenueChange >= 0 : undefined}
                 />
                 <MetricCard
-                  icon={<Receipt size={17} color="#EF4444" />}
-                  label="Custos (CMV)"
-                  value={dashboard?.cost_of_goods_available ? fmt(0) : 'N/D'}
-                  hint={dashboard?.cost_of_goods_available ? undefined : 'Cadastre o custo dos pratos para calcular'}
-                />
-                <MetricCard
-                  icon={<Percent size={17} color="#22C55E" />}
-                  label="Margem Líquida"
-                  value={dashboard?.cost_of_goods_available ? '—' : 'N/D'}
-                  hint={dashboard?.cost_of_goods_available ? undefined : 'Depende do CMV'}
-                />
-                <MetricCard
                   icon={<TrendingUp size={17} color={colors.primary} />}
                   label="Ticket Médio"
                   value={fmt(dashboard?.average_ticket)}

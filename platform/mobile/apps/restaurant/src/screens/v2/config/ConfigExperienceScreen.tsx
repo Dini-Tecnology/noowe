@@ -92,13 +92,6 @@ const CHANNEL_ITEMS: ToggleItem[] = [
     Icon: Users,
     iconColor: '#0284C7',
   },
-  {
-    key: 'eventReservations',
-    label: 'Reserva de Eventos',
-    subtitle: 'Grupos e eventos especiais',
-    Icon: PartyPopper,
-    iconColor: '#D97706',
-  },
 ];
 
 const SERVICE_ITEMS: ToggleItem[] = [

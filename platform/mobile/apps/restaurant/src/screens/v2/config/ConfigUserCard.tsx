@@ -12,7 +12,8 @@ export function ConfigUserCard() {
   const colors = useColors();
   const navigation = useNavigation<any>();
   const { role } = useRestaurantRole();
-  const [name, setName] = useState('Carregando…');
+  // Nunca "Carregando…": sem usuário carregado o card mostra o fallback, não um rótulo que não sai.
+  const [name, setName] = useState('Seu perfil');
   const [email, setEmail] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 

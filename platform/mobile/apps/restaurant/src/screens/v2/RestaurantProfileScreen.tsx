@@ -48,6 +48,7 @@ import {
 import { ConfigSegmentedTabs } from './config/ConfigSegmentedTabs';
 import { ConfigSectionCard } from './config/ConfigSectionCard';
 import { SocialBrandIcon } from './config/SocialBrandIcon';
+import { useRestaurantTables } from './shared/useRestaurantOperations';
 import { formatCentsBRL, maskCentsInput, parseCentsInput } from '@okinawa/shared/utils/money-input';
 import { cnpjErrorMessage, maskCnpjInput } from '@okinawa/shared/utils/cnpj';
 import {
@@ -100,6 +101,9 @@ export default function RestaurantProfileScreen() {
 
   const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
+  const { data: floorTables } = useRestaurantTables();
+  // Capacidade vem das mesas do Mapa do Salão (ADR-026): digitar outro número divergia da soma.
+  const floorSeats = floorTables.reduce((sum, table) => sum + table.seats, 0);
   const [profile, setProfile] = useState<ProfileState>(EMPTY_PROFILE);
   const [hours, setHours] = useState<WeeklyHours>(DEFAULT_WEEK);
   // Sem horário salvo o editor mostra o padrão, mas o cliente vê o restaurante como fechado.
@@ -343,7 +347,10 @@ export default function RestaurantProfileScreen() {
     {
       key: 'capacity',
       label: 'Capacidade',
-      value: profile.capacity ? `${profile.capacity} lugares` : '—',
+      value: floorTables.length
+        ? `${floorSeats} lugares · ${floorTables.length} ${floorTables.length === 1 ? 'mesa' : 'mesas'}`
+        : 'Cadastre as mesas no Mapa do Salão',
+      readOnly: true,
     },
   ];
 
@@ -462,7 +469,14 @@ export default function RestaurantProfileScreen() {
                       },
                     ]}
                   >
-                    {editingField === field.key ? (
+                    {(field as { readOnly?: boolean }).readOnly ? (
+                      <View style={styles.fieldPress}>
+                        <Text style={[styles.fieldLabel, { color: colors.foregroundSecondary }]}>{field.label}</Text>
+                        <Text style={{ color: colors.foreground, fontSize: 12, fontWeight: '600', maxWidth: '60%' }} numberOfLines={1}>
+                          {field.value}
+                        </Text>
+                      </View>
+                    ) : editingField === field.key ? (
                       <View style={{ gap: 8 }}>
                         <Text style={[styles.fieldLabel, { color: colors.foregroundSecondary }]}>
                           {field.label}

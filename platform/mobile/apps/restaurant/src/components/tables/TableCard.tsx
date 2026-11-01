@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Card, Text, IconButton, Chip } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
+import { formatTableLabel } from '../../screens/v2/shared/tableLabel';
 
 type TableStatus = 'available' | 'occupied' | 'reserved' | 'cleaning';
 
@@ -108,7 +109,7 @@ export default function TableCard({ table, onPress, compact = false }: TableCard
         <View style={styles.tableInfo}>
           <IconButton icon="table-furniture" size={compact ? 24 : 32} iconColor={colors.primary} style={styles.icon} />
           <View>
-            <Text variant={compact ? 'titleMedium' : 'titleLarge'} style={styles.tableNumber}>Mesa {table.table_number}</Text>
+            <Text variant={compact ? 'titleMedium' : 'titleLarge'} style={styles.tableNumber}>{formatTableLabel(table.table_number)}</Text>
             <Text variant="bodySmall" style={styles.capacity}>
               Até {table.capacity} pessoas
             </Text>

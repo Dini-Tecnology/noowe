@@ -9,6 +9,7 @@ import { V2Shell } from './shared/V2Shell';
 import { useRestaurantTables } from './shared/useRestaurantOperations';
 import { exportTableQrPdf } from './shared/tableQrExport';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { formatTableLabel } from './shared/tableLabel';
 
 export default function QRBatchScreen() {
   const colors = useColors();
@@ -126,7 +127,7 @@ export default function QRBatchScreen() {
           <View key={code.table_id} style={[styles.previewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <QRCode value={code.qr_code_data!} size={92} ecl="H" />
             <View style={styles.previewText}>
-              <Text style={[styles.previewTitle, { color: colors.foreground }]}>Mesa {code.table_number}</Text>
+              <Text style={[styles.previewTitle, { color: colors.foreground }]}>{formatTableLabel(code.table_number)}</Text>
               <Text style={{ color: colors.foregroundSecondary, fontSize: 12 }}>{code.section || 'Salão'}</Text>
             </View>
           </View>

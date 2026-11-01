@@ -8,6 +8,7 @@ import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { useServiceCallsRealtime, useTablesRealtime } from './shared/useRealtimeSubscription';
 import { V2Shell } from './shared/V2Shell';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { formatTableLabel } from './shared/tableLabel';
 
 interface TableRow {
   id: string;
@@ -134,7 +135,7 @@ export default function WaiterScreen() {
         {tables.map((table) => {
           const tone = tableTone(table.status, table.open_calls ?? 0, colors.primary);
           const { Icon } = tone;
-          const label = `Mesa ${table.table_number ?? table.id}`;
+          const label = `${formatTableLabel(table.table_number ?? table.id)}`;
           const message = tableStatusLabel(table.status, table.open_calls ?? 0);
           return (
             <View

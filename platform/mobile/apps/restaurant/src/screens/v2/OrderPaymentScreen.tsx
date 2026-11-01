@@ -2,6 +2,7 @@ import { CreditCard, Clock, CheckCircle } from 'lucide-react-native';
 import { formatCurrency } from '@okinawa/shared/utils/formatters';
 import { V2ListScreen, type V2ListItem } from './shared/V2ListScreen';
 import { useTableBills } from './shared/useRestaurantOperations';
+import { formatTableLabel } from './shared/tableLabel';
 
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro',
@@ -24,7 +25,7 @@ export default function OrderPaymentScreen() {
         ? [{ icon: CheckCircle, label: 'Nenhuma conta em aberto nas últimas 24h' }]
         : bills.map((bill) => ({
             icon: bill.isPaid ? CheckCircle : CreditCard,
-            label: `Mesa ${bill.tableNumber} · ${formatCurrency(bill.totalAmount)}`,
+            label: `${formatTableLabel(bill.tableNumber)} · ${formatCurrency(bill.totalAmount)}`,
             subtitle: bill.isPaid
               ? `Pago · ${bill.paymentMethod ? PAYMENT_METHOD_LABEL[bill.paymentMethod] ?? bill.paymentMethod : ''}`
               : bill.paymentMethod

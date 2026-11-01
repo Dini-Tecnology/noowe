@@ -33,7 +33,6 @@ import {
   calculateTeamProgress,
   calculateKitchenProgress,
   calculatePaymentsProgress,
-  calculateMarketplaceProgress,
   statusFromProgress,
   type ConfigModuleStatus,
 } from './configTypes';
@@ -54,7 +53,6 @@ interface ProgressMap {
   team: number;
   kitchen: number;
   payments: number;
-  marketplace: number;
 }
 
 const EMPTY_PROGRESS: ProgressMap = {
@@ -66,7 +64,6 @@ const EMPTY_PROGRESS: ProgressMap = {
   team: 0,
   kitchen: 0,
   payments: 0,
-  marketplace: 0,
 };
 
 interface ConfigHubContentProps {
@@ -141,7 +138,6 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
         team: calculateTeamProgress(Array.isArray(staff) ? staff : []),
         kitchen: calculateKitchenProgress(Array.isArray(stations) ? stations : [], kdsConfig),
         payments: calculatePaymentsProgress(profile?.settings?.payment_methods),
-        marketplace: calculateMarketplaceProgress(profile?.features),
       });
     } catch {
       // keep previous progress values
@@ -168,7 +164,6 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
       'config-team': progressMap.team,
       'config-kitchen': progressMap.kitchen,
       'config-payments': progressMap.payments,
-      'config-marketplace': progressMap.marketplace,
     };
 
     const map: Record<string, ModuleState> = {};

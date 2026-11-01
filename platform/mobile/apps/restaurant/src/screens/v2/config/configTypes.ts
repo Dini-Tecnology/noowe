@@ -73,7 +73,7 @@ export const SERVICE_TYPE_CATALOG: ServiceTypeDef[] = [
     id: 'fine_dining',
     name: 'Fine Dining',
     desc: 'Reservas, sommelier, harmonização',
-    features: ['Reservas Online', 'Wine Pairing', 'Sommelier', 'Split por item', 'Course-by-Course'],
+    features: ['Harmonização (sommelier digital)'],
     Icon: Crown,
     mvp: true,
   },
@@ -138,7 +138,7 @@ export const SERVICE_TYPE_CATALOG: ServiceTypeDef[] = [
     id: 'quick_service',
     name: 'Quick Service',
     desc: 'Skip the line, pickup rápido',
-    features: ['Skip the Line', 'Acompanhamento por etapas'],
+    features: [],
     Icon: Zap,
     mvp: true,
   },
@@ -150,6 +150,12 @@ export const SERVICE_TYPE_CATALOG: ServiceTypeDef[] = [
     Icon: Music,
   },
 ];
+
+/**
+ * Serviços que aparecem na tela. Os outros 8 ficam em hold (aditivo §8): fora da UI, sem "em breve".
+ * O catálogo completo continua aqui porque a persistência e os ids do servidor ainda o usam.
+ */
+export const VISIBLE_SERVICE_TYPES: ServiceTypeDef[] = SERVICE_TYPE_CATALOG.filter((type) => type.mvp);
 
 export const CONFIG_MODULES: ConfigModuleDef[] = [
   {
@@ -166,7 +172,7 @@ export const CONFIG_MODULES: ConfigModuleDef[] = [
     id: 'config-service-types',
     route: 'ServiceConfig',
     label: 'Tipos de Serviço',
-    desc: '11 modelos de operação',
+    desc: 'Fine, Casual e Quick',
     Icon: Utensils,
     iconColor: '#0D9488',
     staticProgress: 0,
@@ -229,16 +235,6 @@ export const CONFIG_MODULES: ConfigModuleDef[] = [
     desc: 'Taxa, gorjeta, split, métodos',
     Icon: CreditCard,
     iconColor: '#EA580C',
-    staticProgress: 0,
-    staticStatus: 'needs-attention',
-  },
-  {
-    id: 'config-marketplace',
-    route: 'ConfigMarketplace',
-    label: 'Marketplace de Features',
-    desc: 'Fidelidade, IA, eventos, VIP',
-    Icon: Zap,
-    iconColor: '#D97706',
     staticProgress: 0,
     staticStatus: 'needs-attention',
   },
@@ -331,7 +327,7 @@ export function calculateExperienceProgress(prefs: Record<string, unknown> | nul
     'journeyPayment',
     'journeyPostVisit',
   ] as const;
-  const channelKeys = ['onlineReservations', 'waitlist', 'eventReservations'] as const;
+  const channelKeys = ['onlineReservations', 'waitlist'] as const;
   const serviceKeys = ['tableService', 'qrOrdering', 'counterService', 'selfService'] as const;
   const intelKeys = ['smartAllocation', 'postVisitFeedback'] as const;
 

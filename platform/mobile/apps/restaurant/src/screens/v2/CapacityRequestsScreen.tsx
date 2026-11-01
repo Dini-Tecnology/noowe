@@ -15,6 +15,7 @@ import { describeLayoutError, joinCandidates, swapCandidates, type LayoutCandida
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2Shell } from './shared/V2Shell';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { formatTableLabel } from './shared/tableLabel';
 
 /** Re-render cadence for the "há X min" labels (UX only). */
 const ELAPSED_TICK_MS = 30_000;
@@ -179,7 +180,7 @@ export default function CapacityRequestsScreen() {
               <Text style={[styles.title, { color: colors.foreground }]}>
                 {request.requestKind === 'open'
                   ? `Abrir mesa ${request.tableNumber} · ${request.seatCount} pessoa(s)`
-                  : `Mesa ${request.tableNumber} · ${request.occupiedSeats}/${request.seats} lugares`}
+                  : `${formatTableLabel(request.tableNumber)} · ${request.occupiedSeats}/${request.seats} lugares`}
               </Text>
               <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>{elapsedLabel(request.createdAt, now)}</Text>
             </View>

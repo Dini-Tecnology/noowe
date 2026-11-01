@@ -14,7 +14,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
-import { SERVICE_TYPE_CATALOG } from './config/configTypes';
+import { SERVICE_TYPE_CATALOG, VISIBLE_SERVICE_TYPES } from './config/configTypes';
 import {
   isSupportedServiceType,
   type ServiceType,
@@ -198,7 +198,7 @@ export default function ServiceConfigScreen() {
 
   const featureCount = useMemo(
     () =>
-      SERVICE_TYPE_CATALOG.filter((t) => activeIds.includes(t.id)).reduce((acc, type) => {
+      VISIBLE_SERVICE_TYPES.filter((t) => activeIds.includes(t.id)).reduce((acc, type) => {
         const states = featureStates[type.id] ?? {};
         return acc + type.features.filter((f) => states[f] !== false).length;
       }, 0),
@@ -214,7 +214,7 @@ export default function ServiceConfigScreen() {
       headerRight={
         <View style={[styles.badge, { backgroundColor: `${colors.secondary}18` }]}>
           <Text style={{ color: colors.secondary, fontSize: 10, fontWeight: '800' }}>
-            {activeIds.length}/11
+            {activeIds.filter((id) => VISIBLE_SERVICE_TYPES.some((t) => t.id === id)).length}/{VISIBLE_SERVICE_TYPES.length}
           </Text>
         </View>
       }
@@ -224,9 +224,9 @@ export default function ServiceConfigScreen() {
       ) : (
         <>
           <View style={styles.statsRow}>
-            <Stat value={activeIds.length} label="Ativos" color={colors.primary} colors={colors} />
+            <Stat value={activeIds.filter((id) => VISIBLE_SERVICE_TYPES.some((t) => t.id === id)).length} label="Ativos" color={colors.primary} colors={colors} />
             <Stat value={featureCount} label="Features" color={colors.success} colors={colors} />
-            <Stat value={11} label="Disponíveis" color={colors.foreground} colors={colors} />
+            <Stat value={VISIBLE_SERVICE_TYPES.length} label="Disponíveis" color={colors.foreground} colors={colors} />
           </View>
 
           <View style={[styles.infoBanner, { borderColor: `${colors.info}33`, backgroundColor: `${colors.info}0D` }]}>
@@ -236,7 +236,7 @@ export default function ServiceConfigScreen() {
             </Text>
           </View>
 
-          {SERVICE_TYPE_CATALOG.map((type) => {
+          {VISIBLE_SERVICE_TYPES.map((type) => {
             const isActive = activeIds.includes(type.id);
             const isExpanded = expandedType === type.id;
             const Icon = type.Icon;
@@ -270,11 +270,6 @@ export default function ServiceConfigScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <Text style={[styles.typeName, { color: colors.foreground }]}>{type.name}</Text>
                       {isActive ? <Check size={14} color={colors.primary} /> : null}
-                      {primaryType === type.id ? (
-                        <View style={[styles.primaryPill, { backgroundColor: `${colors.primary}18` }]}>
-                          <Text style={{ color: colors.primary, fontSize: 9, fontWeight: '800' }}>PRIMÁRIO</Text>
-                        </View>
-                      ) : null}
                       {!type.mvp ? (
                         <View style={[styles.primaryPill, { backgroundColor: `${colors.foregroundSecondary}18` }]}>
                           <Text style={{ color: colors.foregroundSecondary, fontSize: 9, fontWeight: '800' }}>EM BREVE</Text>
@@ -319,20 +314,6 @@ export default function ServiceConfigScreen() {
 
                     {isActive ? (
                       <>
-                        {primaryType !== type.id && type.mvp ? (
-                          <TouchableOpacity
-                            onPress={() => {
-                              setPrimaryType(type.id);
-                              void persist(activeIds, featureStates, type.id as ServiceType);
-                            }}
-                            style={[styles.makePrimaryBtn, { borderColor: colors.border }]}
-                          >
-                            <Utensils size={12} color={colors.primary} />
-                            <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '700' }}>
-                              Definir como primário
-                            </Text>
-                          </TouchableOpacity>
-                        ) : null}
                         {DISCOVERY_FILTER_ROUTES[type.id] ? (
                           <TouchableOpacity
                             onPress={() => navigation.navigate(DISCOVERY_FILTER_ROUTES[type.id]!)}

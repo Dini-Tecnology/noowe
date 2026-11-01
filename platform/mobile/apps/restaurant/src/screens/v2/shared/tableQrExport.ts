@@ -2,6 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import QRCode from 'qrcode';
 import type { TableQRCode } from '@okinawa/shared/services/supabase-api';
+import { formatTableLabel } from './tableLabel';
 
 function escapeHtml(value: string): string {
   return value
@@ -30,7 +31,7 @@ export async function exportTableQrPdf(rows: TableQRCode[], fileLabel = 'qrcodes
     return `
       <article class="card">
         <div class="brand">NOOWE</div>
-        <h1>Mesa ${escapeHtml(row.table_number)}</h1>
+        <h1>${formatTableLabel(escapeHtml(row.table_number))}</h1>
         <p class="section">${escapeHtml(row.section || 'Salão')}</p>
         <div class="qr">${svg}</div>
         <h2>Escaneie para entrar na mesa</h2>

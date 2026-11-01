@@ -8,6 +8,8 @@ import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { useServiceCallsRealtime } from './shared/useRealtimeSubscription';
 import { V2Shell } from './shared/V2Shell';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { formatTableLabel } from './shared/tableLabel';
+import { ACTIVE_CALL_STATUSES, isOpenCall } from './shared/liveStatus';
 
 interface ServiceCall {
   id: string;
@@ -39,7 +41,7 @@ function elapsedLabel(iso: string): string {
 }
 
 function statusTone(status: string): { bg: string; border: string; icon: typeof Bell } {
-  if (status === 'open') return { bg: '#FEF2F2', border: '#EF4444', icon: AlertCircle };
+  if (isOpenCall(status)) return { bg: '#FEF2F2', border: '#EF4444', icon: AlertCircle };
   if (status === 'acknowledged') return { bg: '#FFFBEB', border: '#F59E0B', icon: Clock };
   return { bg: '#F0FDF4', border: '#22C55E', icon: Check };
 }
@@ -56,7 +58,7 @@ export default function CallsScreen() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      const data = await supabaseApiAdapter.getServiceCalls(undefined, ['open', 'acknowledged']);
+      const data = await supabaseApiAdapter.getServiceCalls(undefined, ACTIVE_CALL_STATUSES);
       setCalls(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(userErrorMessage(err, 'Erro ao carregar chamados'));
@@ -95,7 +97,7 @@ export default function CallsScreen() {
     }
   };
 
-  const openCalls = calls.filter((c) => c.status === 'open');
+  const openCalls = calls.filter((c) => isOpenCall(c.status));
   const ackCalls = calls.filter((c) => c.status === 'acknowledged');
 
   return (
@@ -137,7 +139,7 @@ export default function CallsScreen() {
               <View style={styles.cardHeader}>
                 <Icon size={18} color={tone.border} />
                 <Text style={{ fontWeight: '700', color: colors.foreground, flex: 1, marginLeft: 8 }}>
-                  {call.table_number ? `Mesa ${call.table_number}` : 'Mesa'} · {callTypeLabel(call.call_type)}
+                  {call.table_number ? `${formatTableLabel(call.table_number)}` : 'Mesa'} · {callTypeLabel(call.call_type)}
                 </Text>
                 <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>
                   {elapsedLabel(call.created_at)}
@@ -181,7 +183,7 @@ export default function CallsScreen() {
               <View style={styles.cardHeader}>
                 <Icon size={18} color={tone.border} />
                 <Text style={{ fontWeight: '700', color: colors.foreground, flex: 1, marginLeft: 8 }}>
-                  {call.table_number ? `Mesa ${call.table_number}` : 'Mesa'} · {callTypeLabel(call.call_type)}
+                  {call.table_number ? `${formatTableLabel(call.table_number)}` : 'Mesa'} · {callTypeLabel(call.call_type)}
                 </Text>
                 <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>
                   {elapsedLabel(call.created_at)}

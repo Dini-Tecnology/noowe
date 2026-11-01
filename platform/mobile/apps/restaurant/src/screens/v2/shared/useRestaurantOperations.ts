@@ -8,6 +8,11 @@ import type { KdsOrder, KdsStatus, OrderStatus, TabOrder } from './v2Types';
 import { useRegisterRemoteRefresh } from './remoteRefreshRegistry';
 import { saoPauloDateKey } from './calendarDate';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { formatTableLabel } from './tableLabel';
+import { ACTIVE_CALL_STATUSES } from './liveStatus';
+import { flattenMenuRows, type MenuItemSummary } from './menuRows';
+
+export { flattenMenuRows, type MenuItemSummary };
 
 type AsyncState<T> = {
   data: T;
@@ -226,7 +231,7 @@ export function mapOrderToTabOrder(raw: RawOrder): TabOrder {
 
   return {
     id: raw.id,
-    table: raw.table_number ? `Mesa ${raw.table_number}` : raw.table_id ? 'Mesa vinculada' : 'Sem mesa',
+    table: raw.table_number ? `${formatTableLabel(raw.table_number)}` : raw.table_id ? 'Mesa vinculada' : 'Sem mesa',
     items: items.length ? items.map(itemLabel) : ['Pedido sem itens vinculados'],
     total,
     time: clockLabel(raw.created_at) || elapsedLabel(raw.created_at),
@@ -260,7 +265,7 @@ export function mapKdsRowsToOrders(rows: RawKdsItem[]): KdsOrder[] {
       id: row.order_id,
       itemIds: [row.id],
       // Pedido sem mesa (retirada): quem a cozinha chama é o nome do cliente.
-      table: row.table_number ? `Mesa ${row.table_number}` : row.customer_name ? `Sem mesa · ${row.customer_name}` : 'Sem mesa',
+      table: row.table_number ? `${formatTableLabel(row.table_number)}` : row.customer_name ? `Sem mesa · ${row.customer_name}` : 'Sem mesa',
       meta: `${elapsedLabel(row.order_created_at || row.created_at)} na fila`,
       status: mapKdsStatus(row.status, row.order_status),
       items: [item],
@@ -1002,33 +1007,6 @@ export function usePromotions(): AsyncState<Promotion[]> {
   return { data, loading, error, refresh };
 }
 
-export type MenuItemSummary = {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  imageUrl?: string;
-  isAvailable: boolean;
-};
-
-function mapMenuItemSummary(raw: {
-  id: string;
-  name: string;
-  description?: string | null;
-  price?: number | string | null;
-  image_url?: string | null;
-  is_available?: boolean;
-}): MenuItemSummary {
-  return {
-    id: raw.id,
-    name: raw.name,
-    description: raw.description || '',
-    price: toNumber(raw.price),
-    imageUrl: raw.image_url ?? undefined,
-    isAvailable: raw.is_available !== false,
-  };
-}
-
 export function useMenuItems(): AsyncState<MenuItemSummary[]> {
   const [data, setData] = useState<MenuItemSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1037,8 +1015,8 @@ export function useMenuItems(): AsyncState<MenuItemSummary[]> {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const raw = await supabaseApiAdapter.getMenu();
-      setData((Array.isArray(raw) ? raw : []).map(mapMenuItemSummary));
+      const raw = await supabaseApiAdapter.getMenu(undefined, true);
+      setData(flattenMenuRows(raw));
     } catch (err) {
       setError(userErrorMessage(err, 'Erro ao carregar cardápio'));
     } finally {
@@ -1085,7 +1063,7 @@ export function useServiceCalls(): AsyncState<ServiceCall[]> {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const raw = await supabaseApiAdapter.getServiceCalls(undefined, ['open', 'acknowledged']);
+      const raw = await supabaseApiAdapter.getServiceCalls(undefined, ACTIVE_CALL_STATUSES);
       setData((Array.isArray(raw) ? raw : []).map(mapServiceCall));
     } catch (err) {
       setError(userErrorMessage(err, 'Erro ao carregar chamados'));

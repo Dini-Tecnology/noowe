@@ -89,6 +89,19 @@ const waiterNavItems: LiquidGlassNavItem[] = [
   { id: 'waiter-settings', icon: Settings, label: 'Config' },
 ];
 
+/**
+ * Itens em hold (aditivo de perfis §8): ficam fora da barra, sem "em breve", até a fase em que forem
+ * construídos. Para religar um item, tirar o id desta lista; as telas continuam no código.
+ */
+export const HOLD_NAV_IDS: readonly string[] = [
+  'manager-stock', // Estoque
+  'chef-stock',
+  'bar-stock',
+  'chef-cost', // CMV, margem e custo por prato
+  'bar-recipes', // fichas técnicas de drinks
+  'chef-approvals', // aprovações de Chef's Table
+];
+
 const NAV_BY_VARIANT: Record<string, LiquidGlassNavItem[]> = {
   default: defaultNavItems,
   manager: managerNavItems,
@@ -108,6 +121,13 @@ export type RestaurantNavVariant =
   | 'cook'
   | 'waiter';
 
+/** Itens da barra de um perfil, sem os escondidos por capability nem os em hold. */
+export function visibleNavItems(variant: string, hiddenItemIds: readonly string[] = []): LiquidGlassNavItem[] {
+  return (NAV_BY_VARIANT[variant] ?? defaultNavItems).filter(
+    (item) => !hiddenItemIds.includes(item.id) && !HOLD_NAV_IDS.includes(item.id),
+  );
+}
+
 interface RestaurantLiquidGlassNavProps {
   variant?: string;
   activeTab: string;
@@ -121,11 +141,7 @@ const RestaurantLiquidGlassNav: React.FC<RestaurantLiquidGlassNavProps> = ({
   onNavigate,
   hiddenItemIds = [],
 }) => {
-  const items = useMemo(
-    () => (NAV_BY_VARIANT[variant] ?? defaultNavItems)
-      .filter((item) => !hiddenItemIds.includes(item.id)),
-    [hiddenItemIds, variant],
-  );
+  const items = useMemo(() => visibleNavItems(variant, hiddenItemIds), [hiddenItemIds, variant]);
 
   return (
     <LiquidGlassBottomNav items={items} activeTab={activeTab} onNavigate={onNavigate} />

@@ -10,6 +10,7 @@ import { V2FormSheet } from './shared/V2FormSheet';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { DateInput, saoPauloDateToIso } from './shared/DateInput';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { toShiftStaffOptions, type StaffOption } from './shared/shiftStaff';
 
 interface Shift {
   id: string;
@@ -23,11 +24,6 @@ interface Shift {
   notes?: string;
 }
 
-interface StaffOption {
-  id: string;
-  full_name?: string;
-  role: string;
-}
 
 const STATUS_META: Record<Shift['status'], { label: string; bg: string; color: string }> = {
   scheduled: { label: 'Agendado', bg: '#EFF6FF', color: '#1D4ED8' },
@@ -90,7 +86,7 @@ export default function ShiftsScreen() {
         supabaseApiAdapter.getStaff(restaurantId ?? undefined),
       ]);
       setShifts(Array.isArray(shiftsData) ? shiftsData : []);
-      setStaff((Array.isArray(staffData) ? staffData : []).filter((member: any) => member.is_active));
+      setStaff(toShiftStaffOptions(staffData));
     } catch (err) {
       setError(getErrorMessage(err, 'Erro ao carregar escalas'));
     } finally {

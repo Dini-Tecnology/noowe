@@ -10,6 +10,7 @@ import { V2Shell } from './shared/V2Shell';
 import { useRestaurantTables } from './shared/useRestaurantOperations';
 import { exportTableQrPdf } from './shared/tableQrExport';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { formatTableLabel } from './shared/tableLabel';
 
 export default function QRGeneratorScreen() {
   const colors = useColors();
@@ -117,7 +118,7 @@ export default function QRGeneratorScreen() {
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
             >
-              <Text style={{ color: active ? colors.primary : colors.foreground, fontWeight: '700' }}>Mesa {table.label}</Text>
+              <Text style={{ color: active ? colors.primary : colors.foreground, fontWeight: '700' }}>{formatTableLabel(table.label)}</Text>
             </Pressable>
           );
         })}
@@ -125,7 +126,7 @@ export default function QRGeneratorScreen() {
 
       {selectedCode?.qr_code_data ? (
         <View style={[styles.qrCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.tableTitle, { color: colors.foreground }]}>Mesa {selectedCode.table_number}</Text>
+          <Text style={[styles.tableTitle, { color: colors.foreground }]}>{formatTableLabel(selectedCode.table_number)}</Text>
           <Text style={[styles.section, { color: colors.foregroundSecondary }]}>{selectedCode.section || selectedTable?.section || 'Salão'}</Text>
           <View style={styles.qrFrame}>
             <QRCode value={selectedCode.qr_code_data} size={238} ecl="H" backgroundColor="#FFFFFF" color="#111827" />

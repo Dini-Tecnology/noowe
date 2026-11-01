@@ -26,6 +26,7 @@ import { V2FormSheet } from '../shared/V2FormSheet';
 import { V2Shell } from '../shared/V2Shell';
 import { useRestaurantTables, type V2Table } from '../shared/useRestaurantOperations';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { formatTableLabel } from '../shared/tableLabel';
 
 const ZONE_PALETTE = [
   { bg: '#FFEDD5', text: '#C2410C', badge: '#FED7AA' },
@@ -306,7 +307,7 @@ export default function ConfigFloorScreen() {
                         <Table2 size={18} color={palette.text} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.tableName, { color: colors.foreground }]}>Mesa {table.label}</Text>
+                        <Text style={[styles.tableName, { color: colors.foreground }]}>{formatTableLabel(table.label)}</Text>
                         <Text style={{ color: colors.foregroundSecondary, fontSize: 12, marginTop: 2 }}>
                           {table.seats} lugares - {shapeLabel(table.shape)}
                         </Text>

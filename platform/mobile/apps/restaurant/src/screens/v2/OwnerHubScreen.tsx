@@ -60,6 +60,9 @@ import { ConfigHubContent } from './config/ConfigHubContent';
 import { PersonalSettingsContent } from './config/PersonalSettingsContent';
 import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import type { TableBill, ServiceCall } from './shared/useRestaurantOperations';
+import { formatTableLabel } from './shared/tableLabel';
+import { cashRegisterStatus, isOpenCall, isTableInService } from './shared/liveStatus';
+import { advanceItems, mapBarQueueRow, type BarQueueItem } from './shared/kdsItems';
 import {
   elapsedLabel,
   customerDisplayName,
@@ -481,7 +484,7 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
     const callAlerts = (serviceFeatures.callWaiter ? serviceCalls : []).map((call) => ({
       id: `call-${call.id}`,
       message: call.tableNumber
-        ? `Mesa ${call.tableNumber} chamou o garçom`
+        ? `${formatTableLabel(call.tableNumber)} chamou o garçom`
         : 'Cliente chamou o garçom',
       createdAt: call.createdAt,
     }));
@@ -683,6 +686,20 @@ function CookContent({
   return <CookQueueView colors={colors} mode={view === 'cook-kds' ? 'kds' : 'station'} />;
 }
 
+/** Avança os itens do card pelo status do item e mostra o erro; o do pedido é recusado enquanto houver item pendente. */
+async function advanceKdsOrder(
+  itemIds: string[],
+  status: 'preparing' | 'ready',
+  refresh: () => Promise<void> | void,
+) {
+  try {
+    await advanceItems(supabaseApiAdapter, itemIds, status);
+  } catch (err) {
+    Alert.alert('Não foi possível atualizar o item', userErrorMessage(err, 'Tente novamente.'));
+  }
+  await refresh();
+}
+
 function CookQueueView({
   colors,
   mode,
@@ -690,7 +707,7 @@ function CookQueueView({
   colors: ReturnType<typeof useColors>;
   mode: 'station' | 'kds';
 }) {
-  const { data: orders, loading } = useKdsOrders();
+  const { data: orders, loading, refresh } = useKdsOrders();
   const queueCount = orders.filter((o) => o.status === 'queue').length;
   const preparingCount = orders.filter((o) => o.status === 'preparing').length;
   const readyCount = orders.filter((o) => o.status === 'ready').length;
@@ -729,7 +746,7 @@ function CookQueueView({
             {!isReady && (
               <TouchableOpacity
                 style={[styles.wideAction, { backgroundColor: actionColor }]}
-                onPress={() => void supabaseApiAdapter.updateOrderStatus(order.id, isPreparing ? 'ready' : 'preparing')}
+                onPress={() => void advanceKdsOrder(order.itemIds, isPreparing ? 'ready' : 'preparing', refresh)}
               >
                 <Text style={[styles.wideActionText, { color: '#FFF' }]}>{actionLabel}</Text>
               </TouchableOpacity>
@@ -748,16 +765,27 @@ function BarmanQueueView({
   colors: ReturnType<typeof useColors>;
   mode: 'station' | 'kds';
 }) {
-  const [barOrders, setBarOrders] = React.useState<any[]>([]);
+  const [barOrders, setBarOrders] = React.useState<BarQueueItem[]>([]);
   const [loadingBar, setLoadingBar] = React.useState(true);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    supabaseApiAdapter.getBarQueue().then((data) => {
-      if (!cancelled) setBarOrders(Array.isArray(data) ? data : []);
-    }).catch(() => {}).finally(() => { if (!cancelled) setLoadingBar(false); });
-    return () => { cancelled = true; };
+  const loadBar = React.useCallback(async () => {
+    try {
+      const data = await supabaseApiAdapter.getBarQueue();
+      setBarOrders((Array.isArray(data) ? data : []).map((row) => mapBarQueueRow(row)));
+    } catch (err) {
+      Alert.alert('Não foi possível carregar o bar', userErrorMessage(err, 'Tente novamente.'));
+    } finally {
+      setLoadingBar(false);
+    }
   }, []);
+
+  React.useEffect(() => {
+    void loadBar();
+  }, [loadBar]);
+
+  const advanceBarItem = async (itemId: string, status: 'preparing' | 'ready') => {
+    await advanceKdsOrder([itemId], status, loadBar);
+  };
 
   const queueCount = barOrders.filter((o) => o.status === 'confirmed' || o.status === 'pending').length;
   const preparingCount = barOrders.filter((o) => o.status === 'preparing').length;
@@ -765,16 +793,10 @@ function BarmanQueueView({
 
   return (
     <View style={styles.section}>
-      {mode === 'kds' ? (
+      {mode === 'kds' && (
         <View style={[styles.tipBanner, { backgroundColor: V2_TONE.info.bg, borderColor: '#BFDBFE' }]}>
           <Text style={[styles.tipBannerText, { color: V2_TONE.info.text }]}>
             KDS Bar — priorize drinks com menor tempo e mesas aguardando garçom.
-          </Text>
-        </View>
-      ) : (
-        <View style={[styles.tipBanner, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
-          <Text style={[styles.tipBannerText, { color: '#C2410C' }]}>
-            Estação — confirme novos pedidos de bar antes de enviar ao KDS.
           </Text>
         </View>
       )}
@@ -790,8 +812,8 @@ function BarmanQueueView({
         const tone = isReady ? 'success' : isPreparing ? 'warning' : 'info';
         const actionLabel = isReady ? 'Pronto ✓' : isPreparing ? 'Marcar pronto' : 'Iniciar preparo';
         const actionColor = isPreparing ? '#22C55E' : '#F59E0B';
-        const tableLabel = item.table_label ?? `Item ${item.id?.slice(0, 6) ?? '?'}`;
-        const meta = `${item.quantity ?? 1}x ${item.item_name ?? 'Bebida'}${item.elapsed_minutes != null ? ` · ${item.elapsed_minutes}min` : ''}`;
+        const tableLabel = item.tableLabel;
+        const meta = `${item.quantity}x ${item.name}${item.elapsedMinutes != null ? ` · ${item.elapsedMinutes}min` : ''}`;
         return (
           <View
             key={item.id}
@@ -807,7 +829,7 @@ function BarmanQueueView({
             {!isReady && (
               <TouchableOpacity
                 style={[styles.wideAction, { backgroundColor: actionColor }]}
-                onPress={() => void supabaseApiAdapter.updateOrderItemStatus(item.id, isPreparing ? 'ready' : 'preparing')}
+                onPress={() => void advanceBarItem(item.id, isPreparing ? 'ready' : 'preparing')}
               >
                 <Text style={[styles.wideActionText, { color: '#FFF' }]}>{actionLabel}</Text>
               </TouchableOpacity>
@@ -835,7 +857,7 @@ function BarmanStockView({ colors }: { colors: ReturnType<typeof useColors> }) {
 }
 
 function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const { data: orders, loading } = useKdsOrders();
+  const { data: orders, loading, refresh } = useKdsOrders();
   const queueCount = orders.filter((o) => o.status === 'queue').length;
   const preparingCount = orders.filter((o) => o.status === 'preparing').length;
   const readyCount = orders.filter((o) => o.status === 'ready').length;
@@ -875,7 +897,7 @@ function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
             {!isReady && (
               <TouchableOpacity
                 style={[styles.wideAction, { backgroundColor: actionColor }]}
-                onPress={() => void supabaseApiAdapter.updateOrderStatus(order.id, isPreparing ? 'ready' : 'preparing')}
+                onPress={() => void advanceKdsOrder(order.itemIds, isPreparing ? 'ready' : 'preparing', refresh)}
               >
                 <Text style={[styles.wideActionText, { color: actionTextColor }]}>{actionLabel}</Text>
               </TouchableOpacity>
@@ -1039,12 +1061,22 @@ function MaitreReservationsView({ colors }: { colors: ReturnType<typeof useColor
 }
 
 function MaitreFlowView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const navigation = useNavigation<any>();
   const { data: reservations, loading, error, refresh } = useReservations();
   const freeTables = useFreeTableCount();
   const upcoming = reservations.filter((r) => r.status === 'pending' || r.status === 'confirmed').slice(0, 4);
 
   return (
     <View style={styles.section}>
+      {/* A fila virtual já tinha tela (WaitlistScreen) mas nenhum perfil chegava a ela. */}
+      <TouchableOpacity
+        style={[styles.wideAction, { backgroundColor: colors.primary }]}
+        onPress={() => navigation.navigate('Waitlist')}
+        accessibilityRole="button"
+        accessibilityLabel="Abrir a fila virtual"
+      >
+        <Text style={[styles.wideActionText, { color: '#FFF' }]}>Abrir a fila virtual</Text>
+      </TouchableOpacity>
       <View style={styles.metricGrid}>
         <Metric value={String(freeTables)} label="Mesas livres" tone="success" />
         <Metric value={loading ? '—' : String(upcoming.length)} label="Próximas reservas" tone="warning" />
@@ -1353,7 +1385,7 @@ function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors>
       ) : (
         approvals.map((approval) => {
           const busy = resolvingId === approval.id;
-          const tableLabel = approval.table_number ? `Mesa ${approval.table_number}` : 'Sem mesa';
+          const tableLabel = approval.table_number ? `${formatTableLabel(approval.table_number)}` : 'Sem mesa';
           return (
             <View key={approval.id} style={[styles.approvalCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
               <View style={styles.approvalTop}>
@@ -1612,9 +1644,9 @@ function ManagerReportView({ colors }: { colors: ReturnType<typeof useColors> })
       <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <Text style={[styles.panelTitle, { color: colors.foreground }]}>Fechamento operacional</Text>
         <View style={styles.checkRow}>
-          {session && !session.isOpen ? <CheckCircle size={15} color="#22C55E" /> : <AlertCircle size={15} color="#F59E0B" />}
+          {cashRegisterStatus(session) === 'closed' ? <CheckCircle size={15} color="#22C55E" /> : <AlertCircle size={15} color="#F59E0B" />}
           <Text style={[styles.staffName, { color: colors.foreground }]}>
-            {session && !session.isOpen ? 'Caixa fechado' : 'Caixa ainda aberto'}
+            {cashRegisterStatus(session) === 'closed' ? 'Caixa fechado' : 'Caixa ainda aberto'}
           </Text>
         </View>
       </View>
@@ -1752,17 +1784,6 @@ function WaiterContent({
   return <WaiterCommandCenter view={view} setView={setView} colors={colors} />;
 }
 
-const WAITER_SEGMENTS: { label: string; view: WaiterRoleView }[] = [
-  { label: 'Ao Vivo', view: 'waiter' },
-  { label: 'Mesas', view: 'waiter-table-actions' },
-  { label: 'Cozinha', view: 'waiter-kitchen' },
-  { label: 'Cobrar', view: 'waiter-table-charge' },
-];
-
-function segmentLabelForView(view: WaiterRoleView): string {
-  return WAITER_SEGMENTS.find((s) => s.view === view)?.label ?? 'Ao Vivo';
-}
-
 type MyTable = {
   id: string;
   tableNumber: string;
@@ -1791,7 +1812,7 @@ function WaiterCommandCenter({
   const { data: restaurantTables, loading: tablesLoading } = useRestaurantTables();
 
   const tables: MyTable[] = restaurantTables.map((table) => {
-    const tableLabel = `Mesa ${table.label}`;
+    const tableLabel = `${formatTableLabel(table.label)}`;
     return {
       id: table.id,
       tableNumber: table.label,
@@ -1808,8 +1829,8 @@ function WaiterCommandCenter({
   });
 
   const readyOrders = kdsOrders.filter((o) => o.status === 'ready');
-  const openCalls = calls.filter((c) => c.status === 'open');
-  const activeTables = tables.filter((t) => t.status === 'occupied' || t.guestCount > 0 || t.pendingOrders > 0);
+  const openCalls = calls.filter((c) => isOpenCall(c.status));
+  const activeTables = tables.filter(isTableInService);
   const unpaidBills = bills.filter((b) => !b.isPaid);
 
   return (
@@ -1819,20 +1840,6 @@ function WaiterCommandCenter({
         retirar={readyOrders.length}
         chamados={openCalls.length}
         cobrar={unpaidBills.length}
-      />
-      <WaiterSegments
-        active={segmentLabelForView(view)}
-        counts={{
-          'Ao Vivo': readyOrders.length + openCalls.length,
-          Cozinha: readyOrders.length,
-          Cobrar: unpaidBills.length,
-        }}
-        onSelect={(label) => {
-          const target = WAITER_SEGMENTS.find((s) => s.label === label);
-          if (!target) return;
-          setView(target.view);
-          if (target.view === 'waiter-table-actions') navigation.navigate('Tables');
-        }}
       />
       {view === 'waiter-table-actions' ? (
         <WaiterTablesBody
@@ -1925,11 +1932,11 @@ function WaiterLiveBody({
       onPress: () => runAction(`order-${order.id}`, () => ApiService.updateOrderStatus(order.id, 'delivered')),
     })),
     ...calls
-      .filter((c) => c.status === 'open')
+      .filter((c) => isOpenCall(c.status))
       .map((call) => ({
         key: `call-${call.id}`,
         tone: 'warning' as V2Tone,
-        table: call.tableNumber ? `Mesa ${call.tableNumber}` : 'Mesa',
+        table: call.tableNumber ? `${formatTableLabel(call.tableNumber)}` : 'Mesa',
         time: elapsedLabel(call.createdAt),
         title: CALL_TYPE_LABEL[call.callType] || call.callType,
         detail: '',
@@ -2013,7 +2020,7 @@ function WaiterTablesBody({
   return (
     <>
       {tables.map((table) => {
-        const tableLabel = `Mesa ${table.tableNumber}`;
+        const tableLabel = `${formatTableLabel(table.tableNumber)}`;
         const hasReadyPlate = kdsOrders.some((o) => o.status === 'ready' && o.table === tableLabel);
         const openCallCount = calls.filter(
           (c) => c.status === 'open' && String(c.tableNumber ?? '') === table.tableNumber,
@@ -2215,7 +2222,7 @@ function WaiterAssistanceView({ colors }: { colors: ReturnType<typeof useColors>
     icon: allergenIcon(allergen),
     items: allergen.items,
     affected: allergen.affected_customers.length > 0
-      ? allergen.affected_customers.map((customer) => `Mesa ${customer.table_number} — ${customer.customer_name}`).join(', ')
+      ? allergen.affected_customers.map((customer) => `${formatTableLabel(customer.table_number)} — ${customer.customer_name}`).join(', ')
       : 'Nenhum reportado',
   }));
   const feedbackItems = assistance.feedback.map((feedback) => ({
@@ -2356,7 +2363,7 @@ function WaiterAssistanceView({ colors }: { colors: ReturnType<typeof useColors>
                   <View style={styles.assistanceCustomerRow}>
                     <View style={styles.tableNumberBubble}><Text style={styles.tableNumberText}>{table.label}</Text></View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.reservationTitle, { color: colors.foreground }]}>Mesa {table.label}</Text>
+                      <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{formatTableLabel(table.label)}</Text>
                       <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
                         {table.guests || table.seats} {(table.guests || table.seats) === 1 ? 'pessoa' : 'pessoas'}
                       </Text>
@@ -2382,12 +2389,12 @@ function WaiterAssistanceView({ colors }: { colors: ReturnType<typeof useColors>
                           quietZone={4}
                         />
                       </View>
-                      <Text style={[styles.assistanceQrLabel, { color: colors.foregroundSecondary }]}>QR Code da Mesa {table.label}</Text>
+                      <Text style={[styles.assistanceQrLabel, { color: colors.foregroundSecondary }]}>QR Code da {formatTableLabel(table.label)}</Text>
                       <Text style={[styles.assistanceQrHelp, { color: colors.foregroundSecondary }]}>O cliente escaneia para acessar o cardápio, fazer pedidos e pagar</Text>
                       <View style={styles.assistanceQrActions}>
                         <TouchableOpacity
                           onPress={() => void Share.share({
-                            title: `Mesa ${table.label}`,
+                            title: `${formatTableLabel(table.label)}`,
                             message: table.qrCodeData,
                           })}
                           style={[styles.assistanceSmallButton, { backgroundColor: '#FF4B2B', borderColor: '#FF4B2B' }]}
@@ -2545,7 +2552,7 @@ function WaiterAssistanceView({ colors }: { colors: ReturnType<typeof useColors>
                   <View style={[styles.assistanceSpecialIcon, { backgroundColor: request.backgroundColor }]}><RequestIcon size={24} color={request.color} /></View>
                   <View style={{ flex: 1 }}>
                     <View style={styles.assistanceSpecialTags}>
-                      <Text style={styles.assistanceTableTag}>Mesa {request.table}</Text>
+                      <Text style={styles.assistanceTableTag}>{formatTableLabel(request.table)}</Text>
                       <Text style={[styles.assistanceTypeTag, { color: request.color, backgroundColor: request.backgroundColor }]}>{request.title}</Text>
                     </View>
                     <Text style={[styles.assistanceSpecialDescription, { color: colors.foregroundSecondary }]}>{request.description}</Text>
@@ -2586,7 +2593,7 @@ function WaiterAssistanceView({ colors }: { colors: ReturnType<typeof useColors>
           <View style={[styles.waiterModalCard, { backgroundColor: colors.card }]}>
             <Text style={[styles.panelTitle, { color: colors.foreground, marginBottom: 4 }]}>Coletar feedback</Text>
             <Text style={[styles.staffRole, { color: colors.foregroundSecondary, marginBottom: 16 }]}>
-              {feedbackDraft ? `${feedbackDraft.candidate.customer_name} · Mesa ${feedbackDraft.candidate.table_number}` : ''}
+              {feedbackDraft ? `${feedbackDraft.candidate.customer_name} · ${formatTableLabel(feedbackDraft.candidate.table_number)}` : ''}
             </Text>
 
             <Text style={[styles.assistanceFormLabel, { color: colors.foreground }]}>Sentimento</Text>
@@ -2800,7 +2807,7 @@ function WaiterChargeBody({
                   <Text style={[styles.waiterKitchenNumberText, { color: colors.primary }]}>{tableNumber}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.staffName, { color: colors.foreground, fontSize: 14 }]}>Mesa {tableNumber}</Text>
+                  <Text style={[styles.staffName, { color: colors.foreground, fontSize: 14 }]}>{formatTableLabel(tableNumber)}</Text>
                   <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
                     {paid} pago · {unpaid} a cobrar
                   </Text>
@@ -3119,46 +3126,6 @@ function WaiterStats({
       <CompactMetric value={String(retirar)} label="Retirar" tone="danger" />
       <CompactMetric value={String(chamados)} label="Chamados" tone="warning" />
       <CompactMetric value={String(cobrar)} label="A cobrar" tone="success" />
-    </View>
-  );
-}
-
-function WaiterSegments({
-  active,
-  counts,
-  onSelect,
-}: {
-  active: string;
-  counts?: Record<string, number>;
-  onSelect: (label: string) => void;
-}) {
-  return (
-    <View style={styles.filterRow}>
-      {['Ao Vivo', 'Mesas', 'Cozinha', 'Cobrar'].map((label) => {
-        const isActive = active === label;
-        const count = counts?.[label] ?? 0;
-        return (
-          <TouchableOpacity
-            key={label}
-            onPress={() => onSelect(label)}
-            activeOpacity={0.8}
-            style={[
-              styles.waiterSegment,
-              {
-                backgroundColor: isActive ? '#FFF' : '#F8FAFC',
-                borderColor: isActive ? '#E5E7EB' : 'transparent',
-              },
-            ]}
-          >
-            <Text style={[styles.waiterSegmentText, { color: isActive ? '#111827' : '#6B7280' }]}>{label}</Text>
-            {count > 0 ? (
-              <View style={[styles.waiterSegmentBadge, { backgroundColor: isActive ? '#FF5A3D' : '#E5E7EB' }]}>
-                <Text style={[styles.waiterSegmentBadgeText, { color: isActive ? '#FFF' : '#6B7280' }]}>{count}</Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
-        );
-      })}
     </View>
   );
 }

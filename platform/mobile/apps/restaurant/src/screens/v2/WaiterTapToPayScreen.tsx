@@ -17,6 +17,7 @@ import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from './shared/V2Shell';
 import { useTableBills, type TableBill } from './shared/useRestaurantOperations';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { formatTableLabel } from './shared/tableLabel';
 
 type Stage = 'amount' | 'tap' | 'success';
 
@@ -125,7 +126,7 @@ export default function WaiterTapToPayScreen() {
           </Text>
           {linkedBill ? (
             <View style={[styles.linkChip, { backgroundColor: `${colors.primary}14` }]}>
-              <Text style={[styles.linkChipText, { color: colors.primary }]}>Mesa {linkedBill.tableNumber}</Text>
+              <Text style={[styles.linkChipText, { color: colors.primary }]}>{formatTableLabel(linkedBill.tableNumber)}</Text>
             </View>
           ) : null}
           {settled && !settled.persisted ? (
@@ -166,7 +167,7 @@ export default function WaiterTapToPayScreen() {
           {linkedBill ? (
             <View style={[styles.linkChip, { backgroundColor: `${colors.primary}14` }]}>
               <Link2 size={12} color={colors.primary} />
-              <Text style={[styles.linkChipText, { color: colors.primary }]}>Mesa {linkedBill.tableNumber}</Text>
+              <Text style={[styles.linkChipText, { color: colors.primary }]}>{formatTableLabel(linkedBill.tableNumber)}</Text>
             </View>
           ) : null}
 
@@ -219,7 +220,7 @@ export default function WaiterTapToPayScreen() {
           <View style={[styles.linkedRow, { borderColor: colors.primary, backgroundColor: `${colors.primary}0D` }]}>
             <Link2 size={16} color={colors.primary} />
             <Text style={[styles.linkedText, { color: colors.foreground }]}>
-              Vinculado à Mesa {linkedBill.tableNumber}
+              Vinculado à {formatTableLabel(linkedBill.tableNumber)}
             </Text>
             <TouchableOpacity onPress={clearLink} hitSlop={8}>
               <X size={18} color={colors.foregroundSecondary} />
@@ -252,7 +253,7 @@ export default function WaiterTapToPayScreen() {
                   <View style={[styles.pickerNum, { backgroundColor: `${colors.primary}14` }]}>
                     <Text style={{ color: colors.primary, fontWeight: '800' }}>{bill.tableNumber}</Text>
                   </View>
-                  <Text style={[styles.linkedText, { color: colors.foreground }]}>Mesa {bill.tableNumber}</Text>
+                  <Text style={[styles.linkedText, { color: colors.foreground }]}>{formatTableLabel(bill.tableNumber)}</Text>
                   <Text style={{ color: colors.foreground, fontWeight: '800' }}>{formatCurrency(bill.totalAmount)}</Text>
                 </TouchableOpacity>
               ))

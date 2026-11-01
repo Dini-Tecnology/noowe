@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { V2FormSheet } from './V2FormSheet';
 import { groupCapacity, type LayoutCandidate } from './tableLayout';
+import { formatTableLabel } from './tableLabel';
 
 type Props = {
   visible: boolean;
@@ -72,7 +73,7 @@ export function TablePickerSheet({
             style={[styles.row, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}0D` : colors.card }]}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowTitle, { color: colors.foreground }]}>Mesa {candidate.label}</Text>
+              <Text style={[styles.rowTitle, { color: colors.foreground }]}>{formatTableLabel(candidate.label)}</Text>
               <Text style={{ color: colors.foregroundSecondary, fontSize: 12 }}>{candidate.section}</Text>
             </View>
             <Text style={[styles.rowSeats, { color: candidate.fits ? colors.foreground : colors.foregroundMuted }]}>

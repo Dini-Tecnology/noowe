@@ -13,6 +13,7 @@ import { TableComandaDialog } from './shared/TableComandaDialog';
 import { TableLayoutPanel } from './tables/TableLayoutPanel';
 import { useRestaurantTables, type V2Table } from './shared/useRestaurantOperations';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { formatTableLabel } from './shared/tableLabel';
 
 type StatusKey = 'available' | 'occupied' | 'reserved' | 'cleaning' | 'blocked' | 'payment';
 type SeatingMode = 'seat' | 'checkin';
@@ -359,7 +360,7 @@ export default function TablesScreen() {
             <View style={[styles.detail, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.detailHeader}>
                 <View style={styles.detailIdentity}>
-                  <Text style={[styles.detailTitle, { color: colors.foreground }]}>Mesa {selectedTable.label}</Text>
+                  <Text style={[styles.detailTitle, { color: colors.foreground }]}>{formatTableLabel(selectedTable.label)}</Text>
                   <Text numberOfLines={1} style={[styles.detailGuest, { color: colors.foregroundSecondary }]}>
                     {selectedTable.guestName || (selectedTable.status === 'available' ? 'Mesa livre' : selectedTable.section)}
                   </Text>
@@ -541,7 +542,7 @@ export default function TablesScreen() {
       <V2FormSheet
         visible={seatingTable !== null}
         title={seatingTable?.mode === 'checkin' ? 'Check-in da reserva' : 'Sentar cliente'}
-        subtitle={seatingTable ? `Mesa ${seatingTable.table.label} · até ${seatingTable.table.seats} pessoas` : undefined}
+        subtitle={seatingTable ? `${formatTableLabel(seatingTable.table.label)} · até ${seatingTable.table.seats} pessoas` : undefined}
         saveLabel={seatingTable?.mode === 'checkin' ? 'Confirmar check-in' : 'Sentar na mesa'}
         saving={isSubmitting}
         onClose={closeSeating}
@@ -716,7 +717,7 @@ const TableCell = React.memo(function TableCell({
       onPress={() => onSelect(table.id)}
       accessibilityRole="button"
       accessibilityState={{ selected: isSelected }}
-      accessibilityLabel={`Mesa ${table.label}, ${meta.label.toLowerCase()}, ${table.guestName || table.section}, ${table.effectiveSeats} lugares${table.mergedIntoLabel ? `, unida à mesa ${table.mergedIntoLabel}` : ''}`}
+      accessibilityLabel={`${formatTableLabel(table.label)}, ${meta.label.toLowerCase()}, ${table.guestName || table.section}, ${table.effectiveSeats} lugares${table.mergedIntoLabel ? `, unida à mesa ${table.mergedIntoLabel}` : ''}`}
       style={({ pressed }) => [{ width: size, height: Math.max(112, Math.min(size, 124)) }, pressed && styles.cellPressed]}
     >
       <Animated.View
