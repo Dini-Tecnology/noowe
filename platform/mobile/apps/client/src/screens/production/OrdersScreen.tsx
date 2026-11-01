@@ -5,20 +5,11 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import customerBackend, { type CustomerOrder, type CustomerOrderStatus } from '../../services/customer-backend';
+import customerBackend, { type CustomerOrder } from '../../services/customer-backend';
 import { useQuickReorder } from '../../hooks/useQuickReorder';
 import { money, restaurantRowStyles, rootNavigate, StateView, tableLabel, useQueryRefreshControl } from './shared';
+import { STATUS_COLORS, STATUS_LABELS } from './order-status-ui';
 import { canReorderQuickOrder, quickOrderStatusLabel, quickOrdersFilter } from './quick-service-ui';
-
-const STATUS_LABELS: Record<CustomerOrderStatus, string> = {
-  pending: 'Recebido', confirmed: 'Confirmado', preparing: 'Preparando',
-  ready: 'Pronto', delivered: 'Entregue', completed: 'Concluído', cancelled: 'Cancelado',
-};
-
-const STATUS_COLORS: Record<CustomerOrderStatus, string> = {
-  pending: '#EA580C', confirmed: '#EA580C', preparing: '#D97706',
-  ready: '#16A34A', delivered: '#64748B', completed: '#64748B', cancelled: '#DC2626',
-};
 
 type OrderFilter = 'active' | 'completed' | 'cancelled';
 

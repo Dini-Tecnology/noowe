@@ -13,6 +13,8 @@ import customerBackend, { type ConsumptionMode } from '../../services/customer-b
 import { QuickOrderOptions } from '../../components/quick/QuickOrderOptions';
 import { cartComboDiscount, pickupSlotOptions } from './quick-service-ui';
 import InviteToTableSheet from '../../components/table/InviteToTableSheet';
+import SessionOrdersSection from '../../components/table/SessionOrdersSection';
+import { openInComanda } from '../../navigation/comanda';
 import { useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
 import CasualDiningComandaScreen from './CasualDiningComandaScreen';
 import { money, tableLabel, translateOrderError } from './shared';
@@ -118,7 +120,10 @@ export default function CartScreen({ navigation, route }: any) {
       cart.clearCart();
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['table-bill'] });
-      navigation.replace('OrderDetail', { orderId: order.id });
+      queryClient.invalidateQueries({ queryKey: ['session-orders'] });
+      // Com mesa, o "voltar" do status cai na comanda; sem mesa (Quick Service) a tela é trocada.
+      if (needsTableSession && hasUsableSession) openInComanda(navigation, 'OrderDetail', { orderId: order.id });
+      else navigation.replace('OrderDetail', { orderId: order.id });
     },
     onError: (error: Error) => Alert.alert('Pedido não enviado', translateOrderError(error)),
   });
@@ -251,6 +256,9 @@ export default function CartScreen({ navigation, route }: any) {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {needsTableSession && hasUsableSession ? (
+            <SessionOrdersSection tableSessionId={session?.tableSessionId} navigation={navigation} />
+          ) : null}
           {cart.items.length === 0 ? (
             <View style={styles.emptyWrap}>
               <Ionicons name="cart-outline" size={40} color={colors.foregroundMuted} />

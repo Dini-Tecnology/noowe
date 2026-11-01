@@ -34,7 +34,7 @@ export type MyTableBalance = { owedCents: number; hasConsumption: boolean };
 
 export type ServiceQrResolution =
   | { kind: 'counter'; restaurantId: string; serviceModel: 'quick_service'; counterLabel: string }
-  | { kind: 'table'; restaurantId: string; serviceModel: 'fine_dining' | 'casual_dining'; tableId: string; tableQrId: string; allowedServiceModels: ServiceModel[]; seats?: number; hasActiveSession?: boolean; isParticipant?: boolean; /** false onde o grupo vem da reserva/fila (Fine). */ asksPartySize?: boolean };
+  | { kind: 'table'; restaurantId: string; serviceModel: 'fine_dining' | 'casual_dining'; tableId: string; tableQrId: string; allowedServiceModels: ServiceModel[]; seats?: number; hasActiveSession?: boolean; isParticipant?: boolean; /** false onde o grupo vem da reserva/fila (Fine). */ asksPartySize?: boolean; /** Horário de funcionamento agora; ausente em servidor antigo. */ isOpen?: boolean };
 
 export type UserNotificationInsert = { type: string; metadata: Record<string, unknown> };
 
@@ -616,6 +616,8 @@ export interface CustomerBackend {
     bebidaItemId: string;
   }): Promise<CustomerOrder>;
   listOrders(limit?: number, cursor?: string): Promise<Page<CustomerOrder>>;
+  /** Pedidos de uma comanda (visíveis a todo participante da mesa pela RLS), do mais novo ao mais antigo. */
+  listSessionOrders(tableSessionId: string): Promise<CustomerOrder[]>;
   getOrder(id: string): Promise<CustomerOrder>;
   cancelOrder(id: string, reason?: string): Promise<CustomerOrder>;
   listReservations(): Promise<CustomerReservation[]>;
@@ -725,6 +727,8 @@ export interface CustomerBackend {
   subscribeToUserNotifications(onInsert: (notification: UserNotificationInsert) => void): Promise<RealtimeChannel>;
   subscribeToWaitlistChanges(restaurantId: string, onChange: () => void): Promise<RealtimeChannel>;
   subscribeToOrderChanges(orderId: string, onChange: () => void): Promise<RealtimeChannel>;
+  /** Qualquer pedido da comanda: o status do pedido é derivado dos itens no servidor, então basta `orders`. */
+  subscribeToTableSessionOrders(tableSessionId: string, onChange: () => void): Promise<RealtimeChannel>;
   /** Invites addressed to me and, when given, every invite of that table session. */
   subscribeToTableInvites(tableSessionId: string | null, onChange: (change: TableInviteChange | null) => void): Promise<RealtimeChannel>;
 }
@@ -1499,6 +1503,14 @@ export const customerBackend: CustomerBackend = {
     return { data: pageRows.map(mapOrder), nextCursor: rows.length > limit ? String(pageRows.at(-1)?.created_at) : null };
   },
 
+  async listSessionOrders(tableSessionId) {
+    const { data, error } = await getSupabaseClient().from('orders').select(
+      '*, restaurant:restaurants(name, logo_url, banner_url), table:tables(table_number), order_items(*, menu_item:menu_items(name, image_url)), reviews(rating)',
+    ).eq('table_session_id', tableSessionId).is('reviews.deleted_at', null).order('created_at', { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map(mapOrder);
+  },
+
   async getOrder(id) {
     const { data, error } = await getSupabaseClient().from('orders').select(
       '*, restaurant:restaurants(name, logo_url, banner_url), table:tables(table_number), order_items(*, menu_item:menu_items(name, image_url)), reviews(rating)',
@@ -2271,6 +2283,16 @@ export const customerBackend: CustomerBackend = {
       }, onChange)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'order_items', filter: `order_id=eq.${orderId}`,
+      }, onChange)
+      .subscribe();
+  },
+
+  async subscribeToTableSessionOrders(tableSessionId, onChange) {
+    await requireUserId();
+    const channelName = `customer-session-orders:${tableSessionId}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    return getSupabaseClient().channel(channelName)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'orders', filter: `table_session_id=eq.${tableSessionId}`,
       }, onChange)
       .subscribe();
   },

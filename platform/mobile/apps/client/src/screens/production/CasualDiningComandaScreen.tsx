@@ -12,6 +12,8 @@ import { cartOrderItems } from '../../utils/cart-order-items';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import customerBackend, { type TableBillItem } from '../../services/customer-backend';
+import SessionOrdersSection from '../../components/table/SessionOrdersSection';
+import { openInComanda } from '../../navigation/comanda';
 import InviteToTableSheet from '../../components/table/InviteToTableSheet';
 import { useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
 import { money, StateView, useQueryRefreshControl, tableLabel, translateOrderError } from './shared';
@@ -108,9 +110,9 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
       cart.clearCart();
       void queryClient.invalidateQueries({ queryKey: ['table-bill'] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
-      // Same hand-off as CartScreen; `navigate` keeps the comanda underneath
-      // so "voltar" returns to the table bill.
-      navigation.navigate('OrderDetail', { orderId: order.id });
+      void queryClient.invalidateQueries({ queryKey: ['session-orders'] });
+      // O "voltar" do status cai na comanda, onde o pedido continua listado.
+      openInComanda(navigation, 'OrderDetail', { orderId: order.id });
     },
     onError: (error: Error) => Alert.alert('Pedido não enviado', translateOrderError(error)),
   });
@@ -288,6 +290,8 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
               <Text style={styles.emptyText}>Nenhum pedido enviado ainda.</Text>
             </View>
           )}
+
+          <SessionOrdersSection tableSessionId={session?.tableSessionId} navigation={navigation} />
 
           {groups.map((group, index) => (
             <View key={group.dinerId} style={styles.personGroup}>

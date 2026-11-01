@@ -13,6 +13,11 @@ export class QrCheckInCancelled extends Error {
   }
 }
 
+/** Mesmo código (P0010) que o servidor devolve no check-in, para cair no desfecho "fechado" já mapeado. */
+export function restaurantClosedError(): Error & { code: string } {
+  return Object.assign(new Error('Restaurante fechado no momento'), { code: 'P0010' });
+}
+
 export type OpenFromQrOptions = {
   dev?: boolean;
   /**
@@ -120,6 +125,8 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
           serviceModel: resolution.serviceModel,
         }
       : await (async () => {
+          // Fechado: avisa antes de perguntar o nº de pessoas. O check-in do servidor segue barrando.
+          if (resolution.isOpen === false && !options?.dev) throw restaurantClosedError();
           let partySize: number | undefined;
           // Só quem abre a mesa responde, e só onde o grupo não vem da reserva/fila (Fine).
           if (!resolution.hasActiveSession && resolution.asksPartySize !== false && options?.askPartySize) {

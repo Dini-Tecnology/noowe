@@ -5,7 +5,7 @@
 --  * o check-in real de mesa é bloqueado com o restaurante fechado (P0010);
 --    o atalho de mesa de teste continua funcionando.
 begin;
-select plan(16);
+select plan(17);
 
 create temp table hours_results(label text primary key, ok boolean not null);
 
@@ -90,6 +90,8 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub', customer_id, 'role', 'authenticated')::text, true);
   picked := public.customer_dev_pick_table_qr(r);
   model := (public.customer_resolve_service_qr(picked->>'qrCodeData')->>'serviceModel')::public.noowe_service_model;
+  insert into hours_results values ('resolve do QR de mesa informa isOpen falso com restaurante fechado',
+    (public.customer_resolve_service_qr(picked->>'qrCodeData')->>'isOpen')::boolean = false);
 
   begin
     perform public.customer_check_in(picked->>'qrCodeData', model);
