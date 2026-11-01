@@ -64,6 +64,25 @@ porta de entrada produz um check-in que a constraint do banco vai rejeitar.
 | [P1](P1-fidelidade.md) | Fidelidade (pontos, níveis, selos) | Todos | N4 |
 | [P2](P2-avaliacao-crm-relatorios.md) | Avaliação, CRM e relatórios | Todos | P1 |
 
+## Série O — orquestração da operação (aditivo de 28/10/2026)
+
+Origem: [`docs/spec/aditivo-perfis-e-workflows.md`](../spec/aditivo-perfis-e-workflows.md). Ordem: O0 → O1 → O2 → {O3, O7} → O4, O5 → O6, O8, O9 → O10.
+Pendências do autor em [`PENDENCIAS-perfis-workflows`](../decisoes/PENDENCIAS-perfis-workflows.md); **O8 só começa depois das respostas 8–11**.
+
+| # | Fatia | Depende de |
+|---|---|---|
+| [O0](O0-correcoes-e-hold.md) | Correções imediatas e hold | — |
+| [O1](O1-estados-unicos.md) | Estados únicos | O0 |
+| [O2](O2-motor-de-eventos.md) | Motor de eventos e tarefas | O1 |
+| [O3](O3-funcoes-e-escala.md) | Várias funções e escala | O2 |
+| [O4](O4-paineis-ao-vivo.md) | Painéis ao vivo | O2, O3 |
+| [O5](O5-atribuicao-automatica.md) | Atribuição automática de mesa e garçom | O3 |
+| [O6](O6-portas-de-entrada.md) | Portas de entrada por serviço | O2, O5 |
+| [O7](O7-cozinha-e-balcao.md) | Cozinha, Expedição e Balcão | O1, O2 |
+| [O8](O8-caixa-e-gorjeta.md) | Caixa e gorjeta | O3 + respostas 8–11 |
+| [O9](O9-central-de-configuracao.md) | Central de Configuração | O5–O8 |
+| [O10](O10-inteligencia-operacional.md) | Inteligência operacional | O5–O7 |
+
 ## Correspondência com o faseamento da spec (§8)
 
 | Fase da spec | Fatias |

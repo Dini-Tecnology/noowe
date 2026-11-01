@@ -76,6 +76,19 @@ export function capabilitiesFor(config: EstablishmentConfig, model: ServiceModel
 | `stamps_per_reward` | int | 10 | Quick |
 | `loyalty_mode` | enum | points | Todos |
 
+### Parâmetros previstos pela série O (aditivo de perfis, ADR-022 a 029)
+
+Provisórios; nascem nas fatias indicadas, sempre em `restaurant_model_configs`/`policies`, nunca como literal no código.
+
+| Parâmetro | Fatia | ADR |
+|---|---|---|
+| `waiter_assignment_mode` (`fixed_sections` · `area_rotation`), `max_tables_per_waiter` | O5 | 026 |
+| `late_item_margin_min`, `expedition_enabled` | O7 | 028 |
+| `reservation_confirm_window_h` (24), `kds_load_limit`, `kds_load_ceiling` | O2, O10 | 022 |
+| `cash_float_cents`, `cash_drop_suggest_cents`, `cash_break_limit_cents` | O8 (bloqueada) | 029 |
+| `tip_split_rule`, `tip_retention_bps` | O8 (bloqueada) | 029 |
+| `table_turn_minutes_by_party_size` | O5, O10 | 026 |
+
 > **Percentuais em basis points (int), não float.** 10% é `1000`. Isso evita reintroduzir
 > ponto flutuante no caminho do cálculo de dinheiro.
 

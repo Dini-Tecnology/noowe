@@ -32,6 +32,11 @@ continuam usando os nomes do documento. Esta tabela é a tradução oficial entr
 | `audit_log` | `audit_logs` | T-F2-03 acrescenta `restaurant_id`, `reason`, `before`, `after` |
 | `bill_shares` | não existe | nasce em T-G3-02 com o nome da spec; `payment_splits` está congelada |
 | `capacity_requests` | não existe | nasce em T-G2-02 com o nome da spec |
+| Tarefa (aditivo de perfis) | `staff_tasks` | nasce em O2 (ADR-022); uma linha por tarefa, não por pessoa |
+| Evento de domínio | `domain_events` | nasce em O2; entrada única `private.emit_event` |
+| Área / Zona do salão | `floor_areas` (hoje `tables.section`, texto livre) | nasce em O5 (ADR-026) |
+| Comanda | `table_sessions` | estados em ADR-024 |
+| Aprovação | `approvals` | passa a ter efeitos e auditoria em O2 |
 
 Nomes que ainda não existem em nenhum dos dois lados nascem com o nome da spec, porque não há
 conflito a traduzir.

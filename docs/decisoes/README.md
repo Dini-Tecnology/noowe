@@ -32,6 +32,17 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [019](ADR-019-codigo-de-convite-e-forca-bruta.md) | Código de convite de 6 dígitos guardado como HMAC, com limite de tentativas por usuário e IP | **Provisório** | Convite adivinhado por força bruta |
 | [021](ADR-021-comanda-como-casa.md) | A comanda é a casa do cliente: uma ativa por cliente, nunca encerra por tempo, encerramento manual com motivo | **Provisório** | App volta ao restaurante, cliente em duas mesas, comanda encerrada sem rastro |
 
+| [022](ADR-022-motor-de-eventos-e-tarefas.md) | Motor de eventos e tarefas: uma linha por tarefa, Gerente junto, sem subida por tempo | **Provisório** | Tarefa duplicada; ninguém avisado |
+| [023](ADR-023-pg-cron.md) | `pg_cron` com um tick por minuto (substitui "não há pg_cron" dos ADR-011, 013, 021) | Aceito | Expiração só quando alguém abre a tela |
+| [024](ADR-024-estados-unicos.md) | Estados únicos de item, pedido, comanda e mesa | **Provisório** | Cada perfil com um nome para a mesma coisa |
+| [025](ADR-025-varias-funcoes-e-permissoes-reduzidas.md) | Várias funções por pessoa e permissões reduzidas | **Provisório** | Permissão só na tela, sem RLS |
+| [026](ADR-026-atribuicao-de-mesa-e-garcom.md) | Atribuição automática de mesa e garçom | **Provisório** | Mesa sem garçom; conflito com reserva |
+| [027](ADR-027-servicos-multiplos-e-fine-por-reserva.md) | Vários serviços sem "primário"; Fine só por reserva (substitui parte do ADR-008) | **Provisório** | Fine sem trava de entrada |
+| [028](ADR-028-expedicao-e-conferencia-do-quick.md) | Expedição opcional; conferência do Quick vira a Expedição ligada (ajusta o ADR-013) | **Provisório** | Quick sem conferência por engano |
+| [029](ADR-029-taxa-gorjeta-rateio-e-caixa.md) | Taxa ou gorjeta, rateio, retenção e caixa — **bloqueado** pelas pendências 8–11 | **Provisório** | Valor cobrado errado; rateio ilegal |
+
+**Série O (022–029):** originada na avaliação de 28/10; perguntas ao autor em [`PENDENCIAS-perfis-workflows`](PENDENCIAS-perfis-workflows.md).
+
 **Vocabulário:** os ADRs usam os nomes da spec. A tradução para o banco está em
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).
 
