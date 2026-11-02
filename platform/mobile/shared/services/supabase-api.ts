@@ -25,6 +25,31 @@ export interface TableQRCode {
   created_at: string | null;
 }
 
+/** O que o app vê do cadastro fiscal: o token da Focus fica no Vault e só existe aqui como `hasToken`. */
+export interface FiscalConfigView {
+  cnpj: string;
+  ie: string | null;
+  razaoSocial: string;
+  nomeFantasia: string | null;
+  stateCode: string;
+  regimeTributario: string;
+  taxDefaults: Record<string, string | undefined>;
+  environment: 'homologation' | 'production';
+  serviceFeeInDocument: boolean;
+  isActive: boolean;
+  hasToken: boolean;
+}
+
+export interface FiscalIssue {
+  id: string;
+  status: 'blocked' | 'rejected' | 'failed';
+  error_message: string | null;
+  total_cents: number;
+  created_at: string;
+  table_sessions: { tables: { table_number: string | null } | null } | null;
+  orders: { order_number: string | null } | null;
+}
+
 export interface SupabaseCreateOrderInput {
   restaurant_id: string;
   items: SupabaseOrderItemInput[];
@@ -348,6 +373,14 @@ export interface SupabaseApiAdapter {
   /** Política do salão (ADR-021): tolerâncias de reserva e fila e alerta de comanda parada. */
   getRoomPolicy(restaurantId: string): Promise<RoomPolicy>;
   updateRoomPolicy(restaurantId: string, patch: Partial<Omit<RoomPolicy, 'reservationCheckInLeadMin'>>): Promise<RoomPolicy>;
+  /** Cadastro fiscal (ADR-030): só dono e gerente, e a resposta nunca traz o token. */
+  getFiscalConfig(restaurantId: string): Promise<{ config: FiscalConfigView | null; openIssues: number }>;
+  /** Token em branco mantém o que está no Vault. */
+  saveFiscalConfig(restaurantId: string, config: Record<string, unknown>, focusToken: string): Promise<FiscalConfigView>;
+  /** Notas que esperam a gerência: bloqueadas, rejeitadas ou com tentativas esgotadas. */
+  getFiscalIssues(restaurantId: string): Promise<FiscalIssue[]>;
+  /** Motivo obrigatório e audit_log no servidor. */
+  retryFiscalDocument(documentId: string, reason: string): Promise<any>;
   fireCourse(orderId: string, course: string): Promise<any>;
   getCookStations(restaurantId?: string): Promise<any>;
   createCookStation(restaurantId: string, data: Record<string, unknown>): Promise<any>;
@@ -737,6 +770,41 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     });
     if (error) throw error;
     return data as RoomPolicy;
+  },
+
+  async getFiscalConfig(restaurantId: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_fiscal_get_config', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return data;
+  },
+
+  async saveFiscalConfig(restaurantId: string, config: Record<string, unknown>, focusToken: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_fiscal_save_config', {
+      p_restaurant_id: restaurantId, p_config: config, p_focus_token: focusToken,
+    });
+    if (error) throw error;
+    return data as FiscalConfigView;
+  },
+
+  async getFiscalIssues(restaurantId: string) {
+    // RLS: só dono e gerente da unidade leem. O snapshot da nota não vem: a tela só precisa do motivo.
+    // table_sessions tem duas FKs para tables; sem nomear a da mesa atual o PostgREST recusa (PGRST201).
+    const { data, error } = await (getSupabaseClient() as any)
+      .from('fiscal_documents')
+      .select('id, status, error_message, total_cents, created_at, table_sessions(tables:tables!table_sessions_table_id_fkey(table_number)), orders(order_number)')
+      .eq('restaurant_id', restaurantId)
+      .in('status', ['blocked', 'rejected', 'failed'])
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as FiscalIssue[];
+  },
+
+  async retryFiscalDocument(documentId: string, reason: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_fiscal_retry', {
+      p_document_id: documentId, p_reason: reason,
+    });
+    if (error) throw error;
+    return data;
   },
 
   async updateQuickServicePolicy(restaurantId: string, patch: QuickPolicyPatch) {

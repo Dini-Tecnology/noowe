@@ -30,6 +30,12 @@ de acesso falsa quando faltava token.
 - **Ativar um restaurante não emite notas antigas:** elas ficam `blocked` até um reenvio registrado.
 - **Pagamento simulado e pagamento tardio não viram nota.**
 - **Webhook da Focus não é usado:** a NFC-e é síncrona. A API responde `autorizado` ou `erro_autorizacao` na mesma chamada.
+- **A gerência cuida do cadastro pelo app** (`restaurant_fiscal_get_config`, `restaurant_fiscal_save_config`, dono e
+  gerente). `fiscal_configs` segue fechada: o token entra por essas RPCs, vai para o Vault e não volta em nenhuma resposta,
+  nem na auditoria. Token em branco mantém o atual. Salvar não libera nota parada: o reenvio é decisão registrada.
+- **O app não escolhe o ambiente.** Cadastro novo nasce em homologação e salvar mantém o ambiente atual. A ida para
+  produção segue por `service_fiscal_configure` até a homologação ser validada. **Provisório:** quando validar, decidir
+  se dono ou gerente pode promover pelo app.
 
 ## Valores provisórios, a validar
 
@@ -50,8 +56,8 @@ de acesso falsa quando faltava token.
 - Reabrir conta já encerrada: a mesma `external_ref` não gera segunda nota. O ADR-004 pede nota complementar ou
   cancelamento, e isso precisa ser resolvido com T-N4-04.
 - Fechamento manual com motivo (`20261025101000`) não emite nota: decisão pendente.
-- Tela de configuração fiscal e lista de notas com erro no app do restaurante. `FiscalSetupScreen` ainda aponta para o
-  backend removido; até haver tela, o cadastro é por `service_fiscal_configure`.
+- Aviso ativo ao gerente quando uma nota para. Hoje ela aparece na lista e no módulo Fiscal da configuração, sem push.
+- Falha ao enfileirar (`fiscal.enqueue_failed`): não existe documento, então não aparece na lista de notas com problema.
 - Retorno assíncrono da contingência (`nfce_consulta_automatica`): a nota em contingência fica marcada, mas um erro
   posterior na retransmissão não volta ao NOOWE.
 

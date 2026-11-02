@@ -8,6 +8,7 @@ import {
   Users,
   ChefHat,
   CreditCard,
+  FileText,
   Zap,
   Crown,
   Flame,
@@ -238,6 +239,16 @@ export const CONFIG_MODULES: ConfigModuleDef[] = [
     staticProgress: 0,
     staticStatus: 'needs-attention',
   },
+  {
+    id: 'config-fiscal',
+    route: 'FiscalSetup',
+    label: 'Fiscal',
+    desc: 'NFC-e: cadastro e notas com problema',
+    Icon: FileText,
+    iconColor: '#475569',
+    staticProgress: 0,
+    staticStatus: 'needs-attention',
+  },
 ];
 
 export const DEFAULT_BUSINESS_HOURS: BusinessHour[] = [
@@ -435,6 +446,12 @@ export function calculateKitchenProgress(
   }
 
   return Math.min(100, score);
+}
+
+/** Nota parada conta como pendência: o cadastro só está completo sem nada esperando a gerência. */
+export function calculateFiscalProgress(fiscal: { config: { hasToken?: boolean } | null; openIssues: number } | null | undefined): number {
+  if (!fiscal?.config?.hasToken) return 0;
+  return fiscal.openIssues > 0 ? 50 : 100;
 }
 
 export function calculatePaymentsProgress(methods: Record<string, unknown> | null | undefined): number {

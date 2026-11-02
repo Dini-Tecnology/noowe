@@ -123,9 +123,9 @@
 | 4 | Ativar `pg_cron` e `pg_net` no projeto | A migration tenta habilitar. Se `pg_cron` falhar, habilite no painel e rode `select private.fiscal_schedule_sweep();`. Sem isso a falha do emissor nao e reprocessada sozinha. |
 | 5 | Vault com `project_url` e `service_role_key` | Os mesmos do push (`configure_customer_push_dispatch`). Sem eles a nota fica pendente, sem ser enviada. |
 | 6 | Publicar a Edge Function | `supabase functions deploy fiscal-emit` |
-| 7 | Provisionar o restaurante | Chamada com service role, em homologacao ate validar:<br>`select public.service_fiscal_configure('<restaurant_id>', '{"cnpj":"...","razaoSocial":"...","stateCode":"SP","regimeTributario":"simples_nacional","environment":"homologation","taxDefaults":{"ncm":"21069090","icms_origem":"0","icms_situacao_tributaria":"102","pis_situacao_tributaria":"49","cofins_situacao_tributaria":"49"}}'::jsonb, '<token>');`<br>Os valores tributarios sao exemplo: use os da contabilidade. |
+| 7 | Provisionar o restaurante | Dono ou gerente cadastra pelo app, em Config > Fiscal, sempre em homologacao. Sem o app, chamada com service role:<br>`select public.service_fiscal_configure('<restaurant_id>', '{"cnpj":"...","razaoSocial":"...","stateCode":"SP","regimeTributario":"simples_nacional","environment":"homologation","taxDefaults":{"ncm":"21069090","icms_origem":"0","icms_situacao_tributaria":"102","pis_situacao_tributaria":"49","cofins_situacao_tributaria":"49"}}'::jsonb, '<token>');`<br>Os valores tributarios sao exemplo: use os da contabilidade. |
 | 8 | Conferir a migration | `20261102100000_fiscal_emission` recusa rodar se `fiscal_configs` ou `fiscal_documents` tiverem linhas do backend antigo. Revise os dados e mova segredos para o Vault antes. |
-| 9 | Promover a producao | So depois de nota autorizada em homologacao: reconfigure com `"environment":"production"` e o token de producao. |
+| 9 | Promover a producao | So depois de nota autorizada em homologacao: reconfigure por service role com `"environment":"production"` e o token de producao. O app nao muda o ambiente. |
 
 ---
 

@@ -180,6 +180,10 @@ e não há RPC de emissão NFC-e nem vínculo com o fechamento. O recibo digital
 (`DigitalReceiptScreen.tsx`, `casual_dining_receipts`) mas sem documento fiscal por trás.
 **Aceite** Fechar a conta emite o documento fiscal e o recibo do app referencia o número emitido.
 **Estado** Implementada (ADR-030, `20261102100000_fiscal_emission.sql`, `functions/fiscal-emit`). Falta validar na homologação da Focus.
+**Sem critério em fatia** A N4 não cobre o cadastro fiscal nem a lista de notas com problema. A tela (`FiscalSetupScreen`,
+`FiscalDocumentsScreen`, `20261102150000_fiscal_management.sql`) saiu de um pedido direto, com este aceite: o gerente
+cadastra o restaurante em homologação, vê uma nota bloqueada, corrige e reenvia, sem o token sair do Vault. Os testes
+estão em `48_fiscal_management.sql` e `fiscalManagement.test.tsx`. Falta decidir se isso vira critério da N4.
 
 ### T-N4-04 · NOVO — Estorno e cancelamento fiscal com aprovação
 **Tipo** servidor **Tamanho** M **Depende de** T-F2-04

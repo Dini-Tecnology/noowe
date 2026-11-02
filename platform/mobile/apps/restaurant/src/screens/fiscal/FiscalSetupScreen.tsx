@@ -1,585 +1,279 @@
-/**
- * FiscalSetupScreen - Fiscal Configuration (NFC-e) Setup
- *
- * Allows restaurant owners to configure fiscal emission:
- * - CNPJ, IE, tax regime
- * - CSC ID and token (from SEFAZ portal)
- * - Certificate upload (.pfx) placeholder
- * - Auto-emit toggle
- *
- * @module restaurant/screens/fiscal
- */
-
-import React, { useState, useEffect, useCallback } from 'react';
-import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Alert,
-} from 'react-native';
-import {
-  Text,
-  Button,
-  TextInput,
-  Switch,
-  ActivityIndicator,
-  Divider,
-  HelperText,
-} from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
+import { Text } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
+import { AlertTriangle, ChevronRight, FileText, KeyRound, Receipt } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
-import { useI18n } from '@/shared/hooks/useI18n';
-import { useRestaurant } from '@/shared/contexts/RestaurantContext';
-import ApiService from '@/shared/services/api';
-import { Card } from '@okinawa/shared/components';
-import * as Haptics from 'expo-haptics';
+import { supabaseApiAdapter, type FiscalConfigView } from '@okinawa/shared/services/supabase-api';
 import { fiscalConfigSchema, validateForm } from '@okinawa/shared/validation/schemas';
+import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
+import { V2Shell } from '../v2/shared/V2Shell';
+import { ConfigSectionCard } from '../v2/config/ConfigSectionCard';
 
-interface FiscalConfigData {
-  cnpj: string;
-  ie: string;
-  razaoSocial: string;
-  nomeFantasia: string;
-  stateCode: string;
-  regimeTributario: string;
-  cscId: string;
-  cscToken: string;
-  autoEmit: boolean;
-  certificateUploaded: boolean;
-  isActive: boolean;
-}
-
-const formatCNPJ = (text: string): string => {
-  const cleaned = text.replace(/\D/g, '').slice(0, 14);
-  return cleaned
-    .replace(/^(\d{2})(\d)/, '$1.$2')
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3/$4')
-    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5');
+const EMPTY_FORM = {
+  cnpj: '', ie: '', razaoSocial: '', nomeFantasia: '', stateCode: '', regimeTributario: 'simples_nacional',
+  ncm: '', cfop: '', icmsOrigem: '', icmsSituacao: '', pisSituacao: '', cofinsSituacao: '',
 };
+type FormKey = keyof typeof EMPTY_FORM;
 
-const REGIME_OPTIONS = [
+const COMPANY_FIELDS: { key: FormKey; label: string; numeric?: boolean; maxLength?: number; uppercase?: boolean }[] = [
+  { key: 'cnpj', label: 'CNPJ', numeric: true, maxLength: 18 },
+  { key: 'razaoSocial', label: 'Razão social' },
+  { key: 'nomeFantasia', label: 'Nome fantasia (opcional)' },
+  { key: 'ie', label: 'Inscrição estadual (opcional)', maxLength: 15 },
+  { key: 'stateCode', label: 'UF', maxLength: 2, uppercase: true },
+];
+
+// Nenhum campo vem preenchido: quem define a tributação é o contador do restaurante (ADR-030).
+const TAX_FIELDS: { key: FormKey; label: string; maxLength: number }[] = [
+  { key: 'ncm', label: 'NCM padrão', maxLength: 8 },
+  { key: 'cfop', label: 'CFOP padrão', maxLength: 4 },
+  { key: 'icmsOrigem', label: 'Origem do ICMS', maxLength: 1 },
+  { key: 'icmsSituacao', label: 'Situação tributária do ICMS', maxLength: 3 },
+  { key: 'pisSituacao', label: 'Situação tributária do PIS', maxLength: 2 },
+  { key: 'cofinsSituacao', label: 'Situação tributária do COFINS', maxLength: 2 },
+];
+
+const REGIMES = [
   { value: 'simples_nacional', label: 'Simples Nacional' },
   { value: 'lucro_presumido', label: 'Lucro Presumido' },
   { value: 'lucro_real', label: 'Lucro Real' },
 ];
 
+function formFromConfig(config: FiscalConfigView): typeof EMPTY_FORM {
+  const tax = config.taxDefaults ?? {};
+  return {
+    cnpj: config.cnpj ?? '', ie: config.ie ?? '', razaoSocial: config.razaoSocial ?? '', nomeFantasia: config.nomeFantasia ?? '',
+    stateCode: config.stateCode ?? '', regimeTributario: config.regimeTributario ?? 'simples_nacional',
+    ncm: tax.ncm ?? '', cfop: tax.cfop ?? '', icmsOrigem: tax.icms_origem ?? '', icmsSituacao: tax.icms_situacao_tributaria ?? '',
+    pisSituacao: tax.pis_situacao_tributaria ?? '', cofinsSituacao: tax.cofins_situacao_tributaria ?? '',
+  };
+}
+
 export default function FiscalSetupScreen() {
   const colors = useColors();
-  const { t } = useI18n();
-  const { restaurant } = useRestaurant();
-
+  const navigation = useNavigation<any>();
+  const { restaurantId } = useRestaurantRole();
+  const [config, setConfig] = useState<FiscalConfigView | null>(null);
+  const [openIssues, setOpenIssues] = useState(0);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [serviceFeeInDocument, setServiceFeeInDocument] = useState(false);
+  // O token só existe aqui enquanto é digitado: o servidor nunca o devolve.
+  const [focusToken, setFocusToken] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [config, setConfig] = useState<FiscalConfigData>({
-    cnpj: '',
-    ie: '',
-    razaoSocial: '',
-    nomeFantasia: '',
-    stateCode: '',
-    regimeTributario: 'simples_nacional',
-    cscId: '',
-    cscToken: '',
-    autoEmit: true,
-    certificateUploaded: false,
-    isActive: false,
-  });
-  const [selectedRegimeIndex, setSelectedRegimeIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    loadConfig();
-  }, []);
-
-  const loadConfig = useCallback(async () => {
-    if (!restaurant?.id) return;
+  const load = useCallback(async () => {
+    if (!restaurantId) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await ApiService.get(
-        `/fiscal/config?restaurant_id=${restaurant.id}`,
-      );
-      if (response.data) {
-        const data = response.data;
-        setConfig({
-          cnpj: data.cnpj || '',
-          ie: data.ie || '',
-          razaoSocial: data.razao_social || '',
-          nomeFantasia: data.nome_fantasia || '',
-          stateCode: data.state_code || '',
-          regimeTributario: data.regime_tributario || 'simples_nacional',
-          cscId: data.csc_id || '',
-          cscToken: data.csc_token || '',
-          autoEmit: data.auto_emit ?? true,
-          certificateUploaded: data.certificate_uploaded ?? false,
-          isActive: data.is_active ?? false,
-        });
-        const regimeIdx = REGIME_OPTIONS.findIndex(
-          (r) => r.value === data.regime_tributario,
-        );
-        if (regimeIdx >= 0) setSelectedRegimeIndex(regimeIdx);
+      const result = await supabaseApiAdapter.getFiscalConfig(restaurantId);
+      setOpenIssues(result.openIssues);
+      setConfig(result.config);
+      if (result.config) {
+        setForm(formFromConfig(result.config));
+        setServiceFeeInDocument(result.config.serviceFeeInDocument);
       }
-    } catch {
-      // Config may not exist yet -- that's fine
+    } catch (err) {
+      setError(userErrorMessage(err, 'Não foi possível carregar o cadastro fiscal.'));
     } finally {
       setLoading(false);
     }
-  }, [restaurant?.id]);
+  }, [restaurantId]);
 
-  const handleSave = useCallback(async () => {
-    if (!restaurant?.id) return;
-
-    const result = validateForm(fiscalConfigSchema, {
-      cnpj: config.cnpj,
-      ie: config.ie || undefined,
-      razaoSocial: config.razaoSocial,
-      nomeFantasia: config.nomeFantasia || undefined,
-      stateCode: config.stateCode,
-      regimeTributario: config.regimeTributario,
+  useEffect(() => {
+    void load();
+    const unsubscribe = navigation.addListener?.('focus', () => {
+      if (!restaurantId) return;
+      supabaseApiAdapter.getFiscalConfig(restaurantId).then((result) => setOpenIssues(result.openIssues)).catch(() => undefined);
     });
+    return typeof unsubscribe === 'function' ? unsubscribe : undefined;
+  }, [load, navigation, restaurantId]);
 
+  const save = useCallback(async () => {
+    if (!restaurantId || saving) return;
+    setSaved(false);
+    const result = validateForm(fiscalConfigSchema, { ...form, ie: form.ie || undefined, nomeFantasia: form.nomeFantasia || undefined });
     if (!result.success) {
-      Alert.alert(t('common.error'), Object.values(result.errors)[0]);
+      setError(Object.values(result.errors)[0]);
       return;
     }
-
+    if (!focusToken.trim() && !config?.hasToken) {
+      setError('Informe o token da Focus NFe.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await ApiService.post('/fiscal/config', {
-        restaurantId: restaurant.id,
-        cnpj: config.cnpj,
-        ie: config.ie,
-        razaoSocial: config.razaoSocial,
-        nomeFantasia: config.nomeFantasia,
-        stateCode: config.stateCode,
-        endereco: {},
-        regimeTributario: config.regimeTributario,
+      const next = await supabaseApiAdapter.saveFiscalConfig(restaurantId, {
+        cnpj: form.cnpj, ie: form.ie, razaoSocial: form.razaoSocial, nomeFantasia: form.nomeFantasia,
+        stateCode: form.stateCode, regimeTributario: form.regimeTributario, serviceFeeInDocument,
         taxDefaults: {
-          cfop: '5102',
-          ncm_default: '00000000',
-          icms_csosn: '102',
-          pis_cst: '99',
-          cofins_cst: '99',
-          pis_aliquota: 0,
-          cofins_aliquota: 0,
+          ncm: form.ncm, cfop: form.cfop, icms_origem: form.icmsOrigem, icms_situacao_tributaria: form.icmsSituacao,
+          pis_situacao_tributaria: form.pisSituacao, cofins_situacao_tributaria: form.cofinsSituacao,
         },
-        cscId: config.cscId,
-        cscToken: config.cscToken,
-        autoEmit: config.autoEmit,
-        fiscalProvider: 'focus_nfe',
-      });
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        t('common.success'),
-        t('financial.fiscal.setup.save'),
-      );
-    } catch (err: any) {
-      setError(err.message || t('common.error'));
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }, focusToken);
+      setConfig(next);
+      setFocusToken('');
+      setSaved(true);
+    } catch (err) {
+      setError(userErrorMessage(err, 'Não foi possível salvar o cadastro fiscal. Tente de novo.'));
     } finally {
       setSaving(false);
     }
-  }, [config, restaurant?.id, t]);
+  }, [config?.hasToken, focusToken, form, restaurantId, saving, serviceFeeInDocument]);
 
-  const handleCertificateUpload = useCallback(() => {
-    // [PLACEHOLDER] In production, use DocumentPicker to select .pfx file
-    Alert.alert(
-      t('financial.fiscal.setup.certificate'),
-      'Certificate upload will be available in production. ' +
-        'Select a .pfx file and enter the password.',
-      [{ text: t('common.ok') }],
-    );
-  }, [t]);
-
-  const updateField = useCallback(
-    (field: keyof FiscalConfigData, value: string | boolean) => {
-      setConfig((prev) => ({ ...prev, [field]: value }));
-    },
-    [],
+  const renderField = (field: { key: FormKey; label: string; numeric?: boolean; maxLength?: number; uppercase?: boolean }) => (
+    <View key={field.key} style={styles.field}>
+      <Text style={[styles.label, { color: colors.foregroundSecondary }]}>{field.label}</Text>
+      <TextInput
+        accessibilityLabel={field.label}
+        value={form[field.key]}
+        onChangeText={(value) => setForm((current) => ({ ...current, [field.key]: field.uppercase ? value.toUpperCase() : value }))}
+        keyboardType={field.numeric ? 'number-pad' : undefined}
+        maxLength={field.maxLength}
+        autoCapitalize={field.uppercase ? 'characters' : undefined}
+        style={[styles.input, { borderColor: colors.border, color: colors.foreground }]}
+      />
+    </View>
   );
 
-  if (loading) {
-    return (
-      <ScreenContainer hasKeyboard>
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.foregroundSecondary }]}>
-          {t('common.loading')}
-        </Text>
-      </View>
-      </ScreenContainer>
-    );
-  }
+  const isHomologation = (config?.environment ?? 'homologation') === 'homologation';
 
   return (
-    <ScreenContainer hasKeyboard>
-    <View style={{ flex: 1, backgroundColor: colors.background }} accessibilityLabel="Fiscal setup">
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Icon
-            name="file-document-outline"
-            size={28}
-            color={colors.primary}
-          />
-          <Text
-            style={[styles.title, { color: colors.foreground }]}
-            variant="headlineSmall"
+    <V2Shell title="Fiscal" subtitle="NFC-e pela Focus NFe" showBack onRefresh={load}>
+      {loading ? (
+        <ActivityIndicator testID="fiscal-setup-loading" color={colors.primary} style={{ marginTop: 40 }} />
+      ) : (
+        <>
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('FiscalDocuments')}
+            style={[styles.issuesRow, { borderColor: openIssues > 0 ? colors.warning : colors.border, backgroundColor: colors.card }]}
           >
-            {t('financial.fiscal.setup.title')}
-          </Text>
-        </View>
-
-        {/* Company Data */}
-        <Card style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text
-            style={[styles.sectionTitle, { color: colors.foreground }]}
-            variant="titleMedium"
-          >
-            Dados da Empresa
-          </Text>
-
-          <TextInput
-            label={t('financial.fiscal.setup.cnpj')}
-            value={formatCNPJ(config.cnpj)}
-            onChangeText={(v) => updateField('cnpj', v.replace(/\D/g, '').slice(0, 14))}
-            mode="outlined"
-            keyboardType="numeric"
-            maxLength={18}
-            style={styles.input}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-          />
-
-          <TextInput
-            label={t('financial.fiscal.setup.ie')}
-            value={config.ie}
-            onChangeText={(v) => updateField('ie', v)}
-            mode="outlined"
-            style={styles.input}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-          />
-
-          <TextInput
-            label={t('formLabels.razaoSocial')}
-            value={config.razaoSocial}
-            onChangeText={(v) => updateField('razaoSocial', v)}
-            mode="outlined"
-            style={styles.input}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-          />
-
-          <TextInput
-            label={t('formLabels.nomeFantasia')}
-            value={config.nomeFantasia}
-            onChangeText={(v) => updateField('nomeFantasia', v)}
-            mode="outlined"
-            style={styles.input}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-          />
-
-          <TextInput
-            label={t('formLabels.stateCode')}
-            value={config.stateCode}
-            onChangeText={(v) =>
-              updateField('stateCode', v.toUpperCase().substring(0, 2))
-            }
-            mode="outlined"
-            maxLength={2}
-            style={styles.input}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-          />
-        </Card>
-
-        {/* Tax Regime */}
-        <Card style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text
-            style={[styles.sectionTitle, { color: colors.foreground }]}
-            variant="titleMedium"
-          >
-            {t('financial.fiscal.setup.regime')}
-          </Text>
-
-          {REGIME_OPTIONS.map((option, index) => (
-            <Button
-              key={option.value}
-              mode={
-                selectedRegimeIndex === index ? 'contained' : 'outlined'
-              }
-              onPress={() => {
-                setSelectedRegimeIndex(index);
-                updateField('regimeTributario', option.value);
-                Haptics.selectionAsync();
-              }}
-              style={styles.regimeButton}
-              buttonColor={
-                selectedRegimeIndex === index ? colors.primary : undefined
-              }
-              textColor={
-                selectedRegimeIndex === index
-                  ? colors.premiumCardForeground
-                  : colors.foreground
-              }
-            >
-              {option.label}
-            </Button>
-          ))}
-        </Card>
-
-        {/* CSC */}
-        <Card style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text
-            style={[styles.sectionTitle, { color: colors.foreground }]}
-            variant="titleMedium"
-          >
-            CSC (SEFAZ)
-          </Text>
-
-          <TextInput
-            label={t('financial.fiscal.setup.csc_id')}
-            value={config.cscId}
-            onChangeText={(v) => updateField('cscId', v)}
-            mode="outlined"
-            style={styles.input}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-          />
-
-          <TextInput
-            label={t('financial.fiscal.setup.csc_token')}
-            value={config.cscToken}
-            onChangeText={(v) => updateField('cscToken', v)}
-            mode="outlined"
-            secureTextEntry
-            style={styles.input}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-          />
-
-          <HelperText type="info" visible>
-            {t('financial.fiscal.setup.help_csc')}
-          </HelperText>
-        </Card>
-
-        {/* Certificate */}
-        <Card style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text
-            style={[styles.sectionTitle, { color: colors.foreground }]}
-            variant="titleMedium"
-          >
-            {t('financial.fiscal.setup.certificate')}
-          </Text>
-
-          <View style={styles.certRow}>
-            <Icon
-              name={
-                config.certificateUploaded
-                  ? 'check-circle'
-                  : 'file-certificate-outline'
-              }
-              size={24}
-              color={
-                config.certificateUploaded
-                  ? colors.success
-                  : colors.foregroundSecondary
-              }
-            />
-            <Text
-              style={[
-                styles.certStatus,
-                {
-                  color: config.certificateUploaded
-                    ? colors.success
-                    : colors.foregroundSecondary,
-                },
-              ]}
-            >
-              {config.certificateUploaded
-                ? t('financial.fiscal.setup.cert_uploaded')
-                : 'Nenhum certificado enviado'}
+            <AlertTriangle size={18} color={openIssues > 0 ? colors.warning : colors.foregroundSecondary} />
+            <Text testID="fiscal-open-issues" style={[styles.issuesText, { color: colors.foreground }]}>
+              {openIssues > 0 ? `Notas com problema (${openIssues})` : 'Nenhuma nota com problema'}
             </Text>
-          </View>
+            <ChevronRight size={18} color={colors.foregroundSecondary} />
+          </TouchableOpacity>
 
-          <Button
-            mode="outlined"
-            onPress={handleCertificateUpload}
-            icon="upload"
-            style={styles.uploadButton}
-            textColor={colors.primary}
-          >
-            {t('financial.fiscal.setup.upload_cert')}
-          </Button>
-        </Card>
-
-        {/* Auto-emit */}
-        <Card style={[styles.card, { backgroundColor: colors.card }]}>
-          <View style={styles.switchRow}>
-            <View style={styles.switchLabel}>
-              <Icon
-                name="lightning-bolt"
-                size={20}
-                color={colors.primary}
-              />
-              <Text style={[styles.switchText, { color: colors.foreground }]}>
-                {t('financial.fiscal.setup.auto_emit')}
+          <ConfigSectionCard title={isHomologation ? 'Ambiente: homologação' : 'Ambiente: produção'} Icon={FileText}>
+            <View style={styles.body}>
+              <Text style={{ color: colors.foregroundSecondary }}>
+                {isHomologation
+                  ? 'As notas são de teste e não têm valor fiscal. A NOOWE muda para produção depois da validação com a contabilidade.'
+                  : 'As notas emitidas têm valor fiscal.'}
+              </Text>
+              <Text style={{ color: colors.foregroundSecondary }}>
+                Certificado A1 e CSC são cadastrados no painel da Focus NFe, não aqui.
               </Text>
             </View>
-            <Switch
-              value={config.autoEmit}
-              onValueChange={(v) => {
-                updateField('autoEmit', v);
-                Haptics.selectionAsync();
-              }}
-              color={colors.primary}
-            />
-          </View>
-        </Card>
+          </ConfigSectionCard>
 
-        {/* Error */}
-        {error && (
-          <Text style={[styles.errorText, { color: colors.destructive }]}>
-            {error}
-          </Text>
-        )}
+          <ConfigSectionCard title="Dados da empresa" Icon={Receipt}>
+            <View style={styles.body}>
+              {COMPANY_FIELDS.map(renderField)}
+              <Text style={[styles.label, { color: colors.foregroundSecondary }]}>Regime tributário</Text>
+              <View style={styles.chips}>
+                {REGIMES.map((regime) => {
+                  const selected = regime.value === form.regimeTributario;
+                  return (
+                    <TouchableOpacity
+                      key={regime.value}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => setForm((current) => ({ ...current, regimeTributario: regime.value }))}
+                      style={[styles.chip, { borderColor: selected ? colors.primary : colors.border }]}
+                    >
+                      <Text style={{ color: selected ? colors.primary : colors.foreground }}>{regime.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </ConfigSectionCard>
 
-        {/* Save Button */}
-        <Button
-          mode="contained"
-          onPress={handleSave}
-          loading={saving}
-          disabled={saving}
-          style={[styles.saveButton, { backgroundColor: colors.primary }]}
-          labelStyle={styles.saveLabel}
-          icon="content-save"
-        >
-          {t('financial.fiscal.setup.save')}
-        </Button>
+          <ConfigSectionCard title="Tributação padrão" Icon={FileText}>
+            <View style={styles.body}>
+              <Text style={{ color: colors.foregroundSecondary }}>
+                Peça estes códigos ao contador. Valem para os itens do cardápio sem NCM ou CFOP próprios.
+              </Text>
+              {TAX_FIELDS.map((field) => renderField({ ...field, numeric: true }))}
+              <View style={styles.switchRow}>
+                <Text style={[styles.switchText, { color: colors.foreground }]}>Incluir a taxa de serviço na nota</Text>
+                <Switch
+                  accessibilityLabel="Incluir a taxa de serviço na nota"
+                  value={serviceFeeInDocument}
+                  onValueChange={setServiceFeeInDocument}
+                />
+              </View>
+            </View>
+          </ConfigSectionCard>
 
-        <Divider style={styles.divider} />
+          <ConfigSectionCard title="Token da Focus NFe" Icon={KeyRound}>
+            <View style={styles.body}>
+              <Text testID="fiscal-token-status" style={{ color: colors.foregroundSecondary }}>
+                {config?.hasToken
+                  ? 'Já existe um token guardado. Ele não aparece aqui. Preencha só para trocar.'
+                  : 'O token fica guardado no cofre da NOOWE e não aparece de novo neste app.'}
+              </Text>
+              <TextInput
+                accessibilityLabel="Token da Focus NFe"
+                value={focusToken}
+                onChangeText={setFocusToken}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder={config?.hasToken ? 'Deixe em branco para manter' : 'Token de homologação'}
+                placeholderTextColor={colors.foregroundMuted}
+                style={[styles.input, { borderColor: colors.border, color: colors.foreground }]}
+              />
+            </View>
+          </ConfigSectionCard>
 
-        {/* Help Section */}
-        <View style={styles.helpSection}>
-          <Icon
-            name="information-outline"
-            size={20}
-            color={colors.info}
-          />
-          <Text
-            style={[styles.helpText, { color: colors.foregroundSecondary }]}
+          {error ? <Text testID="fiscal-setup-error" style={[styles.message, { color: colors.error }]}>{error}</Text> : null}
+          {saved ? (
+            <Text testID="fiscal-setup-saved" style={[styles.message, { color: colors.success }]}>
+              {openIssues > 0
+                ? 'Cadastro salvo. As notas com problema não voltam sozinhas: reenvie cada uma na lista.'
+                : 'Cadastro salvo.'}
+            </Text>
+          ) : null}
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            disabled={saving}
+            style={[styles.button, { backgroundColor: colors.primary, opacity: saving ? 0.6 : 1 }]}
+            onPress={() => void save()}
           >
-            {t('financial.fiscal.setup.help_csc')}
-            {'. '}
-            Seu contador pode ajudar com esse processo.
-          </Text>
-        </View>
-      </ScrollView>
-    </View>
-    </ScreenContainer>
+            {saving ? <ActivityIndicator color={colors.primaryForeground} /> : (
+              <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Salvar cadastro</Text>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
+    </V2Shell>
   );
 }
 
 const styles = StyleSheet.create({
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-  },
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
-  },
-  title: {
-    fontWeight: '700',
-  },
-  card: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  input: {
-    marginBottom: 12,
-  },
-  regimeButton: {
-    marginBottom: 8,
-  },
-  certRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  certStatus: {
-    fontSize: 14,
-  },
-  uploadButton: {
-    marginTop: 4,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  switchLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  switchText: {
-    fontSize: 16,
-  },
-  errorText: {
-    textAlign: 'center',
-    marginBottom: 12,
-    fontSize: 14,
-  },
-  saveButton: {
-    marginTop: 8,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  saveLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  divider: {
-    marginVertical: 20,
-  },
-  helpSection: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  helpText: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 18,
-  },
+  body: { padding: 14, gap: 12 },
+  message: { fontSize: 13, marginBottom: 12 },
+  issuesRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 16 },
+  issuesText: { flex: 1, fontSize: 14, fontWeight: '600' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  field: { gap: 4 },
+  label: { fontSize: 12, fontWeight: '600' },
+  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  switchText: { flex: 1, fontSize: 14 },
+  button: { borderRadius: 12, minHeight: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  buttonText: { fontSize: 14, fontWeight: '700' },
 });

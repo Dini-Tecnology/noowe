@@ -89,7 +89,7 @@
 | **O que é** | API intermediária para emissão de NFC-e (nota fiscal eletrônica ao consumidor) |
 | **Onde criar** | https://focusnfe.com.br → contato comercial (SaaS multicliente) |
 | **O que obter** | Token da API por restaurante |
-| **Onde configurar** | `service_fiscal_configure` por restaurante; o token vai para o Supabase Vault (ADR-030) |
+| **Onde configurar** | Config > Fiscal no app do restaurante (homologação) ou `service_fiscal_configure`; o token vai para o Supabase Vault (ADR-030) |
 | **Certificado A1** | Cada restaurante precisa de certificado digital A1 (.pfx + senha), enviado à Focus NFe. Não fica no NOOWE |
 | **Dados fiscais necessários** | CNPJ, IE, regime tributário, CSC ID + Token (gerado na SEFAZ do estado) |
 | **Homologação** | Testar em `https://homologacao.focusnfe.com.br` primeiro |

@@ -54,7 +54,7 @@ ASAAS_ENVIRONMENT=sandbox
 | Criar conta homologacao | Contatar comercial Focus NFe | https://focusnfe.com.br/contato | [ ] |
 | Cadastrar a empresa | Painel Focus → Empresa: certificado A1 e CSC ficam na Focus | Necessario certificado digital | [ ] |
 | Obter token da empresa | Um token por ambiente (homologacao e producao) | Apos aprovacao | [ ] |
-| Provisionar no NOOWE | `service_fiscal_configure` grava a configuracao e guarda o token no Vault | Ver `ACOES_HUMANAS_PUBLICACAO.md` 1.9 | [ ] |
+| Provisionar no NOOWE | Config > Fiscal no app, ou `service_fiscal_configure`: grava a configuracao e guarda o token no Vault | Ver `ACOES_HUMANAS_PUBLICACAO.md` 1.9 | [ ] |
 | Testar emissao | Fechar uma conta em homologacao e ver a nota `authorized` em `fiscal_documents` | Validar numero e chave no recibo | [ ] |
 
 **Nao ha variavel de ambiente nem webhook:** o token e por restaurante, no Vault, e a NFC-e e sincrona.

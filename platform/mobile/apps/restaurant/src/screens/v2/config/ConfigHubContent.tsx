@@ -32,6 +32,7 @@ import {
   calculateMenuProgress,
   calculateTeamProgress,
   calculateKitchenProgress,
+  calculateFiscalProgress,
   calculatePaymentsProgress,
   statusFromProgress,
   type ConfigModuleStatus,
@@ -53,6 +54,7 @@ interface ProgressMap {
   team: number;
   kitchen: number;
   payments: number;
+  fiscal: number;
 }
 
 const EMPTY_PROGRESS: ProgressMap = {
@@ -64,6 +66,7 @@ const EMPTY_PROGRESS: ProgressMap = {
   team: 0,
   kitchen: 0,
   payments: 0,
+  fiscal: 0,
 };
 
 interface ConfigHubContentProps {
@@ -81,6 +84,7 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
   const [restaurantName, setRestaurantName] = useState(currentRestaurant?.name ?? 'Restaurante');
   const [serviceLabel, setServiceLabel] = useState(currentRestaurant?.serviceType ?? '');
   const [progressMap, setProgressMap] = useState<ProgressMap>(EMPTY_PROGRESS);
+  const [fiscalIssues, setFiscalIssues] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +113,7 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
         supabaseApiAdapter.getStaff(restaurantId),
         supabaseApiAdapter.getCookStations(restaurantId),
         supabaseApiAdapter.getKdsConfig(restaurantId),
+        supabaseApiAdapter.getFiscalConfig(restaurantId),
       ]);
 
       const profile = results[0].status === 'fulfilled' ? results[0].value : null;
@@ -118,6 +123,7 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
       const staff = results[4].status === 'fulfilled' ? results[4].value : [];
       const stations = results[5].status === 'fulfilled' ? results[5].value : [];
       const kdsConfig = results[6].status === 'fulfilled' ? results[6].value : null;
+      const fiscal = results[7].status === 'fulfilled' ? results[7].value : null;
 
       if (profile) {
         setRestaurantName(profile.name ?? currentRestaurant?.name ?? 'Restaurante');
@@ -138,7 +144,9 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
         team: calculateTeamProgress(Array.isArray(staff) ? staff : []),
         kitchen: calculateKitchenProgress(Array.isArray(stations) ? stations : [], kdsConfig),
         payments: calculatePaymentsProgress(profile?.settings?.payment_methods),
+        fiscal: calculateFiscalProgress(fiscal),
       });
+      setFiscalIssues(fiscal?.openIssues ?? 0);
     } catch {
       // keep previous progress values
     }
@@ -164,6 +172,7 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
       'config-team': progressMap.team,
       'config-kitchen': progressMap.kitchen,
       'config-payments': progressMap.payments,
+      'config-fiscal': progressMap.fiscal,
     };
 
     const map: Record<string, ModuleState> = {};
@@ -286,7 +295,9 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
             <ConfigModuleCard
               key={mod.id}
               label={mod.label}
-              desc={mod.desc}
+              desc={mod.id === 'config-fiscal' && fiscalIssues > 0
+                ? `${fiscalIssues} ${fiscalIssues === 1 ? 'nota com problema' : 'notas com problema'}`
+                : mod.desc}
               progress={state.progress}
               status={state.status}
               Icon={mod.Icon}
