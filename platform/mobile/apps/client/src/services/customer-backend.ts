@@ -3,6 +3,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/shared/services/supabase';
 import type { Database } from '@/shared/types/database.generated';
 import type { CustomerExperienceConfig } from '@okinawa/shared/config/service-types';
+import { invokePaymentsCreate, PAYMENT_ERRORS } from './bill-shares';
 import { normalizeUsernameInput } from '../utils/username';
 import { parseMenuCustomizations, type MenuCustomizations } from '../utils/item-customization';
 import {
@@ -259,6 +260,7 @@ export type CustomerOrderStatus =
   | 'delivered' | 'completed' | 'cancelled';
 
 export type CustomerPaymentStatus = 'pending' | 'confirmed' | 'failed' | 'refunded';
+export type OrderPaymentMode = 'asaas' | 'simulated' | 'unavailable';
 export type CustomerFulfillmentStatus =
   | 'received' | 'accepted' | 'preparing' | 'checking' | 'ready'
   | 'delivered' | 'picked_up' | 'not_picked_up' | 'cancelled';
@@ -601,12 +603,17 @@ export interface CustomerBackend {
   /** Quanto a pessoa ainda deve na mesa (ADR-021); o servidor calcula, o app só exibe. */
   getMyTableBalance(tableSessionId: string): Promise<MyTableBalance>;
   placeOrder(input: PlaceOrderInput): Promise<CustomerOrder>;
-  startPayment(input: { orderId: string; paymentMethod: string; idempotencyKey?: string }): Promise<{
+  /** Como este restaurante cobra pedidos agora; quem decide é o servidor. */
+  getOrderPaymentMode(restaurantId: string): Promise<OrderPaymentMode>;
+  /** Cria a cobrança do pedido (ADR-020). `confirmed` só existe depois do webhook; a tela nunca confirma nada. */
+  startPayment(input: { orderId: string; restaurantId: string; paymentMethod: string; idempotencyKey?: string; payerCpfCnpj?: string }): Promise<{
     transactionId: string; orderId: string; paymentStatus: CustomerPaymentStatus; idempotentReplay: boolean; simulated: boolean;
     fulfillmentStatus: CustomerFulfillmentStatus | null;
     /** Pix pendente: copia-e-cola e prazo (ADR-013). */
     pixCode: string | null;
     paymentExpiresAt: string | null;
+    /** Cartão: página hospedada do Asaas, onde o cartão é digitado. */
+    checkoutUrl: string | null;
   }>;
   /** quick_service "Monte seu Combo": places a pickup order for 1 lanche + 1 acompanhamento + 1 bebida at 20% off, computed server-side. */
   orderCustomCombo(input: {
@@ -1459,11 +1466,39 @@ export const customerBackend: CustomerBackend = {
     return mapOrder(data as unknown as Record<string, unknown>);
   },
 
+  async getOrderPaymentMode(restaurantId) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('customer_order_payment_mode', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return data as OrderPaymentMode;
+  },
+
   async startPayment(input) {
+    const idempotencyKey = input.idempotencyKey ?? Crypto.randomUUID();
+    const mode = await customerBackend.getOrderPaymentMode(input.restaurantId);
+    if (mode === 'unavailable') {
+      throw Object.assign(new Error(PAYMENT_ERRORS.payments_unavailable), { code: 'payments_unavailable' });
+    }
+    if (mode === 'asaas') {
+      const charge = objectValue(await invokePaymentsCreate({
+        purpose: 'order', targetId: input.orderId, method: input.paymentMethod, idempotencyKey,
+        ...(input.payerCpfCnpj ? { payerCpfCnpj: input.payerCpfCnpj } : {}),
+      }));
+      return {
+        transactionId: String(charge.paymentId ?? ''),
+        orderId: input.orderId,
+        paymentStatus: (charge.status === 'confirmed' ? 'confirmed' : 'pending') as CustomerPaymentStatus,
+        idempotentReplay: charge.idempotentReplay === true,
+        simulated: false,
+        fulfillmentStatus: null,
+        pixCode: optionalString(objectValue(charge.pix).payload),
+        paymentExpiresAt: optionalString(charge.expiresAt),
+        checkoutUrl: optionalString(charge.checkoutUrl),
+      };
+    }
     const { data, error } = await (getSupabaseClient() as any).rpc('customer_start_payment', {
       p_order_id: input.orderId,
       p_payment_method: input.paymentMethod,
-      p_idempotency_key: input.idempotencyKey ?? Crypto.randomUUID(),
+      p_idempotency_key: idempotencyKey,
     });
     if (error) throw error;
     const row = objectValue(data);
@@ -1476,6 +1511,7 @@ export const customerBackend: CustomerBackend = {
       fulfillmentStatus: optionalString(row.fulfillmentStatus) as CustomerFulfillmentStatus | null,
       pixCode: optionalString(row.pixCode),
       paymentExpiresAt: optionalString(row.paymentExpiresAt),
+      checkoutUrl: null,
     };
   },
 

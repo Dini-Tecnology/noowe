@@ -3,6 +3,8 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import FecharContaScreen from '../screens/production/FecharContaScreen';
 
+jest.mock('../services/bill-shares', () => ({ SPLIT_ERRORS: {}, billShares: { preview: jest.fn(), commit: jest.fn() } }));
+jest.mock('../hooks/useBillShares', () => ({ useBillShares: () => ({ shares: { data: [] } }) }));
 jest.mock('@expo/vector-icons/Ionicons', () => 'Icon');
 jest.mock('@okinawa/shared/contexts/ThemeContext', () => ({ useColors: () => new Proxy({}, { get: () => '#333333' }) }));
 jest.mock('@okinawa/shared/components/ScreenContainer', () => ({ ScreenContainer: ({ children }: React.PropsWithChildren) => <>{children}</> }));

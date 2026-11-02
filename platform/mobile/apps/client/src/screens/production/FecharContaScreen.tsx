@@ -2,25 +2,25 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import customerBackend from '../../services/customer-backend';
+import { billShares, SPLIT_ERRORS } from '../../services/bill-shares';
+import { useBillShares } from '../../hooks/useBillShares';
 import InviteToTableSheet from '../../components/table/InviteToTableSheet';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
 import { BILL_CALL_COOLDOWN_SECONDS, useCooldown } from '../../hooks/useCooldown';
-import { money, StateView, tableLabel } from './shared';
-
-const TIP_OPTIONS = [0, 10, 15, 20];
+import { money, moneyCents, StateView, tableLabel } from './shared';
 
 export default function FecharContaScreen({ route, navigation }: any) {
   const colors = useColors();
   const { session, leaveTable } = useVisitSession();
   const tableSessionId: string | undefined = route?.params?.tableSessionId ?? session?.tableSessionId;
-  const [tipPct, setTipPct] = useState(10);
+  const queryClient = useQueryClient();
 
   const bill = useQuery({
     queryKey: ['table-bill', tableSessionId],
@@ -39,12 +39,30 @@ export default function FecharContaScreen({ route, navigation }: any) {
   const [inviteOpen, setInviteOpen] = useState(false);
   useTableInvitesRealtime(tableSessionId, canInvite && !!tableSessionId);
 
-  const myItems = useMemo(() => bill.data?.items.filter((i) => i.placedByIsMe) ?? [], [bill.data]);
-  const mySubtotal = useMemo(() => myItems.reduce((sum, i) => sum + i.totalPrice, 0), [myItems]);
-  const feePct = bill.data?.serviceFeePercent ?? 10;
-  const myServiceFee = mySubtotal * (feePct / 100);
-  const myTip = mySubtotal * (tipPct / 100);
-  const myTotal = mySubtotal + myServiceFee + myTip;
+  // A parte de cada um vem do servidor em centavos (invariante 2); a gorjeta é escolhida na próxima tela.
+  const me = bill.data?.participants.find((p) => p.isMe);
+  const plan = useQuery({
+    queryKey: ['bill-split-preview', tableSessionId, 'by_owner', bill.dataUpdatedAt],
+    queryFn: () => billShares.preview(tableSessionId!, 'by_owner'),
+    enabled: !!tableSessionId && !!bill.data?.items.length,
+    retry: false,
+  });
+  const myShare = plan.data?.shares.find((share) => share.participantId === me?.dinerId);
+  const { shares } = useBillShares(tableSessionId);
+  // Parcela já criada (ou cobrança em andamento): retoma em vez de refazer a divisão.
+  const myActiveShare = shares.data?.find((share) => share.participantId === me?.dinerId && (share.status === 'open' || share.status === 'pending_payment'));
+
+  const payMine = useMutation({
+    mutationFn: () => billShares.commit({ tableSessionId: tableSessionId!, mode: 'by_owner', version: plan.data!.version }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['bill-shares', tableSessionId] });
+      navigation.navigate('SharePayment', { tableSessionId, restaurantName: restaurant.data?.name });
+    },
+    onError: (error: Error & { code?: string }) => {
+      Alert.alert('Não foi possível continuar', SPLIT_ERRORS[error.code ?? ''] ?? error.message);
+      void plan.refetch();
+    },
+  });
 
   const finishVisit = useMutation({
     mutationFn: leaveTable,
@@ -108,11 +126,6 @@ export default function FecharContaScreen({ route, navigation }: any) {
         itemPrice: { fontSize: 14, fontWeight: '700', color: colors.foreground },
         card: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 16, gap: 8 },
         cardTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground, marginBottom: 4 },
-        tipRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
-        tipChip: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, backgroundColor: colors.backgroundTertiary },
-        tipChipActive: { backgroundColor: colors.primary },
-        tipChipText: { fontSize: 13, fontWeight: '600', color: colors.foregroundSecondary },
-        tipChipTextActive: { color: colors.primaryForeground },
         summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
         summaryLabel: { fontSize: 13, color: colors.foregroundSecondary },
         summaryValue: { fontSize: 13, fontWeight: '600', color: colors.foreground },
@@ -154,8 +167,8 @@ export default function FecharContaScreen({ route, navigation }: any) {
             <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
           </TouchableOpacity>
           <View>
-            <Text style={styles.headerTotalLabel}>Total da mesa</Text>
-            <Text style={styles.headerTotalValue}>{money((bill.data?.subtotal ?? 0) * (1 + feePct / 100))}</Text>
+            <Text style={styles.headerTotalLabel}>Falta pagar</Text>
+            <Text style={styles.headerTotalValue}>{plan.data ? moneyCents(plan.data.totalRemCents) : '—'}</Text>
           </View>
         </View>
         <Text style={styles.headerTitle}>Fechar Conta</Text>
@@ -210,48 +223,38 @@ export default function FecharContaScreen({ route, navigation }: any) {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Resumo</Text>
-              <Text style={[styles.summaryLabel, { marginBottom: 4 }]}>Gorjeta</Text>
-              <View style={styles.tipRow}>
-                {TIP_OPTIONS.map((pct) => (
-                  <TouchableOpacity
-                    key={pct}
-                    style={[styles.tipChip, tipPct === pct && styles.tipChipActive]}
-                    onPress={() => setTipPct(pct)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: tipPct === pct }}
-                  >
-                    <Text style={[styles.tipChipText, tipPct === pct && styles.tipChipTextActive]}>{pct}%</Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryValue}>{moneyCents(myShare?.baseCents ?? 0)}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal ({myItems.length} {myItems.length === 1 ? 'item' : 'itens'})</Text>
-                <Text style={styles.summaryValue}>{money(mySubtotal)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Taxa de serviço ({feePct}%)</Text>
-                <Text style={styles.summaryValue}>{money(myServiceFee)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Gorjeta ({tipPct}%)</Text>
-                <Text style={styles.summaryValue}>{money(myTip)}</Text>
+                <Text style={styles.summaryLabel}>Taxa de serviço{bill.data.serviceFeePercent != null ? ` (${bill.data.serviceFeePercent}%)` : ''}</Text>
+                <Text style={styles.summaryValue}>{moneyCents(myShare?.feeCents ?? 0)}</Text>
               </View>
               <View style={styles.payRow}>
                 <Text style={styles.payLabel}>Você paga</Text>
-                <Text style={styles.payValue}>{money(myTotal)}</Text>
+                <Text style={styles.payValue}>{moneyCents(myShare?.amountCents ?? 0)}</Text>
               </View>
+              <Text style={styles.summaryLabel}>A gorjeta é opcional e escolhida na próxima etapa.</Text>
             </View>
 
             <TouchableOpacity
               style={styles.cta}
-              onPress={() => mySubtotal <= 0 ? finishVisit.mutate() : navigation.navigate('TipPayment', {
-                tableSessionId, restaurantName: restaurant.data?.name,
-                baseAmount: mySubtotal, serviceFeePercent: feePct, tipPercent: tipPct, splitMode: 'mine',
-              })}
-              disabled={finishVisit.isPending}
+              onPress={() => {
+                if (myActiveShare) navigation.navigate('SharePayment', { tableSessionId, restaurantName: restaurant.data?.name });
+                else if (myShare) payMine.mutate();
+                else finishVisit.mutate();
+              }}
+              disabled={finishVisit.isPending || payMine.isPending}
               accessibilityRole="button"
             >
-              <Text style={styles.ctaText}>{mySubtotal > 0 ? 'Pagar e concluir minha conta' : finishVisit.isPending ? 'Encerrando…' : 'Encerrar visita sem saldo pendente'}</Text>
+              <Text style={styles.ctaText}>
+                {myActiveShare
+                  ? 'Continuar pagamento'
+                  : myShare
+                    ? (payMine.isPending ? 'Preparando…' : 'Pagar e concluir minha conta')
+                    : finishVisit.isPending ? 'Encerrando…' : 'Encerrar visita sem saldo pendente'}
+              </Text>
             </TouchableOpacity>
             {bill.data.participants.length > 1 ? (
               <TouchableOpacity onPress={() => navigation.navigate('SplitBill', {

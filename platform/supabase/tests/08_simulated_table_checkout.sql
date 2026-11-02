@@ -1,6 +1,7 @@
 -- Behavioral regression: real RPCs, real signed QR codes, rolled back fixtures.
 begin;
 select plan(1);
+update private.dev_flags set enabled = true where key = 'simulate_share_payment';
 do $$
 declare
   r uuid := 'c1000000-0000-4000-8000-000000000002';

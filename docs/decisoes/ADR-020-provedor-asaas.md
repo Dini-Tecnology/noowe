@@ -34,3 +34,5 @@
 - `gateway_transactions` continua sendo o livro-razão (equivale ao `payments` da spec).
 - Pagamento tardio nunca levanta erro no webhook: vira `completed` + estorno enfileirado.
 - Estorno automático de pagamento tardio conflita com N4 #5 (aprovação registrada): decisão humana pendente.
+- O app pergunta ao servidor como cobrar (`private.payment_mode`): `asaas` com subconta ativa, `simulated` só com flag em `private.dev_flags` (`simulate_order_payment`, `simulate_share_payment`) e sem subconta ativa, senão `unavailable`.
+- **Decisão pendente:** a spec §7.4 lista carteiras digitais no app e este ADR as adia para a P6. Até a decisão, Apple Pay e Google Pay não aparecem como forma de pagamento no app do cliente.

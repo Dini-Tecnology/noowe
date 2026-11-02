@@ -97,7 +97,7 @@ export default function OrderDetailScreen({ route, navigation }: any) {
     enabled: pickupSteps && !!query.data,
   });
   const resumePix = useMutation({
-    mutationFn: () => customerBackend.startPayment({ orderId, paymentMethod: 'pix' }),
+    mutationFn: () => customerBackend.startPayment({ orderId, restaurantId: query.data!.restaurantId, paymentMethod: 'pix' }),
     onSuccess: (payment) => {
       if (payment.paymentStatus === 'pending' && payment.pixCode) {
         setResumedPix({ code: payment.pixCode, expiresAt: payment.paymentExpiresAt });
