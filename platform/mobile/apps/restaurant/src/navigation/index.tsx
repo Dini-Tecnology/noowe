@@ -99,6 +99,7 @@ import ConfigExperienceScreen from '../screens/v2/config/ConfigExperienceScreen'
 import ConfigFloorScreen from '../screens/v2/config/ConfigFloorScreen';
 import ConfigKitchenScreen from '../screens/v2/config/ConfigKitchenScreen';
 import ConfigPaymentsScreen from '../screens/v2/config/ConfigPaymentsScreen';
+import PaymentAccountScreen from '../screens/v2/config/PaymentAccountScreen';
 import ConfigMarketplaceScreen from '../screens/v2/config/ConfigMarketplaceScreen';
 import UserAccountScreen from '../screens/v2/UserAccountScreen';
 import { RestaurantRoleProvider, useRestaurantRole, RestaurantRole } from '../contexts/RestaurantRoleContext';
@@ -210,6 +211,7 @@ const GuardedConfigExperience = withRoleGuard(ConfigExperienceScreen, ['owner', 
 const GuardedConfigFloor = withRoleGuard(ConfigFloorScreen, ['owner', 'manager']);
 const GuardedConfigKitchen = withRoleGuard(ConfigKitchenScreen, ['owner', 'manager']);
 const GuardedConfigPayments = withRoleGuard(ConfigPaymentsScreen, ['owner', 'manager']);
+const GuardedPaymentAccount = withRoleGuard(PaymentAccountScreen, ['owner', 'manager']);
 const GuardedConfigMarketplace = withRoleGuard(ConfigMarketplaceScreen, ['owner', 'manager']);
 const GuardedWaiter = withRoleGuard(WaiterScreen, ['owner', 'manager', 'waiter', 'maitre']);
 const GuardedWaiterTapToPay = withRoleGuard(WaiterTapToPayScreen, ['owner', 'manager', 'waiter']);
@@ -538,6 +540,7 @@ function MainStack() {
       <Stack.Screen name="ConfigFloor" component={GuardedConfigFloor} options={scaleFadeScreenOptions} />
       <Stack.Screen name="ConfigKitchen" component={GuardedConfigKitchen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="ConfigPayments" component={GuardedConfigPayments} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="PaymentAccount" component={GuardedPaymentAccount} options={scaleFadeScreenOptions} />
       <Stack.Screen name="ConfigMarketplace" component={GuardedConfigMarketplace} options={scaleFadeScreenOptions} />
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={scaleFadeScreenOptions} />

@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Switch, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
 import {
+  ChevronRight,
   CreditCard,
   FingerprintPattern,
   Heart,
@@ -13,6 +15,7 @@ import {
   Users,
   ClipboardList,
   DollarSign,
+  Landmark,
 } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
@@ -74,6 +77,7 @@ const PREVIEW_SUBTOTAL = 342;
 
 export default function ConfigPaymentsScreen() {
   const colors = useColors();
+  const navigation = useNavigation<any>();
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [methods, setMethods] = useState<PaymentMethods>(DEFAULT_PAYMENT_METHODS);
   const [loading, setLoading] = useState(true);
@@ -192,6 +196,16 @@ export default function ConfigPaymentsScreen() {
         <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <>
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('PaymentAccount')}
+            style={[styles.accountRow, { borderColor: colors.border, backgroundColor: colors.card }]}
+          >
+            <Landmark size={18} color={colors.primary} />
+            <Text style={[styles.accountRowText, { color: colors.foreground }]}>Conta de recebimento</Text>
+            <ChevronRight size={18} color={colors.foregroundSecondary} />
+          </TouchableOpacity>
           <Text style={[styles.sectionEyebrow, { color: colors.foregroundSecondary }]}>MÉTODOS ACEITOS</Text>
           <View style={[styles.methodGrid, { borderColor: colors.border, backgroundColor: colors.card }]}>
             {METHOD_GRID.map((method) => {
@@ -441,6 +455,8 @@ function StepperRow({
 }
 
 const styles = StyleSheet.create({
+  accountRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 16 },
+  accountRowText: { flex: 1, fontSize: 14, fontWeight: '600' },
   headerIcon: {
     width: 36,
     height: 36,

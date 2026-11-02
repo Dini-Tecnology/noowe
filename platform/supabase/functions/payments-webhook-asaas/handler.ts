@@ -1,4 +1,5 @@
-import { isChargebackEvent, mapAsaasEvent, mapAsaasPaymentStatus } from "../_shared/payments/events.ts";
+import { syncAccountStatus } from "../_shared/payments/account-status.ts";
+import { isAccountStatusEvent, isChargebackEvent, mapAsaasEvent, mapAsaasPaymentStatus } from "../_shared/payments/events.ts";
 import { asaasValueToCents } from "../_shared/payments/money.ts";
 import { sha256Hex, timingSafeEqual } from "../_shared/payments/crypto.ts";
 import { json, type PaymentDeps } from "../_shared/payments/deps.ts";
@@ -33,6 +34,20 @@ export async function handleWebhook(req: Request, deps: PaymentDeps): Promise<Re
       p_provider: "asaas", p_provider_event_id: eventId, p_event_type: type,
       p_payment_account_id: accountId, p_payload: event,
     }).then(() => json({ ok: true, ignored: reason }));
+
+  // Situação da conta (KYC): o evento só avisa que mudou. Quem decide é a reconsulta ao Asaas.
+  if (isAccountStatusEvent(type)) {
+    const apiKey: string | undefined = account.apiKey;
+    if (!apiKey) return orphan("no_api_key");
+    try {
+      const synced = await syncAccountStatus(deps, accountId, apiKey, null);
+      if (synced.error) console.error("payments-webhook-asaas account status error:", synced.error);
+      return json({ ok: true });
+    } catch (err) {
+      console.error("payments-webhook-asaas account recheck failed:", (err as Error).message);
+      return orphan("recheck_failed");
+    }
+  }
 
   if (!type.startsWith("PAYMENT_")) return orphan("not_a_payment_event");
   const paymentId: string = typeof payment?.externalReference === "string" ? payment.externalReference : "";

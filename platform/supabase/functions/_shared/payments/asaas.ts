@@ -1,7 +1,11 @@
 import { centsToAsaasValue } from "./money.ts";
 import type {
+  AsaasAccount, AsaasAccountDocument, AsaasAccountInput, AsaasAccountStatus,
   AsaasChargeInput, AsaasCustomerInput, AsaasPayment, AsaasPix, PaymentProvider,
 } from "./types.ts";
+
+// O POST /accounts levou 5,6 s no sandbox, contra 10 s do timeout padrão.
+const ACCOUNT_CREATE_TIMEOUT_MS = 30_000;
 
 export class AsaasError extends Error {
   status: number;
@@ -38,11 +42,11 @@ export class AsaasClient implements PaymentProvider {
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   }
 
-  private async request<T>(apiKey: string, method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(apiKey: string, method: string, path: string, body?: unknown, timeoutMs = this.timeoutMs): Promise<T> {
     const retriable = method === "GET" || method === "DELETE";
     for (let attempt = 0; ; attempt++) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const base = typeof this.opts.baseUrl === "function" ? this.opts.baseUrl(apiKey) : this.opts.baseUrl;
         const res = await this.fetchImpl(`${base}${path}`, {
@@ -116,5 +120,33 @@ export class AsaasClient implements PaymentProvider {
     await this.request<unknown>(apiKey, "POST", `/payments/${encodeURIComponent(id)}/refund`, {
       value: centsToAsaasValue(valueCents), description,
     });
+  }
+
+  // A apiKey só volta nesta resposta: um timeout curto aqui perderia a subconta recém-criada.
+  createAccount(rootApiKey: string, input: AsaasAccountInput) {
+    return this.request<AsaasAccount>(rootApiKey, "POST", "/accounts", {
+      name: input.name, email: input.email, cpfCnpj: input.cpfCnpj, companyType: input.companyType,
+      mobilePhone: input.mobilePhone, incomeValue: centsToAsaasValue(input.incomeCents),
+      address: input.address, addressNumber: input.addressNumber, province: input.province, postalCode: input.postalCode,
+      webhooks: [{
+        name: "NOOWE pagamentos", url: input.webhook.url, email: input.webhook.email, enabled: true, interrupted: false,
+        apiVersion: 3, sendType: "SEQUENTIALLY", authToken: input.webhook.authToken, events: input.webhook.events,
+      }],
+    }, ACCOUNT_CREATE_TIMEOUT_MS);
+  }
+
+  async findAccountByDocument(rootApiKey: string, cpfCnpj: string) {
+    const res = await this.request<{ data: { id: string }[] }>(
+      rootApiKey, "GET", `/accounts?cpfCnpj=${encodeURIComponent(cpfCnpj)}&limit=1`);
+    return res.data?.[0] ?? null;
+  }
+
+  getAccountStatus(apiKey: string) {
+    return this.request<AsaasAccountStatus>(apiKey, "GET", "/myAccount/status");
+  }
+
+  async listAccountDocuments(apiKey: string) {
+    const res = await this.request<{ data: AsaasAccountDocument[] }>(apiKey, "GET", "/myAccount/documents");
+    return res.data ?? [];
   }
 }

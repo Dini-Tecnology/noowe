@@ -165,3 +165,27 @@ test("pagamento não confirmado não guarda cartão", async () => {
   await handleWebhook(req("PAYMENT_RECEIVED"), deps);
   assert.equal(calls.filter((c) => c.fn === "service_payment_save_card").length, 0);
 });
+
+test("situação da conta: reconsulta o Asaas e o corpo do webhook não decide nada", async () => {
+  const { deps, calls } = await setup();
+  (deps.provider as any).getAccountStatus = async () => ({ general: "PENDING" });
+  (deps.provider as any).listAccountDocuments = async () => [];
+  const res = await handleWebhook(req("ACCOUNT_STATUS_GENERAL_APPROVAL_APPROVED"), deps);
+  assert.equal(res.status, 200);
+  const apply = calls.find((c) => c.fn === "service_payment_account_apply_status")!;
+  assert.equal(apply.args.p_account_id, ACCT);
+  assert.equal(apply.args.p_general, "PENDING");
+  assert.equal(apply.args.p_actor_id, null);
+});
+
+test("situação da conta: falha na reconsulta responde 200 e não aplica; token errado é 401", async () => {
+  const { deps, calls } = await setup();
+  (deps.provider as any).getAccountStatus = async () => { throw new Error("rede"); };
+  assert.equal((await handleWebhook(req("ACCOUNT_STATUS_GENERAL_APPROVAL_APPROVED"), deps)).status, 200);
+  assert.ok(!calls.some((c) => c.fn === "service_payment_account_apply_status"));
+  assert.ok(calls.some((c) => c.fn === "service_payment_record_orphan_event"));
+
+  const denied = await setup();
+  assert.equal((await handleWebhook(req("ACCOUNT_STATUS_GENERAL_APPROVAL_APPROVED", { token: "errado" }), denied.deps)).status, 401);
+  assert.ok(!denied.calls.some((c) => c.fn === "service_payment_account_apply_status"));
+});

@@ -27,6 +27,7 @@ export function saoPauloDate(now: Date): string {
 export function mapRpcError(code?: string): { status: number; error: string } {
   switch (code) {
     case "28000": return { status: 401, error: "unauthorized" };
+    case "42501": return { status: 403, error: "forbidden" };
     case "22023": return { status: 400, error: "invalid_request" };
     case "P0002": return { status: 404, error: "not_found" };
     case "P0001": return { status: 409, error: "payment_not_allowed" };
