@@ -1185,144 +1185,186 @@ export type Database = {
       }
       fiscal_configs: {
         Row: {
-          auto_emit: boolean
-          certificate_base64: string | null
-          certificate_password: string | null
-          certificate_uploaded: boolean
           cnpj: string
           created_at: string
-          csc_id: string | null
-          csc_token: string | null
-          current_series: number
           endereco: Json
+          environment: string
           fiscal_provider: string
-          focus_nfe_token: string | null
+          focus_token_secret_id: string | null
           id: string
           ie: string | null
           is_active: boolean
-          next_number: number
           nome_fantasia: string | null
           razao_social: string
           regime_tributario: string
           restaurant_id: string
+          service_fee_in_document: boolean
           state_code: string
           tax_defaults: Json
           updated_at: string
         }
         Insert: {
-          auto_emit: boolean
-          certificate_base64?: string | null
-          certificate_password?: string | null
-          certificate_uploaded: boolean
           cnpj: string
-          created_at: string
-          csc_id?: string | null
-          csc_token?: string | null
-          current_series: number
-          endereco: Json
-          fiscal_provider: string
-          focus_nfe_token?: string | null
+          created_at?: string
+          endereco?: Json
+          environment?: string
+          fiscal_provider?: string
+          focus_token_secret_id?: string | null
           id?: string
           ie?: string | null
-          is_active: boolean
-          next_number: number
+          is_active?: boolean
           nome_fantasia?: string | null
           razao_social: string
           regime_tributario: string
           restaurant_id: string
+          service_fee_in_document?: boolean
           state_code: string
-          tax_defaults: Json
-          updated_at: string
+          tax_defaults?: Json
+          updated_at?: string
         }
         Update: {
-          auto_emit?: boolean
-          certificate_base64?: string | null
-          certificate_password?: string | null
-          certificate_uploaded?: boolean
           cnpj?: string
           created_at?: string
-          csc_id?: string | null
-          csc_token?: string | null
-          current_series?: number
           endereco?: Json
+          environment?: string
           fiscal_provider?: string
-          focus_nfe_token?: string | null
+          focus_token_secret_id?: string | null
           id?: string
           ie?: string | null
           is_active?: boolean
-          next_number?: number
           nome_fantasia?: string | null
           razao_social?: string
           regime_tributario?: string
           restaurant_id?: string
+          service_fee_in_document?: boolean
           state_code?: string
           tax_defaults?: Json
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fiscal_configs_restaurant_fk"
+            columns: ["restaurant_id"]
+            isOneToOne: true
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fiscal_documents: {
         Row: {
           access_key: string | null
+          attempts: number
+          authorized_at: string | null
+          claimed_at: string | null
+          consult_url: string | null
+          contingency: boolean
           created_at: string
           danfe_url: string | null
+          environment: string | null
+          error_code: string | null
           error_message: string | null
-          external_ref: string | null
+          external_ref: string
           id: string
-          items_snapshot: string | null
+          next_attempt_at: string
           number: number | null
-          order_id: string
+          order_id: string | null
           protocol: string | null
           provider: string
           qr_code_url: string | null
           restaurant_id: string
           series: number | null
+          snapshot: Json
           status: string
-          total_amount: number
+          table_session_id: string | null
+          total_cents: number
           type: string
-          xml: string | null
+          updated_at: string
+          xml_url: string | null
         }
         Insert: {
           access_key?: string | null
-          created_at: string
+          attempts?: number
+          authorized_at?: string | null
+          claimed_at?: string | null
+          consult_url?: string | null
+          contingency?: boolean
+          created_at?: string
           danfe_url?: string | null
+          environment?: string | null
+          error_code?: string | null
           error_message?: string | null
-          external_ref?: string | null
+          external_ref: string
           id?: string
-          items_snapshot?: string | null
+          next_attempt_at?: string
           number?: number | null
-          order_id: string
+          order_id?: string | null
           protocol?: string | null
-          provider: string
+          provider?: string
           qr_code_url?: string | null
           restaurant_id: string
           series?: number | null
-          status: string
-          total_amount: number
-          type: string
-          xml?: string | null
+          snapshot?: Json
+          status?: string
+          table_session_id?: string | null
+          total_cents?: number
+          type?: string
+          updated_at?: string
+          xml_url?: string | null
         }
         Update: {
           access_key?: string | null
+          attempts?: number
+          authorized_at?: string | null
+          claimed_at?: string | null
+          consult_url?: string | null
+          contingency?: boolean
           created_at?: string
           danfe_url?: string | null
+          environment?: string | null
+          error_code?: string | null
           error_message?: string | null
-          external_ref?: string | null
+          external_ref?: string
           id?: string
-          items_snapshot?: string | null
+          next_attempt_at?: string
           number?: number | null
-          order_id?: string
+          order_id?: string | null
           protocol?: string | null
           provider?: string
           qr_code_url?: string | null
           restaurant_id?: string
           series?: number | null
+          snapshot?: Json
           status?: string
-          total_amount?: number
+          table_session_id?: string | null
+          total_cents?: number
           type?: string
-          xml?: string | null
+          updated_at?: string
+          xml_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fiscal_documents_order_fk"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fiscal_documents_restaurant_fk"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fiscal_documents_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fraud_alerts: {
         Row: {

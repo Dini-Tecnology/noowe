@@ -40,6 +40,7 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [027](ADR-027-servicos-multiplos-e-fine-por-reserva.md) | Vários serviços sem "primário"; Fine só por reserva (substitui parte do ADR-008) | **Provisório** | Fine sem trava de entrada |
 | [028](ADR-028-expedicao-e-conferencia-do-quick.md) | Expedição opcional; conferência do Quick vira a Expedição ligada (ajusta o ADR-013) | **Provisório** | Quick sem conferência por engano |
 | [029](ADR-029-taxa-gorjeta-rateio-e-caixa.md) | Taxa ou gorjeta, rateio, retenção e caixa — **bloqueado** pelas pendências 8–11 | **Provisório** | Valor cobrado errado; rateio ilegal |
+| [030](ADR-030-emissao-fiscal-focus-nfe.md) | Focus NFe como emissor de NFC-e; o fechamento só enfileira, a emissão roda fora da transação | **Provisório** | Nota duplicada; falha do emissor reabrindo conta |
 
 **Série O (022–029):** originada na avaliação de 28/10; perguntas ao autor em [`PENDENCIAS-perfis-workflows`](PENDENCIAS-perfis-workflows.md).
 
@@ -47,5 +48,5 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).
 
 **Pendente de revisão humana:** ADR-004 (estorno, documento fiscal já emitido e fraude por
-reabertura de conta), ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência), ADR-018 (troca e junção de mesas), ADR-019 (código de convite), ADR-021 (comanda como casa) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
+reabertura de conta), ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência), ADR-018 (troca e junção de mesas), ADR-019 (código de convite), ADR-021 (comanda como casa), ADR-030 (taxa de serviço na nota e `tipo_integracao`, com a contabilidade) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
 o cliente).

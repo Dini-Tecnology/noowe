@@ -70,7 +70,7 @@ jobs:
         run: supabase stop --no-backup
 
   edge-functions:
-    name: Edge Functions — payments tests
+    name: Edge Functions — payments and fiscal tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -78,4 +78,4 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno test --no-check platform/supabase/functions/_shared/payments platform/supabase/functions/payments-create platform/supabase/functions/payments-sync platform/supabase/functions/payments-webhook-asaas
+      - run: deno test --no-check platform/supabase/functions/_shared/payments platform/supabase/functions/payments-create platform/supabase/functions/payments-sync platform/supabase/functions/payments-webhook-asaas platform/supabase/functions/_shared/fiscal platform/supabase/functions/fiscal-emit

@@ -47,34 +47,26 @@ ASAAS_ENVIRONMENT=sandbox
 
 ---
 
-### 2. FOCUS NFe (Emissao Fiscal — NFC-e)
+### 2. FOCUS NFe (Emissao Fiscal — NFC-e) — ver ADR-030
 
 | Item | O que fazer | URL | Status |
 |------|------------|-----|--------|
 | Criar conta homologacao | Contatar comercial Focus NFe | https://focusnfe.com.br/contato | [ ] |
-| Obter token de API | Dashboard → Configurações → Token | Apos aprovacao | [ ] |
-| Upload certificado A1 (.pfx) | Dashboard → Empresa → Certificado | Necessario certificado digital | [ ] |
-| Configurar webhook URL | Dashboard → Configurações → Webhooks | `https://SEU_DOMINIO/api/v1/fiscal/webhooks/focus-nfe` | [ ] |
-| Obter CNPJ de teste | Usar CNPJ da empresa em ambiente de homologacao | Necessario CNPJ valido | [ ] |
-| Testar emissao | Emitir NFC-e via API → verificar retorno | Validar status "autorizado" | [ ] |
+| Cadastrar a empresa | Painel Focus → Empresa: certificado A1 e CSC ficam na Focus | Necessario certificado digital | [ ] |
+| Obter token da empresa | Um token por ambiente (homologacao e producao) | Apos aprovacao | [ ] |
+| Provisionar no NOOWE | `service_fiscal_configure` grava a configuracao e guarda o token no Vault | Ver `ACOES_HUMANAS_PUBLICACAO.md` 1.9 | [ ] |
+| Testar emissao | Fechar uma conta em homologacao e ver a nota `authorized` em `fiscal_documents` | Validar numero e chave no recibo | [ ] |
 
-**Variaveis .env a preencher:**
-```
-FOCUS_NFE_TOKEN=<token_api_homologacao>
-FOCUS_NFE_ENVIRONMENT=homologation
-```
+**Nao ha variavel de ambiente nem webhook:** o token e por restaurante, no Vault, e a NFC-e e sincrona.
 
 **Pre-requisito critico:** Certificado Digital A1 (formato .pfx/.p12)
 - Emitido por AC credenciada (Certisign, Serasa, etc.)
 - Valido (nao expirado)
 - Pode ser o certificado da propria empresa para testes
 
-**Arquivos que serao alterados:**
-- `backend/src/modules/fiscal/adapters/focus-nfe/focus-nfe.adapter.ts`
+**Codigo:** `platform/supabase/functions/_shared/fiscal/focus.ts`, `platform/supabase/functions/fiscal-emit/`
 
-**Documentacao Focus NFe:**
-- API NFC-e: https://focusnfe.com.br/doc/
-- Webhook callbacks: https://focusnfe.com.br/doc/#webhook
+**Documentacao Focus NFe:** https://doc.focusnfe.com.br/reference/nfce
 
 ---
 
@@ -274,7 +266,7 @@ Semana 11:
 
 Semana 12 (Inicio Sprint 7):
   [ ] Asaas API key disponivel → implementar adapter real
-  [ ] Focus NFe token disponivel → implementar adapter real
+  [ ] Focus NFe token disponivel → validar o adapter em homologacao
   [ ] Twilio/SNS credenciais → implementar phone auth
   [ ] Testar fluxo completo: pagamento → NFC-e → notificacao
 

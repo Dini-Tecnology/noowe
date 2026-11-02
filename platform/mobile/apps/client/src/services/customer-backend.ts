@@ -3,6 +3,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/shared/services/supabase';
 import type { Database } from '@/shared/types/database.generated';
 import type { CustomerExperienceConfig } from '@okinawa/shared/config/service-types';
+import { parseReceiptFiscal, type ReceiptFiscal } from './receipt-fiscal';
 import { normalizeUsernameInput } from '../utils/username';
 import { parseMenuCustomizations, type MenuCustomizations } from '../utils/item-customization';
 import {
@@ -463,6 +464,8 @@ export type TableCheckoutResult = {
   tableTotalCount: number | null;
 };
 
+export type { ReceiptFiscal } from './receipt-fiscal';
+
 export type DigitalReceiptItem = { name: string; quantity: number; unitPrice: number; totalPrice: number };
 
 export type DigitalReceipt = {
@@ -486,6 +489,7 @@ export type DigitalReceipt = {
   familyVisitCount: number | null;
   accessKey: string;
   createdAt: string;
+  fiscal: ReceiptFiscal;
 };
 export type CustomerLoyaltyClaim = {
   code: string;
@@ -705,6 +709,7 @@ export interface CustomerBackend {
     idempotencyKey?: string;
   }): Promise<TableCheckoutResult>;
   getReceipt(receiptId: string): Promise<DigitalReceipt>;
+  getOrderFiscal(orderId: string): Promise<ReceiptFiscal>;
   getLatestReviewableOrder(restaurantId: string): Promise<string | null>;
   updateReview(id: string, input: { rating: number; comment?: string }): Promise<void>;
   deleteReview(id: string): Promise<void>;
@@ -2089,7 +2094,14 @@ export const customerBackend: CustomerBackend = {
       familyVisitCount: row.family_visit_count == null ? null : numberValue(row.family_visit_count),
       accessKey: String(row.accessKey ?? ''),
       createdAt: String(row.created_at),
+      fiscal: parseReceiptFiscal(row.fiscal),
     };
+  },
+
+  async getOrderFiscal(orderId) {
+    const { data, error } = await getSupabaseClient().rpc('customer_order_fiscal', { p_order_id: orderId });
+    if (error) throw error;
+    return parseReceiptFiscal(data);
   },
 
   async getLatestReviewableOrder(restaurantId) {

@@ -7,12 +7,15 @@ import { useQuery } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as WebBrowser from 'expo-web-browser';
+import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import customerBackend, { type DigitalReceipt, type PaymentMethodType } from '../../services/customer-backend';
 import { rootNavigate, StateView } from './shared';
 import { quickReceiptFromOrder } from './quick-receipt';
+import { fiscalIsSettling, fiscalNotice } from './receipt-fiscal';
 
 const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
@@ -27,6 +30,8 @@ function formatDateTime(iso: string): string {
 }
 
 function receiptHtml(receipt: DigitalReceipt): string {
+  const notice = fiscalNotice(receipt.fiscal);
+  const key = receipt.fiscal.status === 'authorized' ? receipt.fiscal.accessKey : null;
   const rows = receipt.items
     .map(
       (item) => `<tr>
@@ -61,7 +66,10 @@ function receiptHtml(receipt: DigitalReceipt): string {
           ${receipt.cashback > 0 ? `Cashback ganho: +${money(receipt.cashback)}<br/>` : ''}
           ${receipt.pointsAwarded > 0 ? `Pontos ganhos: +${receipt.pointsAwarded} pts<br/>` : ''}
         </p>
-        <p style="font-size:11px;color:#999;margin-top:24px;">
+        <p style="font-size:12px;color:#444;margin-top:24px;">
+          ${notice.title}<br/>${notice.detail}${key ? `<br/>Chave de acesso: ${key}` : ''}
+        </p>
+        <p style="font-size:11px;color:#999;margin-top:8px;">
           ${receipt.simulated ? 'Simulação sem cobrança · Sem valor fiscal' : `Comprovante: ${receipt.id}`}
         </p>
       </body>
@@ -79,12 +87,18 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
 
   const query = useQuery({
     queryKey: ['receipt', receiptId ?? orderId],
-    queryFn: async () => (receiptId
-      ? customerBackend.getReceipt(receiptId)
-      : quickReceiptFromOrder(await customerBackend.getOrder(orderId!))),
+    queryFn: async () => {
+      if (receiptId) return customerBackend.getReceipt(receiptId);
+      const [order, fiscal] = await Promise.all([customerBackend.getOrder(orderId!), customerBackend.getOrderFiscal(orderId!)]);
+      return quickReceiptFromOrder(order, fiscal);
+    },
     enabled: !!receiptId || !!orderId,
+    // A nota é emitida depois do pagamento: a tela acompanha até sair o resultado.
+    refetchInterval: (current) => (current.state.data && fiscalIsSettling(current.state.data.fiscal) ? 5000 : false),
   });
   const receipt = query.data;
+  const fiscal = receipt?.fiscal;
+  const notice = fiscal ? fiscalNotice(fiscal) : null;
 
   const downloadPdf = useCallback(async () => {
     if (!receipt) return;
@@ -106,7 +120,7 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
   const shareText = useCallback(() => {
     if (!receipt) return;
     Share.share({
-      message: `${receipt.simulated ? 'Recibo de simulação' : 'Recibo'} · ${receipt.restaurantName}\n${formatDateTime(receipt.createdAt)}\nTotal: ${money(receipt.total + receipt.tip)}\n${receipt.simulated ? 'Simulação sem cobrança · Sem valor fiscal' : `Comprovante: ${receipt.id}`}`,
+      message: `${receipt.simulated ? 'Recibo de simulação' : 'Recibo'} · ${receipt.restaurantName}\n${formatDateTime(receipt.createdAt)}\nTotal: ${money(receipt.total + receipt.tip)}\n${fiscalNotice(receipt.fiscal).title}${receipt.fiscal.danfeUrl ? `\n${receipt.fiscal.danfeUrl}` : ''}\n${receipt.simulated ? 'Simulação sem cobrança · Sem valor fiscal' : `Comprovante: ${receipt.id}`}`,
     });
   }, [receipt]);
 
@@ -149,9 +163,12 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
         infoValueGreen: { fontSize: 13, fontWeight: '700', color: colors.success },
         infoValueOrange: { fontSize: 13, fontWeight: '700', color: colors.primary },
         qrBox: {
-          alignSelf: 'center', width: 96, height: 96, borderRadius: 12, backgroundColor: colors.backgroundTertiary,
+          alignSelf: 'center', minWidth: 96, minHeight: 96, padding: 8, borderRadius: 12, backgroundColor: colors.backgroundTertiary,
           alignItems: 'center', justifyContent: 'center', marginTop: 18,
         },
+        fiscalTitle: { fontSize: 13, fontWeight: '700', color: colors.foreground, textAlign: 'center', marginTop: 10 },
+        fiscalLink: { alignSelf: 'center', minHeight: 40, justifyContent: 'center', marginTop: 4 },
+        fiscalLinkText: { fontSize: 13, fontWeight: '700', color: colors.primary },
         accessKeyText: { fontSize: 10, color: colors.foregroundMuted, textAlign: 'center', marginTop: 10, letterSpacing: 0.5 },
         nfceLabel: { fontSize: 11, color: colors.foregroundMuted, textAlign: 'center', marginTop: 4 },
         actionsRow: { flexDirection: 'row', gap: 10, marginTop: 20 },
@@ -251,11 +268,27 @@ export default function DigitalReceiptScreen({ route, navigation }: any) {
               )}
             </View>
 
-            <View style={styles.qrBox}>
-              <Ionicons name="qr-code-outline" size={44} color={colors.foregroundMuted} />
-            </View>
-            <Text style={styles.nfceLabel}>Comprovante da conta · Sem valor fiscal</Text>
-            <Text style={styles.accessKeyText}>{receipt.simulated ? 'Recibo de simulação · Nenhum valor foi cobrado.' : receipt.accessKey}</Text>
+            {fiscal?.status === 'authorized' && fiscal.qrCodeUrl ? (
+              <View style={styles.qrBox} testID="fiscal-qr">
+                <QRCode value={fiscal.qrCodeUrl} size={120} />
+              </View>
+            ) : (
+              <View style={styles.qrBox}>
+                <Ionicons name="time-outline" size={44} color={colors.foregroundMuted} />
+              </View>
+            )}
+            <Text style={styles.fiscalTitle}>{notice?.title}</Text>
+            <Text style={styles.nfceLabel}>{notice?.detail}</Text>
+            <Text style={styles.accessKeyText} selectable>
+              {fiscal?.status === 'authorized' && fiscal.accessKey
+                ? fiscal.accessKey
+                : receipt.simulated ? 'Recibo de simulação · Nenhum valor foi cobrado.' : `Comprovante ${receipt.accessKey}`}
+            </Text>
+            {fiscal?.status === 'authorized' && fiscal.danfeUrl && (
+              <TouchableOpacity style={styles.fiscalLink} onPress={() => void WebBrowser.openBrowserAsync(fiscal.danfeUrl!)} accessibilityRole="link">
+                <Text style={styles.fiscalLinkText}>Abrir nota fiscal</Text>
+              </TouchableOpacity>
+            )}
 
             <View style={styles.actionsRow}>
               <TouchableOpacity style={styles.actionBtn} onPress={downloadPdf} disabled={exporting} accessibilityRole="button">

@@ -179,6 +179,7 @@ cobrança acontece no React Native (lista completa em T-G3-01).
 e não há RPC de emissão NFC-e nem vínculo com o fechamento. O recibo digital existe
 (`DigitalReceiptScreen.tsx`, `casual_dining_receipts`) mas sem documento fiscal por trás.
 **Aceite** Fechar a conta emite o documento fiscal e o recibo do app referencia o número emitido.
+**Estado** Implementada (ADR-030, `20261102100000_fiscal_emission.sql`, `functions/fiscal-emit`). Falta validar na homologação da Focus.
 
 ### T-N4-04 · NOVO — Estorno e cancelamento fiscal com aprovação
 **Tipo** servidor **Tamanho** M **Depende de** T-F2-04

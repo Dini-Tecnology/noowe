@@ -31,12 +31,14 @@ const mockList = jest.fn();
 const mockPay = jest.fn();
 const mockTips = jest.fn();
 const mockSavedCards = jest.fn();
+const mockLatestReceipt = jest.fn().mockResolvedValue(null);
 jest.mock('../services/bill-shares', () => ({
   SPLIT_ERRORS: { P0012: 'A conta mudou. Confira os valores atualizados.' },
   billShares: {
     preview: (...a: unknown[]) => mockPreview(...a), commit: (...a: unknown[]) => mockCommit(...a),
     list: (...a: unknown[]) => mockList(...a), listClaims: async () => [], claimItem: jest.fn(),
     listSavedCards: (...a: unknown[]) => mockSavedCards(...a),
+    latestReceiptId: (...a: unknown[]) => mockLatestReceipt(...a),
     tipOptions: (...a: unknown[]) => mockTips(...a), pay: (...a: unknown[]) => mockPay(...a), abandon: jest.fn(),
     subscribe: () => ({ unsubscribe: jest.fn() }),
   },
@@ -212,4 +214,24 @@ test('cartão salvo que sumiu (404): volta para a escolha e recarrega a lista', 
   const before = mockSavedCards.mock.calls.length;
   fireEvent.press(screen.getByText('Pagar com cartão'));
   await waitFor(() => expect(mockSavedCards.mock.calls.length).toBeGreaterThan(before));
+});
+
+test('recibo: depois de pagar, o cliente chega ao recibo em vez de voltar à Home sem nada', async () => {
+  mockList.mockResolvedValue([{ ...myShare, status: 'paid' }]);
+  mockTips.mockResolvedValue(tips);
+  mockLatestReceipt.mockResolvedValue('receipt-1');
+  const navigate = jest.fn();
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn(), navigate }} />);
+  fireEvent.press(await screen.findByText('Ver recibo'));
+  expect(navigate).toHaveBeenCalledWith('DigitalReceipt', { receiptId: 'receipt-1' });
+  expect(screen.getByText('Concluir')).toBeTruthy();
+});
+
+test('recibo: enquanto o recibo não existe, Concluir continua disponível', async () => {
+  mockList.mockResolvedValue([{ ...myShare, status: 'paid' }]);
+  mockTips.mockResolvedValue(tips);
+  mockLatestReceipt.mockResolvedValue(null);
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  expect(await screen.findByText('Concluir')).toBeTruthy();
+  expect(screen.queryByText('Ver recibo')).toBeNull();
 });

@@ -108,6 +108,14 @@ export const billShares = {
     }));
   },
 
+  /** Recibo do próprio cliente nesta mesa; a RLS só devolve o que é dele. */
+  async latestReceiptId(tableSessionId: string): Promise<string | null> {
+    const { data, error } = await client().from('casual_dining_receipts').select('id')
+      .eq('table_session_id', tableSessionId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    return data ? String((data as { id: unknown }).id) : null;
+  },
+
   async listClaims(tableSessionId: string): Promise<ItemClaim[]> {
     const { data, error } = await client().from('bill_item_claims').select('order_item_id, participant_id')
       .eq('table_session_id', tableSessionId);
