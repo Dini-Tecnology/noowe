@@ -49,7 +49,7 @@ export const moneyCents = (cents: number) => money(cents / 100);
  * amigáveis em pt-BR antes de exibir ao cliente. Se a mensagem já vier em
  * português (novos RPCs), passa direto.
  */
-const RPC_ERROR_TRANSLATIONS: Array<[RegExp, string]> = [
+const RPC_ERROR_TRANSLATIONS: [RegExp, string][] = [
   [/^Authentication required/i, 'Faça login novamente para continuar.'],
   [/^Order must contain at least one item/i, 'O pedido precisa ter pelo menos um item.'],
   [

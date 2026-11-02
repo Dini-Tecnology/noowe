@@ -215,7 +215,7 @@ export default function RestaurantScreen({ route, navigation }: any) {
     Alert.alert('Restaurante fechado', `${closedLabel}.${serviceTypeFor.features.reservations ? ' Você ainda pode reservar uma mesa.' : ''}`);
   }, [closedLabel, serviceTypeFor.features.reservations]);
   const explainActiveComanda = useCallback(() => {
-    const where = session?.restaurantName ? ` da ${session.restaurantName}` : '';
+    const where = session?.restaurantName ? ` da ${session?.restaurantName}` : '';
     Alert.alert(
       'Você já está em uma comanda',
       `Você já está na ${tableLabel(session?.tableNumber)}${where}. Encerre a comanda para continuar.`,

@@ -196,7 +196,9 @@ function useOpenTableInviteFromPush() {
   const { session } = useVisitSession();
   const hasComanda = !!session?.tableSessionId;
   const hasComandaRef = React.useRef(hasComanda);
-  hasComandaRef.current = hasComanda;
+  useEffect(() => {
+    hasComandaRef.current = hasComanda;
+  }, [hasComanda]);
   useEffect(() => {
     const handled = new Set<string>();
     const open = (response: Notifications.NotificationResponse | null) => {
