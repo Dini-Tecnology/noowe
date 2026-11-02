@@ -34,6 +34,9 @@ describe('staffPushRoute', () => {
   it('check-in de cliente abre o painel do garçom', () => {
     expect(staffPushRoute({ kind: 'staff_table_check_in', table_id: 't1' })).toBe('Waiter');
   });
+  it('nota fiscal parada abre a lista de notas', () => {
+    expect(staffPushRoute({ kind: 'fiscal_document_issue', fiscal_document_id: 'd1' })).toBe('FiscalDocuments');
+  });
   it.each([[{ kind: 'order_ready' }], [{}], [null], [undefined]])('ignora %j', (data) => {
     expect(staffPushRoute(data as Record<string, unknown> | null | undefined)).toBeNull();
   });

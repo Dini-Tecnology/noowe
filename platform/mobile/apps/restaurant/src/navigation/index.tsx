@@ -10,7 +10,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import * as WebBrowser from 'expo-web-browser';
 import { authService } from '@/shared/services/auth';
-import { StaffPushBridge } from './StaffPushBridge';
+import { StaffPushBridge, StaffPushOpener } from './StaffPushBridge';
 import { socialAuthService } from '@/shared/services/social-auth';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { logger } from '@/shared/utils/logger';
@@ -603,7 +603,12 @@ function AuthenticatedGate() {
 
   // Already linked to a restaurant — full app access
   if (serverRole) {
-    return <MainStack key="restaurant-main" />;
+    return (
+      <>
+        <MainStack key="restaurant-main" />
+        <StaffPushOpener />
+      </>
+    );
   }
 
   // Owner intent without a restaurant yet — create establishment + owner role

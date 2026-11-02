@@ -3,7 +3,7 @@
 **Status:** PROVISÓRIO — provedor escolhido pelo responsável do produto em 02/11/2026; regras fiscais abaixo aguardam a contabilidade e a homologação.
 **Origem:** fatia N4 (critério 4), tarefa T-N4-03, spec §7.4
 **Impacta:** N4, G3, Q1, T-N4-04 (cancelamento fiscal)
-**Regras isoladas em função nomeada:** `private.fiscal_fee_in_document`, `private.fiscal_retry_policy`, `PAYMENT_CODE` e `focusPayment` em `_shared/fiscal/focus.ts`.
+**Regras isoladas em função nomeada:** `private.fiscal_fee_in_document`, `private.fiscal_retry_policy`, `private.fiscal_issue_notice_cooldown`, `PAYMENT_CODE` e `focusPayment` em `_shared/fiscal/focus.ts`.
 
 ## Questão
 
@@ -36,6 +36,13 @@ de acesso falsa quando faltava token.
 - **O app não escolhe o ambiente.** Cadastro novo nasce em homologação e salvar mantém o ambiente atual. A ida para
   produção segue por `service_fiscal_configure` até a homologação ser validada. **Provisório:** quando validar, decidir
   se dono ou gerente pode promover pelo app.
+- **Nota parada avisa dono e gerente da unidade** (`20261102161000_fiscal_issue_notice.sql`), pelo push de equipe, com toque
+  na lista de notas e na unidade certa. O gatilho é a transição para `blocked`, `rejected` ou `failed`: varredura e resultado
+  repetido não avisam de novo; reenvio que para outra vez, sim. O texto é fixo, sem `error_message`. Falha no aviso não
+  desfaz o resultado fiscal e grava `fiscal.issue_notice_failed`.
+- **Provisório:** com outra nota já parada na unidade, a pessoa avisada há menos de 24 horas não recebe novo push
+  (`private.fiscal_issue_notice_cooldown`). A nota entra na lista do mesmo jeito. Sem isso, restaurante sem cadastro fiscal
+  ou com token vencido recebe um push por conta encerrada.
 
 ## Valores provisórios, a validar
 
@@ -56,8 +63,12 @@ de acesso falsa quando faltava token.
 - Reabrir conta já encerrada: a mesma `external_ref` não gera segunda nota. O ADR-004 pede nota complementar ou
   cancelamento, e isso precisa ser resolvido com T-N4-04.
 - Fechamento manual com motivo (`20261025101000`) não emite nota: decisão pendente.
-- Aviso ativo ao gerente quando uma nota para. Hoje ela aparece na lista e no módulo Fiscal da configuração, sem push.
-- Falha ao enfileirar (`fiscal.enqueue_failed`): não existe documento, então não aparece na lista de notas com problema.
+- Falha ao enfileirar (`fiscal.enqueue_failed`): não existe documento, então não aparece na lista de notas com problema e
+  **não gera aviso**, por decisão. O toque levaria a uma lista sem a nota, `restaurant_fiscal_retry` exige um documento e o
+  gerente não tem o que corrigir, porque a falha está na montagem da nota. O caso pede uma reconciliação que chame de novo
+  `private.fiscal_enqueue_session` e `private.fiscal_enqueue_order`, idempotentes por `external_ref`, a partir desse rastro
+  ou das contas encerradas sem nota. **Até lá, a falha fica só em `audit_logs`, sem ninguém avisado, e o cliente vê a nota
+  como atrasada.**
 - Retorno assíncrono da contingência (`nfce_consulta_automatica`): a nota em contingência fica marcada, mas um erro
   posterior na retransmissão não volta ao NOOWE.
 

@@ -5,18 +5,25 @@ import * as Notifications from 'expo-notifications';
 import { getSupabaseClient } from '@/shared/services/supabase';
 
 /** Telas do app do restaurante que um push da equipe abre. */
-export type StaffPushRoute = 'CapacityRequests' | 'Waiter';
+export type StaffPushRoute = 'CapacityRequests' | 'Waiter' | 'FiscalDocuments';
 
 /**
  * Para onde um toque no push leva, pelo `kind` que o servidor grava na notificação
- * (`private.notify_capacity_request_created` e `private.notify_table_check_in`).
+ * (`private.notify_capacity_request_created`, `private.notify_table_check_in` e
+ * `private.fiscal_send_issue_notice`).
  */
 export function staffPushRoute(data: Record<string, unknown> | null | undefined): StaffPushRoute | null {
   switch (data?.kind) {
     case 'capacity_request_pending': return 'CapacityRequests';
     case 'staff_table_check_in': return 'Waiter';
+    case 'fiscal_document_issue': return 'FiscalDocuments';
     default: return null;
   }
+}
+
+/** A unidade de que o push fala: quem tem mais de uma precisa abrir a tela nela. */
+export function staffPushRestaurantId(data: Record<string, unknown> | null | undefined): string | null {
+  return typeof data?.restaurant_id === 'string' ? data.restaurant_id : null;
 }
 
 /** Registra o token Expo desta equipe. A RPC não restringe papel: serve para qualquer usuário logado. */
