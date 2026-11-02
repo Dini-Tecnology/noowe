@@ -3,7 +3,7 @@
 **Status:** PROVISÓRIO — provedor escolhido pelo responsável do produto em 02/11/2026; regras fiscais abaixo aguardam a contabilidade e a homologação.
 **Origem:** fatia N4 (critério 4), tarefa T-N4-03, spec §7.4
 **Impacta:** N4, G3, Q1, T-N4-04 (cancelamento fiscal)
-**Regras isoladas em função nomeada:** `private.fiscal_fee_in_document`, `private.fiscal_retry_policy`, `private.fiscal_issue_notice_cooldown`, `PAYMENT_CODE` e `focusPayment` em `_shared/fiscal/focus.ts`.
+**Regras isoladas em função nomeada:** `private.fiscal_fee_in_document`, `private.fiscal_retry_policy`, `private.fiscal_issue_notice_cooldown`, `private.fiscal_enqueue_block_after`, `PAYMENT_CODE` e `focusPayment` em `_shared/fiscal/focus.ts`.
 
 ## Questão
 
@@ -21,7 +21,21 @@ de acesso falsa quando faltava token.
 - **Uma nota por encerramento**, sem CPF do consumidor. Cada pagante recebe o próprio recibo, com a mesma nota.
 - **O fechamento só grava na fila**, na mesma transação. O HTTP roda depois do commit, na Edge Function `fiscal-emit`,
   acionada pelo banco (`pg_net`) e reacionada a cada minuto pelo `pg_cron`. Falha do emissor nunca reabre a conta; falha
-  ao enfileirar não desfaz o encerramento e grava `fiscal.enqueue_failed`.
+  ao enfileirar não desfaz o encerramento e grava `fiscal.enqueue_failed`, que a varredura reconcilia.
+- **Falha ao enfileirar é reconciliada na varredura** (`20261102170000_fiscal_enqueue_recovery.sql`). A varredura parte do
+  rastro `fiscal.enqueue_failed`, não de "contas sem nota", porque fechamento manual e contas antigas também não têm nota, e
+  chama de novo `private.fiscal_enqueue_session` e `private.fiscal_enqueue_order`. Recuperou: a nota entra na fila normal,
+  com a mesma `external_ref`, e grava `fiscal.enqueue_recovered`.
+- **Sem venda real, não há nota.** Pagamento simulado, conta sem pagamento e pedido estornado ou cancelado depois da falha
+  gravam `fiscal.enqueue_not_applicable` e saem da varredura. Conta paga e sem linhas **não** entra nesse caso: pedido
+  marcado `completed` depois do encerramento some de `private.session_lines`, e a nota continua devida.
+- **Falha que persiste vira documento `blocked`** com `error_code = 'enqueue_failed'`, sem foto do encerramento. Assim ela
+  entra na lista da gerência e dispara o aviso de nota parada, uma vez. O texto da lista é fixo; o erro técnico fica em
+  `fiscal.enqueue_retry_failed`. A varredura segue tentando, com a espera de `private.fiscal_retry_policy` e sem limite de
+  tentativas, e, quando conseguir, preenche o mesmo documento. O reenvio da gerência tenta na hora e, se ainda não der,
+  responde erro e a nota continua na lista. Se a venda deixar de existir, o documento é apagado: ele nunca foi à Focus.
+- **Provisório:** a falha só vira documento depois de 15 minutos (`private.fiscal_enqueue_block_after`). Antes disso a
+  varredura tenta a cada minuto, sem avisar ninguém, porque falha passageira se resolve sozinha.
 - **Idempotência:** `external_ref` único e estável (`s-<sessão>`, `o-<pedido>`) é a `ref` na Focus. Da segunda tentativa
   em diante a função consulta antes de reenviar, porque um timeout pode ter autorizado a nota.
 - **Estados:** `pending → processing → authorized`. Falha transitória volta a `pending` com espera crescente. `rejected`
@@ -63,12 +77,6 @@ de acesso falsa quando faltava token.
 - Reabrir conta já encerrada: a mesma `external_ref` não gera segunda nota. O ADR-004 pede nota complementar ou
   cancelamento, e isso precisa ser resolvido com T-N4-04.
 - Fechamento manual com motivo (`20261025101000`) não emite nota: decisão pendente.
-- Falha ao enfileirar (`fiscal.enqueue_failed`): não existe documento, então não aparece na lista de notas com problema e
-  **não gera aviso**, por decisão. O toque levaria a uma lista sem a nota, `restaurant_fiscal_retry` exige um documento e o
-  gerente não tem o que corrigir, porque a falha está na montagem da nota. O caso pede uma reconciliação que chame de novo
-  `private.fiscal_enqueue_session` e `private.fiscal_enqueue_order`, idempotentes por `external_ref`, a partir desse rastro
-  ou das contas encerradas sem nota. **Até lá, a falha fica só em `audit_logs`, sem ninguém avisado, e o cliente vê a nota
-  como atrasada.**
 - Retorno assíncrono da contingência (`nfce_consulta_automatica`): a nota em contingência fica marcada, mas um erro
   posterior na retransmissão não volta ao NOOWE.
 

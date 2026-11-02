@@ -187,8 +187,12 @@ estão em `48_fiscal_management.sql` e `fiscalManagement.test.tsx`. Falta decidi
 O aviso de nota parada (`20261102161000_fiscal_issue_notice.sql`) também saiu de um pedido direto, com este aceite: dono e
 gerente daquela unidade recebem push quando a nota entra em `blocked`, `rejected` ou `failed`, sem repetir a cada varredura,
 sem levar `error_message` nem token e sem derrubar a gravação do resultado; o toque abre `FiscalDocuments` na unidade da nota.
-Os testes estão em `49_fiscal_issue_notice.sql`, `staffPush.test.ts` e `staffPushOpener.test.tsx`. `fiscal.enqueue_failed`
-ficou fora, com a decisão registrada no ADR-030. Falta validar a entrega em aparelho real.
+Os testes estão em `49_fiscal_issue_notice.sql`, `staffPush.test.ts` e `staffPushOpener.test.tsx`. Falta validar a entrega
+em aparelho real.
+A reconciliação de `fiscal.enqueue_failed` (`20261102170000_fiscal_enqueue_recovery.sql`) também saiu de um pedido direto, com
+este aceite: conta encerrada cuja nota falhou ao enfileirar volta a ter documento pela varredura, sem nota duplicada e sem
+criar nota para pagamento simulado, conta sem linhas nem pedido estornado; a falha que persiste vira documento `blocked`, que
+entra na lista e avisa dono e gerente. Os testes estão em `50_fiscal_enqueue_recovery.sql`. Decisão no ADR-030.
 
 ### T-N4-04 · NOVO — Estorno e cancelamento fiscal com aprovação
 **Tipo** servidor **Tamanho** M **Depende de** T-F2-04
