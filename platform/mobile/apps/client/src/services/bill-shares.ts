@@ -2,6 +2,8 @@ import * as Crypto from 'expo-crypto';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/shared/services/supabase';
 
+let channelCount = 0;
+
 /**
  * Divisão de conta (G3). O app só escolhe o modo e exibe: toda parcela, taxa e gorjeta
  * é calculada no servidor e chega em centavos. Nada aqui soma, multiplica ou arredonda dinheiro.
@@ -193,7 +195,10 @@ export const billShares = {
 
   subscribe(tableSessionId: string, onChange: () => void): RealtimeChannel {
     const filter = `table_session_id=eq.${tableSessionId}`;
-    return getSupabaseClient().channel(`bill-shares:${tableSessionId}`)
+    // Duas telas da pilha assinam a mesma conta: com o mesmo nome, channel() devolveria o canal já assinado,
+    // e acrescentar callbacks nele derruba a tela.
+    channelCount += 1;
+    return getSupabaseClient().channel(`bill-shares:${tableSessionId}:${channelCount}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_shares', filter }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_item_claims', filter }, onChange)
       .subscribe();
