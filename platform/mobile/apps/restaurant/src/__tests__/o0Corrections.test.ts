@@ -61,7 +61,7 @@ describe('critério 9: marcar pronto vai pelo item e mostra o erro', () => {
     expect(calls).toEqual([['a', 'ready'], ['b', 'ready']]);
   });
 
-  it('num card misto, cada item anda só os passos que faltam (o servidor não aceita recebido → pronto)', async () => {
+  it('num card misto, cada item anda só o que falta (O1: Pronto vale também para quem está Recebido)', async () => {
     const calls: Array<[string, string]> = [];
     const api = { updateOrderItemStatus: async (id: string, status: string) => { calls.push([id, status]); } };
     await advanceItems(api, [
@@ -69,7 +69,7 @@ describe('critério 9: marcar pronto vai pelo item e mostra o erro', () => {
       { id: 'fazendo', status: 'preparing' },
       { id: 'pronto', status: 'ready' },
     ], 'ready');
-    expect(calls.filter(([id]) => id === 'novo').map(([, s]) => s)).toEqual(['preparing', 'ready']);
+    expect(calls.filter(([id]) => id === 'novo').map(([, s]) => s)).toEqual(['ready']);
     expect(calls.filter(([id]) => id === 'fazendo').map(([, s]) => s)).toEqual(['ready']);
     expect(calls.filter(([id]) => id === 'pronto')).toEqual([]);
   });

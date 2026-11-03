@@ -268,7 +268,9 @@ select is((select reason from public.audit_logs where action = 'fiscal.emission_
 -- Pedido marcado completed depois do encerramento some das linhas da sessão: o null não pode descartar
 -- uma nota que continua devida.
 select pg_temp.failed_session('gone_lines');
+select set_config('noowe.deriving_order_status', 'on', true);
 update public.orders set status = 'completed' where id = pg_temp.ctx('gone_lines:order');
+select set_config('noowe.deriving_order_status', 'off', true);
 select pg_temp.age_failure(pg_temp.ctx('gone_lines'));
 select private.fiscal_dispatch_due();
 select is((pg_temp.doc_of(pg_temp.ctx('gone_lines'))).status, 'blocked', 'conta paga sem linhas chega à gerência');

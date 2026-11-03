@@ -6,6 +6,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from './shared/V2Shell';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { itemStatusLabel } from '@okinawa/shared/utils/status-label';
 
 interface BarQueueItem {
   id: string;
@@ -16,18 +17,6 @@ interface BarQueueItem {
   status: string;
   elapsed_minutes?: number;
   special_instructions?: string;
-}
-
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    pending: 'Novo',
-    confirmed: 'Confirmado',
-    preparing: 'Preparando',
-    ready: 'Pronto',
-    delivered: 'Entregue',
-    cancelled: 'Cancelado',
-  };
-  return map[status] ?? status;
 }
 
 function statusColor(status: string, primary: string): string {
@@ -122,9 +111,9 @@ export default function BarKDSScreen() {
               </View>
               <View style={{ alignItems: 'flex-end', gap: 6 }}>
                 <Text style={{ fontSize: 12, fontWeight: '600', color: accent }}>
-                  {statusLabel(item.status)}
+                  {itemStatusLabel(item.status)}
                 </Text>
-                {item.status === 'preparing' || item.status === 'confirmed' ? (
+                {item.status !== 'ready' ? (
                   <TouchableOpacity
                     style={[styles.actionBtn, { backgroundColor: '#22C55E' }]}
                     onPress={() => void markReady(item.id)}

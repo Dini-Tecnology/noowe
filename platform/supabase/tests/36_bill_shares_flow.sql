@@ -103,7 +103,7 @@ begin
   select * into sh from public.bill_shares where table_session_id = sid and participant_id = pb and status = 'open';
   perform public.customer_pay_share(sh.id, 'credit_card', gen_random_uuid());
   assert (select status from public.table_sessions where id = sid) = 'ended', 'saldo zero encerra a sessão';
-  assert (select status::text from public.tables where id = (select v from _ctx where k = 'table')) = 'available', 'mesa liberada';
+  assert (select status::text from public.tables where id = (select v from _ctx where k = 'table')) = 'cleaning', 'paga, a mesa vai a Limpeza (ADR-024)';
   assert (select sum(amount_cents) from public.bill_shares where table_session_id = sid and status = 'paid') = total, 'soma paga == total, sem centavo perdido';
   assert (select count(*) from public.gateway_transactions where table_session_id = sid) = 2, 'uma cobrança por parcela';
 end $$;

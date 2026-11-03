@@ -146,6 +146,8 @@ export default function OrderStatusStepper({ steps, currentStep }: OrderStatusSt
                 </View>
                 <Text
                   numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
                   style={[styles.label, isCurrent && styles.labelCurrent]}
                 >
                   {step.label}

@@ -119,7 +119,7 @@ export type V2Table = {
   id: string;
   label: string;
   seats: number;
-  status: 'available' | 'occupied' | 'reserved' | 'cleaning' | 'payment' | 'blocked';
+  status: 'available' | 'occupied' | 'reserved' | 'cleaning' | 'payment' | 'partial_payment' | 'blocked';
   guests: number;
   guestName: string | null;
   totalSpent: number;

@@ -7315,6 +7315,7 @@ export type Database = {
         Args: {
           p_estimated_time?: number
           p_order_id: string
+          p_reason?: string
           p_status: string
         }
         Returns: Json

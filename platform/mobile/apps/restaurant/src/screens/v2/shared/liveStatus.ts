@@ -29,6 +29,7 @@ export function isTableInService(table: {
   return (
     table.status === 'occupied' ||
     table.status === 'payment' ||
+    table.status === 'partial_payment' ||
     (table.guestCount ?? 0) > 0 ||
     (table.pendingOrders ?? 0) > 0
   );

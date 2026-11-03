@@ -25,5 +25,11 @@ Um único conjunto de estados, com tradução para o rótulo em um módulo só.
 
 ## Consequências
 
-- Mexe no app cliente (`order-status-ui.ts`); coordenar com o trabalho do cliente em andamento.
-- Migração de dados dos valores antigos (`pending`, `payment`, `available`) para os novos.
+- Mexe no app cliente (`order-status-ui.ts`).
+- **As chaves do banco não mudam:** `pending` é "Recebido", `payment` em mesa é "Conta pedida" e `available` é "Livre". Só o rótulo é único, em `shared/utils/status-label.ts`. Renomear exigiria reescrever mais de 30 funções sem ganho para quem usa.
+- **`completed` deixa de ser escrito ao pagar.** Pago é `payment_status`; o pedido entregue segue `delivered`. `completed` só vem de pedido não retirado e dos dados antigos.
+- **Cliente não cancela o que já está na estação (pendência 30).** No salão e no Quick com aceite automático, o item entra em preparo na hora: o cancelamento segue para a aprovação do gerente (spec v2, seção de alterações após a confirmação). O estorno automático por restaurante fechado só alcança o aceite manual.
+- **Pedido com horário de retirada futuro** fica Recebido até a cozinha marcar Pronto: ainda não há disparo por horário (fatia O7).
+- **Mesa em Limpeza recusa o QR até o garçom liberar.** Sem a tarefa da O2, ninguém é avisado, e a mesa pode ficar parada.
+- **Mesa não vai sozinha a Conta pedida nem a Pagamento parcial (pendência 31).** Os estados e rótulos existem, mas hoje a mesa nesses estados recusa QR e sai de várias contagens de ocupação; escrever exige ajustar essas funções junto.
+- `private.order_requires_quality_check` ainda lê o modelo de serviço, num só lugar. A O7 troca pela opção de Expedição (ADR-028).

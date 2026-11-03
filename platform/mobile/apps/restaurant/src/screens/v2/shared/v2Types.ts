@@ -1,3 +1,4 @@
+import { itemStatusLabel, orderStatusLabel as sharedOrderStatusLabel } from '@okinawa/shared/utils/status-label';
 import type { KdsItemState } from './kdsItems';
 import { V2Tone } from './v2Theme';
 
@@ -142,12 +143,7 @@ export function hubStatusTone(status: string): V2Tone {
 }
 
 export function orderStatusLabel(status: OrderStatus): string {
-  const map: Record<OrderStatus, string> = {
-    new: 'Novo',
-    preparing: 'Preparando',
-    ready: 'Pronto',
-  };
-  return map[status];
+  return sharedOrderStatusLabel(status === 'new' ? 'pending' : status);
 }
 
 export function orderStatusTone(status: OrderStatus): V2Tone {
@@ -160,17 +156,7 @@ export function orderStatusTone(status: OrderStatus): V2Tone {
 }
 
 export function rawOrderStatusLabel(status: string): string {
-  const map: Record<string, string> = {
-    pending: 'Novo',
-    confirmed: 'Confirmado',
-    preparing: 'Preparando',
-    open_for_additions: 'Preparando',
-    ready: 'Pronto',
-    delivered: 'Entregue',
-    completed: 'Concluído',
-    cancelled: 'Cancelado',
-  };
-  return map[status] ?? status;
+  return sharedOrderStatusLabel(status);
 }
 
 export function rawOrderStatusTone(status: string): V2Tone {
@@ -181,12 +167,7 @@ export function rawOrderStatusTone(status: string): V2Tone {
 }
 
 export function kdsStatusLabel(status: KdsStatus): string {
-  const map: Record<KdsStatus, string> = {
-    queue: 'Na fila',
-    preparing: 'Preparando',
-    ready: 'Pronto',
-  };
-  return map[status];
+  return itemStatusLabel(status === 'queue' ? 'pending' : status);
 }
 
 export function kdsStatusTone(status: KdsStatus): V2Tone {

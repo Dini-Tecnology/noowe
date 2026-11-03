@@ -13,27 +13,24 @@ import { TableComandaDialog } from './shared/TableComandaDialog';
 import { TableLayoutPanel } from './tables/TableLayoutPanel';
 import { useRestaurantTables, type V2Table } from './shared/useRestaurantOperations';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { tableStatusLabel } from '@okinawa/shared/utils/status-label';
 import { formatTableLabel } from './shared/tableLabel';
 
-type StatusKey = 'available' | 'occupied' | 'reserved' | 'cleaning' | 'blocked' | 'payment';
+type StatusKey = 'available' | 'occupied' | 'reserved' | 'cleaning' | 'blocked' | 'payment' | 'partial_payment';
 type SeatingMode = 'seat' | 'checkin';
 
 const STATUS_META: Record<StatusKey, { label: string; bg: string; color: string; border: string }> = {
-  available: { label: 'LIVRE', bg: '#EAF8F1', color: '#16A66A', border: '#B7E4CF' },
-  occupied: { label: 'OCUPADA', bg: '#FFF0ED', color: '#FF4B2B', border: '#FEC8BC' },
-  reserved: { label: 'RESERVA', bg: '#FFF7E8', color: '#F59E0B', border: '#FED7AA' },
-  cleaning: { label: 'LIMPEZA', bg: '#FEFCE8', color: '#A16207', border: '#FEF08A' },
-  blocked: { label: 'BLOQUEADA', bg: '#F3F4F6', color: '#4B5563', border: '#D1D5DB' },
-  payment: { label: 'CONTA', bg: '#EAF7FF', color: '#0284C7', border: '#BAE6FD' },
+  available: { label: tableStatusLabel('available').toUpperCase(), bg: '#EAF8F1', color: '#16A66A', border: '#B7E4CF' },
+  occupied: { label: tableStatusLabel('occupied').toUpperCase(), bg: '#FFF0ED', color: '#FF4B2B', border: '#FEC8BC' },
+  reserved: { label: tableStatusLabel('reserved').toUpperCase(), bg: '#FFF7E8', color: '#F59E0B', border: '#FED7AA' },
+  cleaning: { label: tableStatusLabel('cleaning').toUpperCase(), bg: '#FEFCE8', color: '#A16207', border: '#FEF08A' },
+  blocked: { label: tableStatusLabel('blocked').toUpperCase(), bg: '#F3F4F6', color: '#4B5563', border: '#D1D5DB' },
+  payment: { label: tableStatusLabel('payment').toUpperCase(), bg: '#EAF7FF', color: '#0284C7', border: '#BAE6FD' },
+  partial_payment: { label: tableStatusLabel('partial_payment').toUpperCase(), bg: '#EAF7FF', color: '#0284C7', border: '#BAE6FD' },
 };
 
 function statusMeta(status: string) {
   return STATUS_META[status as StatusKey] ?? STATUS_META.available;
-}
-
-function statusLabel(status: string): string {
-  const label = statusMeta(status).label.toLocaleLowerCase('pt-BR');
-  return label.charAt(0).toLocaleUpperCase('pt-BR') + label.slice(1);
 }
 
 function formatCurrency(value: number): string {
@@ -304,11 +301,11 @@ export default function TablesScreen() {
           )}
         >
           <View style={styles.legend} accessibilityLabel="Legenda de status das mesas">
-            <Legend meta={STATUS_META.available} label="Livre" />
-            <Legend meta={STATUS_META.payment} label="Conta" />
-            <Legend meta={STATUS_META.occupied} label="Ocupada" />
-            <Legend meta={STATUS_META.reserved} label="Reservada" />
-            <Legend meta={STATUS_META.cleaning} label="Limpeza" />
+            <Legend meta={STATUS_META.available} label={tableStatusLabel('available')} />
+            <Legend meta={STATUS_META.payment} label={tableStatusLabel('payment')} />
+            <Legend meta={STATUS_META.occupied} label={tableStatusLabel('occupied')} />
+            <Legend meta={STATUS_META.reserved} label={tableStatusLabel('reserved')} />
+            <Legend meta={STATUS_META.cleaning} label={tableStatusLabel('cleaning')} />
             <Legend meta={STATUS_META.blocked} label="Bloqueada" />
           </View>
 
@@ -368,7 +365,7 @@ export default function TablesScreen() {
                 </View>
                 <View style={[styles.detailStatusChip, { backgroundColor: statusMeta(selectedTable.status).bg }]}>
                   <Text style={[styles.detailStatusText, { color: statusMeta(selectedTable.status).color }]}>
-                    {statusLabel(selectedTable.status)}
+                    {tableStatusLabel(selectedTable.status)}
                   </Text>
                 </View>
                 {canManage && !isWaiterView ? (
@@ -421,7 +418,7 @@ export default function TablesScreen() {
                       <View style={[styles.currentStatusDot, { backgroundColor: statusMeta(selectedTable.status).color }]} />
                       <View>
                         <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Status atual</Text>
-                        <Text style={[styles.currentStatusText, { color: statusMeta(selectedTable.status).color }]}>{statusLabel(selectedTable.status)}</Text>
+                        <Text style={[styles.currentStatusText, { color: statusMeta(selectedTable.status).color }]}>{tableStatusLabel(selectedTable.status)}</Text>
                       </View>
                     </View>
                     <View style={[styles.summaryItem, { borderColor: colors.border }]}>
@@ -519,7 +516,7 @@ export default function TablesScreen() {
                           onPress={() => void updateSelectedStatus(status)}
                         >
                           <View style={[styles.statusButtonDot, { backgroundColor: meta.color }]} />
-                          <Text style={{ color: active ? meta.color : colors.foreground, fontWeight: '700', fontSize: 12 }}>{statusLabel(status)}</Text>
+                          <Text style={{ color: active ? meta.color : colors.foreground, fontWeight: '700', fontSize: 12 }}>{tableStatusLabel(status)}</Text>
                         </Pressable>
                       );
                     })}
@@ -736,7 +733,7 @@ const TableCell = React.memo(function TableCell({
         <View style={styles.tableCellHeader}>
           <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.tableNumber, { color: colors.foreground }]}>{table.label}</Text>
           <View style={[styles.tableStatusChip, { backgroundColor: meta.bg }]}>
-            <Text numberOfLines={1} style={[styles.tableStatusText, { color: meta.color }]}>{statusLabel(table.status)}</Text>
+            <Text numberOfLines={1} style={[styles.tableStatusText, { color: meta.color }]}>{tableStatusLabel(table.status)}</Text>
           </View>
         </View>
         <Text style={[styles.capacityText, { color: colors.foregroundSecondary }]}>

@@ -2,45 +2,36 @@ import React, { useMemo, useState } from 'react';
 import { Alert, View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Text } from 'react-native-paper';
-import { Clock, Check, ChefHat, Truck, X, Info, Play } from 'lucide-react-native';
+import { Clock, Check, Truck, X, Info, Play } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import ApiService from '@okinawa/shared/services/api';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { orderStatusLabel } from '@okinawa/shared/utils/status-label';
 import { V2Shell } from './shared/V2Shell';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2DetailDialog } from './shared/V2DetailDialog';
 import { customerDisplayName, useRestaurantOrders } from './shared/useRestaurantOperations';
-import type { OrderStatus, TabOrder } from './shared/v2Types';
+import type { TabOrder } from './shared/v2Types';
 
 type OrdersTab = 'all' | 'new' | 'preparing' | 'ready' | 'delivered';
 
 type PendingAction = {
   orderId: string;
-  action: 'accept' | 'cancel' | 'prepare' | 'ready' | 'deliver';
+  action: 'cancel' | 'deliver';
 };
 
 const FILTER_TABS: { key: OrdersTab; label: string }[] = [
   { key: 'all', label: 'Todos' },
-  { key: 'new', label: 'Novos' },
-  { key: 'preparing', label: 'Preparando' },
+  { key: 'new', label: orderStatusLabel('pending') },
+  { key: 'preparing', label: orderStatusLabel('preparing') },
   { key: 'ready', label: 'Prontos' },
   { key: 'delivered', label: 'Entregues' },
 ];
 
 const ACTION_MESSAGES: Record<PendingAction['action'], { title: string; message: string; destructive?: boolean; confirmLabel: string }> = {
-  accept: { title: 'Aceitar pedido', message: '', confirmLabel: 'Aceitar' },
   cancel: { title: 'Cancelar pedido', message: 'Deseja cancelar este pedido?', destructive: true, confirmLabel: 'Cancelar pedido' },
-  ready: { title: 'Marcar como pronto', message: 'Confirmar que o pedido está pronto para entrega?', confirmLabel: 'Marcar pronto' },
-  prepare: { title: 'Preparar pedido', message: 'Confirmar o início do preparo?', confirmLabel: 'Preparar' },
   deliver: { title: 'Confirmar entrega', message: 'Confirmar que o pedido foi entregue ao cliente?', confirmLabel: 'Confirmar entrega' },
 };
-
-function nextStatus(action: PendingAction['action']): 'confirmed' | OrderStatus | null {
-  if (action === 'accept') return 'confirmed';
-  if (action === 'prepare') return 'preparing';
-  if (action === 'ready') return 'ready';
-  return null;
-}
 
 export default function OrdersScreen() {
   const colors = useColors();
@@ -66,11 +57,8 @@ export default function OrdersScreen() {
     try {
       if (action === 'cancel') {
         await ApiService.updateOrderStatus(orderId, 'cancelled');
-      } else if (action === 'deliver') {
-        await ApiService.updateOrderStatus(orderId, 'delivered');
       } else {
-        const newStatus = nextStatus(action);
-        if (newStatus) await ApiService.updateOrderStatus(orderId, newStatus);
+        await ApiService.updateOrderStatus(orderId, 'delivered');
       }
       await refresh();
       setPendingAction(null);
@@ -167,39 +155,12 @@ export default function OrdersScreen() {
                 <Text style={styles.btnText}>Abrir painel Quick</Text>
               </TouchableOpacity>
             )}
-            {order.orderType !== 'pickup' && order.rawStatus === 'pending' && (
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  style={styles.iconBtn}
-                  onPress={() => setPendingAction({ orderId: order.id, action: 'cancel' })}
-                >
-                  <X size={18} color="#EF4444" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btn, { backgroundColor: colors.primary }]}
-                  onPress={() => setPendingAction({ orderId: order.id, action: 'accept' })}
-                >
-                  <ChefHat size={16} color="#FFF" />
-                  <Text style={styles.btnText}>Aceitar</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            {order.orderType !== 'pickup' && order.rawStatus === 'confirmed' && (
+            {order.orderType !== 'pickup' && (order.rawStatus === 'pending' || order.rawStatus === 'confirmed') && (
               <TouchableOpacity
-                style={[styles.btn, { backgroundColor: '#F59E0B' }]}
-                onPress={() => setPendingAction({ orderId: order.id, action: 'prepare' })}
+                style={styles.iconBtn}
+                onPress={() => setPendingAction({ orderId: order.id, action: 'cancel' })}
               >
-                <Play size={16} color="#FFF" />
-                <Text style={styles.btnText}>Preparar</Text>
-              </TouchableOpacity>
-            )}
-            {order.orderType !== 'pickup' && (order.rawStatus === 'preparing' || order.rawStatus === 'open_for_additions') && (
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: '#22C55E' }]}
-                onPress={() => setPendingAction({ orderId: order.id, action: 'ready' })}
-              >
-                <Check size={16} color="#FFF" />
-                <Text style={styles.btnText}>Marcar como Pronto</Text>
+                <X size={18} color="#EF4444" />
               </TouchableOpacity>
             )}
             {order.orderType !== 'pickup' && order.rawStatus === 'ready' && (
@@ -214,7 +175,7 @@ export default function OrdersScreen() {
             {order.rawStatus === 'delivered' && (
               <View style={styles.deliveredBadge}>
                 <Check size={14} color="#15803D" />
-                <Text style={styles.deliveredBadgeText}>Entregue</Text>
+                <Text style={styles.deliveredBadgeText}>{orderStatusLabel('delivered')}</Text>
               </View>
             )}
           </View>
@@ -224,11 +185,7 @@ export default function OrdersScreen() {
       <V2ConfirmDialog
         visible={!!pendingAction}
         title={dialogConfig?.title ?? ''}
-        message={
-          pendingAction?.action === 'accept' && pendingOrder
-            ? `Aceitar pedido de ${customerDisplayName(pendingOrder.customerName)}?`
-            : dialogConfig?.message ?? ''
-        }
+        message={dialogConfig?.message ?? ''}
         confirmLabel={isSubmitting ? 'Salvando...' : dialogConfig?.confirmLabel}
         destructive={dialogConfig?.destructive}
         onConfirm={() => void handleConfirm()}

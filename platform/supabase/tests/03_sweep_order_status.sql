@@ -32,10 +32,7 @@ create temporary table _sweep_status_allowlist (
 ) on commit drop;
 
 insert into _sweep_status_allowlist (routine_name, destino) values
-  ('restaurant_update_order_item_status', 'remover: a convergencia vira trigger em order_items'),
-  ('restaurant_record_payment',           'escrever orders.payment_status'),
-  ('customer_cancel_order',               'RPC de cancelamento com auditoria'),
-  ('restaurant_resolve_approval',         'RPC de cancelamento com auditoria');
+  ('derive_order_status', 'a unica escrita: recalcula o pedido a partir dos itens (O1, ADR-024)');
 
 -- ---------------------------------------------------------------------------
 -- Funções vivas que escrevem `orders.status` diretamente.

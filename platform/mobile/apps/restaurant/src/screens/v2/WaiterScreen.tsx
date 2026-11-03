@@ -8,6 +8,7 @@ import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { useServiceCallsRealtime, useTablesRealtime } from './shared/useRealtimeSubscription';
 import { V2Shell } from './shared/V2Shell';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { tableStatusLabel as tableStatusName } from '@okinawa/shared/utils/status-label';
 import { formatTableLabel } from './shared/tableLabel';
 
 interface TableRow {
@@ -38,15 +39,7 @@ function tableTone(status: string, openCalls: number, primary: string) {
 
 function tableStatusLabel(status: string, openCalls: number): string {
   if (openCalls > 0) return `${openCalls} chamado${openCalls > 1 ? 's' : ''} aberto${openCalls > 1 ? 's' : ''}`;
-  const map: Record<string, string> = {
-    available: 'Livre',
-    occupied: 'Ocupada',
-    reserved: 'Reservada',
-    cleaning: 'Limpeza',
-    payment: 'Aguardando pagamento',
-    ready: 'Pronta para atender',
-  };
-  return map[status] ?? status;
+  return tableStatusName(status);
 }
 
 export default function WaiterScreen() {

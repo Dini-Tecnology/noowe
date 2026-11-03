@@ -3,6 +3,7 @@ import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Info } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
+import { itemStatusLabel } from '@okinawa/shared/utils/status-label';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from './shared/V2Shell';
 import { V2_TONE } from './shared/v2Theme';
@@ -12,23 +13,18 @@ import { V2DetailDialog } from './shared/V2DetailDialog';
 import { useKdsOrders } from './shared/useRestaurantOperations';
 import { advanceItems } from './shared/kdsItems';
 import { kdsStatusLabel, kdsStatusTone } from './shared/v2Types';
-import type { KdsFilter, KdsOrder, KdsStatus } from './shared/v2Types';
-
-type PendingKdsAction = {
-  orderId: string;
-  action: 'start' | 'ready';
-};
+import type { KdsFilter, KdsOrder } from './shared/v2Types';
 
 const FILTER_TABS: { key: KdsFilter; label: string }[] = [
-  { key: 'queue', label: 'Fila' },
-  { key: 'preparing', label: 'Preparando' },
+  { key: 'queue', label: itemStatusLabel('pending') },
+  { key: 'preparing', label: itemStatusLabel('preparing') },
   { key: 'ready', label: 'Prontos' },
 ];
 
 export default function KitchenDisplayScreen() {
   const colors = useColors();
-  const [activeTab, setActiveTab] = useState<KdsFilter>('queue');
-  const [pendingAction, setPendingAction] = useState<PendingKdsAction | null>(null);
+  const [activeTab, setActiveTab] = useState<KdsFilter>('preparing');
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [detailOrder, setDetailOrder] = useState<KdsOrder | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { data: orders, loading, error, refresh } = useKdsOrders();
@@ -46,12 +42,11 @@ export default function KitchenDisplayScreen() {
 
   const handleConfirm = async () => {
     if (!pendingAction) return;
-    const newStatus: KdsStatus = pendingAction.action === 'start' ? 'preparing' : 'ready';
     setIsSubmitting(true);
     try {
-      const order = orders.find((item) => item.id === pendingAction.orderId);
+      const order = orders.find((item) => item.id === pendingAction);
       if (!order) return;
-      await advanceItems(supabaseApiAdapter, order.itemStates, newStatus === 'ready' ? 'ready' : 'preparing');
+      await advanceItems(supabaseApiAdapter, order.itemStates, 'ready');
       await refresh();
       setPendingAction(null);
     } finally {
@@ -59,7 +54,7 @@ export default function KitchenDisplayScreen() {
     }
   };
 
-  const pendingOrder = pendingAction ? orders.find((o) => o.id === pendingAction.orderId) : null;
+  const pendingOrder = pendingAction ? orders.find((o) => o.id === pendingAction) : null;
 
   return (
     <V2Shell title="KDS Cozinha" subtitle="Kitchen Display System" showBack onRefresh={refresh}>
@@ -121,18 +116,10 @@ export default function KitchenDisplayScreen() {
               <Text style={{ color: colors.foregroundSecondary, fontSize: 12 }}>{time}</Text>
             </View>
           ))}
-          {order.status === 'queue' && (
-            <TouchableOpacity
-              style={styles.action}
-              onPress={() => setPendingAction({ orderId: order.id, action: 'start' })}
-            >
-              <Text style={{ color: '#1E293B', fontWeight: '700' }}>Iniciar preparo</Text>
-            </TouchableOpacity>
-          )}
-          {order.status === 'preparing' && (
+          {order.status !== 'ready' && (
             <TouchableOpacity
               style={[styles.action, { backgroundColor: '#22C55E' }]}
-              onPress={() => setPendingAction({ orderId: order.id, action: 'ready' })}
+              onPress={() => setPendingAction(order.id)}
             >
               <Text style={{ color: '#FFF', fontWeight: '700' }}>Marcar pronto</Text>
             </TouchableOpacity>
@@ -142,15 +129,9 @@ export default function KitchenDisplayScreen() {
 
       <V2ConfirmDialog
         visible={!!pendingAction}
-        title={pendingAction?.action === 'start' ? 'Iniciar preparo' : 'Marcar como pronto'}
-        message={
-          pendingAction?.action === 'start' && pendingOrder
-            ? `Iniciar preparo do pedido da ${pendingOrder.table}?`
-            : pendingOrder
-              ? `Marcar pedido da ${pendingOrder.table} como pronto?`
-              : ''
-        }
-        confirmLabel={isSubmitting ? 'Salvando...' : pendingAction?.action === 'start' ? 'Iniciar' : 'Marcar pronto'}
+        title="Marcar como pronto"
+        message={pendingOrder ? `Marcar pedido da ${pendingOrder.table} como pronto?` : ''}
+        confirmLabel={isSubmitting ? 'Salvando...' : 'Marcar pronto'}
         onConfirm={() => void handleConfirm()}
         onCancel={() => setPendingAction(null)}
       />

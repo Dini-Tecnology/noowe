@@ -1,8 +1,10 @@
+import { orderStatusLabel } from '@okinawa/shared/utils/status-label';
 import type { CustomerOrderStatus } from '../../services/customer-backend';
 
 export const STATUS_LABELS: Record<CustomerOrderStatus, string> = {
-  pending: 'Recebido', confirmed: 'Confirmado', preparing: 'Preparando',
-  ready: 'Pronto', delivered: 'Entregue', completed: 'Concluído', cancelled: 'Cancelado',
+  pending: orderStatusLabel('pending'), confirmed: orderStatusLabel('confirmed'), preparing: orderStatusLabel('preparing'),
+  ready: orderStatusLabel('ready'), delivered: orderStatusLabel('delivered'), completed: orderStatusLabel('completed'),
+  cancelled: orderStatusLabel('cancelled'),
 };
 
 export const STATUS_COLORS: Record<CustomerOrderStatus, string> = {

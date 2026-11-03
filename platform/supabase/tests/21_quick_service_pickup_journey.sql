@@ -211,7 +211,10 @@ do $$
 declare o uuid := (select v from _qs where k = 'o1'); v record; tol integer;
 begin
   select * into v from public.orders where id = o;
-  assert v.fulfillment_status = 'accepted' and v.accepted_at is not null, 'aceite automático';
+  assert v.fulfillment_status = 'preparing' and v.accepted_at is not null, 'aceite automático leva direto a Em preparo';
+  assert (select array_agg(to_value order by created_at, id) from public.order_status_events
+      where order_id = o and field = 'fulfillment_status') = array['received', 'accepted', 'preparing'],
+    'o histórico mostra as etapas na ordem em que aconteceram';
   perform pg_temp.run_to_ready(o);
   select * into v from public.orders where id = o;
   select pickup_expiry_min into tol from public.restaurant_model_policies
@@ -288,7 +291,8 @@ begin
   perform pg_temp.pay(c, o);
   perform pg_temp.act(owner_id);
   perform public.restaurant_accept_quick_order(o);
-  assert (select fulfillment_status from public.orders where id = o) = 'accepted';
+  -- Aceitou, aparece na estação: entra em preparo sozinho (ADR-024).
+  assert (select fulfillment_status from public.orders where id = o) = 'preparing';
   insert into _qs values ('o_accept', o), ('c_accept', c);
 end $$;
 select pass('equipe aceita o pedido e ele passa a poder entrar em produção');
@@ -355,7 +359,7 @@ begin
   select * into ord from public.orders where id = o;
   assert ord.refunded_cents = coalesce(it.total_price_cents, round(it.total_price * 100)::bigint), 'estorno é o valor do item';
   assert ord.refunded_cents < ord.total_cents, 'estorno parcial não pode ser o total';
-  assert ord.fulfillment_status = 'accepted' and ord.payment_status = 'confirmed', 'o pedido segue vivo';
+  assert ord.fulfillment_status = 'preparing' and ord.payment_status = 'confirmed', 'o pedido segue vivo';
   assert (select status::text from public.order_items where id = it.id) = 'cancelled';
   assert exists (select 1 from public.audit_logs where entity_id = it.id and action = 'quick_order.partial_refund');
   remaining := ord.total_cents - ord.refunded_cents;
@@ -421,8 +425,11 @@ select pass('Pix expirado falha o pagamento e cancela o pedido');
 do $$
 declare r uuid := (select v from _qs where k = 'restaurant'); c uuid := pg_temp.new_customer(); o uuid; v record; saved jsonb;
 begin
+  -- No aceite automático o pedido pago já está em preparo: só o aceite manual tem este intervalo.
+  update public.restaurant_model_policies set accept_mode = 'manual' where restaurant_id = r and service_model = 'quick_service';
   o := pg_temp.new_order(c, 10);
   perform pg_temp.pay(c, o);
+  update public.restaurant_model_policies set accept_mode = 'auto' where restaurant_id = r and service_model = 'quick_service';
   select opening_hours into saved from public.restaurants where id = r;
   update public.restaurants set opening_hours = (
     select jsonb_object_agg(d, jsonb_build_object('closed', true, 'shifts', '[]'::jsonb))

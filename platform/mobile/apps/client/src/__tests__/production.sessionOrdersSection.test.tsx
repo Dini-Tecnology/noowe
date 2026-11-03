@@ -75,7 +75,7 @@ describe('SessionOrdersSection', () => {
     mockList.mockResolvedValue([order({ status: 'preparing' })]);
     await waitFor(() => expect(mockOnChange).toBeDefined());
     await act(async () => { mockOnChange!(); });
-    expect(await findByText('Preparando')).toBeTruthy();
+    expect(await findByText('Em preparo')).toBeTruthy();
   });
 
   it('sem pedidos não renderiza nada', async () => {

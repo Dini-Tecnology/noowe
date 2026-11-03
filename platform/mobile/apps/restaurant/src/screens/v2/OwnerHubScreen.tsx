@@ -103,6 +103,7 @@ import {
   useRestaurantRole,
 } from '../../contexts/RestaurantRoleContext';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { itemStatusLabel, orderStatusLabel as orderStateLabel } from '@okinawa/shared/utils/status-label';
 
 const OWNER_ROLES = [
   { id: 'owner', label: 'Dono', title: 'Dashboard Executivo', hint: 'Visão completa do restaurante' },
@@ -687,13 +688,9 @@ function CookContent({
 }
 
 /** Avança os itens do card pelo status do item e mostra o erro; o do pedido é recusado enquanto houver item pendente. */
-async function advanceKdsOrder(
-  items: KdsItemState[],
-  status: 'preparing' | 'ready',
-  refresh: () => Promise<void> | void,
-) {
+async function advanceKdsOrder(items: KdsItemState[], refresh: () => Promise<void> | void) {
   try {
-    await advanceItems(supabaseApiAdapter, items, status);
+    await advanceItems(supabaseApiAdapter, items, 'ready');
   } catch (err) {
     Alert.alert('Não foi possível atualizar o item', userErrorMessage(err, 'Tente novamente.'));
   }
@@ -715,8 +712,8 @@ function CookQueueView({
   return (
     <View style={styles.section}>
       <View style={styles.threeMetricGrid}>
-        <CompactMetric value={String(queueCount)} label="Fila" tone="warning" />
-        <CompactMetric value={String(preparingCount)} label="Preparando" tone="danger" />
+        <CompactMetric value={String(queueCount)} label={itemStatusLabel('pending')} tone="warning" />
+        <CompactMetric value={String(preparingCount)} label={itemStatusLabel('preparing')} tone="danger" />
         <CompactMetric value={String(readyCount)} label="Prontos" tone="success" />
       </View>
       {loading && <Text style={[styles.staffRole, { color: colors.foregroundSecondary, textAlign: 'center', marginTop: 12 }]}>Carregando fila…</Text>}
@@ -724,8 +721,6 @@ function CookQueueView({
         const isReady = order.status === 'ready';
         const isPreparing = order.status === 'preparing';
         const tone = isReady ? 'success' : isPreparing ? 'warning' : 'info';
-        const actionLabel = isReady ? 'Pronto ✓' : isPreparing ? 'Marcar pronto' : 'Iniciar preparo';
-        const actionColor = isPreparing ? '#22C55E' : '#F59E0B';
         return (
           <View key={`${mode}-${order.id}`} style={[styles.managerOrderCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
             <View style={styles.managerOrderHeader}>
@@ -733,7 +728,7 @@ function CookQueueView({
                 <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{order.table}</Text>
                 <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{order.meta}</Text>
               </View>
-              <StatusChip label={tone === 'success' ? 'Pronto' : tone === 'warning' ? 'Preparando' : 'Fila'} tone={tone} />
+              <StatusChip label={itemStatusLabel(isReady ? 'ready' : isPreparing ? 'preparing' : 'pending')} tone={tone} />
             </View>
             <View style={{ marginTop: 10, gap: 6 }}>
               {order.items.map(([name, time]) => (
@@ -745,10 +740,10 @@ function CookQueueView({
             </View>
             {!isReady && (
               <TouchableOpacity
-                style={[styles.wideAction, { backgroundColor: actionColor }]}
-                onPress={() => void advanceKdsOrder(order.itemStates, isPreparing ? 'ready' : 'preparing', refresh)}
+                style={[styles.wideAction, { backgroundColor: '#22C55E' }]}
+                onPress={() => void advanceKdsOrder(order.itemStates, refresh)}
               >
-                <Text style={[styles.wideActionText, { color: '#FFF' }]}>{actionLabel}</Text>
+                <Text style={[styles.wideActionText, { color: '#FFF' }]}>Marcar pronto</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -783,8 +778,8 @@ function BarmanQueueView({
     void loadBar();
   }, [loadBar]);
 
-  const advanceBarItem = async (item: BarQueueItem, status: 'preparing' | 'ready') => {
-    await advanceKdsOrder([{ id: item.id, status: item.status }], status, loadBar);
+  const advanceBarItem = async (item: BarQueueItem) => {
+    await advanceKdsOrder([{ id: item.id, status: item.status }], loadBar);
   };
 
   const queueCount = barOrders.filter((o) => o.status === 'confirmed' || o.status === 'pending').length;
@@ -801,8 +796,8 @@ function BarmanQueueView({
         </View>
       )}
       <View style={styles.threeMetricGrid}>
-        <CompactMetric value={String(queueCount)} label="Fila" tone="warning" />
-        <CompactMetric value={String(preparingCount)} label="Preparando" tone="danger" />
+        <CompactMetric value={String(queueCount)} label={itemStatusLabel('pending')} tone="warning" />
+        <CompactMetric value={String(preparingCount)} label={itemStatusLabel('preparing')} tone="danger" />
         <CompactMetric value={String(readyCount)} label="Prontos" tone="success" />
       </View>
       {loadingBar && <Text style={[styles.staffRole, { color: colors.foregroundSecondary, textAlign: 'center', marginTop: 12 }]}>Carregando bar…</Text>}
@@ -810,8 +805,6 @@ function BarmanQueueView({
         const isPreparing = item.status === 'preparing';
         const isReady = item.status === 'ready';
         const tone = isReady ? 'success' : isPreparing ? 'warning' : 'info';
-        const actionLabel = isReady ? 'Pronto ✓' : isPreparing ? 'Marcar pronto' : 'Iniciar preparo';
-        const actionColor = isPreparing ? '#22C55E' : '#F59E0B';
         const tableLabel = item.tableLabel;
         const meta = `${item.quantity}x ${item.name}${item.elapsedMinutes != null ? ` · ${item.elapsedMinutes}min` : ''}`;
         return (
@@ -824,14 +817,14 @@ function BarmanQueueView({
                 <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{tableLabel}</Text>
                 <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{meta}</Text>
               </View>
-              <StatusChip label={isReady ? 'Pronto' : isPreparing ? 'Preparando' : 'Fila'} tone={tone} />
+              <StatusChip label={itemStatusLabel(isReady ? 'ready' : isPreparing ? 'preparing' : 'pending')} tone={tone} />
             </View>
             {!isReady && (
               <TouchableOpacity
-                style={[styles.wideAction, { backgroundColor: actionColor }]}
-                onPress={() => void advanceBarItem(item, isPreparing ? 'ready' : 'preparing')}
+                style={[styles.wideAction, { backgroundColor: '#22C55E' }]}
+                onPress={() => void advanceBarItem(item)}
               >
-                <Text style={[styles.wideActionText, { color: '#FFF' }]}>{actionLabel}</Text>
+                <Text style={[styles.wideActionText, { color: '#FFF' }]}>Marcar pronto</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -865,8 +858,8 @@ function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
   return (
     <View style={styles.section}>
       <View style={styles.threeMetricGrid}>
-        <CompactMetric value={String(queueCount)} label="Fila" tone="warning" />
-        <CompactMetric value={String(preparingCount)} label="Preparando" tone="danger" />
+        <CompactMetric value={String(queueCount)} label={itemStatusLabel('pending')} tone="warning" />
+        <CompactMetric value={String(preparingCount)} label={itemStatusLabel('preparing')} tone="danger" />
         <CompactMetric value={String(readyCount)} label="Prontos" tone="success" />
       </View>
       {loading && <Text style={[styles.staffRole, { color: colors.foregroundSecondary, textAlign: 'center', marginTop: 12 }]}>Carregando KDS…</Text>}
@@ -874,9 +867,6 @@ function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
         const isReady = order.status === 'ready';
         const isPreparing = order.status === 'preparing';
         const tone = isReady ? 'success' : isPreparing ? 'warning' : 'info';
-        const actionLabel = isReady ? 'Pronto ✓' : isPreparing ? 'Marcar pronto' : 'Iniciar preparo';
-        const actionColor = isReady ? '#22C55E' : isPreparing ? '#22C55E' : '#F59E0B';
-        const actionTextColor = '#FFF';
         return (
           <View key={order.id} style={[styles.managerOrderCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
             <View style={styles.managerOrderHeader}>
@@ -884,7 +874,7 @@ function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
                 <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{order.table}</Text>
                 <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{order.meta}</Text>
               </View>
-              <StatusChip label={tone === 'success' ? 'Pronto' : tone === 'warning' ? 'Preparando' : 'Fila'} tone={tone} />
+              <StatusChip label={itemStatusLabel(isReady ? 'ready' : isPreparing ? 'preparing' : 'pending')} tone={tone} />
             </View>
             <View style={{ marginTop: 10, gap: 6 }}>
               {order.items.map(([name, time]) => (
@@ -896,10 +886,10 @@ function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
             </View>
             {!isReady && (
               <TouchableOpacity
-                style={[styles.wideAction, { backgroundColor: actionColor }]}
-                onPress={() => void advanceKdsOrder(order.itemStates, isPreparing ? 'ready' : 'preparing', refresh)}
+                style={[styles.wideAction, { backgroundColor: '#22C55E' }]}
+                onPress={() => void advanceKdsOrder(order.itemStates, refresh)}
               >
-                <Text style={[styles.wideActionText, { color: actionTextColor }]}>{actionLabel}</Text>
+                <Text style={[styles.wideActionText, { color: '#FFF' }]}>Marcar pronto</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1276,9 +1266,9 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
   const [activeFilter, setActiveFilter] = useState<ManagerOrderFilter>('all');
   const filters: { id: ManagerOrderFilter; label: string }[] = [
     { id: 'all', label: 'Todos' },
-    { id: 'pending', label: 'Pendente' },
-    { id: 'confirmed', label: 'Confirmado' },
-    { id: 'preparing', label: 'Preparando' },
+    { id: 'pending', label: orderStateLabel('pending') },
+    { id: 'confirmed', label: orderStateLabel('confirmed') },
+    { id: 'preparing', label: orderStateLabel('preparing') },
     { id: 'ready', label: 'Prontos' },
     { id: 'delivered', label: 'Entregues' },
   ];
@@ -1329,7 +1319,7 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
             <View style={{ flex: 1 }}>
               <View style={styles.managerOrderHeader}>
                 <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{customerDisplayName(order.customerName)}</Text>
-                <StatusChip label={RAW_ORDER_LABEL[order.rawStatus] ?? order.rawStatus} tone={RAW_ORDER_TONE[order.rawStatus] ?? 'info'} />
+                <StatusChip label={orderStateLabel(order.rawStatus)} tone={RAW_ORDER_TONE[order.rawStatus] ?? 'info'} />
               </View>
               <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{order.items.length} itens · {formatCurrency(order.total)} · {order.time}</Text>
               <View style={styles.orderItemChips}>
@@ -2905,23 +2895,12 @@ function WaiterTapToPayView({ colors }: { colors: ReturnType<typeof useColors> }
 
 const WAITER_ORDER_FILTERS: { label: string; value: string }[] = [
   { label: 'Todos', value: 'all' },
-  { label: 'Pendente', value: 'pending' },
-  { label: 'Confirmado', value: 'confirmed' },
-  { label: 'Preparando', value: 'preparing' },
+  { label: orderStateLabel('pending'), value: 'pending' },
+  { label: orderStateLabel('confirmed'), value: 'confirmed' },
+  { label: orderStateLabel('preparing'), value: 'preparing' },
   { label: 'Prontos', value: 'ready' },
   { label: 'Entregues', value: 'delivered' },
 ];
-
-const RAW_ORDER_LABEL: Record<string, string> = {
-  pending: 'Pendente',
-  confirmed: 'Confirmado',
-  preparing: 'Preparando',
-  open_for_additions: 'Aberto',
-  ready: 'Pronto',
-  delivered: 'Entregue',
-  completed: 'Concluído',
-  cancelled: 'Cancelado',
-};
 
 const RAW_ORDER_TONE: Record<string, V2Tone> = {
   pending: 'warning',
@@ -2936,10 +2915,6 @@ const RAW_ORDER_TONE: Record<string, V2Tone> = {
 
 function nextOrderWorkflowAction(rawStatus: string): { label: string; next: string; bg: string; fg: string } | null {
   switch (rawStatus) {
-    case 'pending': return { label: 'Aceitar', next: 'confirmed', bg: '#FF5A3D', fg: '#FFFFFF' };
-    case 'confirmed': return { label: 'Preparar', next: 'preparing', bg: '#F59E0B', fg: '#FFFFFF' };
-    case 'open_for_additions':
-    case 'preparing': return { label: 'Marcar como Pronto', next: 'ready', bg: '#22C55E', fg: '#FFFFFF' };
     case 'ready': return { label: 'Entregar', next: 'delivered', bg: '#3B82F6', fg: '#FFFFFF' };
     default: return null;
   }
@@ -3042,7 +3017,7 @@ function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) 
                 <View style={{ flex: 1 }}>
                   <View style={styles.managerOrderHeader}>
                     <Text style={[styles.staffName, { color: colors.foreground }]}>{customerDisplayName(order.customerName)}</Text>
-                    <StatusChip label={RAW_ORDER_LABEL[order.rawStatus] ?? order.rawStatus} tone={RAW_ORDER_TONE[order.rawStatus] ?? 'info'} />
+                    <StatusChip label={orderStateLabel(order.rawStatus)} tone={RAW_ORDER_TONE[order.rawStatus] ?? 'info'} />
                   </View>
                   <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
                     {order.items.length} {order.items.length === 1 ? 'item' : 'itens'} · {formatCurrency(order.total)} · {timeText}

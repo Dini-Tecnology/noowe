@@ -46,11 +46,9 @@ export type KdsItemState = { id: string; status: string };
 
 type ItemStatusApi = { updateOrderItemStatus(itemId: string, status: string): Promise<unknown> };
 
-/** O servidor só aceita recebido → em preparo → pronto, um passo de cada vez. */
+/** O servidor aceita Pronto vindo de Recebido ou Em preparo: o item entra em preparo sozinho. */
 function stepsTo(current: string, target: 'preparing' | 'ready'): string[] {
-  if (current === 'pending' || current === 'received' || current === 'confirmed') {
-    return target === 'ready' ? ['preparing', 'ready'] : ['preparing'];
-  }
+  if (current === 'pending' || current === 'received' || current === 'confirmed') return [target];
   if (current === 'preparing' && target === 'ready') return ['ready'];
   return [];
 }

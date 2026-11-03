@@ -836,12 +836,12 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   },
 
   async cancelOrder(id: string, reason?: string) {
-    const { data, error } = await getSupabaseClient()
-      .from('orders')
-      .update({ status: 'cancelled', cancellation_reason: reason })
-      .eq('id', id)
-      .select()
-      .single();
+    // O status do pedido é derivado dos itens: quem cancela é a RPC, com auditoria.
+    const { data, error } = await getSupabaseClient().rpc('restaurant_update_order_status', {
+      p_order_id: id,
+      p_status: 'cancelled',
+      p_reason: reason ?? null,
+    });
     if (error) throw error;
     return data;
   },

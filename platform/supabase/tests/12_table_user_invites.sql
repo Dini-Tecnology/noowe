@@ -333,7 +333,7 @@ begin
     'continua na mesa antiga';
 
   -- Sem consumo (aqui: pedido cancelado) ele pode sair da mesa antiga; só então aceita.
-  update public.orders set status = 'cancelled' where id = o;
+  update public.order_items set status = 'cancelled' where order_id = o;
   assert pg_temp.state_of(format('select public.customer_accept_table_user_invite(%L)', inv->>'id')) = 'P0016',
     'quitar não move o cliente: continua recusado até sair da mesa';
   perform public.customer_leave_table_session(sid2);

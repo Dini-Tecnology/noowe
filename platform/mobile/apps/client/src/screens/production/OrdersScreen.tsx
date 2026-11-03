@@ -26,10 +26,10 @@ const EMPTY_MESSAGES: Record<OrderFilter, string> = {
 };
 
 // "Entregue" still belongs to the open table tab: the order is only concluded after payment.
-function filterOf(order: Pick<CustomerOrder, 'status' | 'serviceModel' | 'fulfillmentStatus'>): OrderFilter {
+function filterOf(order: Pick<CustomerOrder, 'status' | 'serviceModel' | 'fulfillmentStatus' | 'paymentStatus'>): OrderFilter {
   // Quick Service não tem comanda aberta: o pedido termina na retirada (ou no "não retirado").
   if (order.serviceModel === 'quick_service') return quickOrdersFilter(order);
-  if (order.status === 'completed') return 'completed';
+  if (order.status === 'completed' || (order.status === 'delivered' && order.paymentStatus === 'confirmed')) return 'completed';
   if (order.status === 'cancelled') return 'cancelled';
   return 'active';
 }

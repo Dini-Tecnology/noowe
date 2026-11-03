@@ -2,6 +2,13 @@
 begin;
 select plan(1);
 update private.dev_flags set enabled = true where key = 'simulate_share_payment';
+create function pg_temp.scan_blocked(p_qr text) returns boolean language plpgsql as $$
+begin
+  perform public.customer_open_table_session(p_qr);
+  return false;
+exception when others then return true;
+end $$;
+
 do $$
 declare
   r uuid := 'c1000000-0000-4000-8000-000000000002';
@@ -51,8 +58,8 @@ begin
   assert (result->>'charged')::numeric=18, 'remaining own items only';
   assert (result->>'sessionReleased')::boolean, 'paid diner is released';
   assert not (result->>'tableClosed')::boolean, 'other diners remain active';
-  assert (select status::text from public.orders where id=o1)='completed', 'own order finalized';
-  assert (select status::text from public.orders where id=o2)<>'completed', 'other order unchanged';
+  assert (select payment_status::text from public.orders where id=o1)='confirmed', 'own order paid';
+  assert (select payment_status::text from public.orders where id=o2)<>'confirmed', 'other order unchanged';
   -- Quem já saiu não é mais participante: o reenvio da mesma chave é recusado (assert_split_mode_enabled, 20260929).
   begin
     perform public.customer_pay_table_bill(sid,10,'pix',15,'mine',key2);
@@ -66,14 +73,16 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub',b,'role','authenticated')::text,true);
   result := public.customer_pay_table_bill(sid,0,'credit_card',30,'byItem',gen_random_uuid(),array[i2]);
   assert (result->>'tableClosed')::boolean, 'last payment ends session';
-  assert (select status::text from public.tables where id=(t1->>'id')::uuid)='available', 'table released';
+  assert (select status::text from public.tables where id=(t1->>'id')::uuid)='cleaning', 'paid table goes to cleaning, release is up to the waiter';
   assert public.customer_get_active_visit() is null, 'restart will not restore closed visit';
   select count(*) into n from public.gateway_transactions where metadata->>'table_session_id'=sid::text;
   assert n=3, 'retries did not duplicate payments';
   assert not exists (select 1 from public.wallet_transactions wt join public.wallets w on w.id=wt.wallet_id
     where w.user_id in(a,b)), 'simulation neither debits wallet nor grants spendable cashback';
 
-  -- Reusing the same physical QR after closing creates a fresh session.
+  -- Reusing the same physical QR after the waiter releases the table creates a fresh session.
+  assert pg_temp.scan_blocked(t1->>'qr_code'), 'table in cleaning does not take a new visit';
+  update public.tables set status='available' where id=(t1->>'id')::uuid;
   visit := public.customer_open_table_session(t1->>'qr_code');
   assert (visit->>'tableSessionId')::uuid <> sid, 'new visit has a fresh session';
   sid := (visit->>'tableSessionId')::uuid;

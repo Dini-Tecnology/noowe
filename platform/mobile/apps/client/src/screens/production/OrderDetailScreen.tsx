@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
+import { itemStatusLabel, orderStatusLabel } from '@okinawa/shared/utils/status-label';
 import { Alert, AppState, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,16 +26,12 @@ const HEADER_GRADIENT = ['#FF5724', '#F97316', '#F59E0B'] as const;
 
 const TRACKING_STEPS: (OrderStatusStep & { key: TrackingStep })[] = [
   { key: 'received', label: 'Recebido', icon: 'checkmark-circle' },
-  { key: 'preparing', label: 'Preparando', icon: 'chef-hat', iconSet: 'material-community' },
+  { key: 'preparing', label: orderStatusLabel('preparing'), icon: 'chef-hat', iconSet: 'material-community' },
   { key: 'ready', label: 'Pronto', icon: 'silverware-fork-knife', iconSet: 'material-community' },
   { key: 'delivered', label: 'Entregue', icon: 'checkmark' },
 ];
 
 const STEP_INDEX: Record<TrackingStep, number> = { received: 0, preparing: 1, ready: 2, delivered: 3 };
-
-const ITEM_STATUS_LABELS: Record<string, string> = {
-  pending: 'Na fila', preparing: 'Preparando', ready: 'Pronto', delivered: 'Entregue', cancelled: 'Cancelado',
-};
 
 const ITEM_STATUS_COLORS: Record<string, string> = {
   pending: '#94A3B8', preparing: '#EA580C', ready: '#16A34A', delivered: '#16A34A', cancelled: '#DC2626',
@@ -433,7 +430,7 @@ export default function OrderDetailScreen({ route, navigation }: any) {
                       <View style={styles.itemBottomRow}>
                         <View style={[styles.itemStatusPill, { backgroundColor: `${ITEM_STATUS_COLORS[item.status] ?? '#94A3B8'}1A` }]}>
                           <Text style={[styles.itemStatusPillText, { color: ITEM_STATUS_COLORS[item.status] ?? '#94A3B8' }]}>
-                            {ITEM_STATUS_LABELS[item.status] ?? item.status}
+                            {itemStatusLabel(item.status)}
                           </Text>
                         </View>
                         {eta && <Text style={styles.itemEta}>~{eta} min</Text>}
