@@ -67,6 +67,8 @@ async function sendExpo(devices: Device[], payload: Payload) {
   if (!devices.length) return [];
   const messages = devices.map((device) => ({
     to: device.token, sound: "default", title: payload.title, body: payload.body,
+    // Os botões da notificação (Concluir, Assumir, Aprovar, Recusar) são registrados no app por categoria.
+    ...(typeof payload.data?.category === "string" ? { categoryId: payload.data.category } : {}),
     data: { ...payload.data, type: payload.type ?? "system", relatedId: payload.related_id, relatedType: payload.related_type },
   }));
   const tickets: unknown[] = [];

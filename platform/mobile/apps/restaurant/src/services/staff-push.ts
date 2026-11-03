@@ -26,6 +26,72 @@ export function staffPushRestaurantId(data: Record<string, unknown> | null | und
   return typeof data?.restaurant_id === 'string' ? data.restaurant_id : null;
 }
 
+/**
+ * Botões do push por categoria: a tarefa se resolve sem abrir a tela dela (ADR-022).
+ * Abrem o app: em segundo plano, com o app fechado, o JS não roda e o toque se perde sem aviso.
+ */
+const STAFF_PUSH_CATEGORIES = {
+  staff_task: [
+    { identifier: 'task_complete', buttonTitle: 'Concluir', options: { opensAppToForeground: true } },
+    { identifier: 'task_claim', buttonTitle: 'Assumir', options: { opensAppToForeground: true } },
+  ],
+  // Tarefa que pede uma decisão na tela dela: Concluir seria recusado pelo servidor.
+  staff_task_claim: [{ identifier: 'task_claim', buttonTitle: 'Assumir', options: { opensAppToForeground: true } }],
+  approval: [
+    { identifier: 'approval_approve', buttonTitle: 'Aprovar', options: { opensAppToForeground: true } },
+    { identifier: 'approval_reject', buttonTitle: 'Recusar', options: { opensAppToForeground: true, isDestructive: true } },
+  ],
+};
+
+/** Cada toque em um botão vira uma chamada ao servidor, que confere quem pode. */
+export function staffPushAction(
+  actionIdentifier: string,
+  data: Record<string, unknown> | null | undefined,
+): { rpc: string; params: Record<string, unknown> } | null {
+  const taskId = data?.taskId;
+  const approvalId = data?.approvalId;
+  switch (actionIdentifier) {
+    case 'task_complete':
+      return typeof taskId === 'string' ? { rpc: 'restaurant_complete_task', params: { p_task_id: taskId } } : null;
+    case 'task_claim':
+      return typeof taskId === 'string' ? { rpc: 'restaurant_claim_task', params: { p_task_id: taskId } } : null;
+    case 'approval_approve':
+    case 'approval_reject':
+      return typeof approvalId === 'string'
+        ? {
+            rpc: 'restaurant_resolve_approval',
+            params: { p_approval_id: approvalId, p_status: actionIdentifier === 'approval_approve' ? 'approved' : 'rejected' },
+          }
+        : null;
+    default:
+      return null;
+  }
+}
+
+export async function registerStaffPushCategories(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  // Uma por vez: no iOS cada chamada regrava a lista inteira, e em paralelo só a última fica.
+  for (const [category, actions] of Object.entries(STAFF_PUSH_CATEGORIES)) {
+    await Notifications.setNotificationCategoryAsync(category, actions);
+  }
+}
+
+export async function runStaffPushAction(
+  action: { rpc: string; params: Record<string, unknown> },
+  recipientId?: unknown,
+): Promise<void> {
+  const client = getSupabaseClient();
+  // Quem tocou pode não ser quem está logado agora: a ação não sai no nome de outra pessoa.
+  if (typeof recipientId === 'string') {
+    const { data } = await client.auth.getSession();
+    if (data.session?.user.id !== recipientId) return;
+  }
+  const { error } = await client.rpc(action.rpc, action.params);
+  // Outra pessoa já resolveu o pedido: Gerente e Dono recebem juntos, e isso não é erro de tela.
+  const alreadyResolved = action.rpc === 'restaurant_resolve_approval' && error?.code === '23514';
+  if (error && !alreadyResolved) throw error;
+}
+
 let lastDevicePushToken: unknown = null;
 
 /**

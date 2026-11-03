@@ -16,3 +16,4 @@
 6. `engine_tick` expira reserva, fila e aceite do Quick sem ninguém abrir tela.
 7. Reenvio do mesmo evento não gera segunda tarefa nem segundo aviso.
 8. RLS: outro estabelecimento não lê eventos nem tarefas (inclusive por Realtime).
+- **Ficou fora:** `Fechamento do dia` (O8), lista de tarefas na tela (O4) e roteamento só para os escalados (O5). `Mesa liberada` só vira tarefa com gente esperando na fila.
