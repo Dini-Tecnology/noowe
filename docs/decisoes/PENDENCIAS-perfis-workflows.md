@@ -3,7 +3,7 @@
 Enviar a @Pedro. Cada linha tem um default **provisório** já isolado em função nomeada; trocar depois é mudança pontual.
 Os itens em **negrito** bloqueiam a fatia indicada: não implementar antes da resposta.
 
-**Atualizado em 03/11/2026** com a resposta registrada em [`aditivo-comercial-e-pagamentos`](../spec/aditivo-comercial-e-pagamentos.md).
+**Atualizado em 03/11/2026** com as respostas registradas em [`aditivo-comercial-e-pagamentos`](../spec/aditivo-comercial-e-pagamentos.md), inclusive a segunda rodada (10, 11 e 17–32).
 Os itens 2–7 e 12–15 não tiveram objeção: seguem com o default.
 
 | # | Ponto | Conflito | Default provisório | ADR | Bloqueia |
@@ -17,32 +17,45 @@ Os itens 2–7 e 12–15 não tiveram objeção: seguem com o default.
 | 7 | Ninguém escalado no turno | "Sem subida de nível" não cobre turno sem Gerente ou sem garçom | Sem Gerente em turno: todos os gerentes ativos e o Dono | 022 | — |
 | 8 | ~~Taxa de serviço ou gorjeta, sempre opcional~~ | **Respondido** (itens 1 e A do aditivo) | — | 032 | — |
 | 9 | ~~Retenção e rateio~~ | **Respondido** (item 2): o app oferece, o contador valida | — | 029 | — |
-| 10 | **Taxa de no-show e pré-autorização de cartão** | **Sem resposta.** O adapter do Asaas não tem autorização e captura; cobrar sem consentimento é risco | Opções ocultas na Central | 029 | **O6/O9** |
+| 10 | ~~Taxa de no-show e pré-autorização~~ | **Respondido:** ocultas na primeira versão. Quando existirem, só com aceite explícito e reserva de valor no gateway | — | 029 | — |
 | 11a | ~~Reabertura de comanda~~ | **Respondido** (item 3) | — | 004 | — |
-| 11b | **Tap to Pay** | **Em negociação.** A tela hoje registra pago sem cobrar por aproximação, e o plano Profissional vende Tap to Pay. Ver item 23 | Nenhum | 029 | **O8** |
+| 11b | ~~Tap to Pay~~ | **Respondido:** fornecedor em negociação; mecanismo pronto e tela oculta até ativar (fatia T1) | — | 029 | — |
 | 12 | Cozinheiro com "só o botão Pronto" | O PDF também prevê pedir ajuda e solicitar indisponível | Pronto no card; os outros dois num menu secundário | 024 | — |
 | 13 | QR com fila ativa | ADR-016 item 4 manda ao Maître; o documento fala só em mesa reservada | Mantém o item 4 enquanto a mesa estiver segurada | 026 | — |
 | 14 | Etapas do Quick mostradas ao cliente | ADR-013 e PDF usam nomes diferentes | Mantém as do ADR-013 | 024 | — |
 | 15 | Receita do dia | A avaliação não define; a validação no app mostrou pedido entregue e não pago somando na receita | Receita é o que foi pago: pagamento confirmado ou pedido concluído (`private.counts_as_revenue`) | 024 | — |
 | 16 | ~~Por item depois de outra divisão~~ | **Respondido** (itens 4 e A): só recusa com saldo zero | — | 032 | — |
 
-## Perguntas novas, abertas pelo aditivo
+## Respostas da segunda rodada (03/11/2026)
+
+Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção "Respostas às pendências".
+
+| # | Ponto | Decisão | Vai para |
+|---|---|---|---|
+| 17 | Valor fixo inclui a taxa | É o total que sai do cartão, dividido e mostrado antes de confirmar. Sem taxa, é só consumo. Gorjeta livre entra por cima, à parte | G5 |
+| 18 | Partes iguais com taxa retirada | Consumo igual; a taxa é de cada um | G5 |
+| 19 | Limite de quebra | Só o Dono. Fundo de troco e limite para sugerir sangria: Dono e Gerente | O8 |
+| 20 | Maître que cobra | Vê consumo, saldo e quem pagou na mesa que está cobrando; não vê caixa, outras mesas em detalhe nem taxas | O8 |
+| 21 | Estorno | **Mudou o default.** Total no mesmo dia operacional: devolve a taxa, e a NOOWE assume a tarifa. Depois do dia ou parcial: não devolve. Contestação: não devolve, e a tarifa de contestação fica com o restaurante | M2 |
+| 22 | Compensação | Separada dos créditos, sem limite nem validade, em linha própria da fatura, e o que sobra segue para as próximas | M2, M4 |
+| 23 | Tap no Profissional | Fora da lista até ativar o fornecedor | M1, T1 |
+| 24 | Business e Enterprise | Business: 8.000 pedidos, com NFC-e na mesma franquia. Enterprise: "Sob consulta", com preço por contrato nos parâmetros do restaurante | M1, M4 |
+| 25 | O que é pedido | Cada envio à cozinha ou ao bar. Espera da fila e Quick contam 1 cada. Cancelado não conta | M4 |
+| 26 | Restaurantes atuais | **Mudou o default.** Um fluxo só: escolhem o plano no próximo acesso do Dono, com 30 dias de teste, ou código de fundador sem teste | M1, M4, M6 |
+| 27 | Dia operacional | De um fechamento do dia ao seguinte. Sem caixa aberto, vira em horário configurável (6h), com alerta e sem fechar sozinho | O8 |
+| 28 | Nota da NOOWE | Dados da empresa nos parâmetros; fatura com NFS-e pelo Asaas. Conveniência em R$ 0 e desligada até o contador confirmar | M1, M3, M4 |
+| 29 | Gerente deduz a taxa | Mantém o default; não foi à resposta porque não muda o que se constrói | — |
+| 30 | Cliente cancela | **Mudou o default.** Cancela pelo app enquanto o item não foi à estação; depois, só com aprovação. Quick: estorno integral e automático antes da estação | O7 |
+| 31 | Conta pedida | QR funciona com a comanda aberta, em qualquer estado. Os estados são só informativos | O4 |
+| 32 | Dono e aprovação | **Mudou o default.** O Dono nunca precisa de aprovação: aplica direto, com registro. A regra de não aprovar o próprio pedido vale para os demais | O2 (ajuste) |
+
+## Perguntas abertas pelas respostas
 
 | # | Ponto | Por que importa | Default provisório | Bloqueia |
 |---|---|---|---|---|
-| 17 | **Valor fixo inclui a taxa?** | "Pago R$ 50": são R$ 50 de consumo mais taxa (R$ 55 cobrados) ou R$ 50 no total? A regra A6 calcula sobre o consumo, mas o A diz "qualquer valor até o saldo" | R$ 50 é o que sai do cartão; o consumo abatido é o valor sem a taxa | **G5** |
-| 18 | **Partes iguais com taxa retirada** | Se 1 de 3 retira a taxa, as partes de consumo seguem iguais e só o valor final dele muda? | Sim: a parte é de consumo; a taxa é de cada um | **G5** |
-| 19 | **Gerente define o próprio limite de quebra?** | Item G dá "parâmetros do caixa" a Dono e Gerente, e o Gerente é quem fecha o caixa. Quebra acima do limite vai ao Dono, mas ele pode subir o limite antes de fechar | Limite de quebra só o Dono; fundo de troco e sangria, os dois | **O8** |
-| 20 | **Maître cobra, mas não vê valores?** | Item G o inclui em "cobrar e receber dinheiro" e diz que ele "não vê valores detalhados" | Vê o valor da mesa que está cobrando; não vê caixa nem taxas | O8 |
-| 21 | **Estorno: quem arca com a tarifa do Asaas?** | Se a tarifa não voltar no estorno, o restaurante pagou taxa sobre uma venda desfeita. Depende também do spike | Devolve a taxa NOOWE Pay; a tarifa não recuperada entra na compensação | **M2** |
-| 22 | **Compensação × Créditos NOOWE Pay** | Item 8 chama a diferença negativa de "crédito na mensalidade". Se for o mesmo crédito do item D, cai no limite de 30%, expira e se perde ao cancelar, e aí o restaurante pagaria mais que a taxa | Razão separado, sem limite nem validade, abate 100% da fatura | **M2** |
-| 23 | **Plano com Tap to Pay sem Tap** | O Profissional vende um recurso sem fornecedor contratado | Fica fora da lista do plano até o contrato | M4 |
-| 24 | **Franquia do Business e preço do Enterprise** | Item C diz "franquia ampliada", sem número | Nenhum; sem número não há cálculo de excedente | **M4** |
-| 25 | **O que conta como "pedido" na franquia?** | Cada envio à cozinha ou cada comanda? Uma mesa de 6 pedindo em 4 rodadas dá 4 ou 1 | Cada registro em `orders` não cancelado | **M4** |
-| 26 | **Restaurantes que já existem** | Que plano recebem? Há período de teste? Os parceiros fundadores usam código? | Parceiros atuais sem cobrança até receberem código | **M4** |
-| 27 | **"Dia operacional"** | Regras 2 e 3 dependem dele, e há casa que fecha depois da meia-noite | Vai do fechamento do caixa ao fechamento seguinte; sem caixa, corte às 6h | **O8** |
-| 28 | **Nota da NOOWE** | Taxa de conveniência e fatura exigem nota de serviço emitida pela NOOWE, com CNPJ e emissor próprios. A conveniência também passa pela subconta do restaurante antes do split: o contador precisa validar | Nenhum; depende da contabilidade da NOOWE | **M3/M4** |
-| 29 | **Gerente deduz a taxa** | Ele vê caixa líquido e comanda bruta, então calcula a taxa NOOWE Pay mesmo sem vê-la por pagamento | Mantém assim; não é segredo operacional | — |
-| 30 | **Cliente cancela depois de enviar?** | Com o preparo automático, o pedido de salão e o Quick de aceite automático já nascem em preparo, sem intervalo para o cliente cancelar. O estorno automático por restaurante fechado também só alcança o aceite manual | Não cancela pelo app: pede ao garçom, e vai à aprovação do gerente. Se quiser uma janela, ela vira parâmetro de segundos | O1 |
-| 31 | **Quando a mesa vira Conta pedida?** | Pedir a conta ou pagar uma parte, hoje a mesa segue Ocupada. Nesses estados o QR é recusado, então um amigo que chega no meio da divisão não entraria | Mesa segue Ocupada até a O4, e o QR continua aceito nesses dois estados | O4 |
-| 32 | **Dono sozinho pedindo aprovação** | O bloqueio de autoaprovação deixa o pedido sem ninguém para aprovar numa casa só com o Dono, e hoje a tela permite pedir | Quem pediu pode desistir, não aprovar. O Dono sem gerente deveria aplicar direto, sem pedir |
+| 33 | **"Comanda aberta (saldo maior que zero)" no QR** | Mesa recém-aberta, sem nenhum pedido, tem saldo zero. Ao pé da letra, o amigo que chega antes do primeiro pedido não entraria | Vale a sessão ativa, com qualquer saldo. Só deixa de valer ao encerrar a comanda | O4 |
+| 34 | **Dados da empresa NOOWE** | Só veio o CNPJ. Faltam razão social, endereço, inscrição municipal e regime tributário para preencher a tabela | Campos ficam vazios, e nenhuma nota é emitida sem eles | **M3/M4** (emissão) |
+| 35 | **Restaurante ativo que não escolhe plano** | A etapa aparece no próximo acesso do Dono, mas a resposta não diz o que acontece se ele não escolher, nem quando os 30 dias começam | Os 30 dias contam desde esse acesso; a operação segue, e ao fim do teste valem os prazos de atraso, sem bloquear comanda aberta | **M4** |
+| 36 | **"Dinheiro" como forma da maquininha** | A resposta 11 põe dinheiro em "pagamento externo", mas dinheiro entra na gaveta e precisa contar no fechamento cego | Dinheiro entra como dinheiro no caixa; crédito, débito, Pix e vale como externo | O8, T1 |
+| 37 | **Credenciais do Tap na tabela de parâmetros** | A resposta 11 pede credenciais na tabela. Segredo em tabela aparece em histórico, cópia de banco e consultas | O fornecedor ativo fica na tabela; as credenciais, em segredo (Vault ou segredo da função), como as do Asaas | T1 |
+| 38 | **Confirmações do contador da NOOWE** | Formato e emissor da nota de conveniência, e passagem do valor pela conta do restaurante | Aguardando. Não trava a construção: a taxa fica em R$ 0 e desligada | Ligar a M3 |

@@ -33,3 +33,10 @@ Um único conjunto de estados, com tradução para o rótulo em um módulo só.
 - **Mesa em Limpeza recusa o QR até o garçom liberar.** Sem a tarefa da O2, ninguém é avisado, e a mesa pode ficar parada.
 - **Mesa não vai sozinha a Conta pedida nem a Pagamento parcial (pendência 31).** Os estados e rótulos existem, mas hoje a mesa nesses estados recusa QR e sai de várias contagens de ocupação; escrever exige ajustar essas funções junto.
 - `private.order_requires_quality_check` ainda lê o modelo de serviço, num só lugar. A O7 troca pela opção de Expedição (ADR-028).
+
+## Respostas às pendências 30 e 31
+
+- **Cancelar pelo app (30):** o cliente cancela o item que ainda não foi à estação ("Recebido" ou "Em espera"). Depois, só
+  pelo garçom e com aprovação. Quick: estorno integral e automático antes da estação; depois, só com aprovação.
+- **Conta pedida (31):** "Conta pedida" e "Pagamento parcial" são só informativos no mapa e nunca bloqueiam a entrada pelo
+  QR. A resposta diz "saldo maior que zero"; a pendência 33 confirma o caso da mesa ainda sem pedido.

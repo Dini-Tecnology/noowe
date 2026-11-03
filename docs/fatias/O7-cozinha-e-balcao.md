@@ -11,3 +11,5 @@
 5. Item indisponível em um toque some do app do cliente e avisa os garçons das mesas afetadas.
 6. Quick: pedido pago entra em produção; pedido "Pronto" avisa o cliente; retirada valida o QR.
 7. Pedido agendado entra no KDS na hora certa.
+8. O cliente cancela pelo app o item que ainda não foi à estação; depois, só pelo garçom e com aprovação de Gerente ou Dono (resposta 30).
+9. No Quick, cancelar antes da estação estorna integral e automaticamente; depois, só com aprovação.

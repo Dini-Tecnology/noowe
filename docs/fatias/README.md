@@ -79,7 +79,7 @@ Pendências do autor em [`PENDENCIAS-perfis-workflows`](../decisoes/PENDENCIAS-p
 | [O5](O5-atribuicao-automatica.md) | Atribuição automática de mesa e garçom | O3 |
 | [O6](O6-portas-de-entrada.md) | Portas de entrada por serviço | O2, O5 |
 | [O7](O7-cozinha-e-balcao.md) | Cozinha, Expedição e Balcão | O1, O2 |
-| [O8](O8-caixa-e-gorjeta.md) | Caixa e gorjeta | O2, O3, G5 + respostas 19, 20, 27 |
+| [O8](O8-caixa-e-gorjeta.md) | Caixa e gorjeta | O2, O3, G5 |
 | [O9](O9-central-de-configuracao.md) | Central de Configuração | O5–O8 |
 | [O10](O10-inteligencia-operacional.md) | Inteligência operacional | O5–O7 |
 
@@ -90,14 +90,15 @@ Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercia
 | # | Fatia | Depende de |
 |---|---|---|
 | [M1](M1-parametros-noowe.md) | Parâmetros NOOWE | — |
-| [G5](G5-saldo-unico.md) | Saldo único e taxa ou gorjeta opcional | G3, G4 + respostas 17, 18 |
-| [M2](M2-taxa-noowe-pay.md) | Taxa NOOWE Pay, split e extrato | M1, N4, spike + respostas 21, 22 |
-| [M3](M3-taxa-de-conveniencia.md) | Taxa de conveniência | M1, M2, Q1 + resposta 28 |
-| [M4](M4-assinatura.md) | Assinatura e Módulos e plano | M1, O3 + respostas 23–26, 28 |
+| [G5](G5-saldo-unico.md) | Saldo único e taxa ou gorjeta opcional | G3, G4 |
+| [M2](M2-taxa-noowe-pay.md) | Taxa NOOWE Pay, split e extrato | M1, N4, spike |
+| [M3](M3-taxa-de-conveniencia.md) | Taxa de conveniência | M1, M2, Q1 (ligar: contador) |
+| [M4](M4-assinatura.md) | Assinatura e Módulos e plano | M1, O3 + resposta 35 |
 | [M5](M5-creditos-noowe-pay.md) | Créditos NOOWE Pay | M2, M4 |
 | [M6](M6-codigos-promocionais.md) | Códigos promocionais NOOWE | M4, M5 |
 | [P3](P3-cupons-do-restaurante.md) | Cupons do restaurante | G5, P2, O3 |
 | [V1](V1-vale-refeicao.md) | Vale-refeição | G5, M2 |
+| [T1](T1-tap-to-pay.md) | Tap to Pay pronto para ativar | G5, M2, O8 (critério 1: nada) |
 
 ## Correspondência com o faseamento da spec (§8)
 

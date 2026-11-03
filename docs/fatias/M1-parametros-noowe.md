@@ -15,3 +15,5 @@
 4. A linha do vale recusa valor acima do teto.
 5. Alterar um parâmetro não muda cobrança, fatura ou crédito já gerado.
 6. Toda alteração registra autor, horário, antes e depois.
+7. Segunda carga (respostas 23, 24, 26 e 28): Business com 8.000 pedidos, conveniência em R$ 0 e desligada, `tap_to_pay` desligado, prazo de teste, plano sugerido por tipo de serviço e dados da empresa NOOWE, com CNPJ preenchido, todos em tabela e com histórico.
+8. Preço de contrato do Enterprise por restaurante e fornecedor de Tap ativo ficam em parâmetro, sem credenciais em tabela (pendência 37).

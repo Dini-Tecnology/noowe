@@ -1,7 +1,7 @@
 # G5 — Saldo único e taxa ou gorjeta opcional
 
 **Objetivo:** a comanda tem um saldo de consumo; as quatro formas abatem dele e podem ser combinadas, com taxa ou gorjeta por pagamento.
-**Depende de:** G3, G4, respostas 17 e 18 · **Spec:** `aditivo-comercial-e-pagamentos` itens 1, 4 e A · **ADRs:** 032, 001 · **Invariantes:** 2, 4, 10
+**Depende de:** G3, G4 · **Spec:** `aditivo-comercial-e-pagamentos` itens 1, 4 e A · **ADRs:** 032, 001 · **Invariantes:** 2, 4, 10
 
 ## Entregáveis
 - **Banco:** saldo de consumo; modo taxa ou gorjeta por serviço; taxa retirável por parcela, com registro; reserva durante o pagamento; ajuste ao saldo. Sai `split_fixed_remainder`.
@@ -19,3 +19,6 @@
 8. Pagamento misto abate do mesmo saldo; a comanda só encerra com saldo zero.
 9. Quem sai sem pagar deixa a parte para o titular, que é avisado ao abrir a comanda.
 10. Retirar a taxa grava autor, motivo e horário.
+11. Valor fixo é o total que sai do cartão: o app mostra a separação entre consumo e taxa antes de confirmar; sem taxa, é só consumo.
+12. Gorjeta em percentual segue a mesma conta do valor fixo; gorjeta em valor livre entra por cima, mostrada à parte.
+13. Em partes iguais, o consumo é igual para todos e a taxa é de cada um (R$ 300 entre 3: R$ 100 para quem retirou, R$ 110 para os outros).

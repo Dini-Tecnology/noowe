@@ -1,6 +1,6 @@
 # ADR-032 — Saldo único da comanda e taxa ou gorjeta opcional
 
-**Status:** ACEITO na regra (2026-11-03); os pontos em aberto estão nas pendências 17 e 18.
+**Status:** ACEITO (2026-11-03); pendências 17 e 18 respondidas.
 **Origem:** [`aditivo-comercial-e-pagamentos`](../spec/aditivo-comercial-e-pagamentos.md), itens 1, 4 e A.
 **Substitui:** `split_fixed_remainder` e o `redistribute_unpaid` do ADR-010; a ordem de cálculo de `04-calculo-financeiro`
 na parte "taxa dentro do total". **Resolve:** pendências 8 e 16.
@@ -36,3 +36,11 @@ na parte "taxa dentro do total". **Resolve:** pendências 8 e 16.
 
 - Mexe em dinheiro e na comanda em uso: exige migração das parcelas abertas e janela de deploy sem comanda em fechamento.
 - Fiscal (ADR-030): taxa fora da nota por padrão continua valendo; cupom entra como desconto na nota.
+
+## Respostas às pendências 17 e 18
+
+- **Valor fixo é o total que sai do cartão.** O servidor separa consumo e taxa e o app mostra antes de confirmar
+  ("R$ 45,45 de consumo + R$ 4,55 de taxa"). Sem taxa, o valor é só consumo. Gorjeta em percentual segue a mesma conta;
+  gorjeta em valor livre entra por cima do valor fixo, mostrada à parte.
+- **Partes iguais dividem o consumo.** A taxa é de cada um: em R$ 300 entre 3 com taxa de 10%, quem retirou paga R$ 100,
+  e os outros, R$ 110.

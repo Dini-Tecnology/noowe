@@ -40,3 +40,13 @@ Taxa ou gorjeta foi para o ADR-032. **Ainda bloqueado:** pendências 10, 11b, 19
 
 - O8 depende de O3, O2 (aprovações) e das pendências acima.
 - `tip_allocation` (ADR-010) sai, substituído pelo modo de rateio.
+
+## Respostas às pendências 10, 11, 19, 20 e 27
+
+- **Quebra (19):** o limite só o Dono define. Fundo de troco e limite para sugerir sangria: Dono e Gerente.
+- **Maître (20):** vê consumo, saldo e quem pagou na mesa que está cobrando; não vê caixa, outras mesas em detalhe nem taxas.
+- **Dia operacional (27):** de um fechamento do dia ao seguinte. Sem caixa aberto, vira em horário configurável (padrão 6h),
+  definido por Dono e Gerente. Sem fechamento até a virada, Gerente e Dono recebem alerta, e nada fecha sozinho.
+- **No-show e pré-autorização (10):** ocultos na primeira versão. No Fine, a reserva segue sem garantia de cartão.
+- **Tap to Pay (11):** tela oculta enquanto não houver fornecedor ativo, e ela nunca marca a conta como paga sem cobrança
+  real. Até lá, o garçom registra como "Maquininha da casa". Detalhes na fatia T1.

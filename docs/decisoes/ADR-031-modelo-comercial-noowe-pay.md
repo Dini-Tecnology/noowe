@@ -1,6 +1,6 @@
 # ADR-031 — Modelo comercial: parâmetros NOOWE, taxa única e assinatura
 
-**Status:** ACEITO no formato (2026-11-03); **valores provisórios**, em negociação com o Asaas.
+**Status:** ACEITO no formato (2026-11-03); **valores provisórios**, em negociação com o Asaas. Pendências 21–26 e 28 respondidas.
 **Origem:** [`aditivo-comercial-e-pagamentos`](../spec/aditivo-comercial-e-pagamentos.md), itens 5–8, B–E, G e H.
 **Ajusta:** ADR-020 (`platform_fee_bps` deixa de ser uma comissão única).
 **Impacta:** fatias M1–M6, N4, Q1, O9; `payments-create`; capabilities.
@@ -52,3 +52,21 @@ acima do líquido é recusado na criação. Falta confirmar:
   negativo para a NOOWE** e gera compensação. Isso é a maioria das parcelas de uma conta dividida, então a tarifa
   negociada decide o modelo.
 - Documento `docs/PARAMETROS-NOOWE.md` ("Como ajustar os parâmetros") é entregável de M1.
+
+## Respostas às pendências 21–26 e 28
+
+- **Estorno (21):** total no mesmo dia operacional devolve a taxa NOOWE Pay, e a NOOWE assume a tarifa do Asaas. Depois do
+  dia ou parcial, a taxa não volta. Contestação não devolve a taxa, e a tarifa de contestação fica com o restaurante. O
+  extrato do Dono mostra o estorno e o destino da taxa. Isolar em `private.refund_fee_policy`.
+- **Compensação (22):** confirma o item 4. Linha "Ajuste de taxa NOOWE Pay" na fatura, sem limite nem validade, abate a
+  mensalidade inteira, e o que sobrar segue para as próximas.
+- **Planos (23, 24):** Business com 8.000 pedidos e NFC-e na mesma franquia. Enterprise "Sob consulta", com preço de contrato
+  nos parâmetros do restaurante. `tap_to_pay` fica desligado até ativar o fornecedor.
+- **Pedido (25):** cada envio à cozinha ou ao bar. Espera da fila e Quick contam 1 cada; cancelado não conta.
+- **Adesão (26):** um fluxo só. Quem já está ativo escolhe o plano no próximo acesso do Dono. A sugestão por tipo de serviço
+  vem de parâmetro, sem ramificar por modelo no código. Sem código, teste de 30 dias sem cartão. O código de fundador
+  dispensa o teste, combina isenção com percentual e marca a categoria "Parceiro Fundador" no restaurante.
+- **Empresa NOOWE (28):** dados em parâmetro, trocáveis sem nova versão. Fatura pela conta Asaas da NOOWE, com NFS-e
+  automática. Conveniência em R$ 0 e desligada até o contador confirmar; a mecânica do split fica pronta.
+- **Credenciais do Tap (pendência 37):** o fornecedor ativo fica na tabela, e as credenciais em segredo. Segredo em tabela
+  iria parar no histórico de parâmetros (`noowe_param_history`) e nas cópias do banco.

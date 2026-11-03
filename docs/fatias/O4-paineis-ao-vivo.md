@@ -10,3 +10,4 @@
 4. Gerente vê as tarefas paradas há mais tempo no topo, com assumir e redirecionar.
 5. Cor indica estado e som ou vibração indica prioridade.
 6. Barras inferiores conforme o aditivo (Garçom: Ao Vivo · Minhas Mesas · Cobrar · Mais).
+7. O QR funciona com a comanda aberta, em qualquer estado da mesa; "Conta pedida" e "Pagamento parcial" são só informativos no mapa (resposta 31, pendência 33). Pode ser entregue antes do painel.

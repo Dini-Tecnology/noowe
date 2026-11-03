@@ -318,3 +318,97 @@ Para fechar:
 - O Dono escolhe quais vales o restaurante aceita (em geral, só vale-refeição; vale-alimentação é para supermercado), em Central → Pagamentos e caixa.
 - Na conta dividida e no pagamento misto, o vale abate do saldo como qualquer outro meio (ex.: vale no consumo e cartão na gorjeta).
 - Disponibilidade: o vale online depende de o Asaas aceitar (a confirmar), e o vale por aproximação depende do fornecedor do Tap (em negociação). Enquanto não houver, o vale passa só pela maquininha da casa.
+
+---
+
+# Respostas às pendências 10, 11 e 17–32
+
+**Origem:** resposta de Pedro às perguntas enviadas, recebida em 03/11/2026. Texto íntegro abaixo. Onde contradiz o texto
+acima, vale esta resposta (por exemplo, a taxa de conveniência fica em R$ 0 e desligada, e não em R$ 0,99).
+
+## Mais urgentes
+
+### 17. Valor fixo inclui a taxa?
+Ok. Valor fixo é sempre o total que sai do cartão. O app divide proporcionalmente e mostra antes de confirmar: "R$ 45,45 de consumo + R$ 4,55 de taxa". Se a pessoa retirou a taxa, os R$ 50 são só consumo. Na gorjeta em percentual, mesma lógica. Na gorjeta em valor livre, ela entra por cima do valor fixo, mostrada à parte.
+
+### 18. Partes iguais quando alguém retira a taxa
+Ok. O consumo é dividido igual (R$ 100 cada), e a taxa é de cada um: quem retirou paga R$ 100, os outros pagam R$ 110.
+
+### 21. Estorno: quem arca com a tarifa do Asaas?
+Ajuste:
+- Estorno total no mesmo dia operacional: o restaurante recebe de volta a taxa NOOWE Pay, e a NOOWE assume a tarifa do Asaas (igual ao cancelamento na maquininha).
+- Estorno depois do dia operacional, ou parcial: a taxa NOOWE Pay não é devolvida (padrão do pagamento online).
+- Contestação (chargeback): a taxa não é devolvida, e eventual tarifa de contestação do Asaas fica com o restaurante.
+- O extrato do Dono mostra o estorno e o que aconteceu com a taxa.
+
+### 22. Crédito por cobrança muito pequena
+Ok, separado dos Créditos NOOWE Pay: sem limite de 30% e sem validade. Aparece na fatura como linha própria "Ajuste de taxa NOOWE Pay" e abate integralmente a próxima mensalidade. Se passar do valor da fatura, segue para as próximas. Isso deve sumir quando fecharmos o Asaas sem tarifa fixa.
+
+### 24. Números que faltam nos planos
+- Business: franquia de 8.000 pedidos por mês, com NFC-e inclusa na mesma franquia. Excedente de R$ 0,15 por pedido, igual aos outros.
+- Enterprise: sem preço na tabela. Aparece como "Sob consulta", com o botão "Falar com a NOOWE"; o preço é definido por contrato nos parâmetros do restaurante.
+
+Tudo na tabela de parâmetros, para ajustarmos se precisar.
+
+### 28. Nota fiscal da NOOWE
+- Emissor: CNPJ da NOOWE, hoje 64.159.447/0001-90.
+- Os dados da empresa NOOWE (razão social, CNPJ, endereço, inscrição municipal e regime tributário) também ficam na tabela de parâmetros, como as taxas. Pensamos em mudar no futuro, e isso não pode exigir nova versão.
+- Assinatura: fatura cobrada pela conta Asaas da própria NOOWE, com emissão automática de NFS-e pelo módulo de notas do Asaas, vinculada a cada cobrança.
+- Taxa de conveniência: NFS-e da NOOWE. O formato (uma nota por pedido ou consolidada) e o emissor (Asaas ou Focus NFe, que já está no stack) vamos confirmar com o contador.
+- Passagem pela conta do restaurante: vamos confirmar com o contador. Até lá, mantenha a mecânica do split (o valor da conveniência vai direto para a carteira NOOWE e não fica disponível no saldo do restaurante) e deixe a taxa de conveniência com valor R$ 0 no parâmetro, desligada. O fluxo fica pronto e ligamos depois da confirmação, sem travar o build.
+
+## Planos
+
+### 23. Tap to Pay no plano Profissional
+Ok, fica fora da lista do plano até ativarmos o fornecedor (ver item 11). Volta ligando o recurso na tabela de parâmetros, sem nova versão.
+
+### 25. O que conta como "pedido" na franquia?
+Ok. Pedido = cada envio para a cozinha ou o bar (rodada), não importa quantas pessoas. A mesa de 6 com 4 rodadas conta 4 pedidos. Pedido feito na espera da fila e pedido do Quick contam 1 cada. Cancelados não contam.
+
+### 26. Restaurantes que já estão na plataforma
+Ajuste: um fluxo só para todos, sem exceção.
+- Todo restaurante faz o cadastro normal, como qualquer restaurante (dados, tipo de serviço e escolha do plano). Os que já estão ativos veem a etapa "Escolha seu plano" no próximo acesso do Dono.
+- O próprio restaurante escolhe o plano. O app só sugere um conforme o tipo de serviço (Quick e cafés: Essencial; Casual e bares: Profissional; Fine: Business).
+- Na mesma etapa há o campo "Código promocional". Ao aplicar o código de fundador, o restaurante passa para a categoria "Parceiro Fundador" (campo no cadastro do restaurante) e recebe os benefícios do código: 6 meses grátis e 50% de desconto no restante do primeiro ano.
+- A categoria fica registrada para podermos dar outros benefícios aos fundadores no futuro.
+- Sem código: o caminho comum, com 30 dias de teste no plano escolhido, sem cartão no cadastro. Antes do fim do teste, o Dono é avisado para escolher a forma de pagamento.
+- Com o código de fundador, não há período de teste (a isenção já cobre o início).
+- As regras do código de fundador (meses de isenção, percentual, duração, validade, limite de usos e se dá a categoria "Parceiro Fundador") e o prazo do teste ficam na tabela de parâmetros, configurados pela equipe NOOWE, como as demais taxas.
+
+## Caixa e permissões
+
+### 19. Limite de quebra de caixa
+Ok. O limite de quebra só o Dono define. Fundo de troco e limite para sugerir sangria: Dono e Gerente.
+
+### 20. Maître cobra, mas não vê valores?
+Ok. Vê o valor da mesa que está cobrando (consumo, saldo, quem já pagou), mas não vê o caixa, outras mesas em detalhe nem taxas.
+
+### 27. O que é o "dia operacional"?
+Ok, com um ajuste: vai de um fechamento do dia até o seguinte. Sem caixa aberto, o dia vira num horário configurável (padrão 6h), em Central → Pagamentos e caixa, por Dono e Gerente. Se o fechamento do dia não for feito até a virada, o Gerente e o Dono recebem um alerta (sem fechar sozinho).
+
+### 32. Dono sozinho na casa
+Ajuste, mais simples: o Dono é a função máxima e nunca precisa de aprovação, esteja sozinho ou não. A ação dele é aplicada direto e fica registrada. A regra de não aprovar o próprio pedido vale para os demais (Gerente, Maître, Garçom, Chef, Barman).
+
+## Operação
+
+### 30. Cliente pode cancelar depois de enviar o pedido?
+Ajuste:
+- Pelo app, o cliente pode cancelar o item que ainda não foi para a estação (status "Recebido" ou "Em espera", por exemplo curso futuro ou item aguardando o horário de entrar no preparo).
+- Depois que o item foi para a estação, não cancela pelo app: pede ao garçom, e o cancelamento passa pela aprovação (Gerente e Dono ao mesmo tempo).
+- Quick: o pedido já foi pago. Cancelando antes de ir para a estação, o estorno é integral e automático. Depois, só com aprovação.
+
+### 31. Quando a mesa vira "Conta pedida"?
+Pode entrar já, sem esperar o painel, com esta regra: o QR funciona sempre que a comanda estiver aberta (saldo maior que zero), em qualquer estado. "Conta pedida" e "Pagamento parcial" são só estados informativos para o mapa do restaurante e nunca bloqueiam a entrada de alguém na mesa. Se preferir deixar para o painel de operação, ok, desde que o QR siga essa regra.
+
+## Ainda sem resposta (agora respondidas)
+
+### 10. Taxa de no-show e pré-autorização de cartão
+Ok, ocultas na primeira versão. No Fine, a reserva funciona sem garantia de cartão por enquanto. Quando implementarmos: só com aceite explícito da política no checkout e usando a reserva de valor do gateway (autorizar e capturar depois), nunca uma cobrança direta.
+
+### 11. Tap to Pay
+Estamos negociando com o fornecedor (SumUp), ainda sem contrato fechado. A ideia é deixar tudo pronto para, quando fechar, só ativarmos a integração. Então:
+- Deixar o mecanismo do Tap pronto, com uma camada de integração preparada para receber o SDK/API do fornecedor (credenciais e fornecedor ativo na tabela de parâmetros), e o fluxo completo: cobrar, aprovar ou recusar, abater o saldo, registrar no caixa e no extrato.
+- Enquanto o fornecedor não estiver ativo, a tela de Tap fica oculta.
+- A tela NÃO pode marcar a conta como paga sem cobrança real (corrigir isso).
+- Até a ativação, o garçom registra o pagamento como "Maquininha da casa", escolhendo a forma (crédito, débito, Pix, vale ou dinheiro). Isso abate o saldo e entra no caixa como pagamento externo, sem taxa NOOWE Pay e fora do índice dos créditos.
+- Quando fecharmos, ligamos o fornecedor na tabela, o Tap aparece para o garçom e volta para a lista do plano Profissional, sem nova versão.
