@@ -1,5 +1,5 @@
 /* Hallmark · macrostructure: Form · tone: warm utilitarian · anchor hue: orange */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, Share, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -67,10 +67,9 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   });
   const cards = savedCards.data ?? [];
   // Com cartão salvo, o padrão já vem escolhido: é o pagamento em um toque.
-  useEffect(() => {
-    if (method !== 'credit_card' || savedCardId !== null || !cards.length) return;
+  if (method === 'credit_card' && savedCardId === null && cards.length) {
     setSavedCardId((cards.find((c) => c.isDefault) ?? cards[0]).id);
-  }, [method, cards, savedCardId]);
+  }
   const activeSavedCard = method === 'credit_card' ? cards.find((c) => c.id === savedCardId) ?? null : null;
 
   const tips = useQuery({

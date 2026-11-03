@@ -118,9 +118,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
   });
   const preferenceOptions = useMemo(() => waitlistPreferenceOptions(sectionsQuery.data), [sectionsQuery.data]);
   // Setor que sumiu do mapa (o restaurante mexeu nas mesas): volta para "Qualquer".
-  useEffect(() => {
-    if (!preferenceOptions.some((option) => option.id === preference)) setPreference(ANY_SECTION);
-  }, [preferenceOptions, preference]);
+  if (!preferenceOptions.some((option) => option.id === preference)) setPreference(ANY_SECTION);
 
   // Contagem até o fim do prazo de apresentação (ADR-021).
   const [nowMs, setNowMs] = useState(() => Date.now());

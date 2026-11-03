@@ -7,7 +7,6 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { OTPInput } from '@okinawa/shared/components/auth/OTPInput';
 import { INVITE_FAILURE_MESSAGES, useTableInviteHandler } from '../../hooks/useTableInviteHandler';
-import { rootNavigate } from './shared';
 
 const CODE_LENGTH = 6;
 

@@ -196,4 +196,32 @@ describe('Convidar para a mesa · quem convida', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
     client.clear();
   });
+
+  it('discards the created invite when closed, so reopening offers a new one', async () => {
+    mockCreateLink.mockResolvedValue({ url: 'https://noowebr.com/t/invite/abc', code: '123456', expiresAt: '2026-10-13T20:00:00.000Z' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    const sheet = (visible: boolean) => (
+      <QueryClientProvider client={client}>
+        <InviteToTableSheet
+          visible={visible}
+          onClose={jest.fn()}
+          tableSessionId="s1"
+          restaurantName="Noowe"
+          userInviteEnabled={false}
+          guestLinkEnabled
+          searchMinChars={3}
+        />
+      </QueryClientProvider>
+    );
+    const view = render(sheet(true));
+    fireEvent.press(view.getByText('Gerar convite'));
+    await waitFor(() => expect(view.getByTestId('invite-code')).toBeTruthy());
+    view.rerender(sheet(true));
+    expect(view.getByTestId('invite-code')).toBeTruthy();
+    view.rerender(sheet(false));
+    view.rerender(sheet(true));
+    expect(view.queryByTestId('invite-code')).toBeNull();
+    expect(view.getByText('Gerar convite')).toBeTruthy();
+    client.clear();
+  });
 });

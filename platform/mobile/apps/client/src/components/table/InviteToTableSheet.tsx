@@ -128,7 +128,11 @@ export default function InviteToTableSheet({
   // Convite por link, QR no próprio celular ou código de 6 dígitos (ADR-019): um convite serve a todos.
   const [invite, setInvite] = useState<TableInvite | null>(null);
   // Um convite vale pela sessão e pelo prazo; ao reabrir a folha gera-se outro, nunca reaproveita um velho.
-  useEffect(() => { if (!visible) setInvite(null); }, [visible]);
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (!visible) setInvite(null);
+  }
   const createInvite = useMutation({
     mutationFn: () => customerBackend.createTableInvite(tableSessionId),
     onSuccess: (created) => { setInvite(created); setFeedback(null); },

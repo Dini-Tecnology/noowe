@@ -10,7 +10,7 @@ import customerBackend, { type CustomerNotification, type TableUserInvite } from
 import { useRespondToTableInvite } from '../../hooks/useRespondToTableInvite';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { describeClosedInvite, tableInviteKeys, useTableInvitesRealtime } from '../../hooks/useTableUserInvites';
-import { rootNavigate, StateView, useQueryRefreshControl } from './shared';
+import { StateView, useQueryRefreshControl } from './shared';
 
 const ORANGE = '#FF4B22';
 
