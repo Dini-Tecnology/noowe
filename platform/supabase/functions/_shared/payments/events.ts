@@ -51,3 +51,17 @@ export function mapAsaasPaymentStatus(status: string): MappedEvent | null {
 export function isChargebackEvent(event: string): boolean {
   return event.startsWith("PAYMENT_CHARGEBACK_");
 }
+
+export function isAccountStatusEvent(event: string): boolean {
+  return event.startsWith("ACCOUNT_STATUS_");
+}
+
+// Eventos assinados no webhook de cada subconta: o que payments-webhook-asaas sabe tratar.
+export const ACCOUNT_WEBHOOK_EVENTS = [
+  "PAYMENT_CONFIRMED", "PAYMENT_RECEIVED", "PAYMENT_OVERDUE", "PAYMENT_DELETED",
+  "PAYMENT_REPROVED_BY_RISK_ANALYSIS", "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
+  "PAYMENT_REFUND_IN_PROGRESS", "PAYMENT_REFUNDED", "PAYMENT_PARTIALLY_REFUNDED",
+  "PAYMENT_CHARGEBACK_REQUESTED", "PAYMENT_CHARGEBACK_DISPUTE", "PAYMENT_AWAITING_CHARGEBACK_REVERSAL",
+  "ACCOUNT_STATUS_GENERAL_APPROVAL_APPROVED", "ACCOUNT_STATUS_GENERAL_APPROVAL_REJECTED",
+  "ACCOUNT_STATUS_GENERAL_APPROVAL_PENDING", "ACCOUNT_STATUS_GENERAL_APPROVAL_AWAITING_APPROVAL",
+];

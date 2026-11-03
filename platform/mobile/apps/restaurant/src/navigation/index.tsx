@@ -99,6 +99,7 @@ import ConfigExperienceScreen from '../screens/v2/config/ConfigExperienceScreen'
 import ConfigFloorScreen from '../screens/v2/config/ConfigFloorScreen';
 import ConfigKitchenScreen from '../screens/v2/config/ConfigKitchenScreen';
 import ConfigPaymentsScreen from '../screens/v2/config/ConfigPaymentsScreen';
+import PaymentAccountScreen from '../screens/v2/config/PaymentAccountScreen';
 import ConfigMarketplaceScreen from '../screens/v2/config/ConfigMarketplaceScreen';
 import FiscalSetupScreen from '../screens/fiscal/FiscalSetupScreen';
 import FiscalDocumentsScreen from '../screens/fiscal/FiscalDocumentsScreen';
@@ -212,6 +213,7 @@ const GuardedConfigExperience = withRoleGuard(ConfigExperienceScreen, ['owner', 
 const GuardedConfigFloor = withRoleGuard(ConfigFloorScreen, ['owner', 'manager']);
 const GuardedConfigKitchen = withRoleGuard(ConfigKitchenScreen, ['owner', 'manager']);
 const GuardedConfigPayments = withRoleGuard(ConfigPaymentsScreen, ['owner', 'manager']);
+const GuardedPaymentAccount = withRoleGuard(PaymentAccountScreen, ['owner', 'manager']);
 const GuardedConfigMarketplace = withRoleGuard(ConfigMarketplaceScreen, ['owner', 'manager']);
 const GuardedFiscalSetup = withRoleGuard(FiscalSetupScreen, ['owner', 'manager']);
 const GuardedFiscalDocuments = withRoleGuard(FiscalDocumentsScreen, ['owner', 'manager']);
@@ -542,6 +544,7 @@ function MainStack() {
       <Stack.Screen name="ConfigFloor" component={GuardedConfigFloor} options={scaleFadeScreenOptions} />
       <Stack.Screen name="ConfigKitchen" component={GuardedConfigKitchen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="ConfigPayments" component={GuardedConfigPayments} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="PaymentAccount" component={GuardedPaymentAccount} options={scaleFadeScreenOptions} />
       <Stack.Screen name="ConfigMarketplace" component={GuardedConfigMarketplace} options={scaleFadeScreenOptions} />
       <Stack.Screen name="FiscalSetup" component={GuardedFiscalSetup} options={scaleFadeScreenOptions} />
       <Stack.Screen name="FiscalDocuments" component={GuardedFiscalDocuments} options={scaleFadeScreenOptions} />

@@ -14,6 +14,15 @@ export interface AsaasPayment {
   creditCard?: { creditCardToken?: string | null; creditCardBrand?: string | null; creditCardNumber?: string | null } | null;
 }
 export interface AsaasPix { payload: string; expirationDate?: string | null }
+export type AsaasCompanyType = "MEI" | "LIMITED" | "INDIVIDUAL" | "ASSOCIATION";
+export interface AsaasAccountInput {
+  name: string; email: string; cpfCnpj: string; companyType: AsaasCompanyType; mobilePhone: string; incomeCents: number;
+  address: string; addressNumber: string; province: string; postalCode: string;
+  webhook: { url: string; email: string; authToken: string; events: string[] };
+}
+export interface AsaasAccount { id: string; walletId: string; apiKey: string }
+export interface AsaasAccountStatus { id?: string; general: string }
+export interface AsaasAccountDocument { id: string; status: string; onboardingUrl?: string | null }
 
 // Contrato mínimo usado pelas Edge Functions; permite trocar de provedor (ex.: Tap) depois.
 export interface PaymentProvider {
@@ -24,4 +33,8 @@ export interface PaymentProvider {
   getPixQrCode(apiKey: string, id: string): Promise<AsaasPix>;
   cancelCharge(apiKey: string, id: string): Promise<void>;
   refund(apiKey: string, id: string, valueCents: number, description?: string): Promise<void>;
+  createAccount(rootApiKey: string, input: AsaasAccountInput): Promise<AsaasAccount>;
+  findAccountByDocument(rootApiKey: string, cpfCnpj: string): Promise<{ id: string } | null>;
+  getAccountStatus(apiKey: string): Promise<AsaasAccountStatus>;
+  listAccountDocuments(apiKey: string): Promise<AsaasAccountDocument[]>;
 }

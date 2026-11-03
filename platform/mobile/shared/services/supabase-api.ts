@@ -332,6 +332,9 @@ export interface ItemCustomizationDraft {
 }
 
 export interface SupabaseApiAdapter {
+  // ── Conta de recebimento (Asaas) ───────────────────────────────────────────
+  getPaymentAccount(restaurantId: string): Promise<any>;
+  startPaymentAccount(restaurantId: string, account: Record<string, unknown>): Promise<any>;
   // ── Orders ──────────────────────────────────────────────────────────────────
   createOrder(data: SupabaseCreateOrderInput): Promise<any>;
   getMyOrders(): Promise<any>;
@@ -611,6 +614,23 @@ async function resolveRestaurantId(restaurantId?: string): Promise<string> {
   if (ownedError) throw ownedError;
   if (!owned?.id) throw new Error('No restaurant available for current user');
   return owned.id as string;
+}
+
+// A tela decide a mensagem pelo código que a Edge Function devolve em `error`.
+async function invokePaymentAccount(body: Record<string, unknown>) {
+  const { data, error } = await getSupabaseClient().functions.invoke('payments-account', { body });
+  if (!error) return data;
+  const context = (error as { context?: unknown }).context;
+  const json = context && typeof context === 'object' && 'json' in context
+    ? (context as { json?: () => Promise<unknown> }).json
+    : undefined;
+  const failure = typeof json === 'function'
+    ? await json.call(context).catch(() => null) as { error?: string; message?: string | null } | null
+    : null;
+  throw Object.assign(new Error(failure?.error ?? error.message), {
+    code: failure?.error,
+    providerMessage: failure?.message ?? null,
+  });
 }
 
 export const supabaseApiAdapter: SupabaseApiAdapter = {
@@ -1901,6 +1921,15 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     }
     if (data?.error) throw new Error(data.error);
     return data;
+  },
+
+  // ── Conta de recebimento (Asaas) ───────────────────────────────────────────
+  getPaymentAccount(restaurantId: string) {
+    return invokePaymentAccount({ action: 'status', restaurantId });
+  },
+
+  startPaymentAccount(restaurantId: string, account: Record<string, unknown>) {
+    return invokePaymentAccount({ action: 'start', restaurantId, account });
   },
 
   // ── Notifications ──────────────────────────────────────────────────────────
