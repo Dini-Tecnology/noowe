@@ -3,6 +3,8 @@
 **Objetivo:** quanto mais o restaurante recebe pelo app, mais crédito abate da mensalidade.
 **Depende de:** M2, M4 · **Spec:** aditivo item D · **ADRs:** 031
 
+Entrega também a consulta interna de créditos gerados, usados, expirados e a liberar.
+
 ## Critérios de aceite
 1. Índice = pago pelo app (cartão e Pix) ÷ faturamento registrado; vale fora dos dois lados; Tap só com o parâmetro ligado.
 2. Faixa e volume mínimo vêm da tabela; percentual incide sobre o preço mensal de tabela.

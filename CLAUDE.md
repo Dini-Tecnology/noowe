@@ -79,6 +79,7 @@ Estas regras não são preferências de estilo. Violá-las é um bug, mesmo que 
 | Realtime, canais e políticas RLS | `docs/arquitetura/02-realtime-e-rls.md` |
 | Flags por estabelecimento | `docs/arquitetura/03-config-service-model.md` |
 | Regras de dinheiro e arredondamento | `docs/arquitetura/04-calculo-financeiro.md` |
+| Taxas, planos e prazos comerciais da NOOWE | `docs/PARAMETROS-NOOWE.md` |
 | Decisões de produto já tomadas | `docs/decisoes/ADR-*.md` |
 | O que implementar e em que ordem | `docs/fatias/README.md` |
 

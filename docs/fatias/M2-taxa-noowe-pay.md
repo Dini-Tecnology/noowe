@@ -12,3 +12,6 @@
 6. Relatório de gorjetas separa a parte da taxa referente à gorjeta.
 7. Dinheiro e maquininha da casa não geram taxa.
 8. Estorno segue a regra da resposta 21.
+9. A cobrança guarda a taxa e a tarifa aplicadas, lidas de `private.noowe_pay_rate_bps`; meio sem taxa definida (`null`) é recusado.
+10. `private.payment_platform_config`, `private.platform_fee_bps()` e `restaurant_payment_accounts.platform_fee_bps` saem do fluxo, e o cadastro de subconta deixa de depender deles.
+11. Consulta interna de diferenças a compensar, e `private.noowe_report_payment_margin` passa a trazer taxa e tarifa.

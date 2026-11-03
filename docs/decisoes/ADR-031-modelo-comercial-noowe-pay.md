@@ -27,9 +27,10 @@
 
 ## O que o código de hoje muda
 
-- `private.payment_platform_config` (branch `claude/angry-bardeen-0c0c36`, ainda fora da `main`) guarda um percentual
-  único e `restaurant_payment_accounts.platform_fee_bps` copia esse valor. Precisa virar a tabela por meio de pagamento
-  **antes** de cadastrar a primeira subconta em produção.
+- `private.payment_platform_config` guarda um percentual único e `restaurant_payment_accounts.platform_fee_bps` copia
+  esse valor. A M1 criou `private.noowe_pay_rates`, mas a troca no fluxo de cobrança é da M2. Até lá a tabela antiga fica
+  vazia e **não deve ser preenchida**: vazia, ela recusa o cadastro de subconta, e uma comissão única cobraria errado por
+  meio de pagamento.
 - `bill_shares` e `payments-create` calculam `platform_fee_cents` por percentual sobre o valor. Passam a descontar a
   tarifa do Asaas.
 
