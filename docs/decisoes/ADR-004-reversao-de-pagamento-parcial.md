@@ -1,6 +1,6 @@
 # ADR-004 — Reversão de pagamento parcial e reabertura de conta
 
-**Status:** PROVISÓRIO — envolve dinheiro. Não aprovado na rodada de decisões de 2026-09-14; revisão humana obrigatória antes da Onda 3 (fatia G3)
+**Status:** ACEITO (2026-11-03), com as regras de `aditivo-comercial-e-pagamentos` item 3 (ver "Atualização" abaixo)
 **Origem:** spec §8.1, quarta decisão em aberto
 **Impacta:** Fatia G3 (split), Fatia N4 (pagamento e fiscal)
 
@@ -39,3 +39,15 @@ dele.
   reescrita silenciosa.
 - **Ponto que precisa de decisão humana:** a política de estorno quando o cliente já foi
   embora e o valor é a favor dele. Hoje o default deixa a pendência aberta indefinidamente.
+
+## Atualização de 03/11/2026
+
+Sem estorno automático, confirmado. Além do que está acima:
+
+- Reabrir exige motivo e **aprovação**: Gerente e Dono recebem juntos, quem decidir primeiro conclui, ninguém aprova o
+  próprio pedido. Pedem Garçom (mesas dele), Maître e Gerente. Hoje `restaurant_reopen_bill` não pede aprovação e só
+  aceita Dono e Gerente.
+- Só no mesmo dia operacional, antes do fechamento do caixa (definição na pendência 27).
+- Hoje só reabre comanda ativa em fechamento. Passa a reabrir a comanda encerrada e, com a mesa ocupada, sem mesa
+  ("comanda avulsa"). `table_sessions.table_id` é obrigatório: isso exige mudança de esquema e não pode ferir a invariante 3.
+- Estornar é ação separada ("Estornar valor"), parcial ou total, também com aprovação.

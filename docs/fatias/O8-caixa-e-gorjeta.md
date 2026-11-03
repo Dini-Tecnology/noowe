@@ -1,11 +1,15 @@
 # O8 — Caixa e gorjeta
 
 **Objetivo:** caixa em centavos, auditado e ligado a pagamentos; rateio de gorjeta.
-**Depende de:** O3 e **respostas 8–11** · **Spec:** aditivo §4, §5, §7.3 · **ADRs:** 029, 010, 004 · **Invariantes:** 1, 4, 8
+**Depende de:** O2, O3, G5 e **respostas 19, 20 e 27** · **Spec:** aditivo §4, §5, §7.3; `aditivo-comercial-e-pagamentos` itens 2, 3 e G · **ADRs:** 029, 004, 032 · **Invariantes:** 1, 4, 8
 
 ## Critérios de aceite
 1. Caixa em `bigint`; abertura com fundo de troco; sangria e reforço com motivo e responsável, auditados.
 2. Pagamentos digitais conciliam sozinhos; dinheiro lançado pelo garçom quita a parcela e a comanda.
 3. Fechamento cego compara contado e esperado; quebra acima do limite vai ao Dono.
-4. Soma das parcelas continua igual ao total em qualquer modo (teste de propriedade do ADR-001).
+4. Soma do consumo pago continua igual ao consumo total em qualquer modo (ADR-032).
 5. Fechamento do dia bloqueia com comanda aberta, gera o rateio e envia o resumo ao Dono.
+6. Retenção de 0% até o teto do regime; rateio igualitário, por pontos ou por horas; mudança vale do próximo dia operacional.
+7. Cada funcionário vê só o próprio extrato em "Minha gorjeta"; o relatório para a folha sai no fechamento; o app não paga gorjeta.
+8. Reabrir comanda paga e estornar exigem motivo e aprovação, sem estorno automático; ninguém aprova o próprio pedido.
+9. Maquininha da casa e dinheiro são registrados na comanda, sem taxa NOOWE, e abatem o saldo.

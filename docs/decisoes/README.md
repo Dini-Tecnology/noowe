@@ -15,7 +15,7 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [001](ADR-001-arredondamento-split-igual.md) | Centavos residuais distribuídos por `joined_at` | Aceito | Conta que não fecha; centavo criado ou perdido |
 | [002](ADR-002-tolerancias-fila-e-no-show.md) | 8 min fila / 15 min no-show, separados | Aceito, recalibrar em operação | Cada tela com seu próprio timer |
 | [003](ADR-003-coexistencia-de-modelos.md) | Ponto de entrada determina o modelo | Aceito | Pedido quick com sessão de mesa aberta |
-| [004](ADR-004-reversao-de-pagamento-parcial.md) | Sem estorno automático na reabertura | **Provisório** | **Vetor de fraude e descasamento fiscal** |
+| [004](ADR-004-reversao-de-pagamento-parcial.md) | Sem estorno automático na reabertura | Aceito (03/11) | **Vetor de fraude e descasamento fiscal** |
 | [005](ADR-005-credito-de-fidelidade.md) | Pontos por parcela paga, selo na retirada | Aceito | Pontos sem dono no split |
 | [006](ADR-006-convidado-sem-conta.md) | Anônimo consome; anfitrião responde | Aceito | **Saldo sem responsável** |
 | [007](ADR-007-excecao-de-lotacao.md) | `seat_count` por participante, aprovação sempre | Aceito | Mesa lotada em silêncio |
@@ -39,13 +39,15 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [026](ADR-026-atribuicao-de-mesa-e-garcom.md) | Atribuição automática de mesa e garçom | **Provisório** | Mesa sem garçom; conflito com reserva |
 | [027](ADR-027-servicos-multiplos-e-fine-por-reserva.md) | Vários serviços sem "primário"; Fine só por reserva (substitui parte do ADR-008) | **Provisório** | Fine sem trava de entrada |
 | [028](ADR-028-expedicao-e-conferencia-do-quick.md) | Expedição opcional; conferência do Quick vira a Expedição ligada (ajusta o ADR-013) | **Provisório** | Quick sem conferência por engano |
-| [029](ADR-029-taxa-gorjeta-rateio-e-caixa.md) | Taxa ou gorjeta, rateio, retenção e caixa — **bloqueado** pelas pendências 8–11 | **Provisório** | Valor cobrado errado; rateio ilegal |
+| [029](ADR-029-taxa-gorjeta-rateio-e-caixa.md) | Retenção, rateio e caixa; no-show, Tap e limite de quebra seguem em aberto | Aceito em parte | Rateio fora da convenção; caixa sem controle |
+| [031](ADR-031-modelo-comercial-noowe-pay.md) | Parâmetros NOOWE em tabela, taxa única por meio de pagamento, split em valor fixo, assinatura e créditos | Aceito no formato | Taxa no código; restaurante pagando mais que a taxa |
+| [032](ADR-032-saldo-unico-e-taxa-opcional.md) | Saldo único de consumo; taxa ou gorjeta por pagamento e opcional (substitui parte do ADR-010) | Aceito na regra | Centavo perdido ao combinar divisões |
 
 **Série O (022–029):** originada na avaliação de 28/10; perguntas ao autor em [`PENDENCIAS-perfis-workflows`](PENDENCIAS-perfis-workflows.md).
+**031 e 032** vêm do [`aditivo comercial`](../spec/aditivo-comercial-e-pagamentos.md) de 03/11. O ADR-030 (fiscal) está em branch, fora desta árvore.
 
 **Vocabulário:** os ADRs usam os nomes da spec. A tradução para o banco está em
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).
 
-**Pendente de revisão humana:** ADR-004 (estorno, documento fiscal já emitido e fraude por
-reabertura de conta), ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência), ADR-018 (troca e junção de mesas), ADR-019 (código de convite), ADR-021 (comanda como casa) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
+**Pendente de revisão humana:** ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência), ADR-018 (troca e junção de mesas), ADR-019 (código de convite), ADR-021 (comanda como casa) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
 o cliente).

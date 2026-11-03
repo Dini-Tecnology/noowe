@@ -2,6 +2,7 @@
 -- Cada bloco cobre uma regra do ADR; os critérios de aceite 11–14 da fatia Q1 saem daqui.
 begin;
 select plan(30);
+update private.dev_flags set enabled = true where key = 'simulate_order_payment';
 
 create temp table _qs(k text primary key, v uuid);
 create function pg_temp.act(p_uid uuid) returns void language sql as $$

@@ -1,13 +1,14 @@
 /* Hallmark · pre-emit critique: P5 H4 E4 S5 R4 V5 */
 /* Hallmark · macrostructure: Long Document · tone: warm utilitarian · anchor hue: orange */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Crypto from 'expo-crypto';
+import * as WebBrowser from 'expo-web-browser';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useCart } from '@/shared/contexts/CartContext';
@@ -22,15 +23,12 @@ import { formatDistance, isFarFromRestaurant, pickupPolicyText } from './quick-s
 
 const HEADER_GRADIENT = ['#FF5724', '#F97316', '#F59E0B'] as const;
 
-type PaymentMethodType = 'pix' | 'credit_card' | 'apple_pay' | 'google_pay' | 'tap_to_pay' | 'wallet';
+// Só o que o provedor cobra de verdade (ADR-020). Apple Pay, Google Pay e TAP ficam fora até existir cobrança real.
+type PaymentMethodType = 'pix' | 'credit_card';
 
 const PAYMENT_METHODS: { type: PaymentMethodType; icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
   { type: 'pix', icon: 'qr-code-outline', label: 'PIX' },
   { type: 'credit_card', icon: 'card-outline', label: 'Crédito' },
-  { type: 'apple_pay', icon: 'logo-apple', label: 'Apple Pay' },
-  { type: 'google_pay', icon: 'logo-google', label: 'Google Pay' },
-  { type: 'tap_to_pay', icon: 'flash-outline', label: 'TAP to Pay' },
-  { type: 'wallet', icon: 'wallet-outline', label: 'Carteira' },
 ];
 
 /** Dados que o carrinho coleta e o checkout envia ao servidor (ADR-013). */
@@ -40,12 +38,12 @@ export type QuickCheckoutParams = {
   pickupSlotStart?: string | null;
 };
 
-type PendingPix = { orderId: string; code: string; expiresAt: string | null };
+/** Cobrança criada e ainda não confirmada: Pix com `code`, cartão com `checkoutUrl`. */
+type PendingCharge = { orderId: string; code: string | null; checkoutUrl: string | null; expiresAt: string | null; simulated: boolean };
 
 /**
- * Skip the Line checkout uses the same intent/event boundary as a real
- * provider. The provider is simulated, but only the server confirmation can
- * release this order to the KDS.
+ * Checkout do Skip the Line: cria o pedido e a cobrança no provedor que o servidor indicar.
+ * Só a confirmação do servidor (webhook) libera o pedido para o KDS; esta tela nunca confirma nada.
  */
 export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   const params: QuickCheckoutParams = route?.params ?? {};
@@ -54,10 +52,13 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   const cart = useCart();
   const queryClient = useQueryClient();
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('pix');
-  const [usePoints, setUsePoints] = useState(false);
   const [policyAccepted, setPolicyAccepted] = useState(false);
-  const [pix, setPix] = useState<PendingPix | null>(null);
+  const [pix, setPix] = useState<PendingCharge | null>(null);
+  const [needsDocument, setNeedsDocument] = useState(false);
+  const [document, setDocument] = useState('');
   const checkoutKey = useRef(Crypto.randomUUID());
+  // Uma cobrança por forma de pagamento: repetir a mesma retoma, trocar a forma não reaproveita a errada.
+  const chargeKeys = useRef(new Map<PaymentMethodType, string>());
   const { policies } = useServiceTypeFor(cart.restaurantId, 'quick_service');
   const restaurant = useQuery({
     queryKey: ['restaurant', cart.restaurantId],
@@ -72,20 +73,15 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
     noPickupPolicy: policies?.noPickupPolicy ?? null,
   });
 
-  const loyalty = useQuery({
-    queryKey: ['loyalty'],
-    queryFn: () => customerBackend.listLoyalty(),
+  const paymentMode = useQuery({
+    queryKey: ['order-payment-mode', cart.restaurantId],
+    queryFn: () => customerBackend.getOrderPaymentMode(cart.restaurantId!),
+    enabled: !!cart.restaurantId,
   });
-  const restaurantLoyalty = loyalty.data?.find((entry) => entry.restaurantId === cart.restaurantId);
-  const pointsBalance = restaurantLoyalty?.points ?? 0;
+  const paymentUnavailable = paymentMode.data === 'unavailable';
 
-  const pointsDiscount = useMemo(() => {
-    if (!usePoints || pointsBalance <= 0) return 0;
-    // 200 pontos = R$10 de desconto, como no mockup — 1 ponto = R$0,05.
-    return Math.min(cart.total, pointsBalance * 0.05);
-  }, [usePoints, pointsBalance, cart.total]);
-
-  const total = Math.max(0, cart.total - pointsDiscount);
+  // O total cobrado é o que o servidor calcular no pedido; o carrinho é só a prévia.
+  const total = cart.total;
 
   const place = useMutation({
     mutationFn: async () => {
@@ -101,23 +97,29 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
         pickupPolicyAccepted: policyAccepted,
         items: orderItems,
       });
+      if (!chargeKeys.current.has(selectedMethod)) chargeKeys.current.set(selectedMethod, Crypto.randomUUID());
       const payment = await customerBackend.startPayment({
         orderId: order.id,
+        restaurantId: cart.restaurantId!,
         paymentMethod: selectedMethod,
-        idempotencyKey: checkoutKey.current,
+        idempotencyKey: chargeKeys.current.get(selectedMethod)!,
+        payerCpfCnpj: document.replace(/\D/g, '') || undefined,
       });
       return { order, payment };
     },
     onSuccess: ({ order, payment }) => {
+      setNeedsDocument(false);
       if (payment.paymentStatus === 'confirmed') return finish(order.id);
-      if (payment.paymentStatus === 'pending' && payment.pixCode) {
-        setPix({ orderId: order.id, code: payment.pixCode, expiresAt: payment.paymentExpiresAt });
+      if (payment.paymentStatus === 'pending' && (payment.pixCode || payment.checkoutUrl)) {
+        setPix({ orderId: order.id, code: payment.pixCode, checkoutUrl: payment.checkoutUrl, expiresAt: payment.paymentExpiresAt, simulated: payment.simulated });
+        if (!payment.pixCode && payment.checkoutUrl) void WebBrowser.openBrowserAsync(payment.checkoutUrl).catch(() => undefined);
         return undefined;
       }
       Alert.alert('Pagamento não confirmado', 'O pagamento ainda não foi confirmado. Tente novamente.');
       return undefined;
     },
     onError: (error: unknown) => {
+      if ((error as { code?: string }).code === 'payer_document_required') { setNeedsDocument(true); return; }
       const kind = quickOrderErrorKind(error);
       const existingOrderId = duplicateOrderId(error);
       if (kind === 'duplicate' && existingOrderId) {
@@ -155,6 +157,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   const resetPix = useCallback(() => {
     // A chave de idempotência acompanha o pedido: um novo pedido precisa de uma nova chave.
     checkoutKey.current = Crypto.randomUUID();
+    chargeKeys.current.clear();
     setPix(null);
   }, []);
   const pixExpired = !!pix && pixOrder.data?.fulfillmentStatus === 'cancelled';
@@ -186,24 +189,6 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
         headerTotalLabel: { fontSize: 11, color: 'rgba(255,255,255,0.8)' },
         headerTotalValue: { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
         body: { paddingHorizontal: 16, gap: 16 },
-        loyaltyCard: {
-          flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16,
-          backgroundColor: colors.card, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.08, shadowRadius: 12, elevation: 4,
-        },
-        loyaltyBadge: {
-          width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(234, 88, 12, 0.12)',
-          alignItems: 'center', justifyContent: 'center',
-        },
-        loyaltyTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground },
-        loyaltySub: { fontSize: 12, color: colors.foregroundSecondary, marginTop: 2 },
-        loyaltyToggle: {
-          paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12,
-          borderWidth: 1.5, borderColor: colors.primary,
-        },
-        loyaltyToggleActive: { backgroundColor: colors.primary },
-        loyaltyToggleText: { fontSize: 12, fontWeight: '700', color: colors.primary },
-        loyaltyToggleTextActive: { color: colors.primaryForeground },
         sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground },
         methodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
         methodItem: {
@@ -221,12 +206,12 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
         policyText: { fontSize: 13, color: colors.foregroundSecondary, lineHeight: 19 },
         policyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
         policyAccept: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.foreground },
+        input: { height: 48, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, backgroundColor: colors.backgroundTertiary, color: colors.foreground },
         summaryCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, gap: 8 },
         summaryTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 4 },
         summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
         summaryLabel: { fontSize: 13, color: colors.foregroundSecondary },
         summaryValue: { fontSize: 13, fontWeight: '600', color: colors.foreground },
-        discountValue: { fontSize: 13, fontWeight: '600', color: colors.success },
         divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: 4 },
         totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
         totalLabel: { fontSize: 16, fontWeight: '700', color: colors.foreground },
@@ -261,31 +246,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
             </View>
           </LinearGradient>
 
-          {/* The loyalty card tucks into the header; without it the section
-              title needs room below the gradient instead. */}
-          <View style={[styles.body, { marginTop: pointsBalance > 0 ? -8 : 16 }]}>
-            {pointsBalance > 0 && (
-              <View style={styles.loyaltyCard}>
-                <View style={styles.loyaltyBadge}>
-                  <Ionicons name="ribbon-outline" size={20} color={colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.loyaltyTitle}>Você tem {pointsBalance} pontos</Text>
-                  <Text style={styles.loyaltySub}>Use pontos para descontar no total</Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.loyaltyToggle, usePoints && styles.loyaltyToggleActive]}
-                  onPress={() => setUsePoints((v) => !v)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: usePoints }}
-                >
-                  <Text style={[styles.loyaltyToggleText, usePoints && styles.loyaltyToggleTextActive]}>
-                    {usePoints ? 'Usando' : 'Usar'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
+          <View style={[styles.body, { marginTop: 16 }]}>
             <View style={{ gap: 12 }}>
               <Text style={styles.sectionTitle}>Forma de pagamento</Text>
               <View style={styles.methodGrid}>
@@ -308,17 +269,34 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
               </View>
             </View>
 
+            {needsDocument && (
+              <View style={styles.policyCard}>
+                <Text style={styles.policyText}>Informe seu CPF para gerar a cobrança (só na primeira vez).</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="CPF"
+                  placeholderTextColor={colors.foregroundMuted}
+                  keyboardType="number-pad"
+                  maxLength={14}
+                  value={document}
+                  onChangeText={setDocument}
+                  accessibilityLabel="CPF do pagador"
+                />
+              </View>
+            )}
+
+            {paymentUnavailable && (
+              <View style={styles.warnCard} accessibilityRole="alert">
+                <Ionicons name="alert-circle-outline" size={18} color={colors.warning ?? colors.primary} />
+                <Text style={styles.warnText}>Este restaurante ainda não aceita pagamento online.</Text>
+              </View>
+            )}
+
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Resumo</Text>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal ({cart.itemCount} {cart.itemCount === 1 ? 'item' : 'itens'})</Text>
                 <Text style={styles.summaryValue}>{money(cart.total)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Desconto pontos</Text>
-                <Text style={pointsDiscount > 0 ? styles.discountValue : styles.summaryValue}>
-                  {pointsDiscount > 0 ? `- ${money(pointsDiscount)}` : money(0)}
-                </Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.totalRow}>
@@ -365,9 +343,21 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
+            ) : pix && !pix.code ? (
+              <View style={styles.policyCard}>
+                <Text style={styles.sectionTitle}>Aguardando confirmação</Text>
+                <Text style={styles.policyText}>O pedido vai para a cozinha assim que o pagamento do cartão for confirmado. Esta tela atualiza sozinha.</Text>
+                {pix.checkoutUrl && (
+                  <TouchableOpacity style={styles.cta} onPress={() => void WebBrowser.openBrowserAsync(pix.checkoutUrl!)} accessibilityRole="button" accessibilityLabel="Abrir pagamento">
+                    <LinearGradient colors={HEADER_GRADIENT as unknown as [string, string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.ctaGradient}>
+                      <Text style={styles.ctaText}>Abrir pagamento</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+              </View>
             ) : pix ? (
               <PixPendingPanel
-                code={pix.code}
+                code={pix.code!}
                 expiresAt={pix.expiresAt}
                 checking={pixOrder.isFetching}
                 onCheck={() => {
@@ -377,14 +367,14 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
                     }
                   });
                 }}
-                onSimulatePaid={__DEV__ ? () => simulatePixPaid.mutate() : undefined}
+                onSimulatePaid={__DEV__ && pix.simulated ? () => simulatePixPaid.mutate() : undefined}
                 onExpired={() => { void pixOrder.refetch(); }}
               />
             ) : (
             <TouchableOpacity
-              style={[styles.cta, (place.isPending || !cart.items.length || !policyAccepted) && styles.ctaDisabled]}
+              style={[styles.cta, (place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable) && styles.ctaDisabled]}
               onPress={() => place.mutate()}
-              disabled={place.isPending || !cart.items.length || !policyAccepted}
+              disabled={place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable}
               activeOpacity={0.9}
               accessibilityRole="button"
               accessibilityLabel="Confirmar pagamento"
@@ -392,7 +382,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
               <LinearGradient colors={HEADER_GRADIENT as unknown as [string, string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.ctaGradient}>
                 <Ionicons name="card" size={18} color="#FFFFFF" />
                 <Text style={styles.ctaText}>
-                  {place.isPending ? 'Confirmando...' : selectedMethod === 'pix' ? 'Gerar Pix' : 'Confirmar Pagamento'}
+                  {place.isPending ? 'Gerando cobrança...' : selectedMethod === 'pix' ? 'Gerar Pix' : 'Pagar com cartão'}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>

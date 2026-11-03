@@ -1,6 +1,7 @@
 -- Contract V2 and the critical Quick Service payment/quality/pickup invariants.
 begin;
 select plan(6);
+update private.dev_flags set enabled = true where key in ('simulate_order_payment', 'simulate_share_payment');
 
 create temp table _runtime(k text primary key,v uuid);
 create function pg_temp.act(p_uid uuid) returns void language sql as $$

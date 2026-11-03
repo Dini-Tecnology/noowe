@@ -83,6 +83,18 @@ function mapPlan(data: unknown): SplitPlan {
 
 export type SplitParams = { amountCents?: number };
 
+/** Cria a cobrança no provedor. A resposta nunca significa "pago": quem confirma é o webhook. */
+export async function invokePaymentsCreate(body: Record<string, unknown>): Promise<unknown> {
+  const { data, error } = await getSupabaseClient().functions.invoke('payments-create', { body });
+  if (error) {
+    const response = (error as { context?: Response }).context;
+    const parsed = response && typeof response.json === 'function' ? await response.json().catch(() => null) : null;
+    const code = (parsed as { error?: string } | null)?.error;
+    throw Object.assign(new Error(PAYMENT_ERRORS[code ?? ''] ?? 'Não foi possível criar a cobrança. Tente novamente.'), { code });
+  }
+  return data;
+}
+
 export const billShares = {
   async preview(tableSessionId: string, mode: SplitMode, params: SplitParams = {}): Promise<SplitPlan> {
     return mapPlan(await rpc('customer_bill_split_preview', { p_table_session_id: tableSessionId, p_mode: mode, p_params: params }));
@@ -141,17 +153,14 @@ export const billShares = {
     /** Só com cartão: salvar o cartão digitado no Asaas (consentimento) ou usar um cartão já salvo. */
     saveCard?: boolean; paymentMethodId?: string;
   }): Promise<SharePayment> {
-    const { data, error } = await getSupabaseClient().functions.invoke('payments-create', {
-      body: { purpose: 'bill_share', targetId: input.shareId, method: input.method, tipCents: input.tipCents,
-        idempotencyKey: input.idempotencyKey, payerCpfCnpj: input.payerCpfCnpj,
-        ...(input.saveCard ? { saveCard: true } : {}), ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId } : {}) },
-    });
-    if (error) {
-      const response = (error as { context?: Response }).context;
-      const body = response && typeof response.json === 'function' ? await response.json().catch(() => null) : null;
-      const code = (body as { error?: string } | null)?.error;
-      throw Object.assign(new Error(PAYMENT_ERRORS[code ?? ''] ?? 'Não foi possível criar a cobrança. Tente novamente.'), { code });
+    // Provedor simulado só com a flag de desenvolvimento do servidor; o normal é a cobrança real.
+    if (await rpc('customer_share_payment_mode', { p_share_id: input.shareId }) === 'simulated') {
+      await rpc('customer_pay_share', { p_share_id: input.shareId, p_method: input.method, p_idempotency_key: input.idempotencyKey, p_tip_cents: input.tipCents });
+      return { paymentId: null, status: 'confirmed', amountCents: 0, expiresAt: null, checkoutUrl: null, pix: null, alreadyPaid: false, savedCard: false };
     }
+    const data = await invokePaymentsCreate({ purpose: 'bill_share', targetId: input.shareId, method: input.method, tipCents: input.tipCents,
+      idempotencyKey: input.idempotencyKey, payerCpfCnpj: input.payerCpfCnpj,
+      ...(input.saveCard ? { saveCard: true } : {}), ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId } : {}) });
     const raw = obj(data);
     const pix = obj(raw.pix);
     return {
@@ -183,11 +192,11 @@ export const billShares = {
   },
 };
 
-const PAYMENT_ERRORS: Record<string, string> = {
+export const PAYMENT_ERRORS: Record<string, string> = {
   payer_document_required: 'Informe seu CPF para gerar a cobrança.',
   payments_unavailable: 'Este restaurante ainda não aceita pagamento online.',
-  payment_not_allowed: 'Esta parcela não pode ser paga agora. Atualize a conta.',
-  not_found: 'Parcela não encontrada.',
+  payment_not_allowed: 'Este pagamento não pode ser feito agora. Atualize a tela.',
+  not_found: 'Cobrança não encontrada.',
   card_not_found: 'Cartão salvo não encontrado. Escolha outro cartão.',
   invalid_request: 'Dados de pagamento inválidos.',
   provider_unavailable: 'O provedor de pagamento está indisponível. Tente novamente em instantes.',
