@@ -14,11 +14,16 @@ Notifications.setNotificationHandler({
   }),
 });
 
+let lastDevicePushToken: unknown = null;
+
 /**
  * `askPermission: false` só registra o token quando o usuário já autorizou. A permissão é pedida na
  * abertura da comanda (ADR-021: "Para avisarmos sobre seus pedidos e sua mesa"), não no boot do app.
+ * `devicePushToken` é o token que o listener já recebeu: quem o informa não pode voltar ao nativo.
  */
-export async function registerCustomerPushToken(options: { askPermission?: boolean } = {}): Promise<void> {
+export async function registerCustomerPushToken(
+  options: { askPermission?: boolean; devicePushToken?: Notifications.DevicePushToken } = {},
+): Promise<void> {
   const { askPermission = true } = options;
   if (!Device.isDevice || Platform.OS === 'web') return;
   const { data } = await getSupabaseClient().auth.getSession();
@@ -41,7 +46,9 @@ export async function registerCustomerPushToken(options: { askPermission?: boole
   const provider = 'expo';
   const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
   if (!projectId) throw new Error('EAS projectId is required for push notifications');
-  const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+  const devicePushToken = options.devicePushToken ?? (await Notifications.getDevicePushTokenAsync());
+  lastDevicePushToken = devicePushToken.data;
+  const token = (await Notifications.getExpoPushTokenAsync({ projectId, devicePushToken })).data;
   await customerBackend.registerPushToken(token, Platform.OS as 'ios' | 'android', {
     provider,
     deviceName: Device.deviceName,
@@ -52,9 +59,11 @@ export async function registerCustomerPushToken(options: { askPermission?: boole
 
 export function subscribeCustomerPushTokenChanges() {
   if (!Device.isDevice || Platform.OS === 'web') return () => undefined;
-  const subscription = Notifications.addPushTokenListener(() => {
-    // Re-resolve the Expo token whenever the underlying native token rotates.
-    void registerCustomerPushToken({ askPermission: false });
+  const subscription = Notifications.addPushTokenListener((devicePushToken) => {
+    // `getDevicePushTokenAsync` emite este evento a cada chamada, mesmo com o token igual. Chamá-lo
+    // daqui, direto ou por `getExpoPushTokenAsync` sem `devicePushToken`, vira loop infinito.
+    if (devicePushToken.data === lastDevicePushToken) return;
+    void registerCustomerPushToken({ askPermission: false, devicePushToken }).catch(() => undefined);
   });
   return () => subscription.remove();
 }

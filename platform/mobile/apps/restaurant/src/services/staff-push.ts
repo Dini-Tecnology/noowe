@@ -26,8 +26,13 @@ export function staffPushRestaurantId(data: Record<string, unknown> | null | und
   return typeof data?.restaurant_id === 'string' ? data.restaurant_id : null;
 }
 
-/** Registra o token Expo desta equipe. A RPC não restringe papel: serve para qualquer usuário logado. */
-export async function registerStaffPushToken(): Promise<void> {
+let lastDevicePushToken: unknown = null;
+
+/**
+ * Registra o token Expo desta equipe. A RPC não restringe papel: serve para qualquer usuário logado.
+ * `receivedDevicePushToken` é o token que o listener já recebeu: quem o informa não pode voltar ao nativo.
+ */
+export async function registerStaffPushToken(receivedDevicePushToken?: Notifications.DevicePushToken): Promise<void> {
   if (!Device.isDevice || Platform.OS === 'web') return;
   const { data } = await getSupabaseClient().auth.getSession();
   if (!data.session) return;
@@ -46,7 +51,9 @@ export async function registerStaffPushToken(): Promise<void> {
 
   const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
   if (!projectId) throw new Error('EAS projectId is required for push notifications');
-  const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+  const devicePushToken = receivedDevicePushToken ?? (await Notifications.getDevicePushTokenAsync());
+  lastDevicePushToken = devicePushToken.data;
+  const token = (await Notifications.getExpoPushTokenAsync({ projectId, devicePushToken })).data;
   const { error } = await getSupabaseClient().rpc('customer_register_push_token', {
     p_token: token,
     p_platform: Platform.OS,
@@ -57,8 +64,11 @@ export async function registerStaffPushToken(): Promise<void> {
 
 export function subscribeStaffPushTokenChanges(): () => void {
   if (!Device.isDevice || Platform.OS === 'web') return () => undefined;
-  const subscription = Notifications.addPushTokenListener(() => {
-    void registerStaffPushToken().catch(() => undefined);
+  const subscription = Notifications.addPushTokenListener((devicePushToken) => {
+    // `getDevicePushTokenAsync` emite este evento a cada chamada, mesmo com o token igual. Chamá-lo
+    // daqui, direto ou por `getExpoPushTokenAsync` sem `devicePushToken`, vira loop infinito.
+    if (devicePushToken.data === lastDevicePushToken) return;
+    void registerStaffPushToken(devicePushToken).catch(() => undefined);
   });
   return () => subscription.remove();
 }

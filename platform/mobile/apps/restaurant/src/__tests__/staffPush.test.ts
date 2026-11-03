@@ -12,20 +12,40 @@ jest.mock('expo-device', () => ({
 }));
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { extra: { eas: { projectId: 'p1' } } } } }));
 const mockGetPermissions = jest.fn();
+const mockGetDeviceToken = jest.fn();
 const mockGetToken = jest.fn();
+let mockTokenListener: ((token: { type: string; data: string }) => void) | null = null;
+// Como no expo-notifications 0.32: o nativo emite `onDevicePushToken` a cada chamada, mesmo com o token
+// igual, e `getExpoPushTokenAsync` só chama o nativo quando não recebe `devicePushToken`.
+const MAX_NATIVE_CALLS = 25;
+const mockNativeDeviceToken = async () => {
+  mockGetDeviceToken();
+  const token = { type: 'ios', data: 'apns-1' };
+  // O limite só impede que a regressão trave a suíte: ela falha na contagem, não por timeout.
+  if (mockGetDeviceToken.mock.calls.length <= MAX_NATIVE_CALLS) setTimeout(() => mockTokenListener?.(token), 0);
+  return token;
+};
 jest.mock('expo-notifications', () => ({
   getPermissionsAsync: (...a: unknown[]) => mockGetPermissions(...a),
   requestPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'denied' })),
-  getExpoPushTokenAsync: (...a: unknown[]) => mockGetToken(...a),
+  getDevicePushTokenAsync: () => mockNativeDeviceToken(),
+  getExpoPushTokenAsync: async (options: { devicePushToken?: unknown }) => {
+    if (!options.devicePushToken) await mockNativeDeviceToken();
+    return mockGetToken(options);
+  },
   setNotificationChannelAsync: jest.fn(),
-  addPushTokenListener: jest.fn(() => ({ remove: jest.fn() })),
+  addPushTokenListener: jest.fn((listener: typeof mockTokenListener) => {
+    mockTokenListener = listener;
+    return { remove: () => { mockTokenListener = null; } };
+  }),
   AndroidImportance: { HIGH: 4 },
 }));
 
 import * as Device from 'expo-device';
-import { registerStaffPushToken, staffPushRoute } from '../services/staff-push';
+import { registerStaffPushToken, staffPushRoute, subscribeStaffPushTokenChanges } from '../services/staff-push';
 
 const mockDevice = Device as unknown as { isDevice: boolean };
+const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
 describe('staffPushRoute', () => {
   it('solicitação nova abre a Lotação', () => {
@@ -66,5 +86,42 @@ describe('registerStaffPushToken', () => {
     mockGetPermissions.mockResolvedValueOnce({ status: 'denied' });
     await registerStaffPushToken();
     expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  describe('com o listener de token ativo', () => {
+    let unsubscribe: () => void;
+    beforeEach(() => { unsubscribe = subscribeStaffPushTokenChanges(); });
+    afterEach(() => unsubscribe());
+
+    it('abrir o app registra o token uma vez, sem loop com o listener', async () => {
+      await registerStaffPushToken();
+      await settle();
+      expect(mockGetDeviceToken).toHaveBeenCalledTimes(1);
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+    });
+
+    it('token novo vindo do listener é registrado sem voltar ao nativo', async () => {
+      await registerStaffPushToken();
+      await settle();
+      jest.clearAllMocks();
+
+      mockTokenListener?.({ type: 'ios', data: 'apns-2' });
+      await settle();
+
+      expect(mockGetDeviceToken).not.toHaveBeenCalled();
+      expect(mockGetToken).toHaveBeenCalledWith(expect.objectContaining({ devicePushToken: { type: 'ios', data: 'apns-2' } }));
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+    });
+
+    it('o evento repetido com o mesmo token não registra de novo', async () => {
+      await registerStaffPushToken();
+      await settle();
+      jest.clearAllMocks();
+
+      mockTokenListener?.({ type: 'ios', data: 'apns-1' });
+      await settle();
+
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
   });
 });
