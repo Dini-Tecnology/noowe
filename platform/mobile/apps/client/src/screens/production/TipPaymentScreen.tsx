@@ -25,7 +25,6 @@ const PAYMENT_METHODS: { id: PaymentMethodType; label: string; icon: React.Compo
   { id: 'credit_card', label: 'Crédito', icon: 'card-outline' },
   { id: 'apple_pay', label: 'Apple Pay', icon: 'logo-apple' },
   { id: 'google_pay', label: 'Google Pay', icon: 'logo-google' },
-  { id: 'tap_to_pay', label: 'TAP to Pay', icon: 'flash-outline' },
   { id: 'wallet', label: 'Carteira', icon: 'wallet-outline' },
 ];
 

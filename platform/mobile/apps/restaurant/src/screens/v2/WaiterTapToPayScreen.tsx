@@ -1,3 +1,4 @@
+// Fora da navegação até a T1 (docs/fatias/T1-tap-to-pay.md): esta tela registra o pagamento sem cobrar de verdade.
 import React, { useMemo, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { Text } from 'react-native-paper';

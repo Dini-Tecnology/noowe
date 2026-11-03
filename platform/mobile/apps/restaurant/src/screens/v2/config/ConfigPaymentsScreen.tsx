@@ -5,7 +5,6 @@ import { useNavigation } from '@react-navigation/native';
 import {
   ChevronRight,
   CreditCard,
-  FingerprintPattern,
   Heart,
   Minus,
   Percent,
@@ -32,7 +31,7 @@ export const DEFAULT_PAYMENT_METHODS: PaymentMethods = {
   cash: false,
   applePay: true,
   googlePay: true,
-  tapToPay: true,
+  tapToPay: false,
   pixKey: '',
   feePercent: 10,
   serviceFeeEnabled: true,
@@ -45,7 +44,7 @@ export const DEFAULT_PAYMENT_METHODS: PaymentMethods = {
   splitFixed: true,
 };
 
-type MethodKey = 'creditCard' | 'debitCard' | 'pix' | 'applePay' | 'googlePay' | 'tapToPay';
+type MethodKey = 'creditCard' | 'debitCard' | 'pix' | 'applePay' | 'googlePay';
 
 const METHOD_GRID: {
   key: MethodKey;
@@ -58,7 +57,6 @@ const METHOD_GRID: {
   { key: 'pix', label: 'PIX', Icon: CreditCard, iconColor: '#16A34A' },
   { key: 'applePay', label: 'Apple Pay', Icon: Smartphone, iconColor: '#111827' },
   { key: 'googlePay', label: 'Google Pay', Icon: Smartphone, iconColor: '#CA8A04' },
-  { key: 'tapToPay', label: 'TAP to Pay', Icon: FingerprintPattern, iconColor: '#EA580C' },
 ];
 
 const SPLIT_ITEMS: {

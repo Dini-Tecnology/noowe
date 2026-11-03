@@ -1769,7 +1769,6 @@ function WaiterContent({
 }) {
   // Deep utility views kept reachable programmatically (not part of the 4-tab nav).
   if (view === 'waiter-assistance') return <WaiterAssistanceView colors={colors} />;
-  if (view === 'waiter-tap-to-pay') return <WaiterTapToPayView colors={colors} />;
   if (view === 'waiter-order-management') return <WaiterOrdersView colors={colors} />;
   if (view === 'waiter-tips') return <WaiterTipsView colors={colors} />;
   if (view === 'waiter-settings') return <PersonalSettingsView />;
@@ -2762,21 +2761,6 @@ function WaiterChargeBody({
 
   return (
     <>
-      <TouchableOpacity
-        onPress={() => navigation.navigate('WaiterTapToPay')}
-        activeOpacity={0.85}
-        style={[styles.waiterTapToPayCta, { backgroundColor: colors.primary }]}
-      >
-        <View style={styles.waiterTapToPayIcon}>
-          <CreditCardIcon size={20} color="#FFF" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.waiterTapToPayTitle}>Tap to Pay</Text>
-          <Text style={styles.waiterTapToPaySub}>Digite um valor e cobre por aproximação</Text>
-        </View>
-        <Text style={styles.waiterTapToPayArrow}>→</Text>
-      </TouchableOpacity>
-
       <View style={[styles.tipBanner, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }]}>
         <Text style={[styles.tipBannerText, { color: '#EA580C', fontWeight: '800' }]}>Cobrança inteligente</Text>
         <Text style={[styles.tipBannerText, { color: '#C2410C', fontWeight: '500' }]}>
@@ -2872,24 +2856,6 @@ function WaiterChargeBody({
         </View>
       </Modal>
     </>
-  );
-}
-
-function WaiterTapToPayView({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const navigation = useNavigation<any>();
-  return (
-    <View style={styles.section}>
-      <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center' }]}>
-        <Phone size={54} color={colors.primary} />
-        <Text style={[styles.panelTitle, { color: colors.foreground, marginTop: 14 }]}>Tap to Pay</Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('WaiterTapToPay')}
-          style={[styles.actionBtn, { backgroundColor: colors.primary, alignSelf: 'stretch' }]}
-        >
-          <Text style={{ color: '#FFF', fontWeight: '800', textAlign: 'center' }}>Abrir cobrança por aproximação</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
   );
 }
 
@@ -3659,11 +3625,6 @@ const styles = StyleSheet.create({
   waiterMethodBtn: { width: '47%', minHeight: 48, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   waiterMethodBtnText: { fontSize: 14, fontWeight: '800' },
   waiterModalCancel: { marginTop: 16, alignItems: 'center', paddingVertical: 10 },
-  waiterTapToPayCta: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, padding: 14 },
-  waiterTapToPayIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' },
-  waiterTapToPayTitle: { color: '#FFF', fontSize: 15, fontWeight: '800' },
-  waiterTapToPaySub: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 1 },
-  waiterTapToPayArrow: { color: '#FFF', fontSize: 20, fontWeight: '800' },
   waiterOrderActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   waiterOrderPrimary: { flex: 1, minHeight: 40, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   waiterOrderPrimaryText: { color: '#FFF', fontSize: 13, fontWeight: '800' },

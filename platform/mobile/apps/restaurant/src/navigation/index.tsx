@@ -74,7 +74,6 @@ import PromotionsScreen from '../screens/v2/PromotionsScreen';
 import LoyaltyScreen from '../screens/v2/LoyaltyScreen';
 import RoleDashboardScreen from '../screens/v2/RoleDashboardScreen';
 import WaiterScreen from '../screens/v2/WaiterScreen';
-import WaiterTapToPayScreen from '../screens/v2/WaiterTapToPayScreen';
 import MaitreScreen from '../screens/v2/MaitreScreen';
 import QRGeneratorScreen from '../screens/v2/QRGeneratorScreen';
 import QRBatchScreen from '../screens/v2/QRBatchScreen';
@@ -218,7 +217,6 @@ const GuardedConfigMarketplace = withRoleGuard(ConfigMarketplaceScreen, ['owner'
 const GuardedFiscalSetup = withRoleGuard(FiscalSetupScreen, ['owner', 'manager']);
 const GuardedFiscalDocuments = withRoleGuard(FiscalDocumentsScreen, ['owner', 'manager']);
 const GuardedWaiter = withRoleGuard(WaiterScreen, ['owner', 'manager', 'waiter', 'maitre']);
-const GuardedWaiterTapToPay = withRoleGuard(WaiterTapToPayScreen, ['owner', 'manager', 'waiter']);
 const GuardedBarKDS = withRoleGuard(BarKDSScreen, ['owner', 'manager', 'barman', 'chef']);
 // Configuração do Quick muda regras de dinheiro (tolerância, estorno): só dono e gerente.
 const GuardedQuickService = withRoleGuard(QuickServiceScreen, ['owner', 'manager']);
@@ -516,7 +514,6 @@ function MainStack() {
       <Stack.Screen name="Loyalty" component={LoyaltyScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RoleDashboard" component={RoleDashboardScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Waiter" component={JourneyWaiter} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="WaiterTapToPay" component={GuardedWaiterTapToPay} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Maitre" component={JourneyMaitre} options={scaleFadeScreenOptions} />
       <Stack.Screen name="BarKDS" component={GuardedBarKDS} options={scaleFadeScreenOptions} />
       <Stack.Screen name="QRGenerator" component={GuardedQRGenerator} options={scaleFadeScreenOptions} />

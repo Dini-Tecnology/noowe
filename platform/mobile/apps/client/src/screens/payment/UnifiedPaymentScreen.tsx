@@ -55,7 +55,7 @@ const GRID_GAP = 10;
 const GRID_COLUMNS = 3;
 const GRID_ITEM_WIDTH = (SCREEN_WIDTH - 32 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
 
-type PaymentMethodType = 'pix' | 'credit' | 'apple' | 'google' | 'tap' | 'wallet';
+type PaymentMethodType = 'pix' | 'credit' | 'apple' | 'google' | 'wallet';
 type ActiveTab = 'pay' | 'split' | 'tip';
 const TIP_OPTIONS = [0, 10, 15, 20];
 
@@ -160,7 +160,6 @@ const PAYMENT_METHODS: Array<{
   { type: 'credit', icon: 'credit-card' },
   { type: 'apple', icon: 'apple', platform: 'ios' },
   { type: 'google', icon: 'google', platform: 'android' },
-  { type: 'tap', icon: 'contactless-payment', isNew: true },
   { type: 'wallet', icon: 'wallet' },
 ];
 
@@ -355,9 +354,6 @@ export default function UnifiedPaymentScreen() {
           break;
         case 'google':
           paymentData.payment_method = 'google_pay';
-          break;
-        case 'tap':
-          paymentData.payment_method = 'tap_to_pay';
           break;
         case 'wallet':
           paymentData.payment_method = 'wallet';

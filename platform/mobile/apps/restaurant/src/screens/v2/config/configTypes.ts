@@ -457,7 +457,7 @@ export function calculateFiscalProgress(fiscal: { config: { hasToken?: boolean }
 export function calculatePaymentsProgress(methods: Record<string, unknown> | null | undefined): number {
   if (!methods || typeof methods !== 'object') return 0;
 
-  const methodKeys = ['creditCard', 'debitCard', 'pix', 'applePay', 'googlePay', 'tapToPay', 'cash'] as const;
+  const methodKeys = ['creditCard', 'debitCard', 'pix', 'applePay', 'googlePay', 'cash'] as const;
   const enabledMethods = methodKeys.filter((key) => Boolean(methods[key])).length;
   if (enabledMethods === 0) return 15;
 
