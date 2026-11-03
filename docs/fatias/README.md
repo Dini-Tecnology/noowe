@@ -67,7 +67,7 @@ porta de entrada produz um check-in que a constraint do banco vai rejeitar.
 ## Série O — orquestração da operação (aditivo de 28/10/2026)
 
 Origem: [`docs/spec/aditivo-perfis-e-workflows.md`](../spec/aditivo-perfis-e-workflows.md). Ordem: O0 → O1 → O2 → {O3, O7} → O4, O5 → O6, O8, O9 → O10.
-Pendências do autor em [`PENDENCIAS-perfis-workflows`](../decisoes/PENDENCIAS-perfis-workflows.md); **O8 só começa depois das respostas 8–11**.
+Pendências do autor em [`PENDENCIAS-perfis-workflows`](../decisoes/PENDENCIAS-perfis-workflows.md); **O8 só começa depois das respostas 19, 20 e 27**.
 
 | # | Fatia | Depende de |
 |---|---|---|
@@ -79,9 +79,25 @@ Pendências do autor em [`PENDENCIAS-perfis-workflows`](../decisoes/PENDENCIAS-p
 | [O5](O5-atribuicao-automatica.md) | Atribuição automática de mesa e garçom | O3 |
 | [O6](O6-portas-de-entrada.md) | Portas de entrada por serviço | O2, O5 |
 | [O7](O7-cozinha-e-balcao.md) | Cozinha, Expedição e Balcão | O1, O2 |
-| [O8](O8-caixa-e-gorjeta.md) | Caixa e gorjeta | O3 + respostas 8–11 |
+| [O8](O8-caixa-e-gorjeta.md) | Caixa e gorjeta | O2, O3, G5 + respostas 19, 20, 27 |
 | [O9](O9-central-de-configuracao.md) | Central de Configuração | O5–O8 |
 | [O10](O10-inteligencia-operacional.md) | Inteligência operacional | O5–O7 |
+
+## Série M — modelo comercial e pagamentos (aditivo de 03/11/2026)
+
+Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercial-e-pagamentos.md). Valores provisórios; o formato está decidido.
+
+| # | Fatia | Depende de |
+|---|---|---|
+| [M1](M1-parametros-noowe.md) | Parâmetros NOOWE | — |
+| [G5](G5-saldo-unico.md) | Saldo único e taxa ou gorjeta opcional | G3, G4 + respostas 17, 18 |
+| [M2](M2-taxa-noowe-pay.md) | Taxa NOOWE Pay, split e extrato | M1, N4, spike + respostas 21, 22 |
+| [M3](M3-taxa-de-conveniencia.md) | Taxa de conveniência | M1, M2, Q1 + resposta 28 |
+| [M4](M4-assinatura.md) | Assinatura e Módulos e plano | M1, O3 + respostas 23–26, 28 |
+| [M5](M5-creditos-noowe-pay.md) | Créditos NOOWE Pay | M2, M4 |
+| [M6](M6-codigos-promocionais.md) | Códigos promocionais NOOWE | M4, M5 |
+| [P3](P3-cupons-do-restaurante.md) | Cupons do restaurante | G5, P2, O3 |
+| [V1](V1-vale-refeicao.md) | Vale-refeição | G5, M2 |
 
 ## Correspondência com o faseamento da spec (§8)
 
