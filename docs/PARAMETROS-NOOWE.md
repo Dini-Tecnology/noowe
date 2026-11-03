@@ -61,10 +61,11 @@ Tabela `noowe_convenience_fees`. Campos: `flow`, `restaurant_id`, `fee_cents`, `
 
 | Fluxo (`flow`) | Valor atual |
 |---|---|
-| `pickup` (retirada sem fila) | 99 (R$ 0,99) |
-| `scheduled` (pedido agendado) | 99 (R$ 0,99) |
+| `pickup` (retirada sem fila) | 0 (R$ 0), desligada (`enabled = false`) |
+| `scheduled` (pedido agendado) | 0 (R$ 0), desligada (`enabled = false`) |
 
-Fluxo fora da tabela não cobra. O padrão e o valor por restaurante seguem a mesma regra da taxa NOOWE Pay.
+**Desligada até o contador confirmar** o formato da nota e a passagem pela conta do restaurante (pendência 38). O fluxo fica
+pronto: para ligar, troque `fee_cents` (o provisório era 99) e `enabled`. Fluxo fora da tabela não cobra. O padrão e o valor por restaurante seguem a mesma regra da taxa NOOWE Pay.
 
 ## Planos
 
@@ -107,6 +108,38 @@ Tabela `noowe_billing_settings`.
 | `grace_days` (tolerância, depois sai da busca) | 7 |
 | `suspend_orders_after_days` (suspende pedidos pelo app) | 30 |
 | `renewal_notice_days` (aviso antes da renovação) | 30 |
+| `trial_days` (teste sem cartão para quem não usa código) | 30 |
+
+## Plano sugerido por tipo de serviço
+
+Tabela `noowe_plan_suggestions`. O app só sugere; o restaurante escolhe.
+
+| `service_model` | `plan_code` |
+|---|---|
+| `quick_service` | `essencial` |
+| `casual_dining` | `profissional` |
+| `fine_dining` | `business` |
+
+## Contrato por restaurante
+
+Tabela `noowe_restaurant_contracts`. Serve ao Enterprise, que aparece como "Sob consulta": o preço vem daqui, e campo vazio
+herda o do plano.
+
+```sql
+insert into private.noowe_restaurant_contracts(restaurant_id, plan_code, monthly_price_cents, order_allowance, note)
+values ('<id do restaurante>', 'enterprise', 1200000, 20000, 'Contrato de 03/11');
+```
+
+## Dados da empresa NOOWE
+
+Tabela `noowe_company`, uma linha só. Hoje só o CNPJ (`64159447000190`) está preenchido. Razão social, endereço, inscrição
+municipal e regime tributário esperam o Pedro (pendência 34), e nenhuma nota é emitida sem eles.
+
+## Fornecedor de Tap to Pay
+
+Tabela `noowe_tap_settings`, uma linha só: `provider` e `active` (hoje vazio e falso). O banco recusa `active = true` sem
+fornecedor. **As credenciais não ficam aqui:** vão em segredo, porque o histórico copiaria o valor. Para ligar quando houver
+contrato, altere esta linha e ligue `tap_to_pay` em `noowe_plan_features`.
 
 ## Códigos promocionais
 
