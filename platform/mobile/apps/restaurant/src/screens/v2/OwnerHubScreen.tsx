@@ -2924,7 +2924,7 @@ function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) 
             if (!restaurantId) return;
             setActing(order.id);
             try {
-              await supabaseApiAdapter.requestApproval({
+              const approval = await supabaseApiAdapter.requestApproval({
                 restaurantId,
                 type: 'order_cancellation',
                 itemName: `Conta ${order.table}`,
@@ -2932,7 +2932,13 @@ function WaiterOrdersView({ colors }: { colors: ReturnType<typeof useColors> }) 
                 amount: order.total,
                 orderId: order.id,
               });
-              Alert.alert('Solicitação enviada', 'O pedido permanecerá ativo até a aprovação do gerente.');
+              // O Dono não precisa de aprovação: o servidor aplica direto e devolve o pedido já aprovado.
+              if (approval?.status === 'approved') {
+                Alert.alert('Pedido cancelado', 'O cancelamento foi aplicado e ficou registrado.');
+                await refresh();
+              } else {
+                Alert.alert('Solicitação enviada', 'O pedido permanecerá ativo até a aprovação do gerente.');
+              }
             } catch (err) {
               Alert.alert('Falha ao solicitar cancelamento', userErrorMessage(err, 'Tente novamente.'));
             } finally {
