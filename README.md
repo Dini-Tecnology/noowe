@@ -489,6 +489,30 @@ supabase db push
 # public.custom_access_token_hook
 ```
 
+#### RPC errors on local Supabase
+
+With Supabase CLI 2.72.7, the local PostgREST container has no UTF-8 locale. If an RPC raises an
+error that PostgREST answers with 5xx (every `P0xxx` except `P0001`) and the message has an accent,
+PostgREST crashes while logging it. The response becomes HTTP 500 with the plain text
+`Something went wrong` and no `code`, so `payments-create` answers `internal_error` instead of
+`payments_unavailable`, and the client app falls back to its generic error.
+
+This is local only: production returns the JSON body with `code`. Don't change RPCs or handlers
+because of it. To test these paths locally, recreate the container with a UTF-8 locale after
+`supabase start`, running this from `platform/`:
+
+```bash
+PROJECT=$(sed -nE 's/^project_id = "(.*)"/\1/p' supabase/config.toml)
+C=supabase_rest_$PROJECT
+IMAGE=$(docker inspect "$C" --format '{{.Config.Image}}')
+docker inspect "$C" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^PGRST_' > /tmp/pgrst.env
+docker rm -f "$C"
+docker run -d --name "$C" --network "supabase_network_$PROJECT" --network-alias rest --env-file /tmp/pgrst.env -e LANG=C.UTF-8 "$IMAGE"
+rm /tmp/pgrst.env
+```
+
+`supabase stop` doesn't remove the recreated container, so run `docker rm -f "$C"` before it.
+
 ### Run Applications
 
 ```bash
