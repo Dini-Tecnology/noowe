@@ -10,7 +10,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import * as WebBrowser from 'expo-web-browser';
 import { authService } from '@/shared/services/auth';
-import { StaffPushBridge } from './StaffPushBridge';
+import { StaffPushBridge, StaffPushOpener } from './StaffPushBridge';
 import { socialAuthService } from '@/shared/services/social-auth';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { logger } from '@/shared/utils/logger';
@@ -100,6 +100,8 @@ import ConfigFloorScreen from '../screens/v2/config/ConfigFloorScreen';
 import ConfigKitchenScreen from '../screens/v2/config/ConfigKitchenScreen';
 import ConfigPaymentsScreen from '../screens/v2/config/ConfigPaymentsScreen';
 import ConfigMarketplaceScreen from '../screens/v2/config/ConfigMarketplaceScreen';
+import FiscalSetupScreen from '../screens/fiscal/FiscalSetupScreen';
+import FiscalDocumentsScreen from '../screens/fiscal/FiscalDocumentsScreen';
 import UserAccountScreen from '../screens/v2/UserAccountScreen';
 import { RestaurantRoleProvider, useRestaurantRole, RestaurantRole } from '../contexts/RestaurantRoleContext';
 import type { ServiceTypeFeatureKey } from '@okinawa/shared/config/service-types';
@@ -211,6 +213,8 @@ const GuardedConfigFloor = withRoleGuard(ConfigFloorScreen, ['owner', 'manager']
 const GuardedConfigKitchen = withRoleGuard(ConfigKitchenScreen, ['owner', 'manager']);
 const GuardedConfigPayments = withRoleGuard(ConfigPaymentsScreen, ['owner', 'manager']);
 const GuardedConfigMarketplace = withRoleGuard(ConfigMarketplaceScreen, ['owner', 'manager']);
+const GuardedFiscalSetup = withRoleGuard(FiscalSetupScreen, ['owner', 'manager']);
+const GuardedFiscalDocuments = withRoleGuard(FiscalDocumentsScreen, ['owner', 'manager']);
 const GuardedWaiter = withRoleGuard(WaiterScreen, ['owner', 'manager', 'waiter', 'maitre']);
 const GuardedWaiterTapToPay = withRoleGuard(WaiterTapToPayScreen, ['owner', 'manager', 'waiter']);
 const GuardedBarKDS = withRoleGuard(BarKDSScreen, ['owner', 'manager', 'barman', 'chef']);
@@ -539,6 +543,8 @@ function MainStack() {
       <Stack.Screen name="ConfigKitchen" component={GuardedConfigKitchen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="ConfigPayments" component={GuardedConfigPayments} options={scaleFadeScreenOptions} />
       <Stack.Screen name="ConfigMarketplace" component={GuardedConfigMarketplace} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="FiscalSetup" component={GuardedFiscalSetup} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="FiscalDocuments" component={GuardedFiscalDocuments} options={scaleFadeScreenOptions} />
       <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={scaleFadeScreenOptions} />
     </Stack.Navigator>
@@ -597,7 +603,12 @@ function AuthenticatedGate() {
 
   // Already linked to a restaurant — full app access
   if (serverRole) {
-    return <MainStack key="restaurant-main" />;
+    return (
+      <>
+        <MainStack key="restaurant-main" />
+        <StaffPushOpener />
+      </>
+    );
   }
 
   // Owner intent without a restaurant yet — create establishment + owner role

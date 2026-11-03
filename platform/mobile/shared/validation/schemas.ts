@@ -446,10 +446,17 @@ export const cnpjSchema = z
 export const fiscalConfigSchema = z.object({
   cnpj: cnpjSchema,
   ie: z.string().max(15).optional(),
-  razaoSocial: z.string().min(2).max(200),
+  razaoSocial: z.string().trim().min(2, { message: 'Informe a razão social.' }).max(200),
   nomeFantasia: z.string().max(200).optional(),
-  stateCode: z.string().length(2),
+  stateCode: z.string().regex(/^[A-Z]{2}$/, { message: 'Informe a UF com duas letras.' }),
   regimeTributario: z.enum(['simples_nacional', 'lucro_presumido', 'lucro_real']),
+  // Formato do layout da NFC-e. O valor é do contador; o servidor confere de novo.
+  ncm: z.string().regex(/^(?!0{8})\d{8}$/, { message: 'Informe o NCM padrão com 8 dígitos.' }),
+  cfop: z.string().regex(/^\d{4}$/, { message: 'Informe o CFOP padrão com 4 dígitos.' }),
+  icmsOrigem: z.string().regex(/^\d$/, { message: 'Informe a origem do ICMS com 1 dígito.' }),
+  icmsSituacao: z.string().regex(/^\d{2,3}$/, { message: 'Informe a situação do ICMS com 2 ou 3 dígitos.' }),
+  pisSituacao: z.string().regex(/^\d{2}$/, { message: 'Informe a situação do PIS com 2 dígitos.' }),
+  cofinsSituacao: z.string().regex(/^\d{2}$/, { message: 'Informe a situação do COFINS com 2 dígitos.' }),
 });
 export type FiscalConfigFormData = z.infer<typeof fiscalConfigSchema>;
 

@@ -1,11 +1,11 @@
-import type { CustomerOrder, DigitalReceipt } from '../../services/customer-backend';
+import type { CustomerOrder, DigitalReceipt, ReceiptFiscal } from '../../services/customer-backend';
 
 /**
  * Comprovante de um pedido Quick Service (ADR-013). O Quick não cobra taxa de serviço;
  * o desconto (combo) é a diferença entre subtotal e total que o servidor calculou.
  * Só exibe o que o servidor devolveu — não recalcula valores.
  */
-export function quickReceiptFromOrder(order: CustomerOrder): DigitalReceipt {
+export function quickReceiptFromOrder(order: CustomerOrder, fiscal: ReceiptFiscal): DigitalReceipt {
   const discount = Math.max(0, Math.round((order.subtotal - order.total) * 100) / 100);
   return {
     simulated: false,
@@ -29,5 +29,6 @@ export function quickReceiptFromOrder(order: CustomerOrder): DigitalReceipt {
     familyVisitCount: null,
     accessKey: order.pickupCode ? `Pedido ${order.pickupCode}` : order.orderNumber,
     createdAt: order.pickedUpAt ?? order.createdAt,
+    fiscal,
   };
 }

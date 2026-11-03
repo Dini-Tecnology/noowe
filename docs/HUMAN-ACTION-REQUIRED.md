@@ -89,13 +89,13 @@
 | **O que é** | API intermediária para emissão de NFC-e (nota fiscal eletrônica ao consumidor) |
 | **Onde criar** | https://focusnfe.com.br → contato comercial (SaaS multicliente) |
 | **O que obter** | Token da API por restaurante |
-| **Onde configurar** | `FiscalConfig` entity por restaurante (campo `focus_nfe_token`) |
-| **Certificado A1** | Cada restaurante precisa de certificado digital A1 (.pfx + senha). Enviado para Focus NFe via upload endpoint |
+| **Onde configurar** | Config > Fiscal no app do restaurante (homologação) ou `service_fiscal_configure`; o token vai para o Supabase Vault (ADR-030) |
+| **Certificado A1** | Cada restaurante precisa de certificado digital A1 (.pfx + senha), enviado à Focus NFe. Não fica no NOOWE |
 | **Dados fiscais necessários** | CNPJ, IE, regime tributário, CSC ID + Token (gerado na SEFAZ do estado) |
 | **Homologação** | Testar em `https://homologacao.focusnfe.com.br` primeiro |
 | **Produção** | `https://api.focusnfe.com.br` |
-| **Webhook URL** | `https://api.noowebr.com/fiscal/webhooks/focus-nfe` |
-| **Tela no app** | `FiscalSetupScreen.tsx` já existe no restaurant app para onboarding |
+| **Webhook URL** | Não usa: a NFC-e é síncrona. Emissão pela Edge Function `fiscal-emit` |
+| **Tela no app** | `FiscalSetupScreen.tsx` ainda aponta para o backend removido; não usar até ser ligada ao Supabase |
 | **Tempo estimado** | 4h por restaurante (coletar dados + upload certificado + testar homologação) |
 
 ---

@@ -40,14 +40,15 @@ registrar (009 e 010) e uma adição de produto à spec (011).
 | [027](ADR-027-servicos-multiplos-e-fine-por-reserva.md) | Vários serviços sem "primário"; Fine só por reserva (substitui parte do ADR-008) | **Provisório** | Fine sem trava de entrada |
 | [028](ADR-028-expedicao-e-conferencia-do-quick.md) | Expedição opcional; conferência do Quick vira a Expedição ligada (ajusta o ADR-013) | **Provisório** | Quick sem conferência por engano |
 | [029](ADR-029-taxa-gorjeta-rateio-e-caixa.md) | Retenção, rateio e caixa; no-show, Tap e limite de quebra seguem em aberto | Aceito em parte | Rateio fora da convenção; caixa sem controle |
+| [030](ADR-030-emissao-fiscal-focus-nfe.md) | Focus NFe como emissor de NFC-e; o fechamento só enfileira, a emissão roda fora da transação | **Provisório** | Nota duplicada; falha do emissor reabrindo conta |
 | [031](ADR-031-modelo-comercial-noowe-pay.md) | Parâmetros NOOWE em tabela, taxa única por meio de pagamento, split em valor fixo, assinatura e créditos | Aceito no formato | Taxa no código; restaurante pagando mais que a taxa |
 | [032](ADR-032-saldo-unico-e-taxa-opcional.md) | Saldo único de consumo; taxa ou gorjeta por pagamento e opcional (substitui parte do ADR-010) | Aceito na regra | Centavo perdido ao combinar divisões |
 
 **Série O (022–029):** originada na avaliação de 28/10; perguntas ao autor em [`PENDENCIAS-perfis-workflows`](PENDENCIAS-perfis-workflows.md).
-**031 e 032** vêm do [`aditivo comercial`](../spec/aditivo-comercial-e-pagamentos.md) de 03/11. O ADR-030 (fiscal) está em branch, fora desta árvore.
+**031 e 032** vêm do [`aditivo comercial`](../spec/aditivo-comercial-e-pagamentos.md) de 03/11.
 
 **Vocabulário:** os ADRs usam os nomes da spec. A tradução para o banco está em
 [`docs/arquitetura/05-glossario-spec-banco.md`](../arquitetura/05-glossario-spec-banco.md).
 
-**Pendente de revisão humana:** ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência), ADR-018 (troca e junção de mesas), ADR-019 (código de convite), ADR-021 (comanda como casa) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
+**Pendente de revisão humana:** ADR-016 (fila ativa e walk-in no Casual), ADR-017 (seletor de experiência), ADR-018 (troca e junção de mesas), ADR-019 (código de convite), ADR-021 (comanda como casa), ADR-030 (taxa de serviço na nota e `tipo_integracao`, com a contabilidade) e ADR-013 (valores de timeout, Pix e distância do Quick Service, a confirmar com
 o cliente).

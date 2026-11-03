@@ -120,6 +120,14 @@ export default function SharePaymentScreen({ route, navigation }: any) {
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   }, [completeCheckout, navigation, tableSessionId]);
 
+  // O recibo nasce no webhook: pode levar um instante depois de a parcela aparecer paga.
+  const receipt = useQuery({
+    queryKey: ['share-receipt', tableSessionId],
+    queryFn: () => billShares.latestReceiptId(tableSessionId!),
+    enabled: !!tableSessionId && myPaid,
+    refetchInterval: (query) => (query.state.data ? false : 3000),
+  });
+
   const paidCount = list.filter((s) => s.status === 'paid').length;
 
   const styles = useMemo(() => StyleSheet.create({
@@ -200,9 +208,14 @@ export default function SharePaymentScreen({ route, navigation }: any) {
         {myPaid && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Pagamento confirmado</Text>
-            <Text style={styles.hint}>Obrigado! Sua parte está paga. A mesa fecha quando todos pagarem.</Text>
-            <TouchableOpacity style={styles.cta} onPress={finish} accessibilityRole="button">
-              <Text style={styles.ctaText}>Concluir</Text>
+            <Text style={styles.hint}>Obrigado! Sua parte está paga. A mesa fecha quando todos pagarem, e a nota fiscal sai no fechamento.</Text>
+            {receipt.data && (
+              <TouchableOpacity style={styles.cta} onPress={() => navigation.navigate('DigitalReceipt', { receiptId: receipt.data })} accessibilityRole="button">
+                <Text style={styles.ctaText}>Ver recibo</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={receipt.data ? styles.link : styles.cta} onPress={finish} accessibilityRole="button">
+              <Text style={receipt.data ? styles.linkText : styles.ctaText}>Concluir</Text>
             </TouchableOpacity>
           </View>
         )}

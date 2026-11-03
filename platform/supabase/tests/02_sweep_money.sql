@@ -78,13 +78,12 @@ insert into _sweep_money_allowlist (table_name, column_name, category) values
   ('wallet_transactions','amount','dinheiro'),
   ('wallet_transactions','balance_before','dinheiro'),
   ('wallet_transactions','balance_after','dinheiro'),
-  -- Caixa, gorjeta, financeiro e fiscal.
+  -- Caixa, gorjeta e financeiro.
   ('cash_register_sessions','opening_balance','dinheiro'),
   ('cash_register_sessions','expected_balance','dinheiro'),
   ('cash_register_sessions','actual_balance','dinheiro'),
   ('cash_register_movements','amount','dinheiro'),
   ('financial_transactions','amount','dinheiro'),
-  ('fiscal_documents','total_amount','dinheiro'),
   ('tips','amount','dinheiro'),
   ('approvals','amount','dinheiro'),
   ('loyalty_programs','total_spent','dinheiro'),
@@ -158,13 +157,13 @@ select diag(_test.diag_list(
 -- Meta-asserção: a conversão terminou quando esta contagem chegar a zero.
 -- Enquanto não chega, o número é o placar público da fatia F2.
 --
--- 46 = entradas `dinheiro` desta allowlist em 14/09/2026.  O valor anterior (41)
+-- 45 = 46 de 14/09/2026 menos fiscal_documents.total_amount (T-N4-03).  O valor anterior (41)
 -- não batia com a própria lista e reprovaria na primeira execução.  A cada coluna
 -- convertida, a entrada sai da allowlist e este número desce no mesmo commit.
 -- ---------------------------------------------------------------------------
 select cmp_ok(
   (select count(*)::bigint from _sweep_money_allowlist where category = 'dinheiro'),
-  '<=', 46::bigint,
+  '<=', 45::bigint,
   'placar F2: colunas de dinheiro por converter nao aumentou'
 );
 
