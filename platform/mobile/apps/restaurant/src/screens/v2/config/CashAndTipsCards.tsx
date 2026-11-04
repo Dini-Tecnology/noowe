@@ -21,9 +21,11 @@ export function CashSettingsCard({ restaurantId }: { restaurantId: string | null
   const [limit, setLimit] = useState('');
   const [turnover, setTurnover] = useState('06:00');
   const [saving, setSaving] = useState(false);
+  const [vouchers, setVouchers] = useState<string[]>([]);
 
   useEffect(() => {
     if (!restaurantId) return;
+    supabaseApiAdapter.getPaymentOptions(restaurantId).then((value) => setVouchers(value.acceptedVouchers ?? [])).catch(() => undefined);
     supabaseApiAdapter.getCashSettings(restaurantId).then((value) => {
       setSettings(value);
       setOpening(textFromCents(value.openingFloatCents));
@@ -32,6 +34,18 @@ export function CashSettingsCard({ restaurantId }: { restaurantId: string | null
       setTurnover(value.dayTurnover);
     }).catch(() => setSettings(null));
   }, [restaurantId]);
+
+  // Quais vales o restaurante aceita: só o Dono.
+  const toggleVoucher = async (kind: string) => {
+    if (!restaurantId) return;
+    const next = vouchers.includes(kind) ? vouchers.filter((value) => value !== kind) : [...vouchers, kind];
+    try {
+      await supabaseApiAdapter.setAcceptedVouchers(restaurantId, next);
+      setVouchers(next);
+    } catch (err) {
+      Alert.alert('Não foi possível salvar', userErrorMessage(err, 'Tente novamente.'));
+    }
+  };
 
   const save = async () => {
     if (!restaurantId) return;
@@ -73,6 +87,27 @@ export function CashSettingsCard({ restaurantId }: { restaurantId: string | null
         <Pressable accessibilityRole="button" disabled={saving} onPress={() => void save()} style={[styles.save, { backgroundColor: colors.primary, opacity: saving ? 0.6 : 1 }]}>
           <Text style={styles.saveText}>{saving ? 'Salvando…' : 'Salvar caixa'}</Text>
         </Pressable>
+        {isOwner ? (
+          <>
+            <Text style={label}>Vales aceitos, na maquininha da casa</Text>
+            <View style={styles.row}>
+              {([['refeicao', 'Vale-refeição'], ['alimentacao', 'Vale-alimentação']] as const).map(([kind, text]) => {
+                const selected = vouchers.includes(kind);
+                return (
+                  <Pressable
+                    key={kind}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
+                    onPress={() => void toggleVoucher(kind)}
+                    style={[styles.chip, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}18` : colors.card }]}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: selected ? colors.primary : colors.foreground }}>{text}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
       </View>
     </ConfigSectionCard>
   );

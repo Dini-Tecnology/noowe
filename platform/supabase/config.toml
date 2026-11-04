@@ -66,6 +66,13 @@ verify_jwt = false
 # Só o banco chama (pg_net), com a service role; a função confere o papel e o gateway valida o JWT.
 verify_jwt = true
 
+[functions.tap-charge]
+verify_jwt = true
+
+[functions.tap-webhook]
+# O fornecedor chama, sem JWT: quem autentica é a assinatura, na camada do fornecedor.
+verify_jwt = false
+
 [functions.fiscal-emit]
 # Só o banco chama (pg_net), com a service role; a função compara o token e o gateway valida o JWT.
 verify_jwt = true

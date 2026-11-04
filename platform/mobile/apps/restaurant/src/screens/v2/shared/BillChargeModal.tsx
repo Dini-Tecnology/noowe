@@ -11,8 +11,8 @@ const METHODS = [
   { id: 'credit_card', label: 'Crédito' },
   { id: 'debit_card', label: 'Débito' },
   { id: 'pix', label: 'Pix' },
-  { id: 'voucher', label: 'Vale' },
 ] as const;
+const VOUCHER_LABEL: Record<string, string> = { refeicao: 'Vale-refeição', alimentacao: 'Vale-alimentação' };
 
 const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 
@@ -61,12 +61,27 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
   const ready = !!bill && billFor === baseCents;
   const total = !ready ? null : hasFee && keepFee ? bill.totalWithFeeCents : bill.chargeBaseCents;
 
-  const charge = async (method: string) => {
+  // Aproximação: inicia e espera o fornecedor confirmar. Fechar a tela não confirma nada, e recusado não abate.
+  const chargeByTap = async () => {
+    if (!tableSessionId || !ready) return;
+    setSubmitting(true);
+    try {
+      await supabaseApiAdapter.startTapCharge(tableSessionId, { baseCents, waiveFee: hasFee && !keepFee, idempotencyKey: key.current });
+      Alert.alert('Aproxime o cartão', 'A conta só abate quando a cobrança for aprovada.');
+      onClose();
+    } catch (err) {
+      Alert.alert('Falha ao cobrar', userErrorMessage(err, 'Tente novamente.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const charge = async (method: string, voucherKind?: string) => {
     if (!tableSessionId || !ready) return;
     setSubmitting(true);
     try {
       await supabaseApiAdapter.recordBillPayment(tableSessionId, {
-        method, baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, idempotencyKey: key.current,
+        method, baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, idempotencyKey: key.current, voucherKind: voucherKind ?? null,
       });
       await onCharged();
       onClose();
@@ -154,6 +169,27 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
                 <Text style={{ color: colors.foreground, fontWeight: '700' }}>{method.label}</Text>
               </Pressable>
             ))}
+            {(bill?.acceptedVouchers ?? []).map((kind) => (
+              <Pressable
+                key={kind}
+                accessibilityRole="button"
+                disabled={submitting || !ready || bill?.balanceCents === 0}
+                onPress={() => void charge('voucher', kind)}
+                style={[styles.method, { borderColor: colors.border, opacity: submitting || !ready ? 0.6 : 1 }]}
+              >
+                <Text style={{ color: colors.foreground, fontWeight: '700' }}>{VOUCHER_LABEL[kind] ?? kind}</Text>
+              </Pressable>
+            ))}
+            {bill?.tapActive ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={submitting || !ready || bill?.balanceCents === 0}
+                onPress={() => void chargeByTap()}
+                style={[styles.method, { borderColor: colors.primary, opacity: submitting || !ready ? 0.6 : 1 }]}
+              >
+                <Text style={{ color: colors.primary, fontWeight: '700' }}>Aproximação</Text>
+              </Pressable>
+            ) : null}
           </View>
           <Pressable accessibilityRole="button" disabled={submitting} onPress={onClose} style={styles.cancel}>
             <Text style={{ color: colors.foregroundSecondary, fontWeight: '700' }}>Cancelar</Text>

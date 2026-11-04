@@ -10,6 +10,7 @@ const mockRecord = jest.fn();
 const mockPolicies = jest.fn();
 const mockUpdate = jest.fn();
 const mockAbsorb = jest.fn().mockResolvedValue({});
+const mockTap = jest.fn().mockResolvedValue({ paymentId: 'p1', amountCents: 6600, sdkPayload: {} });
 jest.mock('expo-crypto', () => { let n = 0; return { randomUUID: () => `key-${++n}` }; });
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => 'Icon' }));
 jest.mock('@okinawa/shared/contexts/ThemeContext', () => ({ useColors: () => new Proxy({}, { get: () => '#333333' }) }));
@@ -23,6 +24,7 @@ jest.mock('@okinawa/shared/services/supabase-api', () => ({ supabaseApiAdapter: 
   getChargePolicies: (...a: unknown[]) => mockPolicies(...a),
   updateChargePolicy: (...a: unknown[]) => mockUpdate(...a),
   setConvenienceAbsorbed: (...a: unknown[]) => mockAbsorb(...a),
+  startTapCharge: (...a: unknown[]) => mockTap(...a),
 } }));
 const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 
@@ -85,6 +87,26 @@ describe('cobrança presencial (G5)', () => {
     await waitFor(() => expect(view.getByText(/22,00/)).toBeTruthy());
     fireEvent.press(view.getByText('Dinheiro'));
     await waitFor(() => expect(mockRecord).toHaveBeenCalledWith('s1', expect.objectContaining({ baseCents: 2000 })));
+  });
+
+  it('vale: só os aceitos pelo restaurante, e vai a forma escolhida (V1)', async () => {
+    mockBill.mockResolvedValue({ ...bill, acceptedVouchers: ['refeicao'], payers: [] });
+    const view = scene();
+    fireEvent.press(await view.findByText('Vale-refeição'));
+    expect(view.queryByText('Vale-alimentação')).toBeNull();
+    await waitFor(() => expect(mockRecord).toHaveBeenCalledWith('s1', expect.objectContaining({ method: 'voucher', voucherKind: 'refeicao' })));
+  });
+
+  it('sem fornecedor ativo, não há aproximação; com fornecedor, inicia e não abate sozinho (T1)', async () => {
+    const off = scene();
+    await waitFor(() => expect(off.getByText(/66,00/)).toBeTruthy());
+    expect(off.queryByText('Aproximação')).toBeNull();
+    mockBill.mockResolvedValue({ ...bill, tapActive: true });
+    const on = scene();
+    fireEvent.press(await on.findByText('Aproximação'));
+    await waitFor(() => expect(mockTap).toHaveBeenCalledWith('s1', expect.objectContaining({ baseCents: null, idempotencyKey: expect.any(String) })));
+    expect(mockRecord).not.toHaveBeenCalled();
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('Aproxime o cartão', expect.stringContaining('aprovada')));
   });
 
   it('em modo gorjeta não há taxa para desmarcar', async () => {

@@ -114,7 +114,9 @@ Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercia
 | O8 | Feita, no GitHub e no banco Noowe. Falta conferir as telas no simulador |
 | M2 | Feita, no GitHub e no banco Noowe. Spike no sandbox registrado no ADR-031. Estorno de Pix com split sem observação |
 | M3 | Feita e desligada: a taxa fica em R$ 0 até o contador confirmar (pendência 38) |
-| M4–M6, P3, V1 | A fazer, nesta ordem (plano de 03/11) |
+| V1 | Maquininha da casa: feita. Online e por aproximação dependem do provedor; o Asaas não aceita vale online (ADR-031) |
+| T1 | Pronto e desligado: fornecedor entra por parâmetro e pela camada em `functions/_shared/tap`. Falta o contrato e o SDK |
+| M4–M6, P3 | A fazer, nesta ordem (plano de 03/11) |
 
 ## Correspondência com o faseamento da spec (§8)
 

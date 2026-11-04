@@ -101,7 +101,7 @@ begin
   assert exists (select 1 from public.cash_register_movements m where m.session_id = caixa and m.type = 'sale' and m.actor_id = pg_temp.ctx('garcom') and m.gateway_transaction_id = (res->>'transactionId')::uuid), 'ligado ao pagamento e a quem recebeu';
   -- Maquininha da casa: externo, abate o saldo, fora da gaveta e sem taxa NOOWE.
   select expected_cents into e from public.cash_register_sessions where id = caixa;
-  res := public.restaurant_record_bill_payment(sid, 'voucher', gen_random_uuid(), 1000);
+  res := public.restaurant_record_bill_payment(sid, 'voucher', gen_random_uuid(), 1000, false, 0, null, 'refeicao');
   assert (select expected_cents from public.cash_register_sessions where id = caixa) = e, 'maquininha não entra na gaveta';
   assert (select (metadata->>'external')::boolean from public.gateway_transactions where id = (res->>'transactionId')::uuid), 'registrada como externa';
   assert not exists (select 1 from private.noowe_pay_transaction_fees where gateway_transaction_id = (res->>'transactionId')::uuid), 'sem taxa NOOWE';

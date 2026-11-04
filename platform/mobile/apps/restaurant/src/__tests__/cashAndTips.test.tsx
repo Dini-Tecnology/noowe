@@ -10,7 +10,7 @@ import { PaymentActionsPanel } from '../screens/v2/shared/PaymentActionsPanel';
 const mockApi = {
   getCashSettings: jest.fn(), updateCashSettings: jest.fn(), getDayStatus: jest.fn(), closeOperationalDay: jest.fn(), reviewCashBreak: jest.fn(),
   getTipRules: jest.fn(), updateTipRules: jest.fn(), setTaxRegime: jest.fn(), getMyTips: jest.fn(), getRefundablePayments: jest.fn(),
-  requestRefund: jest.fn(), requestBillReopen: jest.fn(),
+  requestRefund: jest.fn(), requestBillReopen: jest.fn(), getPaymentOptions: jest.fn(), setAcceptedVouchers: jest.fn(),
 };
 let mockRoles = ['owner'];
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => 'Icon' }));
@@ -32,6 +32,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockRoles = ['owner'];
   api.getCashSettings.mockResolvedValue(settings);
+  api.getPaymentOptions.mockResolvedValue({ tapActive: false, acceptedVouchers: ['refeicao'] });
+  api.setAcceptedVouchers.mockResolvedValue({});
   api.updateCashSettings.mockResolvedValue(settings);
   api.getTipRules.mockResolvedValue(rules);
   api.updateTipRules.mockResolvedValue({ ...rules, pending: { mode: 'hours', retentionBps: 500, rolePoints: {}, effectiveDay: '2026-11-05' } });
@@ -68,6 +70,16 @@ describe('parâmetros do caixa (critério 10)', () => {
     expect(await view.findByText(/só o Dono altera/)).toBeTruthy();
     fireEvent.press(view.getByText('Salvar caixa'));
     await waitFor(() => expect(api.updateCashSettings).toHaveBeenCalledWith('r1', expect.objectContaining({ breakLimitCents: null })));
+  });
+
+  it('o Dono escolhe os vales; o Gerente não vê a opção (V1, critério 2)', async () => {
+    const view = render(<CashSettingsCard restaurantId="r1" />);
+    fireEvent.press(await view.findByText('Vale-alimentação'));
+    await waitFor(() => expect(api.setAcceptedVouchers).toHaveBeenCalledWith('r1', ['refeicao', 'alimentacao']));
+    mockRoles = ['manager'];
+    const manager = render(<CashSettingsCard restaurantId="r1" />);
+    await manager.findByText('Salvar caixa');
+    expect(manager.queryByText('Vale-alimentação')).toBeNull();
   });
 
   it('recusa virada do dia fora do formato', async () => {

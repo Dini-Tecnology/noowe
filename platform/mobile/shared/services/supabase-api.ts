@@ -38,6 +38,8 @@ export type SessionBill = {
   feeBps: number;
   feeOrTipMode: 'service_fee' | 'tip';
   adjusted: boolean;
+  acceptedVouchers: string[];
+  tapActive: boolean;
   /** Quem já pagou nesta mesa. */
   payers: { name: string; baseCents: number; method: string | null }[];
 };
@@ -631,7 +633,11 @@ export interface SupabaseApiAdapter {
   /** Saldo e valores prontos para cobrar uma comanda aberta. `baseCents` nulo é o saldo todo. */
   getSessionBill(tableSessionId: string, baseCents?: number | null): Promise<SessionBill>;
   /** Pagamento presencial: abate do mesmo saldo da comanda (ADR-032). */
-  recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string }): Promise<any>;
+  recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string; voucherKind?: string | null }): Promise<any>;
+  /** Inicia a cobrança por aproximação. A resposta nunca significa pago: quem confirma é o fornecedor. */
+  startTapCharge(tableSessionId: string, input: { baseCents?: number | null; waiveFee?: boolean; idempotencyKey: string }): Promise<{ paymentId: string; amountCents: number; sdkPayload: Record<string, unknown> }>;
+  setAcceptedVouchers(restaurantId: string, kinds: string[]): Promise<any>;
+  getPaymentOptions(restaurantId: string): Promise<{ tapActive: boolean; acceptedVouchers: string[] }>;
   getChargePolicies(restaurantId: string): Promise<ChargePolicyRow[]>;
   setConvenienceAbsorbed(restaurantId: string, absorbed: boolean): Promise<any>;
   /** Extrato do Dono: valor pago, taxa e líquido. Tarifa e margem não saem do servidor. */
@@ -2393,6 +2399,8 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       totalWithFeeCents: Number(raw.totalWithFeeCents ?? 0), feeBps: Number(raw.feeBps ?? 0),
       feeOrTipMode: raw.feeOrTipMode === 'tip' ? 'tip' : 'service_fee', adjusted: raw.adjusted === true,
       payers: Array.isArray(raw.payers) ? (raw.payers as SessionBill['payers']) : [],
+      acceptedVouchers: Array.isArray(raw.acceptedVouchers) ? (raw.acceptedVouchers as string[]) : [],
+      tapActive: raw.tapActive === true,
     } as SessionBill;
   },
 
@@ -2400,9 +2408,26 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_record_bill_payment', {
       p_table_session_id: tableSessionId, p_payment_method: input.method, p_idempotency_key: input.idempotencyKey,
       p_base_cents: input.baseCents ?? null, p_waive_fee: input.waiveFee === true, p_tip_cents: input.tipCents ?? 0, p_reason: input.reason ?? null,
+      p_voucher_kind: input.voucherKind ?? null,
     });
     if (error) throw error;
     return data;
+  },
+
+  async startTapCharge(tableSessionId, input) {
+    const { data, error } = await getSupabaseClient().functions.invoke('tap-charge', {
+      body: { tableSessionId, baseCents: input.baseCents ?? null, waiveFee: input.waiveFee === true, idempotencyKey: input.idempotencyKey },
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async setAcceptedVouchers(restaurantId: string, kinds: string[]) {
+    return rpcData('restaurant_set_accepted_vouchers', { p_restaurant_id: restaurantId, p_kinds: kinds });
+  },
+
+  async getPaymentOptions(restaurantId: string) {
+    return rpcData('restaurant_get_payment_options', { p_restaurant_id: restaurantId });
   },
 
   async setConvenienceAbsorbed(restaurantId: string, absorbed: boolean) {
