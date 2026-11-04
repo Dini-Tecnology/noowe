@@ -1,4 +1,4 @@
-import { assignableRoles, canManageMember } from '../screens/v2/shared/staffRoles';
+import { assignableRoles, canManageMember, keepPrimary, toggleRole } from '../screens/v2/shared/staffRoles';
 
 describe('assignableRoles', () => {
   it('dono pode vincular outro dono', () => {
@@ -46,5 +46,18 @@ describe('canManageMember', () => {
   it('quem não é dono nem gerente não gerencia ninguém', () => {
     expect(canManageMember({ viewerRole: 'waiter', viewerUserId: 'u-w', member: waiter })).toBe(false);
     expect(canManageMember({ viewerRole: null, viewerUserId: null, member: waiter })).toBe(false);
+  });
+});
+
+describe('várias funções (O3)', () => {
+  it('marca e desmarca, sem deixar a pessoa sem função', () => {
+    expect(toggleRole(['waiter'], 'barman')).toEqual(['waiter', 'barman']);
+    expect(toggleRole(['waiter', 'barman'], 'waiter')).toEqual(['barman']);
+    expect(toggleRole(['waiter'], 'waiter')).toEqual(['waiter']);
+  });
+
+  it('a principal acompanha as funções marcadas', () => {
+    expect(keepPrimary(['waiter', 'barman'], 'barman')).toBe('barman');
+    expect(keepPrimary(['waiter'], 'barman')).toBe('waiter');
   });
 });

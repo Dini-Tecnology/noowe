@@ -6,7 +6,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
-import { assignableRoles, canManageMember } from './shared/staffRoles';
+import { assignableRoles, canManageMember, keepPrimary, toggleRole } from './shared/staffRoles';
 import { V2Shell } from './shared/V2Shell';
 import { V2FormSheet } from './shared/V2FormSheet';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
@@ -20,6 +20,7 @@ interface StaffMember {
   avatar_url?: string | null;
   role: string;
   is_active: boolean;
+  is_primary?: boolean;
   created_at: string;
   shift?: { id: string; start_time: string; end_time: string; status: string } | null;
   sales_value?: number | string | null;
@@ -32,7 +33,8 @@ type FoundUser = {
   full_name?: string;
   email?: string;
   already_in_this_restaurant: boolean;
-  existing_role?: string;
+  existing_roles?: string[];
+  primary_role?: string;
   /** Tem vínculo ativo em outro restaurante (sem revelar qual). */
   works_in_other_restaurant?: boolean;
 };
@@ -95,7 +97,8 @@ export default function StaffScreen() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [foundUser, setFoundUser] = useState<FoundUser | null>(null);
-  const [selectedRole, setSelectedRole] = useState('waiter');
+  const [selectedRoles, setSelectedRoles] = useState<string[]>(['waiter']);
+  const [primaryRole, setPrimaryRole] = useState('waiter');
   const [newFullName, setNewFullName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
@@ -133,7 +136,8 @@ export default function StaffScreen() {
     setEmail('');
     setFoundUser(null);
     setSearchError(null);
-    setSelectedRole('waiter');
+    setSelectedRoles(['waiter']);
+    setPrimaryRole('waiter');
     setNewFullName('');
     setNewPassword('');
     setInviteMode('link');
@@ -142,8 +146,10 @@ export default function StaffScreen() {
   };
 
   const openEdit = (member: StaffMember) => {
+    const rows = staff.filter((row) => row.user_id === member.user_id && row.is_active);
     setEditingMember(member);
-    setSelectedRole(member.role);
+    setSelectedRoles(rows.map((row) => row.role));
+    setPrimaryRole(rows.find((row) => row.is_primary)?.role ?? member.role);
     setSearchError(null);
     setInviteOpen(true);
   };
@@ -167,8 +173,9 @@ export default function StaffScreen() {
         return;
       }
       setFoundUser(result);
-      if (result.existing_role && result.already_in_this_restaurant) {
-        setSelectedRole(result.existing_role);
+      if (result.already_in_this_restaurant && result.existing_roles?.length) {
+        setSelectedRoles(result.existing_roles);
+        setPrimaryRole(result.primary_role ?? result.existing_roles[0]);
       }
     } catch (err) {
       setSearchError(getErrorMessage(err, 'Não foi possível buscar o usuário.'));
@@ -181,7 +188,7 @@ export default function StaffScreen() {
     ? true
     : inviteMode === 'link'
       // Quem já trabalha em outro restaurante pode ser vinculado a este também: a conta é uma só.
-      ? Boolean(foundUser && !foundUser.already_in_this_restaurant)
+      ? Boolean(foundUser)
       : Boolean(newFullName.trim() && email.trim() && newPassword.length >= 6);
 
   const submit = async () => {
@@ -189,11 +196,14 @@ export default function StaffScreen() {
     setSaving(true);
     try {
       if (editingMember) {
-        await supabaseApiAdapter.updateStaffRole(editingMember.id, selectedRole);
+        await supabaseApiAdapter.setStaffRoles(restaurantId, editingMember.user_id, selectedRoles, primaryRole);
       } else if (inviteMode === 'link') {
-        if (foundUser) await supabaseApiAdapter.upsertStaffRole(restaurantId, foundUser.id, selectedRole);
+        if (foundUser) await supabaseApiAdapter.setStaffRoles(restaurantId, foundUser.id, selectedRoles, primaryRole);
       } else {
-        await supabaseApiAdapter.createStaffUser(restaurantId, email.trim(), newPassword, newFullName.trim(), selectedRole);
+        const created = await supabaseApiAdapter.createStaffUser(restaurantId, email.trim(), newPassword, newFullName.trim(), primaryRole);
+        if (selectedRoles.length > 1 && created?.user?.id) {
+          await supabaseApiAdapter.setStaffRoles(restaurantId, created.user.id, selectedRoles, primaryRole);
+        }
       }
       setInviteOpen(false);
       setEditingMember(null);
@@ -439,7 +449,12 @@ export default function StaffScreen() {
                   setInviteMode('create');
                   setSearchError(null);
                   // Conta nova com senha provisória não nasce como dono.
-                  if (selectedRole === 'owner') setSelectedRole('waiter');
+                  if (selectedRoles.includes('owner')) {
+                    const roles = selectedRoles.filter((item) => item !== 'owner');
+                    const next = roles.length > 0 ? roles : ['waiter'];
+                    setSelectedRoles(next);
+                    setPrimaryRole(keepPrimary(next, primaryRole));
+                  }
                 }}
                 style={[styles.modeTab, { borderColor: colors.border }, inviteMode === 'create' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
               >
@@ -477,7 +492,7 @@ export default function StaffScreen() {
                 {foundUser ? (
                   foundUser.already_in_this_restaurant ? (
                     <Text style={styles.infoWarn}>
-                      Este usuário já faz parte da sua equipe como {ROLE_LABELS[foundUser.existing_role ?? ''] ?? foundUser.existing_role}.
+                      Esta pessoa já faz parte da sua equipe. Ajuste as funções abaixo.
                     </Text>
                   ) : (
                     <Text style={styles.infoOk}>
@@ -529,15 +544,19 @@ export default function StaffScreen() {
 
         {(editingMember
           || inviteMode === 'create'
-          || (foundUser && !foundUser.already_in_this_restaurant)) ? (
-          <Field label="Função" required>
+          || foundUser) ? (
+          <Field label="Funções" required>
             <View style={styles.roleOptions}>
               {assignableRoles({ viewerRole: serverRole, creatingAccount: !editingMember && inviteMode === 'create' }).map((role) => {
-                const selected = selectedRole === role;
+                const selected = selectedRoles.includes(role);
                 return (
                   <Pressable
                     key={role}
-                    onPress={() => setSelectedRole(role)}
+                    onPress={() => {
+                      const next = toggleRole(selectedRoles, role);
+                      setSelectedRoles(next);
+                      setPrimaryRole(keepPrimary(next, primaryRole));
+                    }}
                     style={[
                       styles.roleOption,
                       { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}12` : colors.card },
@@ -545,6 +564,30 @@ export default function StaffScreen() {
                   >
                     <Text style={{ color: selected ? colors.primary : colors.foreground, fontWeight: selected ? '800' : '600' }}>
                       {ROLE_LABELS[role]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Field>
+        ) : null}
+
+        {selectedRoles.length > 1 && (editingMember || inviteMode === 'create' || foundUser) ? (
+          <Field label="Função principal (abre o app)" required>
+            <View style={styles.roleOptions}>
+              {selectedRoles.map((role) => {
+                const selected = primaryRole === role;
+                return (
+                  <Pressable
+                    key={role}
+                    onPress={() => setPrimaryRole(role)}
+                    style={[
+                      styles.roleOption,
+                      { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}12` : colors.card },
+                    ]}
+                  >
+                    <Text style={{ color: selected ? colors.primary : colors.foreground, fontWeight: selected ? '800' : '600' }}>
+                      {ROLE_LABELS[role] ?? role}
                     </Text>
                   </Pressable>
                 );

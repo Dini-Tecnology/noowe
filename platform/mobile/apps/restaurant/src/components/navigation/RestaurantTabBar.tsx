@@ -2,7 +2,7 @@ import React, { useContext, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BottomTabBarHeightCallbackContext } from '@react-navigation/bottom-tabs';
-import RestaurantLiquidGlassNav from '@okinawa/shared/components/RestaurantLiquidGlassNav';
+import RestaurantLiquidGlassNav, { mergedNavItems } from '@okinawa/shared/components/RestaurantLiquidGlassNav';
 import {
   ChefRoleView,
   BarmanRoleView,
@@ -10,8 +10,18 @@ import {
   MaitreRoleView,
   ManagerRoleView,
   WaiterRoleView,
+  type RestaurantRole,
   useRestaurantRole,
 } from '../../contexts/RestaurantRoleContext';
+
+/** O Dono usa a barra padrão; os demais, a do próprio perfil. */
+function variantOfRole(role: RestaurantRole): string {
+  return role === 'owner' ? 'default' : role;
+}
+
+function roleOfVariant(variant: string): RestaurantRole {
+  return variant === 'default' ? 'owner' : (variant as RestaurantRole);
+}
 
 const ROUTE_TO_TAB: Record<string, string> = {
   Hub: 'dashboard',
@@ -33,6 +43,9 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
   const onHeightChange = useContext(BottomTabBarHeightCallbackContext);
   const {
     role,
+    setRole,
+    serverRoles,
+    primaryRole,
     managerView,
     setManagerView,
     maitreView,
@@ -48,20 +61,7 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
     serviceFeatures,
   } = useRestaurantRole();
   const activeRoute = state.routes[state.index]?.name ?? 'Hub';
-  const variant =
-    role === 'manager'
-      ? 'manager'
-      : role === 'maitre'
-        ? 'maitre'
-        : role === 'chef'
-          ? 'chef'
-          : role === 'barman'
-            ? 'barman'
-            : role === 'cook'
-              ? 'cook'
-              : role === 'waiter'
-                ? 'waiter'
-                : 'default';
+  const variant = variantOfRole(role);
   const activeTab =
     variant === 'manager'
       ? managerView
@@ -89,6 +89,13 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
     return hidden;
   }, [serviceFeatures]);
 
+  // Supervisão (Dono olhando outro perfil) segue com uma barra só: a junção é só entre as funções da pessoa.
+  const mergedVariants = useMemo(() => {
+    if (serverRoles.length < 2 || !serverRoles.includes(role)) return [];
+    const ordered = primaryRole ? [primaryRole, ...serverRoles.filter((item) => item !== primaryRole)] : serverRoles;
+    return ordered.map(variantOfRole);
+  }, [primaryRole, role, serverRoles]);
+
   return (
     <View
       style={styles.wrap}
@@ -97,10 +104,13 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
     >
       <RestaurantLiquidGlassNav
         variant={variant}
+        mergedVariants={mergedVariants}
         activeTab={activeTab}
         hiddenItemIds={hiddenItemIds}
         onNavigate={(tab) => {
-          if (variant === 'manager') {
+          const target = mergedNavItems(mergedVariants, hiddenItemIds).find((item) => item.id === tab)?.ownerVariant ?? variant;
+          if (target !== variant) setRole(roleOfVariant(target));
+          if (target === 'manager') {
             setManagerView(tab as ManagerRoleView);
             const routeName = tab === 'manager-tables' ? 'Tables' : 'Hub';
             if (state.routes.some((item) => item.name === routeName)) {
@@ -108,7 +118,7 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
             }
             return;
           }
-          if (variant === 'maitre') {
+          if (target === 'maitre') {
             setMaitreView(tab as MaitreRoleView);
             const routeName = tab === 'maitre-tables' ? 'Tables' : 'Hub';
             if (state.routes.some((item) => item.name === routeName)) {
@@ -116,28 +126,28 @@ export function RestaurantTabBar({ state, navigation }: BottomTabBarProps) {
             }
             return;
           }
-          if (variant === 'chef') {
+          if (target === 'chef') {
             setChefView(tab as ChefRoleView);
             if (state.routes.some((item) => item.name === 'Hub')) {
               navigation.navigate('Hub');
             }
             return;
           }
-          if (variant === 'barman') {
+          if (target === 'barman') {
             setBarmanView(tab as BarmanRoleView);
             if (state.routes.some((item) => item.name === 'Hub')) {
               navigation.navigate('Hub');
             }
             return;
           }
-          if (variant === 'cook') {
+          if (target === 'cook') {
             setCookView(tab as CookRoleView);
             if (state.routes.some((item) => item.name === 'Hub')) {
               navigation.navigate('Hub');
             }
             return;
           }
-          if (variant === 'waiter') {
+          if (target === 'waiter') {
             setWaiterView(tab as WaiterRoleView);
             const routeName = tab === 'waiter-table-actions' ? 'Tables' : 'Hub';
             if (state.routes.some((item) => item.name === routeName)) {

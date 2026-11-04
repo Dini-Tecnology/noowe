@@ -143,7 +143,7 @@ function withRoleGuard<P extends object>(
   allowedRoles: RestaurantRole[],
 ): React.ComponentType<P> {
   return function RoleGuardedScreen(props: P) {
-    const { serverRole, roleLoading } = useRestaurantRole();
+    const { serverRole, serverRoles, roleLoading } = useRestaurantRole();
     if (roleLoading) {
       return (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -152,7 +152,7 @@ function withRoleGuard<P extends object>(
       );
     }
     // null means user has no role record — deny by default, never allow through
-    if (!serverRole || !allowedRoles.includes(serverRole)) {
+    if (!serverRole || !allowedRoles.some((allowed) => serverRoles.includes(allowed))) {
       return (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: '#1A1A1A', marginBottom: 8 }}>

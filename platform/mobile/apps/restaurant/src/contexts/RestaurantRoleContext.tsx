@@ -6,7 +6,7 @@ import logger from '@okinawa/shared/utils/logger';
 import { getActiveRestaurantId, setActiveRestaurantId } from '@okinawa/shared/services/active-restaurant';
 import { loadStoredActiveRestaurantId, saveStoredActiveRestaurantId } from '@okinawa/shared/services/active-restaurant-storage';
 import socketService from '../services/socket';
-import { pickRoleRow } from './pickRestaurantRole';
+import { parseMyRoles, pickRestaurantRoles, pickRoleRow } from './pickRestaurantRole';
 import {
   DISABLED_SERVICE_TYPE_FEATURES,
   isSupportedServiceType,
@@ -98,6 +98,10 @@ interface RestaurantRoleContextValue {
   role: RestaurantRole;
   /** Real role from server — cannot be changed by the user. */
   serverRole: RestaurantRole | null;
+  /** Todas as funções da pessoa nesta unidade: as permissões são a soma delas (ADR-025). */
+  serverRoles: RestaurantRole[];
+  /** A função que abre o app. */
+  primaryRole: RestaurantRole | null;
   restaurantId: string | null;
   serviceType: ServiceType | null;
   serviceFeatures: ServiceTypeFeatures;
@@ -136,6 +140,8 @@ const SUPERVISORY_ROLES: RestaurantRole[] = ['owner', 'manager'];
 
 export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
   const [serverRole, setServerRole] = useState<RestaurantRole | null>(null);
+  const [serverRoles, setServerRoles] = useState<RestaurantRole[]>([]);
+  const [primaryRole, setPrimaryRole] = useState<RestaurantRole | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState(true);
   const [role, setRoleState] = useState<RestaurantRole>('owner');
@@ -168,9 +174,15 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
     // Uma pessoa pode ter mais de um papel no mesmo restaurante (ex.: gerente e depois dono).
     const data = pickRoleRow(roleRows ?? [], targetRestaurantId);
     if (data) {
-      const loaded = data.role as RestaurantRole;
+      const { data: myRoles, error: myRolesError } = await getSupabaseClient()
+        .rpc('restaurant_get_my_roles', { p_restaurant_id: data.restaurant_id });
+      if (myRolesError) logger.warn('[RestaurantRoleContext] Failed to load all roles:', myRolesError.message);
+      const mine = parseMyRoles(myRoles) ?? pickRestaurantRoles(roleRows ?? [], data.restaurant_id);
+      const loaded = mine.roles[0] ?? (data.role as RestaurantRole);
       setServerRole(loaded);
-      setRoleState(loaded);
+      setServerRoles(mine.roles.length > 0 ? mine.roles : [loaded]);
+      setPrimaryRole(mine.primary ?? loaded);
+      setRoleState(mine.primary ?? loaded);
       setRestaurantId(data.restaurant_id as string);
       setActiveRestaurantId(data.restaurant_id as string);
       return true;
@@ -190,6 +202,8 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
     if (ownedError) {
       logger.warn('[RestaurantRoleContext] Failed to load owned restaurant:', ownedError.message);
       setServerRole(null);
+      setServerRoles([]);
+      setPrimaryRole(null);
       setRestaurantId(null);
       setActiveRestaurantId(null);
       return false;
@@ -197,6 +211,8 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
 
     if (owned?.id) {
       setServerRole('owner');
+      setServerRoles(['owner']);
+      setPrimaryRole('owner');
       setRoleState('owner');
       setRestaurantId(owned.id as string);
       setActiveRestaurantId(owned.id as string);
@@ -204,6 +220,8 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
     }
 
     setServerRole(null);
+    setServerRoles([]);
+    setPrimaryRole(null);
     setRestaurantId(null);
     setActiveRestaurantId(null);
     return false;
@@ -332,8 +350,8 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
   }, [restaurantId, restaurants, activeServiceModel]);
 
   const setRole = (newRole: RestaurantRole) => {
-    // Only supervisory roles can impersonate another role view.
-    if (serverRole && !SUPERVISORY_ROLES.includes(serverRole)) return;
+    // Only supervisory roles can impersonate another role view; anyone can move between their own roles.
+    if (serverRole && !SUPERVISORY_ROLES.includes(serverRole) && !serverRoles.includes(newRole)) return;
     setRoleState(newRole);
   };
 
@@ -345,6 +363,8 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       return {
       role,
       serverRole,
+      serverRoles,
+      primaryRole,
       restaurantId,
       serviceType,
       serviceFeatures: capabilities
@@ -377,7 +397,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [role, serverRole, restaurantId, roleLoading, reloadRole, restaurants, restaurantsLoading, reloadRestaurants, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView, capabilities],
+    [role, serverRole, serverRoles, primaryRole, restaurantId, roleLoading, reloadRole, restaurants, restaurantsLoading, reloadRestaurants, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView, capabilities],
   );
 
   return (

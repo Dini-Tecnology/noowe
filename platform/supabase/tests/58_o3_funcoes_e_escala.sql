@@ -1,6 +1,6 @@
 -- Fatia O3 (docs/fatias/O3-funcoes-e-escala.md), um bloco por critério de aceite.
 begin;
-select plan(12);
+select plan(28);
 
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
@@ -62,6 +62,44 @@ select is(pg_temp.state_of(format($q$insert into public.profile_roles(user_id, r
 select is(pg_temp.state_of(format($q$update public.user_roles set role = 'manager' where user_id = %L$q$, pg_temp.ctx('waiter'))),
   '42501', 'update direto também não promove a Gerente');
 reset role;
+
+-- ---------------------------------------------------------------------------
+-- Critério 2: as permissões são a soma das funções, e valem no servidor
+-- ---------------------------------------------------------------------------
+do $$ begin perform pg_temp.new_user('duas'); perform pg_temp.new_user('tres'); end $$;
+select pg_temp.act(pg_temp.ctx('owner'));
+select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L, %L, array['waiter', 'barman'], 'waiter')$q$, pg_temp.ctx('r'), pg_temp.ctx('duas'))),
+  'ok', 'a mesma pessoa recebe duas funções de uma vez');
+select pg_temp.act(pg_temp.ctx('duas'));
+select is(public.restaurant_get_my_roles(pg_temp.ctx('r')), '{"roles": ["barman", "waiter"], "primary": "waiter"}'::jsonb,
+  'a pessoa vê as duas funções e a principal');
+select ok(private.has_restaurant_role(pg_temp.ctx('r'), array['waiter']::public.user_roles_role_enum[])
+  and private.has_restaurant_role(pg_temp.ctx('r'), array['barman']::public.user_roles_role_enum[]), 'critério 2: as duas valem no servidor');
+select is(pg_temp.state_of(format($q$select public.restaurant_get_shifts(%L)$q$, pg_temp.ctx('r'))), '42501', 'e só elas: Garçom e Barman não veem o que é de Gerente');
+
+select pg_temp.act(pg_temp.ctx('owner'));
+select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L, %L, array['barman'], 'waiter')$q$, pg_temp.ctx('r'), pg_temp.ctx('duas'))),
+  '22023', 'a principal precisa estar entre as funções');
+select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L, %L, array[]::text[], 'waiter')$q$, pg_temp.ctx('r'), pg_temp.ctx('duas'))),
+  '22023', 'ninguém fica sem função por aqui');
+select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L, %L, array['barman', 'chef'], 'chef')$q$, pg_temp.ctx('r'), pg_temp.ctx('duas'))),
+  'ok', 'trocar as funções');
+select pg_temp.act(pg_temp.ctx('duas'));
+select is(public.restaurant_get_my_roles(pg_temp.ctx('r')), '{"roles": ["chef", "barman"], "primary": "chef"}'::jsonb, 'quem saiu perde a função, e a principal acompanha');
+select ok(not private.has_restaurant_role(pg_temp.ctx('r'), array['waiter']::public.user_roles_role_enum[]), 'a função retirada deixa de valer no servidor');
+select is((select count(*)::int from public.user_roles where user_id = pg_temp.ctx('duas') and is_primary), 1, 'só uma linha é a principal');
+select is((select count(*)::int from public.audit_logs where action = 'staff_primary_changed' and entity_id = pg_temp.ctx('duas')), 2, 'cada troca da principal fica em audit_logs');
+
+select pg_temp.act(pg_temp.ctx('manager'));
+select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L, %L, array['waiter', 'manager'], 'waiter')$q$, pg_temp.ctx('r'), pg_temp.ctx('tres'))),
+  '42501', 'Gerente não concede Gerente nem junto de outra função');
+select is((select count(*)::int from public.user_roles where user_id = pg_temp.ctx('tres') and is_active), 0, 'e nada fica pela metade');
+select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L, %L, array['chef'], 'chef')$q$, pg_temp.ctx('r'), pg_temp.ctx('manager'))),
+  '42501', 'Gerente não tira a própria função de Gerente');
+select pg_temp.act(pg_temp.ctx('owner'));
+select is(pg_temp.state_of(format($q$select public.restaurant_deactivate_staff((select id from public.user_roles where user_id = %L limit 1))$q$, pg_temp.ctx('duas'))),
+  'ok', 'inativar');
+select is((select count(*)::int from public.user_roles where user_id = pg_temp.ctx('duas') and is_active), 0, 'inativar vale para a pessoa inteira');
 
 select * from finish();
 rollback;

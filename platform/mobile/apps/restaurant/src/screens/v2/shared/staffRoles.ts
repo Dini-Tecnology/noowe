@@ -31,3 +31,14 @@ export function canManageMember(opts: {
   if (viewerRole !== 'owner') return false;
   return member.role !== 'owner' || member.user_id !== viewerUserId;
 }
+
+/** Marca ou desmarca uma função. A última não sai: toda pessoa da equipe tem ao menos uma. */
+export function toggleRole(roles: readonly string[], role: string): string[] {
+  if (!roles.includes(role)) return [...roles, role];
+  return roles.length === 1 ? [...roles] : roles.filter((item) => item !== role);
+}
+
+/** A principal precisa estar entre as marcadas; se saiu, vale a primeira. */
+export function keepPrimary(roles: readonly string[], primary: string): string {
+  return roles.includes(primary) ? primary : roles[0];
+}

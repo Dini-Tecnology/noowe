@@ -128,8 +128,43 @@ export function visibleNavItems(variant: string, hiddenItemIds: readonly string[
   );
 }
 
+/** Abas que são a mesma coisa em perfis diferentes: quem acumula funções vê uma só (ADR-025). */
+const NAV_KEY_BY_ITEM: Record<string, string> = {
+  settings: 'config', 'manager-settings': 'config', 'maitre-settings': 'config', 'chef-settings': 'config',
+  'barman-settings': 'config', 'cook-settings': 'config', 'waiter-settings': 'config',
+  tables: 'tables', 'manager-tables': 'tables', 'maitre-tables': 'tables', 'waiter-table-actions': 'tables',
+  orders: 'orders', 'manager-orders': 'orders', 'waiter-order-management': 'orders',
+  'kitchen-kds': 'kds', 'chef-kds': 'kds', 'cook-kds': 'kds', 'waiter-kitchen': 'kds',
+};
+
+export type MergedNavItem = LiquidGlassNavItem & { ownerVariant: string };
+
+/** A barra de quem tem várias funções, com a principal primeiro e sem abas repetidas. */
+export function mergedNavItems(variants: readonly string[], hiddenItemIds: readonly string[] = []): MergedNavItem[] {
+  const seen = new Set<string>();
+  const merged: MergedNavItem[] = [];
+  for (const variant of variants) {
+    for (const item of visibleNavItems(variant, hiddenItemIds)) {
+      const key = NAV_KEY_BY_ITEM[item.id] ?? item.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push({ ...item, ownerVariant: variant });
+    }
+  }
+  return merged;
+}
+
+/** A aba acesa: a tela aberta pode ser de uma aba que a junção deixou de fora. */
+export function mergedActiveTab(activeTab: string, items: readonly LiquidGlassNavItem[]): string {
+  if (items.some((item) => item.id === activeTab)) return activeTab;
+  const key = NAV_KEY_BY_ITEM[activeTab];
+  return items.find((item) => key !== undefined && NAV_KEY_BY_ITEM[item.id] === key)?.id ?? activeTab;
+}
+
 interface RestaurantLiquidGlassNavProps {
   variant?: string;
+  /** Duas ou mais: junta as barras desses perfis. */
+  mergedVariants?: readonly string[];
   activeTab: string;
   onNavigate: (screen: string) => void;
   hiddenItemIds?: string[];
@@ -137,14 +172,20 @@ interface RestaurantLiquidGlassNavProps {
 
 const RestaurantLiquidGlassNav: React.FC<RestaurantLiquidGlassNavProps> = ({
   variant = 'default',
+  mergedVariants,
   activeTab,
   onNavigate,
   hiddenItemIds = [],
 }) => {
-  const items = useMemo(() => visibleNavItems(variant, hiddenItemIds), [hiddenItemIds, variant]);
+  const items = useMemo<LiquidGlassNavItem[]>(
+    () => (mergedVariants && mergedVariants.length > 1
+      ? mergedNavItems(mergedVariants, hiddenItemIds)
+      : visibleNavItems(variant, hiddenItemIds)),
+    [hiddenItemIds, mergedVariants, variant],
+  );
 
   return (
-    <LiquidGlassBottomNav items={items} activeTab={activeTab} onNavigate={onNavigate} />
+    <LiquidGlassBottomNav items={items} activeTab={mergedActiveTab(activeTab, items)} onNavigate={onNavigate} />
   );
 };
 
