@@ -20,6 +20,9 @@ interface Shift {
   start_time: string;
   end_time: string;
   role?: string;
+  area?: string | null;
+  station_id?: string | null;
+  station_name?: string | null;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
   notes?: string;
 }
@@ -31,6 +34,16 @@ const STATUS_META: Record<Shift['status'], { label: string; bg: string; color: s
   completed: { label: 'Concluído', bg: '#F3F4F6', color: '#4B5563' },
   cancelled: { label: 'Cancelado', bg: '#FEF2F2', color: '#DC2626' },
   no_show: { label: 'Faltou', bg: '#FFF7ED', color: '#C2410C' },
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Dono',
+  manager: 'Gerente',
+  maitre: 'Maître',
+  chef: 'Chef',
+  barman: 'Barman',
+  cook: 'Cozinheiro',
+  waiter: 'Garçom',
 };
 
 const WEEKDAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -56,9 +69,35 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return userErrorMessage(error, fallback);
 }
 
+/** Tocar de novo no escolhido limpa: função, área e estação são opcionais. */
+function ChoiceRow({ options, value, onChange, colors }: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  return (
+    <View style={styles.choiceRow}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="button"
+            onPress={() => onChange(selected ? '' : option.value)}
+            style={[styles.choice, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}12` : colors.card }]}
+          >
+            <Text style={{ color: selected ? colors.primary : colors.foreground, fontWeight: selected ? '800' : '600' }}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function ShiftsScreen() {
   const colors = useColors();
-  const { restaurantId } = useRestaurantRole();
+  const { restaurantId, serviceFeatures } = useRestaurantRole();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [staff, setStaff] = useState<StaffOption[]>([]);
@@ -72,6 +111,10 @@ export default function ShiftsScreen() {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [role, setRole] = useState('');
+  const [area, setArea] = useState('');
+  const [stationId, setStationId] = useState('');
+  const [areaOptions, setAreaOptions] = useState<string[]>([]);
+  const [stationOptions, setStationOptions] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Shift | null>(null);
@@ -97,6 +140,15 @@ export default function ShiftsScreen() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    if (!restaurantId) return;
+    // Sem as opções, a escala segue funcionando só com pessoa e função.
+    void supabaseApiAdapter.getShiftOptions(restaurantId).then((options) => {
+      setAreaOptions(options?.areas ?? []);
+      setStationOptions(options?.stations ?? []);
+    }).catch(() => undefined);
+  }, [restaurantId]);
+
   const onRefresh = () => { setRefreshing(true); void load(); };
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
@@ -111,6 +163,8 @@ export default function ShiftsScreen() {
     return map;
   }, [days, shifts]);
 
+  const rolesOfStaff = useMemo(() => staff.find((member) => member.id === staffId)?.roles ?? [], [staff, staffId]);
+
   const openCreate = () => {
     setStaffId(staff[0]?.id ?? '');
     const now = new Date();
@@ -118,6 +172,8 @@ export default function ShiftsScreen() {
     setStartTime('18:00');
     setEndTime('23:00');
     setRole('');
+    setArea('');
+    setStationId('');
     setFormError(null);
     setEditing(null);
   };
@@ -128,6 +184,8 @@ export default function ShiftsScreen() {
     setStartTime(shift.start_time);
     setEndTime(shift.end_time);
     setRole(shift.role ?? '');
+    setArea(shift.area ?? '');
+    setStationId(shift.station_id ?? '');
     setFormError(null);
     setEditing(shift);
   };
@@ -152,10 +210,12 @@ export default function ShiftsScreen() {
           date,
           start_time: startTime.trim(),
           end_time: endTime.trim(),
-          role: role.trim() || null,
+          role: role || null,
+          area,
+          station_id: stationId,
         });
       } else {
-        await supabaseApiAdapter.createShift(restaurantId, staffId, date, startTime.trim(), endTime.trim(), role.trim() || undefined);
+        await supabaseApiAdapter.createShift(restaurantId, staffId, date, startTime.trim(), endTime.trim(), role || undefined, undefined, area || undefined, stationId || undefined);
       }
       setEditing(undefined);
       await load();
@@ -239,7 +299,7 @@ export default function ShiftsScreen() {
                           <View style={{ flex: 1 }}>
                             <Text style={{ fontWeight: '700', color: colors.foreground }}>{shift.staff_name ?? 'Funcionário'}</Text>
                             <Text style={{ fontSize: 12, color: colors.foregroundSecondary, marginTop: 2 }}>
-                              {shift.start_time} – {shift.end_time}{shift.role ? ` · ${shift.role}` : ''}
+                              {[`${shift.start_time} – ${shift.end_time}`, shift.role ? ROLE_LABELS[shift.role] ?? shift.role : null, shift.area, shift.station_name].filter(Boolean).join(' · ')}
                             </Text>
                           </View>
                           <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
@@ -290,7 +350,7 @@ export default function ShiftsScreen() {
                 return (
                   <Pressable
                     key={member.id}
-                    onPress={() => setStaffId(member.id)}
+                    onPress={() => { setStaffId(member.id); setRole(''); }}
                     style={[
                       styles.staffOption,
                       { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? `${colors.primary}12` : colors.card },
@@ -334,15 +394,26 @@ export default function ShiftsScreen() {
             </Field>
           </View>
         </View>
-        <Field label="Função (opcional)">
-          <TextInput
-            value={role}
-            onChangeText={setRole}
-            placeholder="Ex.: Garçom, Caixa"
-            placeholderTextColor={colors.foregroundMuted}
-            style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
-          />
-        </Field>
+        {rolesOfStaff.length > 0 ? (
+          <Field label="Função no turno">
+            <ChoiceRow
+              options={rolesOfStaff.map((item) => ({ value: item, label: ROLE_LABELS[item] ?? item }))}
+              value={role}
+              onChange={setRole}
+              colors={colors}
+            />
+          </Field>
+        ) : null}
+        {serviceFeatures.tableManagement && areaOptions.length > 0 ? (
+          <Field label="Área">
+            <ChoiceRow options={areaOptions.map((item) => ({ value: item, label: item }))} value={area} onChange={setArea} colors={colors} />
+          </Field>
+        ) : null}
+        {stationOptions.length > 0 ? (
+          <Field label="Estação">
+            <ChoiceRow options={stationOptions.map((item) => ({ value: item.id, label: item.name }))} value={stationId} onChange={setStationId} colors={colors} />
+          </Field>
+        ) : null}
         {formError ? <Text style={styles.formError}>{formError}</Text> : null}
       </V2FormSheet>
 
@@ -387,6 +458,8 @@ function IconAction({ label, onPress, children }: { label: string; onPress: () =
 }
 
 const styles = StyleSheet.create({
+  choiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  choice: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
   addButton: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, borderRadius: 13 },
   addButtonLabel: { color: '#FFF', fontSize: 12, fontWeight: '800' },
   weekNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },

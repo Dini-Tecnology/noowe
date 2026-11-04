@@ -483,7 +483,8 @@ export interface SupabaseApiAdapter {
   deleteBill(billId: string): Promise<any>;
   getCustomers(restaurantId?: string, limit?: number): Promise<any>;
   getShifts(restaurantId?: string, from?: string, to?: string): Promise<any>;
-  createShift(restaurantId: string, staffId: string, date: string, startTime: string, endTime: string, role?: string, notes?: string): Promise<any>;
+  createShift(restaurantId: string, staffId: string, date: string, startTime: string, endTime: string, role?: string, notes?: string, area?: string, stationId?: string): Promise<any>;
+  getShiftOptions(restaurantId: string): Promise<{ areas: string[]; stations: { id: string; name: string }[] }>;
   updateShift(shiftId: string, patch: Record<string, unknown>): Promise<any>;
   deleteShift(shiftId: string): Promise<any>;
   getIntegrations(restaurantId: string): Promise<any>;
@@ -1589,7 +1590,13 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
-  async createShift(restaurantId: string, staffId: string, date: string, startTime: string, endTime: string, role?: string, notes?: string) {
+  async getShiftOptions(restaurantId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_get_shift_options', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return data;
+  },
+
+  async createShift(restaurantId: string, staffId: string, date: string, startTime: string, endTime: string, role?: string, notes?: string, area?: string, stationId?: string) {
     const { data, error } = await getSupabaseClient().rpc('restaurant_create_shift', {
       p_restaurant_id: restaurantId,
       p_staff_id: staffId,
@@ -1598,6 +1605,8 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_end_time: endTime,
       p_role: role || null,
       p_notes: notes || null,
+      p_area: area || null,
+      p_station_id: stationId || null,
     });
     if (error) throw error;
     return data;
@@ -1612,6 +1621,10 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_role: patch.role || null,
       p_status: patch.status || null,
       p_notes: patch.notes || null,
+      // Vazio limpa a área; ausente mantém.
+      p_area: patch.area ?? null,
+      p_station_id: patch.station_id || null,
+      p_clear_station: patch.station_id === '',
     });
     if (error) throw error;
     return data;

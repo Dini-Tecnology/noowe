@@ -1,6 +1,6 @@
 -- Fatia O3 (docs/fatias/O3-funcoes-e-escala.md), um bloco por critério de aceite.
 begin;
-select plan(49);
+select plan(64);
 
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
@@ -175,6 +175,49 @@ select pg_temp.act(pg_temp.ctx('recep'));
 set local role authenticated;
 select is(pg_temp.state_of(format($q$delete from public.role_permission_overrides where user_id = %L$q$, pg_temp.ctx('recep'))), '42501', 'nem direto na tabela');
 reset role;
+
+-- ---------------------------------------------------------------------------
+-- Critério 6: a escala registra pessoa, função, área e estação
+-- ---------------------------------------------------------------------------
+do $$
+declare r uuid := pg_temp.ctx('r'); e uuid := pg_temp.new_user('escalado'); t jsonb; st uuid;
+begin
+  perform pg_temp.act(pg_temp.ctx('owner'));
+  perform public.restaurant_set_staff_roles(r, e, array['waiter', 'manager'], 'waiter');
+  t := public.restaurant_create_table(r, 'o3-' || e, 4);
+  update public.tables set section = 'Varanda O3' where id = (t->>'id')::uuid;
+  insert into public.cook_stations(restaurant_id, name, type) values (r, 'Grelha O3', 'kitchen') returning id into st;
+  insert into _ctx values ('estacao', st);
+end $$;
+select pg_temp.act(pg_temp.ctx('owner'));
+select is((public.restaurant_create_shift(pg_temp.ctx('r'), pg_temp.ctx('escalado'), now(), '10:00', '18:00', 'waiter', null, 'Varanda O3', pg_temp.ctx('estacao'))->>'area'),
+  'Varanda O3', 'critério 6: a escala guarda a área');
+select is((select role from public.shifts where staff_id = pg_temp.ctx('escalado')), 'waiter', 'critério 6: e a função');
+select is((select station_id from public.shifts where staff_id = pg_temp.ctx('escalado')), pg_temp.ctx('estacao'), 'critério 6: e a estação');
+select is(pg_temp.state_of(format($q$select public.restaurant_create_shift(%L, %L, now(), '10:00', '18:00', 'chef')$q$, pg_temp.ctx('r'), pg_temp.ctx('escalado'))),
+  '22023', 'não se escala em função que a pessoa não tem');
+select is(pg_temp.state_of(format($q$select public.restaurant_create_shift(%L, %L, now(), '10:00', '18:00', 'waiter', null, 'Lua')$q$, pg_temp.ctx('r'), pg_temp.ctx('escalado'))),
+  '22023', 'nem em área que não existe');
+select is(pg_temp.state_of(format($q$select public.restaurant_create_shift(%L, %L, now(), '10:00', '18:00', 'waiter', null, null, %L)$q$, pg_temp.ctx('r'), pg_temp.ctx('escalado'), gen_random_uuid())),
+  '22023', 'nem em estação de outro lugar');
+select is((public.restaurant_create_shift(pg_temp.ctx('r'), pg_temp.ctx('escalado'), now(), '10:00', '18:00', 'Garçom')->>'role'), 'waiter', 'o rótulo de app antigo vira a função');
+select is((public.restaurant_create_shift(pg_temp.ctx('r'), pg_temp.ctx('escalado'), now(), '10:00', '18:00', 'Caixa')->>'role'), null, 'rótulo desconhecido fica sem função');
+select ok((public.restaurant_get_shift_options(pg_temp.ctx('r'))->'areas') ? 'Varanda O3', 'as opções trazem as áreas das mesas');
+select is((select (x->>'station_name') from jsonb_array_elements(public.restaurant_get_shifts(pg_temp.ctx('r'), now() - interval '1 day', now() + interval '1 day')) x
+  where x->>'staff_id' = pg_temp.ctx('escalado')::text and x->>'station_id' is not null limit 1), 'Grelha O3', 'a escala mostra o nome da estação');
+select lives_ok(format($q$select public.restaurant_update_shift((select id from public.shifts where staff_id = %L and station_id is not null), p_area => '', p_clear_station => true)$q$, pg_temp.ctx('escalado')),
+  'dá para tirar área e estação');
+select is((select count(*)::int from public.shifts where staff_id = pg_temp.ctx('escalado') and (area is not null or station_id is not null)), 0, 'e elas saem');
+update public.shifts set status = 'cancelled' where restaurant_id = pg_temp.ctx('r');
+insert into public.shifts(staff_id, restaurant_id, date, start_time, end_time, role, status, is_overtime, created_at, updated_at)
+select pg_temp.ctx('escalado'), pg_temp.ctx('r'), (now() at time zone private.restaurant_time_zone())::date,
+  to_char(now() at time zone private.restaurant_time_zone() - interval '1 hour', 'HH24:MI'),
+  to_char(now() at time zone private.restaurant_time_zone() + interval '1 hour', 'HH24:MI'), 'waiter', 'scheduled', false, now(), now();
+select ok(not private.manager_on_shift(pg_temp.ctx('r')), 'Gerente escalado como Garçom não conta como Gerente em turno');
+update public.shifts set role = 'manager' where restaurant_id = pg_temp.ctx('r') and status = 'scheduled';
+select ok(private.manager_on_shift(pg_temp.ctx('r')), 'escalado como Gerente, conta');
+update public.shifts set role = null where restaurant_id = pg_temp.ctx('r') and status = 'scheduled';
+select ok(private.manager_on_shift(pg_temp.ctx('r')), 'sem função na escala, vale o que a pessoa é');
 
 select * from finish();
 rollback;

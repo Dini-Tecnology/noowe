@@ -3,6 +3,8 @@ export type StaffOption = {
   id: string;
   full_name?: string;
   role: string;
+  /** Todas as funções da pessoa: só nelas ela pode ser escalada. */
+  roles: string[];
 };
 
 type RawStaffRow = {
@@ -16,14 +18,13 @@ type RawStaffRow = {
 /** Quem pode receber turno: pessoas ativas, uma vez só, pelo `user_id`. */
 export function toShiftStaffOptions(rows: unknown): StaffOption[] {
   const list = Array.isArray(rows) ? (rows as RawStaffRow[]) : [];
-  const seen = new Set<string>();
-  const options: StaffOption[] = [];
+  const byUser = new Map<string, StaffOption>();
   for (const row of list) {
     if (!row.is_active) continue;
     const userId = row.user_id ?? row.id;
-    if (seen.has(userId)) continue;
-    seen.add(userId);
-    options.push({ id: userId, full_name: row.full_name ?? undefined, role: row.role });
+    const existing = byUser.get(userId);
+    if (existing) existing.roles.push(row.role);
+    else byUser.set(userId, { id: userId, full_name: row.full_name ?? undefined, role: row.role, roles: [row.role] });
   }
-  return options;
+  return [...byUser.values()];
 }

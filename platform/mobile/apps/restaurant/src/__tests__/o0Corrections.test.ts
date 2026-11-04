@@ -110,7 +110,7 @@ describe('critério 7: criar turno usa o user_id', () => {
       { id: 'role-2', user_id: 'user-1', full_name: 'Bia', role: 'barman', is_active: true },
       { id: 'role-3', user_id: 'user-2', full_name: 'Caio', role: 'cook', is_active: false },
     ]);
-    expect(options).toEqual([{ id: 'user-1', full_name: 'Bia', role: 'waiter' }]);
+    expect(options).toEqual([{ id: 'user-1', full_name: 'Bia', role: 'waiter', roles: ['waiter', 'barman'] }]);
   });
 });
 
