@@ -217,7 +217,7 @@ export function TipRulesCard({ restaurantId }: { restaurantId: string | null | u
 }
 
 const styles = StyleSheet.create({
-  block: { gap: 8, paddingVertical: 8 },
+  block: { gap: 8, paddingVertical: 8, paddingHorizontal: 14 },
   label: { fontSize: 12, fontWeight: '700', marginTop: 4 },
   hint: { fontSize: 12 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

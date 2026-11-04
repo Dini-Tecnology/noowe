@@ -181,7 +181,7 @@ function ServicePolicy({ restaurantId, policy, onSaved }: { restaurantId: string
 }
 
 const styles = StyleSheet.create({
-  block: { paddingVertical: 12, gap: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  block: { paddingVertical: 12, paddingHorizontal: 14, gap: 8, borderBottomWidth: StyleSheet.hairlineWidth },
   title: { fontSize: 15, fontWeight: '800' },
   label: { fontSize: 12, fontWeight: '700', marginTop: 4 },
   hint: { fontSize: 12 },

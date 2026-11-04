@@ -543,7 +543,7 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
           <ChevronRight size={18} color={colors.foregroundMuted} />
         </TouchableOpacity>
       ) : null}
-      <SectionTitle title="Ações rápidas" subtitle="Os 4 atalhos principais do dia" colors={colors} />
+      <SectionTitle title="Ações rápidas" subtitle="Os atalhos principais do dia" colors={colors} />
       <View style={styles.metricGrid}>
         {primaryActions.map((action) => (
           <QuickAction

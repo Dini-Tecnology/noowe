@@ -11,6 +11,7 @@ import { V2FormSheet } from './shared/V2FormSheet';
 import { V2Shell } from './shared/V2Shell';
 import { TableComandaDialog } from './shared/TableComandaDialog';
 import { TableLayoutPanel } from './tables/TableLayoutPanel';
+import { BillChargeModal } from './shared/BillChargeModal';
 import { useRestaurantTables, type V2Table } from './shared/useRestaurantOperations';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { tableStatusLabel } from '@okinawa/shared/utils/status-label';
@@ -46,7 +47,7 @@ export default function TablesScreen() {
   const colors = useColors();
   const { width } = useWindowDimensions();
   const navigation = useNavigation<any>();
-  const { restaurantId, role, serverRole, setWaiterView } = useRestaurantRole();
+  const { restaurantId, role, serverRole, serverRoles, setWaiterView } = useRestaurantRole();
   const canManage = serverRole === 'owner' || serverRole === 'manager';
   const isWaiterView = role === 'waiter';
   const [selected, setSelected] = useState<string | null>(null);
@@ -56,6 +57,9 @@ export default function TablesScreen() {
   const [deleteTable, setDeleteTable] = useState<V2Table | null>(null);
   const [seatingTable, setSeatingTable] = useState<{ table: V2Table; mode: SeatingMode } | null>(null);
   const [closeAccountTable, setCloseAccountTable] = useState<V2Table | null>(null);
+  const [chargeTable, setChargeTable] = useState<V2Table | null>(null);
+  // Cobrar: Garçom (na visão dele), Maître, Gerente e Dono. A regra de verdade é do servidor.
+  const canCharge = serverRoles.some((value) => value === 'owner' || value === 'manager' || value === 'maitre');
   const [closeReason, setCloseReason] = useState('');
   const [comandaTable, setComandaTable] = useState<V2Table | null>(null);
   const [tableNumber, setTableNumber] = useState('');
@@ -470,14 +474,25 @@ export default function TablesScreen() {
                         <Users size={17} color={colors.foreground} />
                         <Text style={[styles.primaryOperationText, { color: colors.foreground }]}>Ver comanda por pessoa</Text>
                       </Pressable>
+                      {canCharge ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Cobrar a mesa ${selectedTable.label}`}
+                          onPress={() => setChargeTable(selectedTable)}
+                          style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: colors.primary }, pressed && styles.primaryPressed]}
+                        >
+                          <Receipt size={17} color="#FFF" />
+                          <Text style={styles.primaryOperationText}>Cobrar</Text>
+                        </Pressable>
+                      ) : null}
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`Fechar a conta da mesa ${selectedTable.label}`}
+                        accessibilityLabel={`Encerrar a comanda da mesa ${selectedTable.label}`}
                         onPress={() => setCloseAccountTable(selectedTable)}
                         style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: '#0284C7' }, pressed && styles.primaryPressed]}
                       >
                         <Receipt size={17} color="#FFF" />
-                        <Text style={styles.primaryOperationText}>Fechar a conta</Text>
+                        <Text style={styles.primaryOperationText}>Encerrar comanda</Text>
                       </Pressable>
                     </>
                   ) : null}
@@ -619,6 +634,12 @@ export default function TablesScreen() {
         {formError ? <Text style={styles.formError}>{formError}</Text> : null}
       </V2FormSheet>
 
+      <BillChargeModal
+        tableSessionId={chargeTable?.sessionId ?? null}
+        tableLabel={chargeTable ? `mesa ${chargeTable.label}` : ''}
+        onClose={() => setChargeTable(null)}
+        onCharged={refresh}
+      />
       <V2ConfirmDialog
         visible={closeAccountTable !== null}
         title="Encerrar a comanda?"

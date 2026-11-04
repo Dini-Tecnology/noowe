@@ -12,7 +12,7 @@ jest.mock('@react-navigation/native', () => ({ useFocusEffect: (fn: () => void) 
 let mockRoles = ['owner'];
 jest.mock('@okinawa/shared/contexts/ThemeContext', () => ({ useColors: () => new Proxy({}, { get: () => '#333333' }) }));
 jest.mock('../contexts/RestaurantRoleContext', () => ({ useRestaurantRole: () => ({ restaurantId: 'r1', serverRoles: mockRoles }) }));
-jest.mock('../screens/v2/shared/V2Shell', () => ({ V2Shell: ({ children }: any) => <>{children}</> }));
+jest.mock('../screens/v2/shared/V2Shell', () => ({ V2Shell: ({ subtitle, children }: any) => { const { Text } = require('react-native'); return <><Text>{subtitle}</Text>{children}</>; } }));
 jest.mock('@okinawa/shared/utils/user-error-message', () => ({ userErrorMessage: (_: unknown, fallback: string) => fallback }));
 jest.mock('@okinawa/shared/services/supabase-api', () => ({ get supabaseApiAdapter() { return mockApi; } }));
 jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);

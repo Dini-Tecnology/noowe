@@ -103,7 +103,7 @@ describe('Meu plano (M4 e M5)', () => {
 
   it('recurso fora do plano aparece com cadeado para o Dono', async () => {
     const view = render(<PlanScreen />);
-    expect(await view.findByText(/🔒 Reservas/)).toBeTruthy();
+    expect(await view.findByLabelText('Reservas, fora do plano')).toBeTruthy();
   });
 
   it('upgrade avisa que vale na hora; downgrade, no próximo ciclo', async () => {
@@ -169,6 +169,16 @@ describe('aviso de plano', () => {
 });
 
 describe('Índice e cadeado (M4, M5)', () => {
+  it('sem aviso, o Dono ainda chega a Módulos e plano pela Central', async () => {
+    (api as any).getPlanSummary.mockResolvedValue(active);
+    const quiet = render(<PlanGateBanner />);
+    await waitFor(() => expect((api as any).getPlanSummary).toHaveBeenCalled());
+    expect(quiet.queryByText(/Módulos e plano/)).toBeNull();
+    const view = render(<PlanGateBanner always />);
+    fireEvent.press(await view.findByText('Módulos e plano · Essencial'));
+    expect(mockNavigate).toHaveBeenCalledWith('Plan');
+  });
+
   it('o Gerente vê índice e faixa, sem valores, e o Dono não precisa deste cartão', async () => {
     const { CreditIndexCard } = require('../screens/v2/shared/CreditIndexCard');
     mockRoles = ['manager'];

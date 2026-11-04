@@ -1,6 +1,6 @@
 -- P3: um teste por critério do servidor.
 begin;
-select plan(27);
+select plan(28);
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true) $$;
 create function pg_temp.state_of(p_sql text) returns text language plpgsql as $$
@@ -386,6 +386,21 @@ begin
   assert exists (select 1 from public.audit_logs a where a.entity_id = ag and a.action = 'coupon.ended'), 'rastro';
 end $$;
 select pass('painel: Ativo, Agendado, Pausado, Esgotado e Encerrado; usos, desconto, faturamento, ticket e clientes novos');
+
+-- O que a tela manda de verdade: campos vazios como null.
+do $$
+declare r uuid := pg_temp.ctx('r'); j jsonb; p public.promotions;
+begin
+  perform pg_temp.act(pg_temp.ctx('dono'));
+  j := public.restaurant_upsert_coupon(r, jsonb_build_object('id', null, 'title', 'Da tela', 'code', '', 'discountKind', 'percent', 'discountBps', 1500, 'discountCents', null, 'freeItemId', null, 'minOrderCents', null,
+    'services', null, 'scope', 'bill', 'scopeIds', null, 'dow', jsonb_build_array(2, 3, 4), 'hoursFrom', '15:00', 'hoursUntil', '18:00', 'audience', 'all', 'inactiveDays', null, 'maxUses', null, 'maxUsesPerUser', 1,
+    'validFrom', now(), 'validUntil', now() + interval '30 days', 'isAuto', false, 'isVisible', true));
+  select * into p from public.promotions where id = (j->>'id')::uuid;
+  assert p.code <> '' and p.services is null and p.scope_ids is null and p.dow = '{2,3,4}', 'salva com os vazios: ' || j;
+  assert p.max_uses is null and p.min_order_cents is null, 'sem limite e sem mínimo';
+  update public.promotions set status = 'inactive' where id = p.id;
+end $$;
+select pass('cupom salva com o que a tela manda, com campos vazios como null');
 
 -- Revisão: pedido com cupom. Uso reservado vira uso quando paga, e volta quando o pedido não sai.
 create function pg_temp.order_with(p_total bigint) returns public.orders language plpgsql as $$

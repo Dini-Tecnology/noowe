@@ -254,7 +254,8 @@ const styles = StyleSheet.create({
   methodLabel: { fontSize: 12, fontWeight: '700' },
   methodCheck: {
     position: 'absolute',
-    bottom: 6,
+    top: 6,
+    right: 6,
     width: 16,
     height: 16,
     borderRadius: 8,

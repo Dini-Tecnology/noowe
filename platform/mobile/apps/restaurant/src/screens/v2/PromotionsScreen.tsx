@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
@@ -29,6 +29,7 @@ export default function PromotionsScreen() {
   const [saving, setSaving] = useState(false);
   const [menu, setMenu] = useState<MenuChoice[]>([]);
   const [qrFor, setQrFor] = useState<CouponRow | null>(null);
+  const formScroll = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
     if (!restaurantId) return;
@@ -56,6 +57,9 @@ export default function PromotionsScreen() {
     return map;
   }, [menu]);
   const allItems = useMemo(() => menu.flatMap((category) => category.items), [menu]);
+
+  // Cada passo começa do topo: o formulário anterior pode estar rolado.
+  useEffect(() => { formScroll.current?.scrollTo({ y: 0, animated: false }); }, [step]);
 
   const sentence = useMemo(() => (draft ? couponSentence(draft, names) : ''), [draft, names]);
   const patch = (value: Partial<CouponDraft>) => setDraft((current) => (current ? { ...current, ...value } : current));
@@ -136,12 +140,8 @@ export default function PromotionsScreen() {
   if (draft) {
     return (
       <V2Shell title={locked ? 'Editar cupom' : `Novo cupom · passo ${step} de 3`} subtitle={sentence} showBack onBack={() => setDraft(null)}>
-        <ScrollView>
-          <View style={panel}>
-            <Text style={[styles.title, { color: colors.foreground }]}>Como fica</Text>
-            <Text style={{ color: colors.primary, fontWeight: '700' }}>{sentence}</Text>
-            {locked ? <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>Este cupom já foi usado: só validade e limite podem mudar.</Text> : null}
-          </View>
+        <ScrollView ref={formScroll}>
+          {locked ? <Text style={{ fontSize: 12, marginBottom: 12, color: colors.foregroundSecondary }}>Este cupom já foi usado: só validade e limite podem mudar.</Text> : null}
 
           {step === 1 && (
             <View style={panel}>

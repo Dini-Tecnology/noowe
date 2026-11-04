@@ -18,6 +18,7 @@ import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import { ConfigHero } from './ConfigHero';
 import { ConfigTipCard } from './ConfigTipCard';
+import { PlanGateBanner } from '../shared/PlanGateBanner';
 import { ConfigModuleCard } from './ConfigModuleCard';
 import { ConfigUserCard } from './ConfigUserCard';
 import { useAccountActions } from './useAccountActions';
@@ -281,6 +282,7 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
       />
 
       {showTip ? <ConfigTipCard onDismiss={() => void dismissTip()} /> : null}
+      <PlanGateBanner always />
 
       <View style={styles.statsRow}>
         <StatCard value={stats.complete} label="Completos" tone="success" colors={colors} />

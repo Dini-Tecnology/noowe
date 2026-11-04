@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Lock } from 'lucide-react-native';
 import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -143,10 +144,10 @@ export default function PlanScreen() {
           </View>
           <Text style={muted}>Pago pelo app: {formatCents(credits.paidCents)}{credits.minVolumeCents != null ? ` de ${formatCents(credits.minVolumeCents)} mínimos` : ''}</Text>
           <Text style={muted}>Previsão do mês: {formatCents(credits.forecastCents)}</Text>
-          {credits.nextTier ? <Text style={muted}>Se mais {formatCents(credits.nextTier.missingCents)} forem pagos pelo app este mês, você chega à faixa {credits.nextTier.name}.</Text> : null}
+          {credits.nextTier && credits.nextTier.missingCents > 0 ? <Text style={muted}>Se mais {formatCents(credits.nextTier.missingCents)} forem pagos pelo app este mês, você chega à faixa {credits.nextTier.name}.</Text> : null}
           <Text style={{ color: colors.foreground }}>Saldo: {formatCents(credits.balanceCents)}</Text>
           {credits.toRelease.map((lot) => <Text key={lot.availableFrom} style={muted}>A liberar: {formatCents(lot.amountCents)} em {formatDate(lot.availableFrom)}</Text>)}
-          {credits.expiringSoonCents > 0 ? <Text style={muted}>Expira em até 30 dias: {formatCents(credits.expiringSoonCents)}</Text> : null}
+          {credits.expiringSoonCents > 0 ? <Text style={muted}>Expira em breve: {formatCents(credits.expiringSoonCents)}</Text> : null}
           {credits.statement.slice(0, 12).map((line, index) => (
             <View key={`${line.at}-${index}`} style={styles.row}>
               <Text style={muted}>{({ generated: 'Gerado', used: 'Usado', expired: 'Expirado', lost: 'Perdido' } as Record<string, string>)[line.kind] ?? line.kind}</Text>
@@ -158,7 +159,7 @@ export default function PlanScreen() {
 
       <View style={panel}>
         <Text style={title}>{summary.needsChoice ? 'Planos' : 'Comparar e trocar'}</Text>
-        <View style={styles.row}>
+        <View style={styles.leftRow}>
           {(['monthly', 'annual'] as const).map((value) => (
             <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: cycle === value }} onPress={() => setCycle(value)}
               style={[styles.chip, { borderColor: cycle === value ? colors.primary : colors.border, backgroundColor: cycle === value ? `${colors.primary}18` : colors.card }]}>
@@ -197,7 +198,12 @@ export default function PlanScreen() {
       {summary.locked?.length ? (
         <View style={panel}>
           <Text style={title}>Fora do seu plano</Text>
-          {summary.locked.map((key) => <Text key={key} style={muted}>🔒 {FEATURE_LABELS[key] ?? key}</Text>)}
+          {summary.locked.map((key) => (
+            <View key={key} style={styles.leftRow} accessibilityLabel={`${FEATURE_LABELS[key] ?? key}, fora do plano`}>
+              <Lock size={14} color={colors.foregroundSecondary} />
+              <Text style={muted}>{FEATURE_LABELS[key] ?? key}</Text>
+            </View>
+          ))}
         </View>
       ) : null}
 
@@ -256,6 +262,7 @@ export default function PlanScreen() {
 }
 
 const styles = StyleSheet.create({
+  leftRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   panel: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 12, gap: 8 },
   title: { fontSize: 15, fontWeight: '800' },
   row: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
