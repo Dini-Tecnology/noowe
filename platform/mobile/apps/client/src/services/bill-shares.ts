@@ -224,6 +224,14 @@ export const billShares = {
     return { tipCents: num(data.tipCents), totalCents: num(data.totalCents) };
   },
 
+  /** Total do checkout, com gorjeta e conveniência. O valor cobrado sai do pedido, no servidor. */
+  async checkoutQuote(restaurantId: string, amountCents: number, input: { scheduled: boolean; tipBps: number; tipCents: number }): Promise<TipQuote & { convenienceCents: number }> {
+    const data = obj(await rpc('customer_checkout_quote', {
+      p_restaurant_id: restaurantId, p_amount_cents: amountCents, p_scheduled: input.scheduled, p_tip_bps: input.tipBps, p_tip_cents: input.tipCents,
+    }));
+    return { tipCents: num(data.tipCents), totalCents: num(data.totalCents), convenienceCents: num(data.convenienceCents) };
+  },
+
   /** Um toque, sem aprovação, e fica registrado. Vale só para a parte da própria pessoa. */
   async setFeeWaived(shareId: string, waived: boolean): Promise<void> {
     await rpc('customer_set_share_fee_waived', { p_share_id: shareId, p_waived: waived });

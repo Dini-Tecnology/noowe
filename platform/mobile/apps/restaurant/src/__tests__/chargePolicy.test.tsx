@@ -9,9 +9,12 @@ const mockBill = jest.fn();
 const mockRecord = jest.fn();
 const mockPolicies = jest.fn();
 const mockUpdate = jest.fn();
+const mockAbsorb = jest.fn().mockResolvedValue({});
 jest.mock('expo-crypto', () => { let n = 0; return { randomUUID: () => `key-${++n}` }; });
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => 'Icon' }));
 jest.mock('@okinawa/shared/contexts/ThemeContext', () => ({ useColors: () => new Proxy({}, { get: () => '#333333' }) }));
+jest.mock('../contexts/RestaurantRoleContext', () => ({ useRestaurantRole: () => ({ serverRoles: mockRoles() }) }));
+const mockRoles = jest.fn(() => ['owner']);
 jest.mock('../screens/v2/config/ConfigSectionCard', () => ({ ConfigSectionCard: ({ children }: React.PropsWithChildren) => <>{children}</> }));
 jest.mock('@okinawa/shared/utils/user-error-message', () => ({ userErrorMessage: (_: unknown, fallback: string) => fallback }));
 jest.mock('@okinawa/shared/services/supabase-api', () => ({ supabaseApiAdapter: {
@@ -19,6 +22,7 @@ jest.mock('@okinawa/shared/services/supabase-api', () => ({ supabaseApiAdapter: 
   recordBillPayment: (...a: unknown[]) => mockRecord(...a),
   getChargePolicies: (...a: unknown[]) => mockPolicies(...a),
   updateChargePolicy: (...a: unknown[]) => mockUpdate(...a),
+  setConvenienceAbsorbed: (...a: unknown[]) => mockAbsorb(...a),
 } }));
 const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 
@@ -122,6 +126,17 @@ describe('taxa ou gorjeta por serviço (G5)', () => {
     fireEvent.changeText(await view.findByLabelText('Percentual da taxa, Casual Dining'), '12,5');
     fireEvent.press(view.getByText('Salvar Casual Dining'));
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith('r1', 'casual_dining', expect.objectContaining({ serviceFeeBps: 1250 })));
+  });
+
+  it('com a conveniência ligada, só o Dono pode assumir a taxa (M3)', async () => {
+    mockPolicies.mockResolvedValue([{ ...quick, convenienceCents: 99, convenienceAbsorbed: false }]);
+    const view = render(<ChargePolicyCard restaurantId="r1" />);
+    fireEvent(await view.findByLabelText('Pagar a taxa de conveniência pelos meus clientes'), 'valueChange', true);
+    await waitFor(() => expect(mockAbsorb).toHaveBeenCalledWith('r1', true));
+    mockRoles.mockReturnValueOnce(['manager']).mockReturnValueOnce(['manager']);
+    const manager = render(<ChargePolicyCard restaurantId="r1" />);
+    await manager.findByText(/só gorjeta opcional/);
+    expect(manager.queryByLabelText('Pagar a taxa de conveniência pelos meus clientes')).toBeNull();
   });
 
   it('Quick: só gorjeta, sem marcar nada e sem dividir conta', async () => {

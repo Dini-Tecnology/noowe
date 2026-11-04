@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Percent } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import { ConfigSectionCard } from './ConfigSectionCard';
 import {
   bpsFromPercent, parseChargePolicies, parsePresets, percentFromBps, presetsText, SERVICE_LABELS, SPLIT_LABELS, toggleSplitMode, type ChargePolicy,
@@ -47,6 +48,7 @@ export function ChargePolicyCard({ restaurantId }: { restaurantId: string | null
 
 function ServicePolicy({ restaurantId, policy, onSaved }: { restaurantId: string; policy: ChargePolicy; onSaved: () => Promise<void> }) {
   const colors = useColors();
+  const { serverRoles } = useRestaurantRole();
   const [mode, setMode] = useState(policy.feeOrTipMode);
   const [feeText, setFeeText] = useState(String(percentFromBps(policy.serviceFeeBps)));
   const [tipsText, setTipsText] = useState(presetsText(policy.tipPresetsBps));
@@ -139,6 +141,17 @@ function ServicePolicy({ restaurantId, policy, onSaved }: { restaurantId: string
         </>
       )}
 
+      {policy.prepaid && policy.convenienceCents > 0 && serverRoles.includes('owner') && (
+        <View style={styles.convenienceRow}>
+          <Text style={{ flex: 1, color: colors.foreground }}>Pagar a taxa de conveniência pelos meus clientes</Text>
+          <Switch
+            value={policy.convenienceAbsorbed}
+            onValueChange={(value) => void supabaseApiAdapter.setConvenienceAbsorbed(restaurantId, value).then(onSaved).catch((err) => Alert.alert('Não foi possível salvar', userErrorMessage(err, 'Tente novamente.')))}
+            accessibilityLabel="Pagar a taxa de conveniência pelos meus clientes"
+          />
+        </View>
+      )}
+
       {!policy.prepaid && (
         <>
           <Text style={[styles.label, { color: colors.foregroundSecondary }]}>Formas de dividir a conta</Text>
@@ -175,6 +188,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1.5 },
   input: { height: 44, borderRadius: 12, paddingHorizontal: 12, fontSize: 15 },
+  convenienceRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   save: { marginTop: 6, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   saveText: { color: '#FFFFFF', fontWeight: '800' },
 });

@@ -633,6 +633,7 @@ export interface SupabaseApiAdapter {
   /** Pagamento presencial: abate do mesmo saldo da comanda (ADR-032). */
   recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string }): Promise<any>;
   getChargePolicies(restaurantId: string): Promise<ChargePolicyRow[]>;
+  setConvenienceAbsorbed(restaurantId: string, absorbed: boolean): Promise<any>;
   /** Extrato do Dono: valor pago, taxa e líquido. Tarifa e margem não saem do servidor. */
   getPaymentStatement(restaurantId: string): Promise<PaymentStatement>;
   /** Caixa, dia operacional, gorjeta e estorno (O8). Tudo em centavos. */
@@ -2402,6 +2403,10 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     });
     if (error) throw error;
     return data;
+  },
+
+  async setConvenienceAbsorbed(restaurantId: string, absorbed: boolean) {
+    return rpcData('restaurant_set_convenience_absorbed', { p_restaurant_id: restaurantId, p_absorbed: absorbed });
   },
 
   async getPaymentStatement(restaurantId: string) {

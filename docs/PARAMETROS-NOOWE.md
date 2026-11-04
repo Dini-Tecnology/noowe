@@ -185,4 +185,10 @@ Diferenças a compensar, por restaurante, tipo e situação:
 select * from private.noowe_report_compensations where status = 'open';
 ```
 
-Receita de conveniência e créditos gerados, usados, expirados e a liberar ainda não têm consulta: dependem das fatias M3 e M5.
+Receita de conveniência, por restaurante e mês:
+
+```sql
+select * from private.noowe_report_convenience order by month desc;
+```
+
+Créditos gerados, usados, expirados e a liberar ainda não têm consulta: dependem da fatia M5.

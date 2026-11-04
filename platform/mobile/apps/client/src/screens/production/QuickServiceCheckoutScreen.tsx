@@ -90,11 +90,12 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   // O total cobrado é o que o servidor calcular no pedido; o carrinho é só a prévia.
   const total = cart.total;
   const hasTip = tipBps > 0 || tipCents > 0;
-  // Prévia da gorjeta: quem calcula é o servidor, sobre o total do pedido.
-  const tipQuote = useQuery({
-    queryKey: ['quick-tip-quote', total, tipBps, tipCents],
-    queryFn: () => billShares.tipQuote(Math.round(total * 100), { tipBps, tipCents }),
-    enabled: hasTip,
+  // Prévia do total: quem calcula é o servidor. Gorjeta sobre o pedido; conveniência, quando o parâmetro estiver ligado.
+  const quote = useQuery({
+    queryKey: ['quick-checkout-quote', cart.restaurantId, total, tipBps, tipCents, !!params.pickupSlotStart],
+    queryFn: () => billShares.checkoutQuote(cart.restaurantId!, Math.round(total * 100), { scheduled: !!params.pickupSlotStart, tipBps, tipCents }),
+    enabled: !!cart.restaurantId,
+    placeholderData: (previous) => previous,
   });
 
   const place = useMutation({
@@ -352,16 +353,25 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
                 <Text style={styles.summaryLabel}>Subtotal ({cart.itemCount} {cart.itemCount === 1 ? 'item' : 'itens'})</Text>
                 <Text style={styles.summaryValue}>{money(cart.total)}</Text>
               </View>
-              {hasTip && tipQuote.data && (
+              {hasTip && quote.data && (
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Gorjeta</Text>
-                  <Text style={styles.summaryValue}>{moneyCents(tipQuote.data.tipCents)}</Text>
+                  <Text style={styles.summaryValue}>{moneyCents(quote.data.tipCents)}</Text>
                 </View>
+              )}
+              {!!quote.data?.convenienceCents && (
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Taxa de conveniência NOOWE</Text>
+                    <Text style={styles.summaryValue}>{moneyCents(quote.data.convenienceCents)}</Text>
+                  </View>
+                  <Text style={styles.policyText}>Cobre o pedido pelo app, sem fila. Vai para a NOOWE, não para o restaurante.</Text>
+                </>
               )}
               <View style={styles.divider} />
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValue}>{hasTip && tipQuote.data ? moneyCents(tipQuote.data.totalCents) : money(total)}</Text>
+                <Text style={styles.totalValue}>{quote.data ? moneyCents(quote.data.totalCents) : money(total)}</Text>
               </View>
             </View>
 

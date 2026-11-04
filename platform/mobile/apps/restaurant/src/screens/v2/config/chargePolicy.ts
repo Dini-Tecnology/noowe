@@ -9,6 +9,8 @@ export type ChargePolicy = {
   tipDefaultBps: number | null;
   splitModes: SplitMode[];
   prepaid: boolean;
+  convenienceCents: number;
+  convenienceAbsorbed: boolean;
 };
 
 export const SERVICE_LABELS: Record<string, string> = {
@@ -54,6 +56,8 @@ export function parseChargePolicies(raw: unknown): ChargePolicy[] {
       tipDefaultBps: row.tipDefaultBps == null ? null : Number(row.tipDefaultBps),
       splitModes: (Array.isArray(row.splitModes) ? row.splitModes : []) as SplitMode[],
       prepaid: row.prepaid === true,
+      convenienceCents: Number(row.convenienceCents ?? 0),
+      convenienceAbsorbed: row.convenienceAbsorbed === true,
     };
   });
 }
