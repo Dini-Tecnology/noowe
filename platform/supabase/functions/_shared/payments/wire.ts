@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { AsaasClient } from "./asaas.ts";
 import { asaasBaseUrlForKey } from "./environment.ts";
 import type { PaymentDeps } from "./deps.ts";
+import { tapProviderFor } from "../tap/providers.ts";
 
 // Liga os handlers ao Supabase (service_role) e ao Asaas reais.
 export function realDeps(): PaymentDeps {
@@ -20,6 +21,7 @@ export function realDeps(): PaymentDeps {
       return error || !data.user ? null : { id: data.user.id };
     },
     provider: new AsaasClient({ baseUrl: (apiKey) => asaasBaseUrlForKey(apiKey, (name) => Deno.env.get(name)) }),
+    tapProvider: (name) => tapProviderFor(name, (key) => Deno.env.get(key)),
     env: (name) => Deno.env.get(name),
   };
 }

@@ -109,6 +109,41 @@ describe('cobrança presencial (G5)', () => {
     await waitFor(() => expect(alert).toHaveBeenCalledWith('Aproxime o cartão', expect.stringContaining('aprovada')));
   });
 
+  it('vale com gorjeta: a gorjeta vai antes, no cartão, com chave própria; o vale só paga o consumo (V1)', async () => {
+    mockBill.mockResolvedValue({ ...bill, feeOrTipMode: 'tip', feeBps: 0, feeCents: 0, totalWithFeeCents: 6000, acceptedVouchers: ['refeicao'] });
+    const view = scene();
+    await waitFor(() => expect(view.getByText('Vale-refeição')).toBeTruthy());
+    fireEvent.changeText(view.getByLabelText('Gorjeta'), '500');
+    fireEvent.press(view.getByText('Vale-refeição'));
+    const buttons = alert.mock.calls[alert.mock.calls.length - 1][2] as any[];
+    expect(mockRecord).not.toHaveBeenCalled();
+    buttons.find((b) => b.text === 'Crédito').onPress();
+    await waitFor(() => expect(mockRecord).toHaveBeenCalledTimes(2));
+    const [first, second] = mockRecord.mock.calls.map((c) => c[1]);
+    expect(first).toMatchObject({ method: 'credit_card', baseCents: 0, tipCents: 500 });
+    expect(second).toMatchObject({ method: 'voucher', voucherKind: 'refeicao', tipCents: 0 });
+    expect(first.idempotencyKey).not.toBe(second.idempotencyKey);
+  });
+
+  it('aproximação repetida mantém a chave depois de queda, e troca só se o servidor disser que falhou (T1)', async () => {
+    mockBill.mockResolvedValue({ ...bill, tapActive: true });
+    const view = scene();
+    await waitFor(() => expect(view.getByText('Aproximação')).toBeTruthy());
+    mockTap.mockRejectedValueOnce(new Error('rede'));
+    fireEvent.press(view.getByText('Aproximação'));
+    await waitFor(() => expect(mockTap).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(view.getByText('Aproximação')).toBeTruthy());
+    mockTap.mockRejectedValueOnce(Object.assign(new Error('charge_failed'), { code: 'charge_failed' }));
+    fireEvent.press(view.getByText('Aproximação'));
+    await waitFor(() => expect(mockTap).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('Cobrança não concluída', expect.any(String)));
+    fireEvent.press(view.getByText('Aproximação'));
+    await waitFor(() => expect(mockTap).toHaveBeenCalledTimes(3));
+    const keys = mockTap.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).not.toBe(keys[1]);
+  });
+
   it('em modo gorjeta não há taxa para desmarcar', async () => {
     mockBill.mockResolvedValue({ ...bill, feeOrTipMode: 'tip', feeBps: 0, feeCents: 0, totalWithFeeCents: 6000 });
     const view = scene();

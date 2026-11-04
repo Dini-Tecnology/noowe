@@ -37,6 +37,20 @@ export async function handleRefund(req: Request, deps: PaymentDeps): Promise<Res
   };
 
   if (!job.providerRef) return job.action === "verify" ? json({ ok: true }) : record("failed", "Cobrança sem referência no provedor");
+  if (job.provider === "tap") {
+    // O fornecedor confirma pelo webhook dele. A repetição é idempotente pelo id do estorno.
+    if (job.action === "verify") return json({ ok: true });
+    const active = await deps.rpc("service_tap_provider", {});
+    const tap = deps.tapProvider?.(active.data ?? null);
+    if (!tap) return record("transient", "Fornecedor de aproximação indisponível");
+    try {
+      await tap.refund({ reference: job.refundId, providerRef: job.providerRef, amountCents: job.amountCents, reason: String(job.reason ?? "").slice(0, 200) });
+      return record("sent");
+    } catch (err) {
+      console.error("payments-refund tap error:", err);
+      return record("transient", "Fornecedor de aproximação indisponível");
+    }
+  }
   const secrets = await deps.rpc("service_payment_account_secrets", { p_account_id: job.paymentAccountId });
   const apiKey: string | undefined = secrets.data?.apiKey;
   if (secrets.error || !apiKey) return job.action === "verify" ? json({ ok: true }) : record("transient", "Credenciais do provedor indisponíveis");

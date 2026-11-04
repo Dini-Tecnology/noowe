@@ -667,7 +667,7 @@ export interface SupabaseApiAdapter {
   /** Pagamento presencial: abate do mesmo saldo da comanda (ADR-032). */
   recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string; voucherKind?: string | null; couponCode?: string | null }): Promise<any>;
   /** Inicia a cobrança por aproximação. A resposta nunca significa pago: quem confirma é o fornecedor. */
-  startTapCharge(tableSessionId: string, input: { baseCents?: number | null; waiveFee?: boolean; idempotencyKey: string }): Promise<{ paymentId: string; amountCents: number; sdkPayload: Record<string, unknown> }>;
+  startTapCharge(tableSessionId: string, input: { baseCents?: number | null; waiveFee?: boolean; reason?: string | null; idempotencyKey: string }): Promise<{ paymentId: string; amountCents: number; sdkPayload: Record<string, unknown> }>;
   setAcceptedVouchers(restaurantId: string, kinds: string[]): Promise<any>;
   getPaymentOptions(restaurantId: string): Promise<{ tapActive: boolean; acceptedVouchers: string[] }>;
   getChargePolicies(restaurantId: string): Promise<ChargePolicyRow[]>;
@@ -2455,9 +2455,13 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
   async startTapCharge(tableSessionId, input) {
     const { data, error } = await getSupabaseClient().functions.invoke('tap-charge', {
-      body: { tableSessionId, baseCents: input.baseCents ?? null, waiveFee: input.waiveFee === true, idempotencyKey: input.idempotencyKey },
+      body: { tableSessionId, baseCents: input.baseCents ?? null, waiveFee: input.waiveFee === true, reason: input.reason ?? null, idempotencyKey: input.idempotencyKey },
     });
-    if (error) throw error;
+    if (error) {
+      // O corpo traz o motivo: quem chamou decide se pode tentar com nova chave.
+      const body = await (error as any).context?.json?.().catch(() => null);
+      throw Object.assign(new Error(body?.error ?? error.message), { code: body?.error });
+    }
     return data;
   },
 

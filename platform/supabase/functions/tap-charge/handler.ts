@@ -23,15 +23,21 @@ export async function handleTapCharge(req: Request, deps: TapDeps): Promise<Resp
 
   const begun = await deps.rpc("service_tap_begin", {
     p_user_id: user.id, p_table_session_id: body.tableSessionId, p_idempotency_key: body.idempotencyKey,
-    p_base_cents: body.baseCents ?? null, p_waive_fee: body.waiveFee === true, p_tip_cents: body.tipCents ?? 0,
+    p_base_cents: body.baseCents ?? null, p_waive_fee: body.waiveFee === true, p_tip_cents: body.tipCents ?? 0, p_reason: typeof body.reason === "string" ? body.reason : null,
   });
   if (begun.error) {
     const mapped = mapRpcError(begun.error.code);
     return json({ error: mapped.error }, mapped.status);
   }
   const payment = begun.data;
+  // Repetição: nada vai de novo ao fornecedor. Só uma cobrança ainda pendente e sem início registrado é iniciada.
+  if (payment.status === "completed") return json({ paymentId: payment.paymentId, amountCents: payment.amountCents, approved: true });
+  if (payment.status !== "pending") return json({ error: "charge_failed" }, 409);
+  if (payment.providerRef) return json({ paymentId: payment.paymentId, amountCents: payment.amountCents, sdkPayload: payment.sdkPayload ?? null, resumed: true });
   try {
     const charge = await provider.startCharge({ reference: payment.paymentId, amountCents: payment.amountCents, description: "Conta da mesa NOOWE" });
+    const started = await deps.rpc("service_tap_started", { p_payment_id: payment.paymentId, p_provider_ref: charge.providerRef, p_sdk_payload: charge.sdkPayload });
+    if (started.error) console.error("tap-charge started error:", started.error.message);
     return json({ paymentId: payment.paymentId, amountCents: payment.amountCents, sdkPayload: charge.sdkPayload });
   } catch (err) {
     console.error("tap-charge provider error:", err);

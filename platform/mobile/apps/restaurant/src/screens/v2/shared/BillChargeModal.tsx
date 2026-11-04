@@ -37,11 +37,16 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
   const [submitting, setSubmitting] = useState(false);
   // Repetir depois de uma falha usa a mesma chave: nunca lança o pagamento duas vezes.
   const key = useRef('');
+  const tipKey = useRef('');
   const baseCents = digits ? parseInt(digits, 10) : null;
+  const [tipDigits, setTipDigits] = useState('');
+  const tipCents = tipDigits ? parseInt(tipDigits, 10) : 0;
 
   useEffect(() => {
     if (!tableSessionId) return;
     key.current = Crypto.randomUUID();
+    tipKey.current = Crypto.randomUUID();
+    setTipDigits('');
     setDigits('');
     setKeepFee(true);
     setReason('');
@@ -68,22 +73,45 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
     if (!tableSessionId || !ready) return;
     setSubmitting(true);
     try {
-      await supabaseApiAdapter.startTapCharge(tableSessionId, { baseCents, waiveFee: hasFee && !keepFee, idempotencyKey: key.current });
+      await supabaseApiAdapter.startTapCharge(tableSessionId, { baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, idempotencyKey: key.current });
       Alert.alert('Aproxime o cartão', 'A conta só abate quando a cobrança for aprovada.');
       onClose();
     } catch (err) {
+      // Recusada ou não iniciada: agora sim é uma cobrança nova. Queda de rede mantém a chave, porque pode ter passado.
+      if ((err as { code?: string }).code === 'charge_failed') {
+        key.current = Crypto.randomUUID();
+        Alert.alert('Cobrança não concluída', 'A tentativa anterior não foi aprovada. Toque de novo para cobrar.');
+        return;
+      }
       Alert.alert('Falha ao cobrar', userErrorMessage(err, 'Tente novamente.'));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const charge = async (method: string, voucherKind?: string) => {
+  // Vale não paga gorjeta: ela vai antes, no cartão, para a conta ainda estar aberta quando o vale quitar o saldo.
+  const askTipMethod = (voucherKind: string) => {
+    Alert.alert('Gorjeta no cartão', 'O vale paga só o consumo. Em qual cartão vai a gorjeta?', [
+      { text: 'Crédito', onPress: () => void charge('voucher', voucherKind, 'credit_card') },
+      { text: 'Débito', onPress: () => void charge('voucher', voucherKind, 'debit_card') },
+      { text: 'Voltar', style: 'cancel' },
+    ]);
+  };
+
+  const charge = async (method: string, voucherKind?: string, tipMethod?: string) => {
     if (!tableSessionId || !ready) return;
+    if (method === 'voucher' && tipCents > 0 && !tipMethod) {
+      askTipMethod(voucherKind ?? '');
+      return;
+    }
     setSubmitting(true);
     try {
+      if (tipMethod) {
+        await supabaseApiAdapter.recordBillPayment(tableSessionId, { method: tipMethod, baseCents: 0, tipCents, idempotencyKey: tipKey.current });
+      }
       await supabaseApiAdapter.recordBillPayment(tableSessionId, {
         method, baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, idempotencyKey: key.current, voucherKind: voucherKind ?? null, couponCode: coupon.trim() || null,
+        tipCents: method === 'voucher' ? 0 : tipCents,
       });
       await onCharged();
       onClose();
@@ -152,6 +180,18 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
                 />
               )}
             </>
+          )}
+
+          {bill?.feeOrTipMode === 'tip' && (
+            <TextInput
+              value={tipCents ? formatCents(tipCents) : ''}
+              onChangeText={(text) => setTipDigits(text.replace(/\D/g, '').replace(/^0+/, '').slice(0, 7))}
+              keyboardType="number-pad"
+              placeholder="Gorjeta (opcional)"
+              placeholderTextColor={colors.foregroundMuted}
+              accessibilityLabel="Gorjeta"
+              style={[styles.input, { color: colors.foreground, backgroundColor: colors.backgroundTertiary }]}
+            />
           )}
 
           <TextInput

@@ -43,7 +43,7 @@ Tabela `noowe_pay_rates`. Campos: `payment_method`, `restaurant_id`, `rate_bps`,
 | `debit_card` | 149 (1,49%) | |
 | `pix` | 99 (0,99%) | |
 | `voucher` | sem linha | A spec não define o valor. Teto de 360 (3,6%) em `noowe_pay_methods.max_rate_bps` |
-| `tap_card` | sem linha | Taxa do fornecedor do Tap, ainda sem contrato |
+| `tap_card` | sem linha | Taxa do fornecedor do Tap, ainda sem contrato. **Sem esta linha, ligar o fornecedor não mostra o botão** |
 | `cash`, `house_terminal` | não têm taxa | O banco recusa linha para eles |
 
 **Linha sem `restaurant_id` é o padrão.** Linha com `restaurant_id` vale só para aquele restaurante e prevalece:

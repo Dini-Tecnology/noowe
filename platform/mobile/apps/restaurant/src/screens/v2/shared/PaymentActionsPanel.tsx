@@ -8,7 +8,7 @@ import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 
 const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
-const METHOD_LABEL: Record<string, string> = { cash: 'Dinheiro', pix: 'Pix', credit_card: 'Crédito', debit_card: 'Débito', voucher: 'Vale' };
+const METHOD_LABEL: Record<string, string> = { cash: 'Dinheiro', pix: 'Pix', credit_card: 'Crédito', debit_card: 'Débito', voucher: 'Vale', tap_card: 'Aproximação' };
 
 type Action = { kind: 'refund' | 'reopen'; payment: RefundablePayment };
 

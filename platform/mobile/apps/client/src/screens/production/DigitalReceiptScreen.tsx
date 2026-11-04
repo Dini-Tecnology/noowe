@@ -21,7 +21,7 @@ const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'curren
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethodType, string> = {
   pix: 'PIX', credit_card: 'Crédito', debit_card: 'Débito', apple_pay: 'Apple Pay',
-  google_pay: 'Google Pay', tap_to_pay: 'TAP to Pay', wallet: 'Carteira Noowe',
+  google_pay: 'Google Pay', tap_to_pay: 'TAP to Pay', tap_card: 'Aproximação', wallet: 'Carteira Noowe',
 };
 
 function formatDateTime(iso: string): string {

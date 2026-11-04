@@ -116,3 +116,11 @@ Deno.test("forma de pagamento desconhecida não vira código fiscal", () => {
 Deno.test("horário de emissão usa o fuso de São Paulo", () => {
   assertEquals(focusIssuedAt(new Date("2026-01-01T02:30:00Z")), "2025-12-31T23:30:00-03:00");
 });
+
+Deno.test("vale declara o tipo certo, e aproximação tem código", () => {
+  const body = buildFocusNfce({
+    ...input,
+    payments: [{ method: "voucher_refeicao", cents: 100 }, { method: "voucher_alimentacao", cents: 100 }, { method: "tap_card", cents: 9800 }],
+  }) as { formas_pagamento: Record<string, unknown>[] };
+  assertEquals(body.formas_pagamento.map((p) => p.forma_pagamento), ["11", "10", "03"]);
+});

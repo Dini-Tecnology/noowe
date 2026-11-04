@@ -119,3 +119,21 @@ test("sem credencial, tenta de novo depois", async () => {
   await handleRefund(req(), deps);
   assert.equal(outcome(calls).p_outcome, "transient");
 });
+
+test("pagamento por aproximação estorna pelo fornecedor dele, nunca pelo Asaas", async () => {
+  const tapRefunds: any[] = [];
+  const { deps, calls, refunds } = setup({ job: { ...job, provider: "tap" } });
+  (deps as any).tapProvider = () => ({ refund: async (input: unknown) => { tapRefunds.push(input); } });
+  await handleRefund(req(), deps);
+  assert.equal(refunds.length, 0);
+  assert.equal(tapRefunds[0].amountCents, 1500);
+  assert.equal(tapRefunds[0].reference, REFUND);
+  assert.equal(outcome(calls).p_outcome, "sent");
+});
+
+test("sem fornecedor de aproximação, espera em vez de falhar", async () => {
+  const { deps, calls } = setup({ job: { ...job, provider: "tap" } });
+  await handleRefund(req(), deps);
+  assert.equal(outcome(calls).p_outcome, "transient");
+});
+

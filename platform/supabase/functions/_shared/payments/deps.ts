@@ -1,3 +1,4 @@
+import type { TapProvider } from "../tap/types.ts";
 import { timingSafeEqual } from "./crypto.ts";
 import type { PaymentProvider } from "./types.ts";
 
@@ -8,6 +9,8 @@ export interface PaymentDeps {
   rpc(fn: string, args: Record<string, unknown>): Promise<RpcResult>;
   getUser(token: string): Promise<{ id: string } | null>;
   provider: PaymentProvider;
+  // Fornecedor de aproximação, para estornar o que foi cobrado por ele.
+  tapProvider?(name: string | null): TapProvider | null;
   env(name: string): string | undefined;
   now?(): Date;
 }
