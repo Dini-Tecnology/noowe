@@ -2,6 +2,7 @@
 -- the caller's order ready so the visit can continue.
 begin;
 select plan(1);
+update private.dev_flags set enabled = false where key = 'simulate_table_scan';
 do $$
 declare
   r uuid := 'c1000000-0000-4000-8000-000000000002';

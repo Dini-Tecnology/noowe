@@ -282,6 +282,7 @@ select is(public.customer_order_fiscal((select id from public.orders where table
 do $$
 declare d uuid; v_sent integer;
 begin
+  delete from vault.secrets where name in ('project_url', 'service_role_key');
   perform vault.create_secret('https://proj.test', 'project_url', 'teste');
   perform vault.create_secret('service-key', 'service_role_key', 'teste');
   update public.fiscal_documents set status = 'failed' where status in ('pending', 'processing');

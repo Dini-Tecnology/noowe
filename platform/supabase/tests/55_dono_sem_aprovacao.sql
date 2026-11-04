@@ -34,12 +34,12 @@ end $$;
 
 -- O Dono pede: nasce aprovado, aplica o efeito e audita, sem tarefa nem aviso.
 select pg_temp.act(pg_temp.ctx('owner'));
-select (public.restaurant_request_approval(pg_temp.ctx('r'), 'discount', 'Conta', 'Cortesia da casa', 10, null, pg_temp.ctx('order'))->>'id') as own_id \gset
-select is((select status from public.approvals where id = :'own_id'), 'approved', 'o pedido do Dono nasce aprovado');
-select is((select resolver_id from public.approvals where id = :'own_id'), pg_temp.ctx('owner'), 'o próprio Dono consta como quem resolveu');
+insert into _ctx values ('own_id', (public.restaurant_request_approval(pg_temp.ctx('r'), 'discount', 'Conta', 'Cortesia da casa', 10, null, pg_temp.ctx('order'))->>'id')::uuid);
+select is((select status from public.approvals where id = pg_temp.ctx('own_id')), 'approved', 'o pedido do Dono nasce aprovado');
+select is((select resolver_id from public.approvals where id = pg_temp.ctx('own_id')), pg_temp.ctx('owner'), 'o próprio Dono consta como quem resolveu');
 select is((select discount_cents from public.orders where id = pg_temp.ctx('order')), 1000::bigint, 'o desconto vale na conta, em centavos');
-select is((select count(*)::int from public.staff_tasks where entity_id = :'own_id'::uuid), 0, 'sem tarefa para quem decide');
-select is((select count(*)::int from public.audit_logs where entity_id = :'own_id'::uuid and action = 'approval.approved'
+select is((select count(*)::int from public.staff_tasks where entity_id = pg_temp.ctx('own_id')::uuid), 0, 'sem tarefa para quem decide');
+select is((select count(*)::int from public.audit_logs where entity_id = pg_temp.ctx('own_id')::uuid and action = 'approval.approved'
   and "after"->>'direct' = 'true'), 1, 'fica registrado como aplicado direto');
 
 -- Quem é Dono e também garçom conta como Dono.
@@ -49,18 +49,18 @@ select is((public.restaurant_request_approval(pg_temp.ctx('r'), 'other', 'Item',
 
 -- O garçom segue pedindo e esperando.
 select pg_temp.act(pg_temp.ctx('waiter'));
-select (public.restaurant_request_approval(pg_temp.ctx('r'), 'other', 'Item', 'Teste', 0)->>'id') as w_id \gset
-select is((select status from public.approvals where id = :'w_id'), 'pending', 'o pedido do garçom fica pendente');
+insert into _ctx values ('w_id', (public.restaurant_request_approval(pg_temp.ctx('r'), 'other', 'Item', 'Teste', 0)->>'id')::uuid);
+select is((select status from public.approvals where id = pg_temp.ctx('w_id')), 'pending', 'o pedido do garçom fica pendente');
 
 -- O Gerente não aprova o próprio pedido, mas desiste; o Dono aprova o dele e o dos outros.
 select pg_temp.act(pg_temp.ctx('manager'));
-select (public.restaurant_request_approval(pg_temp.ctx('r'), 'other', 'Item do gerente', 'Teste', 0)->>'id') as m_id \gset
-select is(pg_temp.state_of(format($q$select public.restaurant_resolve_approval(%L, 'approved')$q$, :'m_id')), '42501',
+insert into _ctx values ('m_id', (public.restaurant_request_approval(pg_temp.ctx('r'), 'other', 'Item do gerente', 'Teste', 0)->>'id')::uuid);
+select is(pg_temp.state_of(format($q$select public.restaurant_resolve_approval(%L, 'approved')$q$, pg_temp.ctx('m_id'))), '42501',
   'o Gerente não aprova o próprio pedido');
-select lives_ok(format($q$select public.restaurant_resolve_approval(%L, 'rejected', 'Desisti')$q$, :'m_id'), 'o Gerente pode desistir');
+select lives_ok(format($q$select public.restaurant_resolve_approval(%L, 'rejected', 'Desisti')$q$, pg_temp.ctx('m_id')), 'o Gerente pode desistir');
 select pg_temp.act(pg_temp.ctx('owner'));
-select lives_ok(format($q$select public.restaurant_resolve_approval(%L, 'approved', 'Ok')$q$, :'w_id'), 'o Dono aprova o pedido do garçom');
-select is((select resolver_id from public.approvals where id = :'w_id'), pg_temp.ctx('owner'), 'quem aprovou fica registrado');
+select lives_ok(format($q$select public.restaurant_resolve_approval(%L, 'approved', 'Ok')$q$, pg_temp.ctx('w_id')), 'o Dono aprova o pedido do garçom');
+select is((select resolver_id from public.approvals where id = pg_temp.ctx('w_id')), pg_temp.ctx('owner'), 'quem aprovou fica registrado');
 
 select * from finish();
 rollback;

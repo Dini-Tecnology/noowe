@@ -3,6 +3,7 @@
 begin;
 select plan(30);
 update private.dev_flags set enabled = true where key = 'simulate_order_payment';
+update private.dev_flags set enabled = false where key = 'simulate_pix_payment';
 
 create temp table _qs(k text primary key, v uuid);
 create function pg_temp.act(p_uid uuid) returns void language sql as $$

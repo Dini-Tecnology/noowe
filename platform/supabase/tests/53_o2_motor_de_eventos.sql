@@ -135,21 +135,21 @@ update public.tables set status = 'available' where id = pg_temp.ctx('table');
 -- Critério 4: aprovações chegam a Gerente e Dono; ninguém aprova o próprio pedido
 -- ---------------------------------------------------------------------------
 select pg_temp.act(pg_temp.ctx('waiter'));
-select (public.restaurant_request_approval(pg_temp.ctx('r'), 'discount', 'Conta da mesa', 'Cliente reclamou', 5, null, pg_temp.ctx('order'))->>'id') as approval_id \gset
+insert into _ctx values ('approval_id', (public.restaurant_request_approval(pg_temp.ctx('r'), 'discount', 'Conta da mesa', 'Cliente reclamou', 5, null, pg_temp.ctx('order'))->>'id')::uuid);
 select pg_temp.act(pg_temp.ctx('owner'));
 select is((select count(*)::integer from public.notifications where related_id = (pg_temp.task('approval.requested')).id
   and user_id in (pg_temp.ctx('manager'), pg_temp.ctx('owner'))), 2, 'critério 4: Gerente e Dono recebem ao mesmo tempo');
 select is((select metadata->>'category' from public.notifications where related_id = (pg_temp.task('approval.requested')).id limit 1),
   'approval', 'a notificação traz os botões de aprovar e recusar');
 select pg_temp.act(pg_temp.ctx('manager'));
-select (public.restaurant_request_approval(pg_temp.ctx('r'), 'other', 'Meu pedido', 'Teste', 0)->>'id') as own_id \gset
-select is(pg_temp.state_of(format($q$select public.restaurant_resolve_approval(%L, 'approved')$q$, :'own_id')), '42501',
+insert into _ctx values ('own_id', (public.restaurant_request_approval(pg_temp.ctx('r'), 'other', 'Meu pedido', 'Teste', 0)->>'id')::uuid);
+select is(pg_temp.state_of(format($q$select public.restaurant_resolve_approval(%L, 'approved')$q$, pg_temp.ctx('own_id'))), '42501',
   'ninguém aprova o próprio pedido');
-select lives_ok(format($q$select public.restaurant_resolve_approval(%L, 'approved', 'Ok')$q$, :'approval_id'), 'gerente aprova o pedido do garçom');
+select lives_ok(format($q$select public.restaurant_resolve_approval(%L, 'approved', 'Ok')$q$, pg_temp.ctx('approval_id')), 'gerente aprova o pedido do garçom');
 select pg_temp.act(pg_temp.ctx('owner'));
 select is((select discount_cents from public.orders where id = pg_temp.ctx('order')), 500::bigint, 'o desconto aprovado chega em centavos ao pedido');
 select is(pg_temp.open_tasks('approval.requested'), 1, 'resolver fecha a tarefa; a outra segue aberta');
-select is((select reason from public.audit_logs where action = 'approval.approved' and entity_id = :'approval_id'::uuid), 'Ok', 'aprovação deixa rastro');
+select is((select reason from public.audit_logs where action = 'approval.approved' and entity_id = pg_temp.ctx('approval_id')::uuid), 'Ok', 'aprovação deixa rastro');
 
 -- ---------------------------------------------------------------------------
 -- Critério 5: sem Gerente em turno, entram os gerentes ativos e o Dono
@@ -460,7 +460,7 @@ select lives_ok(format($q$select private.manager_on_shift(%L)$q$, pg_temp.ctx('r
 
 -- Quem pediu pode desistir, mesmo sem poder aprovar.
 select pg_temp.act(pg_temp.ctx('manager'));
-select lives_ok(format($q$select public.restaurant_resolve_approval(%L, 'rejected', 'Desisti')$q$, :'own_id'), 'quem pediu pode desistir');
+select lives_ok(format($q$select public.restaurant_resolve_approval(%L, 'rejected', 'Desisti')$q$, pg_temp.ctx('own_id')), 'quem pediu pode desistir');
 select pg_temp.act(pg_temp.ctx('owner'));
 
 -- Nada do que rodou acima falhou em silêncio.

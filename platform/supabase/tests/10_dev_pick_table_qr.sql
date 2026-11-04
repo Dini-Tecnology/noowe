@@ -2,6 +2,7 @@
 -- hand back a payload that customer_open_table_session accepts.
 begin;
 select plan(1);
+update private.dev_flags set enabled = false where key = 'simulate_table_scan';
 do $$
 declare
   r uuid := 'c1000000-0000-4000-8000-000000000002';

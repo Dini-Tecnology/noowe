@@ -109,6 +109,7 @@ begin
     'cnpj', '12345678000123', 'razaoSocial', 'Casa LTDA', 'stateCode', 'SP', 'regimeTributario', 'simples_nacional',
     'taxDefaults', jsonb_build_object('ncm', '21069090', 'cfop', '5102', 'icms_origem', '0', 'icms_situacao_tributaria', '102',
       'pis_situacao_tributaria', '49', 'cofins_situacao_tributaria', '49')), 'tok-rec');
+  delete from vault.secrets where name in ('project_url', 'service_role_key');
   perform vault.create_secret('https://proj.test', 'project_url', 'teste');
   perform vault.create_secret('service-key', 'service_role_key', 'teste');
 end $$;

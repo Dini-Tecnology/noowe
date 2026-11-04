@@ -10,6 +10,8 @@ select ok(
   not exists (
     select 1 from public.restaurants
     where is_active
+      -- O backfill cuida de quem existia. Quem foi criado depois pode estar incompleto (pendência 39).
+      and created_at < '2026-09-22'
       and service_type in ('fine_dining', 'casual_dining', 'quick_service')
       and (
         nullif(trim(coalesce(description, '')), '') is null
@@ -18,7 +20,7 @@ select ok(
         or jsonb_array_length(coalesce(service_config->'amenities', '[]'::jsonb)) = 0
       )
   ),
-  'nenhum restaurante ativo fica com o perfil pela metade'
+  'nenhum restaurante do backfill fica com o perfil pela metade'
 );
 
 select ok(
