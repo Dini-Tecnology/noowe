@@ -181,9 +181,13 @@ begin
   insert into public.fiscal_documents(id, restaurant_id, table_session_id, external_ref, total_cents, status) values (d, r, s, 's-' || s, 6000, 'authorized');
   perform pg_temp.act(pg_temp.ctx('owner'));
   perform public.restaurant_request_refund(ta, 'Só uma parte');
+  assert (select cancel_status from public.fiscal_documents where id = d) is null, 'pedir não mexe na nota';
+  perform private.apply_payment_event(ta, 'asaas', 'evt-fa-' || ta, 'PAYMENT_REFUNDED', 'refunded', null);
   assert (select cancel_status from public.fiscal_documents where id = d) is null, 'parte da venda não cancela a nota';
   assert exists (select 1 from public.audit_logs where action = 'fiscal.refund_review' and entity_id = d), 'pede revisão';
   perform public.restaurant_request_refund(tb, 'O restante');
+  assert (select cancel_status from public.fiscal_documents where id = d) is null, 'antes de o dinheiro voltar, a nota segue';
+  perform private.apply_payment_event(tb, 'asaas', 'evt-fb-' || tb, 'PAYMENT_REFUNDED', 'refunded', null);
   assert (select cancel_status from public.fiscal_documents where id = d) = 'requested', 'toda a venda estornada cancela a nota';
   assert length((select cancel_reason from public.fiscal_documents where id = d)) between 15 and 255, 'justificativa no tamanho da SEFAZ';
   perform public.service_fiscal_configure(r, jsonb_build_object('cnpj', '12.345.678/0001-23', 'razaoSocial', 'Casa LTDA', 'stateCode', 'SP',

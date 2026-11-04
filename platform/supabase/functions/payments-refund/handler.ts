@@ -1,9 +1,18 @@
 import { AsaasError } from "../_shared/payments/asaas.ts";
 import { mapAsaasPaymentStatus } from "../_shared/payments/events.ts";
+import { asaasValueToCents } from "../_shared/payments/money.ts";
+import type { AsaasPayment } from "../_shared/payments/types.ts";
 import { bearer, isServiceRole, json, type PaymentDeps } from "../_shared/payments/deps.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALREADY_REFUNDING = new Set(["REFUNDED", "REFUND_IN_PROGRESS", "REFUND_REQUESTED"]);
+
+// Quanto o provedor já registra como devolvido ou a caminho nesta cobrança, em centavos.
+function refundedAtProvider(charge: AsaasPayment, onlyDone: boolean): number {
+  return (charge.refunds ?? [])
+    .filter((r) => (onlyDone ? r.status === "DONE" : r.status !== "CANCELLED"))
+    .reduce((sum, r) => sum + asaasValueToCents(r.value), 0);
+}
 
 // Envia à Asaas um estorno aprovado. Só o banco chama (pg_net), com a service role. A resposta da Asaas diz que o pedido foi
 // aceito; quem confirma a devolução é o webhook. Se o webhook não vier, a mesma fila confere a cobrança depois.
@@ -42,6 +51,13 @@ export async function handleRefund(req: Request, deps: PaymentDeps): Promise<Res
           p_event_type: `SYNC_${actual.status}`, p_outcome: "refunded", p_amount_cents: null,
           p_payload: { source: "refund-verify", providerStatus: actual.status }, p_gateway_status: mapped.gatewayStatus ?? null,
         });
+      } else if (refundedAtProvider(actual, true) >= (job.settledCents ?? 0) + job.amountCents) {
+        // Parcial concluído sem o aviso chegar.
+        await deps.rpc("service_payment_apply_event", {
+          p_payment_id: job.paymentId, p_provider: "asaas", p_provider_event_id: `sync-refund:${job.refundId}`,
+          p_event_type: "SYNC_PARTIALLY_REFUNDED", p_outcome: "refunded", p_amount_cents: null,
+          p_payload: { source: "refund-verify", providerStatus: actual.status }, p_gateway_status: "partially_refunded",
+        });
       }
     } catch (err) {
       console.error("payments-refund verify error:", err);
@@ -50,10 +66,11 @@ export async function handleRefund(req: Request, deps: PaymentDeps): Promise<Res
   }
 
   try {
-    // Só a primeira tentativa é certamente inédita: um timeout pode ter devolvido o dinheiro.
-    if (job.attempt > 1 && job.total) {
+    // Só a primeira tentativa é certamente inédita: um timeout ou uma função interrompida pode ter devolvido o dinheiro.
+    if (job.attempt > 1) {
       const actual = await deps.provider.getCharge(apiKey, job.providerRef);
-      if (ALREADY_REFUNDING.has(actual.status)) return record("sent");
+      if (job.total && ALREADY_REFUNDING.has(actual.status)) return record("sent");
+      if (refundedAtProvider(actual, false) >= (job.settledCents ?? 0) + job.amountCents) return record("sent");
     }
     await deps.provider.refund(apiKey, job.providerRef, job.amountCents, String(job.reason ?? "").slice(0, 200));
     return record("sent");
@@ -66,8 +83,7 @@ export async function handleRefund(req: Request, deps: PaymentDeps): Promise<Res
       return record("failed", `Asaas recusou o estorno (HTTP ${err.status})`);
     }
     console.error("payments-refund provider error:", err instanceof AsaasError ? { status: err.status, body: err.body } : err);
-    // Estorno parcial não dá para conferir na cobrança: repetir às cegas poderia devolver duas vezes. Vai para uma pessoa.
-    if (!job.total) return record("failed", "Sem resposta do provedor. Confira na Asaas se a devolução saiu.");
+    // A próxima tentativa confere na cobrança antes de enviar de novo.
     return record("transient", "Provedor indisponível");
   }
 }

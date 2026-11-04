@@ -7,7 +7,7 @@ import type { PaymentDeps } from "../_shared/payments/deps.ts";
 const REFUND = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const job = { claimed: true, refundId: REFUND, action: "send", attempt: 1, total: true, paymentId: "p1", paymentAccountId: "a1", providerRef: "pay_1", amountCents: 1500, reason: "Prato errado" };
 
-function setup(over: { job?: any; refund?: () => Promise<void>; status?: string; apiKey?: string | null } = {}) {
+function setup(over: { job?: any; refund?: () => Promise<void>; status?: string; apiKey?: string | null; refunds?: { status: string; value: number }[] } = {}) {
   const calls: { fn: string; args: any }[] = [];
   const refunds: any[] = [];
   const deps = {
@@ -19,7 +19,7 @@ function setup(over: { job?: any; refund?: () => Promise<void>; status?: string;
     },
     provider: {
       refund: async (...a: unknown[]) => { refunds.push(a); if (over.refund) await over.refund(); },
-      getCharge: async () => ({ id: "pay_1", status: over.status ?? "RECEIVED", value: 15 }),
+      getCharge: async () => ({ id: "pay_1", status: over.status ?? "RECEIVED", value: 15, refunds: over.refunds ?? null }),
     },
     env: () => "service-key",
     getUser: async () => null,
@@ -68,10 +68,34 @@ test("queda de rede em estorno total tenta de novo", async () => {
   assert.equal(outcome(calls).p_outcome, "transient");
 });
 
-test("queda de rede em estorno parcial não repete às cegas", async () => {
+test("queda de rede em estorno parcial tenta de novo, porque a próxima tentativa confere antes", async () => {
   const { deps, calls } = setup({ job: { ...job, total: false }, refund: async () => { throw new Error("timeout"); } });
   await handleRefund(req(), deps);
-  assert.equal(outcome(calls).p_outcome, "failed");
+  assert.equal(outcome(calls).p_outcome, "transient");
+});
+
+test("parcial retomado depois de queda: se o provedor já registra, não devolve de novo", async () => {
+  const { deps, calls, refunds } = setup({ job: { ...job, total: false, attempt: 2, settledCents: 0 }, refunds: [{ status: "PENDING", value: 15 }] });
+  await handleRefund(req(), deps);
+  assert.equal(refunds.length, 0);
+  assert.equal(outcome(calls).p_outcome, "sent");
+});
+
+test("parcial retomado: o que o provedor registra é de estorno anterior, então envia", async () => {
+  const { deps, refunds } = setup({ job: { ...job, total: false, attempt: 2, settledCents: 1000 }, refunds: [{ status: "DONE", value: 10 }, { status: "CANCELLED", value: 15 }] });
+  await handleRefund(req(), deps);
+  assert.equal(refunds.length, 1);
+});
+
+test("conferência conclui parcial cujo aviso se perdeu, sem dar por feito o que não terminou", async () => {
+  const done = setup({ job: { ...job, action: "verify", total: false, settledCents: 0 }, refunds: [{ status: "DONE", value: 15 }] });
+  await handleRefund(req(), done.deps);
+  const event = done.calls.find((c) => c.fn === "service_payment_apply_event")?.args;
+  assert.equal(event.p_gateway_status, "partially_refunded");
+  assert.equal(event.p_provider_event_id, `sync-refund:${REFUND}`);
+  const pending = setup({ job: { ...job, action: "verify", total: false, settledCents: 0 }, refunds: [{ status: "PENDING", value: 15 }] });
+  await handleRefund(req(), pending.deps);
+  assert.equal(pending.calls.some((c) => c.fn === "service_payment_apply_event"), false);
 });
 
 test("nova tentativa confere antes: se já foi devolvido, não devolve de novo", async () => {

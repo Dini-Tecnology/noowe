@@ -38,6 +38,11 @@ function setup(over: { reserved?: any; reserveError?: any; customerId?: string |
         (provider as any).input = i;
         return { id: "pay_asaas", status: "PENDING", value: 50, netValue: 49.01, invoiceUrl: "https://asaas/i/1" };
       },
+      payWithToken: async (_k: string, id: string, token: string, ip: string | null) => {
+        provider.push(`pay:${id}`);
+        (provider as any).paid = { token, ip };
+        return { id, status: "CONFIRMED", value: 50 };
+      },
       setSplit: async (_k: string, _id: string, wallet: string, cents: number) => {
         if (over.setSplitThrows) throw new AsaasError(500, null, "boom");
         provider.push(`setSplit:${wallet}:${cents}`);
@@ -179,9 +184,7 @@ test("cartão novo com consentimento: marca a cobrança para salvar e segue pela
   assert.equal(body.savedCard, undefined);
   const options = calls.find((c) => c.fn === "service_payment_set_card_options")!;
   assert.deepEqual(options.args, { p_payment_id: PAY, p_user_id: USER, p_save_card: true, p_payment_method_id: null });
-  const input = (provider as any).input;
-  assert.equal(input.creditCardToken, null);
-  assert.equal(input.remoteIp, null);
+  assert.equal((provider as any).paid, undefined);
   assert.equal(calls.filter((c) => c.fn === "service_payment_card_token").length, 0);
 });
 
@@ -191,7 +194,7 @@ test("cartão novo sem consentimento: não marca para salvar", async () => {
   assert.equal(calls.find((c) => c.fn === "service_payment_set_card_options")!.args.p_save_card, false);
 });
 
-test("cartão salvo: cobra com o token do servidor, sem página do Asaas, e devolve pendente", async () => {
+test("cartão salvo: cobra com o token do servidor, depois do split e da referência gravada, sem página do Asaas", async () => {
   const { deps, calls, provider } = setup({ cardToken: "tok_secreto_1", customerId: "cus_1" });
   const res = await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }), deps);
   assert.equal(res.status, 200);
@@ -199,10 +202,12 @@ test("cartão salvo: cobra com o token do servidor, sem página do Asaas, e devo
   assert.equal(body.status, "pending");
   assert.equal(body.savedCard, true);
   assert.equal(body.checkoutUrl, null);
-  const input = (provider as any).input;
-  assert.equal(input.creditCardToken, "tok_secreto_1");
-  assert.equal(input.remoteIp, "203.0.113.7");
-  assert.equal(input.billingType, "CREDIT_CARD");
+  assert.deepEqual((provider as any).paid, { token: "tok_secreto_1", ip: "203.0.113.7" });
+  assert.equal((provider as any).input.billingType, "CREDIT_CARD");
+  assert.equal((provider as any).input.creditCardToken, undefined);
+  const order = provider as unknown as string[];
+  assert.ok(order.findIndex((x) => x.startsWith("setSplit")) < order.indexOf("pay:pay_asaas"), "split antes de cobrar");
+  assert.ok(calls.some((c) => c.fn === "service_payment_attach_provider"), "referência gravada");
   assert.equal(JSON.stringify(body).includes("tok_secreto_1"), false);
   assert.deepEqual(calls.find((c) => c.fn === "service_payment_card_token")!.args,
     { p_user_id: USER, p_payment_method_id: SAVED, p_account_id: ACCT });

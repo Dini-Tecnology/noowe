@@ -85,3 +85,9 @@ acima do líquido é recusado na criação. Falta confirmar:
   automática. Conveniência em R$ 0 e desligada até o contador confirmar; a mecânica do split fica pronta.
 - **Credenciais do Tap (pendência 37):** o fornecedor ativo fica na tabela, e as credenciais em segredo. Segredo em tabela
   iria parar no histórico de parâmetros (`noowe_param_history`) e nas cópias do banco.
+
+## Spike de 04/11, no sandbox do Asaas
+
+- **Cartão salvo:** cobrança criada sem token, split definido e depois `POST /payments/{id}/payWithCreditCard`. A cobrança sai com o split desde o início. É o caminho adotado: cobrar antes e definir o split depois só funcionou por tolerância do provedor.
+- **Estornos da cobrança:** `GET /payments/{id}` traz `refunds`, com `status` e `value`. É o que permite repetir um estorno sem devolver duas vezes.
+- **`PAYMENT_REFUND_DENIED`:** aceito no cadastro do webhook. O disparo em si não foi observado.

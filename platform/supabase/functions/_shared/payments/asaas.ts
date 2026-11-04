@@ -89,9 +89,7 @@ export class AsaasClient implements PaymentProvider {
       dueDate: input.dueDate,
       externalReference: input.externalReference,
       description: input.description,
-      callback: input.successUrl && !input.creditCardToken ? { successUrl: input.successUrl, autoRedirect: true } : undefined,
-      creditCardToken: input.creditCardToken ?? undefined,
-      remoteIp: input.creditCardToken ? input.remoteIp ?? undefined : undefined,
+      callback: input.successUrl ? { successUrl: input.successUrl, autoRedirect: true } : undefined,
     });
   }
 
@@ -114,6 +112,10 @@ export class AsaasClient implements PaymentProvider {
     await this.request<AsaasPayment>(apiKey, "PUT", `/payments/${encodeURIComponent(id)}`, {
       split: cents > 0 ? [{ walletId, fixedValue: centsToAsaasValue(cents) }] : [],
     });
+  }
+
+  payWithToken(apiKey: string, id: string, creditCardToken: string, remoteIp: string | null) {
+    return this.request<AsaasPayment>(apiKey, "POST", `/payments/${encodeURIComponent(id)}/payWithCreditCard`, { creditCardToken, remoteIp });
   }
 
   async cancelCharge(apiKey: string, id: string) {

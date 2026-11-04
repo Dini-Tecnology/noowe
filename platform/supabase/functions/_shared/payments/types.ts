@@ -5,13 +5,13 @@ export interface AsaasChargeInput {
   customer: string; billingType: "PIX" | "CREDIT_CARD" | "UNDEFINED"; valueCents: number; dueDate: string;
   externalReference: string; description: string;
   successUrl?: string | null;
-  // Cobrança em um toque com cartão salvo (F6): o token vem da nossa tabela privada, nunca do app.
-  creditCardToken?: string | null; remoteIp?: string | null;
 }
 export interface AsaasPayment {
   id: string; status: string; value: number; netValue?: number; invoiceUrl?: string; externalReference?: string | null;
   // Em pagamentos com cartão o Asaas devolve o token, a bandeira e o final (creditCardNumber = 4 dígitos).
   creditCard?: { creditCardToken?: string | null; creditCardBrand?: string | null; creditCardNumber?: string | null } | null;
+  // Estornos pedidos nesta cobrança. Status: PENDING, DONE, CANCELLED e os de autorização.
+  refunds?: { status: string; value: number }[] | null;
 }
 export interface AsaasPix { payload: string; expirationDate?: string | null }
 export type AsaasCompanyType = "MEI" | "LIMITED" | "INDIVIDUAL" | "ASSOCIATION";
@@ -32,6 +32,8 @@ export interface PaymentProvider {
   getCharge(apiKey: string, id: string): Promise<AsaasPayment>;
   getPixQrCode(apiKey: string, id: string): Promise<AsaasPix>;
   setSplit(apiKey: string, id: string, walletId: string, cents: number): Promise<void>;
+  // Cartão salvo (F6): o token vem da nossa tabela privada, nunca do app. Paga só depois do split definido.
+  payWithToken(apiKey: string, id: string, creditCardToken: string, remoteIp: string | null): Promise<AsaasPayment>;
   cancelCharge(apiKey: string, id: string): Promise<void>;
   refund(apiKey: string, id: string, valueCents: number, description?: string): Promise<void>;
   createAccount(rootApiKey: string, input: AsaasAccountInput): Promise<AsaasAccount>;

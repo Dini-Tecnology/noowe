@@ -108,7 +108,6 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
         valueCents: r.amountCents, dueDate: saoPauloDate(deps.now?.() ?? new Date()),
         externalReference: r.paymentId, description: purpose === "bill_share" ? "Conta da mesa NOOWE" : "Pedido NOOWE",
         successUrl: returnUrl ? `${returnUrl}?pid=${r.paymentId}` : null,
-        creditCardToken, remoteIp: creditCardToken ? remoteIp : null,
       });
     }
 
@@ -135,6 +134,8 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
       p_pix_payload: pixPayload, p_expires_at: pixExpires,
     });
     if (attached.error) throw new Error(`attach: ${attached.error.message}`);
+    // Cartão salvo só é cobrado com o split definido e a referência gravada: o aviso do provedor já encontra tudo pronto.
+    if (creditCardToken && charge.status === "PENDING") await deps.provider.payWithToken(apiKey, charge.id, creditCardToken, remoteIp);
     return json({
       paymentId: r.paymentId, status: "pending", method, amountCents: r.amountCents, expiresAt: pixExpires,
       checkoutUrl: creditCardToken ? null : charge.invoiceUrl ?? null,

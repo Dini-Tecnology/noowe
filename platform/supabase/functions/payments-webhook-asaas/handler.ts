@@ -69,6 +69,16 @@ export async function handleWebhook(req: Request, deps: PaymentDeps): Promise<Re
     return json({ ok: true, ignored: "chargeback_alerted" });
   }
 
+  // Aceito antes e negado agora: a venda volta a valer, e o estabelecimento é avisado.
+  if (type === "PAYMENT_REFUND_DENIED") {
+    await deps.rpc("service_payment_record_orphan_event", {
+      p_provider: "asaas", p_provider_event_id: eventId, p_event_type: type,
+      p_payment_account_id: accountId, p_payload: event,
+    });
+    await deps.rpc("service_refund_denied", { p_payment_id: local.paymentId });
+    return json({ ok: true, refundDenied: true });
+  }
+
   const mapped = mapAsaasEvent(type);
   if (!mapped) return orphan("event_not_handled");
 
