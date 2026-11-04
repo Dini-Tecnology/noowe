@@ -60,3 +60,9 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 37 | **Credenciais do Tap na tabela de parâmetros** | A resposta 11 pede credenciais na tabela. Segredo em tabela aparece em histórico, cópia de banco e consultas | O fornecedor ativo fica na tabela; as credenciais, em segredo (Vault ou segredo da função), como as do Asaas | T1 |
 | 38 | **Confirmações do contador da NOOWE** | Formato e emissor da nota de conveniência, e passagem do valor pela conta do restaurante | Aguardando. Não trava a construção: a taxa fica em R$ 0 e desligada | Ligar a M3 |
 | 39 | **Restaurante novo com perfil incompleto** | Natural Noowe e Parrilaria Noowe, criados depois do backfill de setembro, estão ativos sem preço médio (o primeiro também sem comodidades). A tela de detalhes assume perfil completo | Etapa de cadastro da M4 exige os campos; os dois existentes ficam como estão, porque são de teste | M4 |
+| 40 | **Recepcionista recusa reserva?** | O PDF diz que ela não pode "aprovar, recusar" | Não recusa; só o Maître completo, Gerente e Dono | — |
+| 41 | **O que é "isentar no-show" sem taxa?** | A taxa está oculta (resposta 10) e não há o que isentar | Reverter o no-show; quando a taxa existir, a permissão é a mesma | — |
+| 42 | **Gerente altera outro Gerente?** | Item G só diz que o Dono "concede" | Só o Dono altera ou inativa Gerente | — |
+| 43 | **Validade do convite de equipe** | Não definida | 7 dias, em `private.staff_invite_ttl` | — |
+| 44 | **Convite sem e-mail** | "Por e-mail ou link": o link funciona para quem o tiver | Permitido; quem convida escolhe | — |
+| 45 | **Quem vê a escala** | A matriz do PDF inclui Maître e Chef, e hoje só Dono e Gerente leem | Fica para depois: não está nos critérios da O3 | — |

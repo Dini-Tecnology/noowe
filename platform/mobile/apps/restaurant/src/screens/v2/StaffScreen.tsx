@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, TextInput, View, StyleSheet, Switch } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, TextInput, View, StyleSheet, Switch, Share } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Users, Shield, UserCheck, UserX, Plus, Pencil, Ban, CheckCircle2, Trash2, Search } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
-import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import { supabaseApiAdapter, type StaffInvite, type StaffInviteSent } from '@okinawa/shared/services/supabase-api';
+import { staffInviteShareMessage } from './shared/staffInvite';
 import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { assignableRoles, canManageMember, keepPrimary, toggleRole } from './shared/staffRoles';
@@ -92,7 +93,7 @@ export default function StaffScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteMode, setInviteMode] = useState<'link' | 'create'>('link');
+  const [inviteMode, setInviteMode] = useState<'link' | 'invite'>('link');
   const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
   const [email, setEmail] = useState('');
   const [searching, setSearching] = useState(false);
@@ -101,24 +102,30 @@ export default function StaffScreen() {
   const [selectedRoles, setSelectedRoles] = useState<string[]>(['waiter']);
   const [primaryRole, setPrimaryRole] = useState('waiter');
   const [receptionist, setReceptionist] = useState(false);
-  const [newFullName, setNewFullName] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  const [invites, setInvites] = useState<StaffInvite[]>([]);
+  const [sent, setSent] = useState<StaffInviteSent | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [deleting, setDeleting] = useState<DeleteState | null>(null);
+
+  const loadInvites = useCallback(async () => {
+    if (!restaurantId) return;
+    setInvites(await supabaseApiAdapter.listStaffInvites(restaurantId).catch(() => []));
+  }, [restaurantId]);
 
   const load = useCallback(async () => {
     try {
       setError(null);
       const data = await supabaseApiAdapter.getStaff(restaurantId ?? undefined);
       setStaff(Array.isArray(data) ? data : []);
+      await loadInvites();
     } catch (err) {
       setError(getErrorMessage(err, 'Erro ao carregar equipe'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [restaurantId]);
+  }, [restaurantId, loadInvites]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -141,8 +148,7 @@ export default function StaffScreen() {
     setSelectedRoles(['waiter']);
     setPrimaryRole('waiter');
     setReceptionist(false);
-    setNewFullName('');
-    setNewPassword('');
+    setSent(null);
     setInviteMode('link');
     setEditingMember(null);
     setInviteOpen(true);
@@ -193,7 +199,7 @@ export default function StaffScreen() {
     : inviteMode === 'link'
       // Quem já trabalha em outro restaurante pode ser vinculado a este também: a conta é uma só.
       ? Boolean(foundUser)
-      : Boolean(newFullName.trim() && email.trim() && newPassword.length >= 6);
+      : !sent;
 
   const submit = async () => {
     if (!restaurantId) return;
@@ -207,10 +213,13 @@ export default function StaffScreen() {
       } else if (inviteMode === 'link') {
         if (foundUser) await supabaseApiAdapter.setStaffRoles(restaurantId, foundUser.id, selectedRoles, primaryRole);
       } else {
-        const created = await supabaseApiAdapter.createStaffUser(restaurantId, email.trim(), newPassword, newFullName.trim(), primaryRole);
-        if (selectedRoles.length > 1 && created?.user?.id) {
-          await supabaseApiAdapter.setStaffRoles(restaurantId, created.user.id, selectedRoles, primaryRole);
-        }
+        const result = await supabaseApiAdapter.sendStaffInvite({
+          restaurantId, email: email.trim() || undefined, roles: selectedRoles, primaryRole,
+        });
+        setSent(result);
+        await loadInvites();
+        // A folha fica aberta para mostrar o código e compartilhar.
+        return;
       }
       setInviteOpen(false);
       setEditingMember(null);
@@ -365,6 +374,36 @@ export default function StaffScreen() {
                 </View>
               ))}
 
+              {canManage && invites.length > 0 ? (
+                <View style={{ marginBottom: 20 }}>
+                  <View style={styles.roleHeader}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foregroundSecondary }}>Convites abertos ({invites.length})</Text>
+                  </View>
+                  <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    {invites.map((invite) => (
+                      <View key={invite.id} style={styles.memberRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontWeight: '600', color: colors.foreground }}>{invite.email ?? 'Convite por link'}</Text>
+                          <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>
+                            {invite.roles.map((role) => ROLE_LABELS[role] ?? role).join(', ')}
+                          </Text>
+                        </View>
+                        <IconAction
+                          label="Cancelar convite"
+                          onPress={() => {
+                            void supabaseApiAdapter.revokeStaffInvite(invite.id)
+                              .then(loadInvites)
+                              .catch((err) => setError(getErrorMessage(err, 'Não foi possível cancelar o convite.')));
+                          }}
+                        >
+                          <Ban size={15} color="#F59E0B" />
+                        </IconAction>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
               {canManage && inactive.length > 0 ? (
                 <View style={{ marginBottom: 20 }}>
                   <View style={styles.roleHeader}>
@@ -429,8 +468,8 @@ export default function StaffScreen() {
           ? 'Altere a função deste membro da equipe'
           : inviteMode === 'link'
             ? 'Busque por e-mail um usuário já cadastrado no app'
-            : 'Crie uma conta nova e vincule à sua equipe'}
-        saveLabel={editingMember ? 'Salvar alterações' : inviteMode === 'link' ? 'Vincular à equipe' : 'Criar e vincular'}
+            : 'A pessoa recebe o convite e cria a própria senha'}
+        saveLabel={editingMember ? 'Salvar alterações' : inviteMode === 'link' ? 'Vincular à equipe' : 'Enviar convite'}
         saving={saving}
         saveDisabled={!canSubmitInvite}
         onClose={closeInvite}
@@ -453,9 +492,9 @@ export default function StaffScreen() {
               </Pressable>
               <Pressable
                 onPress={() => {
-                  setInviteMode('create');
+                  setInviteMode('invite');
                   setSearchError(null);
-                  // Conta nova com senha provisória não nasce como dono.
+                  // Dono não entra por convite: é vinculado a uma conta que já existe.
                   if (selectedRoles.includes('owner')) {
                     const roles = selectedRoles.filter((item) => item !== 'owner');
                     const next = roles.length > 0 ? roles : ['waiter'];
@@ -463,10 +502,10 @@ export default function StaffScreen() {
                     setPrimaryRole(keepPrimary(next, primaryRole));
                   }
                 }}
-                style={[styles.modeTab, { borderColor: colors.border }, inviteMode === 'create' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                style={[styles.modeTab, { borderColor: colors.border }, inviteMode === 'invite' && { backgroundColor: colors.primary, borderColor: colors.primary }]}
               >
-                <Text style={{ fontWeight: '800', fontSize: 12, color: inviteMode === 'create' ? '#FFF' : colors.foreground }}>
-                  Criar novo usuário
+                <Text style={{ fontWeight: '800', fontSize: 12, color: inviteMode === 'invite' ? '#FFF' : colors.foreground }}>
+                  Convidar
                 </Text>
               </Pressable>
             </View>
@@ -513,16 +552,7 @@ export default function StaffScreen() {
               </>
             ) : (
               <>
-                <Field label="Nome completo" required>
-                  <TextInput
-                    value={newFullName}
-                    onChangeText={setNewFullName}
-                    placeholder="Ex.: Maria Souza"
-                    placeholderTextColor={colors.foregroundMuted}
-                    style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
-                  />
-                </Field>
-                <Field label="E-mail" required>
+                <Field label="E-mail (sem e-mail, vale o link)">
                   <TextInput
                     value={email}
                     onChangeText={setEmail}
@@ -533,16 +563,25 @@ export default function StaffScreen() {
                     style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
                   />
                 </Field>
-                <Field label="Senha provisória" required>
-                  <TextInput
-                    value={newPassword}
-                    onChangeText={setNewPassword}
-                    secureTextEntry
-                    placeholder="Mínimo 6 caracteres"
-                    placeholderTextColor={colors.foregroundMuted}
-                    style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
-                  />
-                </Field>
+                {sent ? (
+                  <View style={{ marginBottom: 12, gap: 8 }}>
+                    <Text style={styles.infoOk}>
+                      {sent.emailed
+                        ? `Convite enviado para ${sent.email}. Se preferir, compartilhe o link também.`
+                        : sent.email
+                          ? 'O convite está valendo, mas o e-mail não saiu. Compartilhe o link.'
+                          : 'Convite criado. Compartilhe o link com a pessoa.'}
+                    </Text>
+                    <Text selectable style={{ fontSize: 12, color: colors.foregroundSecondary }}>Código: {sent.code}</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => void Share.share({ message: staffInviteShareMessage(sent.link, sent.code) })}
+                      style={[styles.modeTab, { borderColor: colors.border }]}
+                    >
+                      <Text style={{ fontWeight: '800', fontSize: 12, color: colors.primary, textAlign: 'center' }}>Compartilhar convite</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
                 {searchError ? <Text style={styles.formError}>{searchError}</Text> : null}
               </>
             )}
@@ -550,11 +589,11 @@ export default function StaffScreen() {
         )}
 
         {(editingMember
-          || inviteMode === 'create'
+          || inviteMode === 'invite'
           || foundUser) ? (
           <Field label="Funções" required>
             <View style={styles.roleOptions}>
-              {assignableRoles({ viewerRole: serverRole, creatingAccount: !editingMember && inviteMode === 'create' }).map((role) => {
+              {assignableRoles({ viewerRole: serverRole, creatingAccount: !editingMember && inviteMode === 'invite' }).map((role) => {
                 const selected = selectedRoles.includes(role);
                 return (
                   <Pressable
@@ -590,7 +629,7 @@ export default function StaffScreen() {
           </Field>
         ) : null}
 
-        {selectedRoles.length > 1 && (editingMember || inviteMode === 'create' || foundUser) ? (
+        {selectedRoles.length > 1 && (editingMember || inviteMode === 'invite' || foundUser) ? (
           <Field label="Função principal (abre o app)" required>
             <View style={styles.roleOptions}>
               {selectedRoles.map((role) => {

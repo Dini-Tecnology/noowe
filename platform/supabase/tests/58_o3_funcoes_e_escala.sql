@@ -1,6 +1,6 @@
 -- Fatia O3 (docs/fatias/O3-funcoes-e-escala.md), um bloco por critério de aceite.
 begin;
-select plan(64);
+select plan(82);
 
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
@@ -218,6 +218,69 @@ update public.shifts set role = 'manager' where restaurant_id = pg_temp.ctx('r')
 select ok(private.manager_on_shift(pg_temp.ctx('r')), 'escalado como Gerente, conta');
 update public.shifts set role = null where restaurant_id = pg_temp.ctx('r') and status = 'scheduled';
 select ok(private.manager_on_shift(pg_temp.ctx('r')), 'sem função na escala, vale o que a pessoa é');
+
+-- ---------------------------------------------------------------------------
+-- Critério 6: novo membro entra por convite, sem senha provisória
+-- ---------------------------------------------------------------------------
+create temp table _codes(k text primary key, v text);
+grant select on _codes to authenticated;
+do $$
+declare r uuid := pg_temp.ctx('r');
+begin
+  perform pg_temp.new_user('conv_email'); perform pg_temp.new_user('conv_outro'); perform pg_temp.new_user('conv_link'); perform pg_temp.new_user('conv_auto');
+  update auth.users set email = 'convidado-o3@teste.test', email_confirmed_at = now() where id = pg_temp.ctx('conv_email');
+  update auth.users set email_confirmed_at = now() where id = pg_temp.ctx('conv_outro');
+  update auth.users set email = 'auto-o3@teste.test', email_confirmed_at = now() where id = pg_temp.ctx('conv_auto');
+  perform pg_temp.act(pg_temp.ctx('manager'));
+  insert into _codes values ('email', public.restaurant_create_staff_invite(r, 'Convidado-O3@teste.test', array['waiter', 'barman'], 'barman')->>'code');
+  insert into _codes values ('link', public.restaurant_create_staff_invite(r, null, array['chef'], 'chef')->>'code');
+  insert into _codes values ('auto', public.restaurant_create_staff_invite(r, 'auto-o3@teste.test', array['cook'], 'cook')->>'code');
+  insert into _codes values ('cancelado', public.restaurant_create_staff_invite(r, null, array['cook'], 'cook')->>'code');
+  insert into _ctx values ('conv_cancelado', (select id from public.staff_invites where token_hash = private.staff_invite_hash((select v from _codes where k = 'cancelado'))));
+end $$;
+select is(pg_temp.state_of(format($q$select public.restaurant_create_staff_invite(%L, 'x@y.z', array['manager'], 'manager')$q$, pg_temp.ctx('r'))), '42501', 'critério 4: Gerente não convida Gerente');
+select is(pg_temp.state_of(format($q$select public.restaurant_create_staff_invite(%L, 'x@y.z', array['owner'], 'owner')$q$, pg_temp.ctx('r'))), '22023', 'Dono não entra por convite');
+select is((select count(*)::int from public.staff_invites where token_hash = (select v from _codes where k = 'email')), 0, 'o código não fica gravado, só o hash');
+
+select pg_temp.act(pg_temp.ctx('conv_outro'));
+select is(pg_temp.state_of(format($q$select public.staff_accept_invite(%L)$q$, (select v from _codes where k = 'email'))), '42501', 'convite de e-mail não vale para outro e-mail');
+select is(pg_temp.state_of($q$select public.staff_accept_invite('codigo-errado')$q$), 'P0002', 'código errado não entra');
+
+select pg_temp.act(pg_temp.ctx('conv_email'));
+select is((public.staff_accept_invite((select v from _codes where k = 'email'))->>'alreadyAccepted'), 'false', 'critério 6: quem foi convidado entra');
+select is(public.restaurant_get_my_roles(pg_temp.ctx('r'))->>'primary', 'barman', 'com a função principal do convite');
+select ok(private.has_restaurant_role(pg_temp.ctx('r'), array['waiter']::public.user_roles_role_enum[]), 'e todas as funções');
+select is((public.staff_accept_invite((select v from _codes where k = 'email'))->>'alreadyAccepted'), 'true', 'repetir não duplica');
+select pg_temp.act(pg_temp.ctx('conv_outro'));
+select is(pg_temp.state_of(format($q$select public.staff_accept_invite(%L)$q$, (select v from _codes where k = 'email'))), '23514', 'código usado não serve para outra pessoa');
+
+select pg_temp.act(pg_temp.ctx('conv_link'));
+select is((public.staff_accept_invite((select v from _codes where k = 'link'))->>'alreadyAccepted'), 'false', 'convite por link entra com o código');
+select pg_temp.act(pg_temp.ctx('conv_auto'));
+select is(public.staff_claim_my_invites(), 1, 'quem se cadastra com o e-mail convidado entra sozinho');
+select is(public.restaurant_get_my_roles(pg_temp.ctx('r'))->>'primary', 'cook', 'com a função do convite');
+select is((select count(*)::int from public.audit_logs where action = 'staff_invite_accepted' and restaurant_id = pg_temp.ctx('r')), 3, 'aceitar fica em audit_logs');
+
+select pg_temp.act(pg_temp.ctx('manager'));
+select is((public.restaurant_revoke_staff_invite(pg_temp.ctx('conv_cancelado'))->>'revoked'), 'true', 'cancelar o convite');
+select pg_temp.act(pg_temp.ctx('conv_outro'));
+select is(pg_temp.state_of(format($q$select public.staff_accept_invite(%L)$q$, (select v from _codes where k = 'cancelado'))), 'P0002', 'cancelado não entra');
+
+-- Quem convidou perdeu a função: o convite cai.
+do $$
+declare r uuid := pg_temp.ctx('r');
+begin
+  perform pg_temp.act(pg_temp.ctx('manager'));
+  insert into _codes values ('orfao', public.restaurant_create_staff_invite(r, null, array['cook'], 'cook')->>'code');
+  perform pg_temp.act(pg_temp.ctx('owner'));
+  perform public.restaurant_deactivate_staff((select id from public.user_roles where user_id = pg_temp.ctx('manager') limit 1));
+end $$;
+select pg_temp.act(pg_temp.ctx('conv_outro'));
+select is(pg_temp.state_of(format($q$select public.staff_accept_invite(%L)$q$, (select v from _codes where k = 'orfao'))), '23514', 'quem convidou perdeu a função: o convite não vale');
+
+set local role authenticated;
+select is(pg_temp.state_of($q$select count(*) from public.staff_invites$q$), '42501', 'o app não lê a tabela de convites');
+reset role;
 
 select * from finish();
 rollback;

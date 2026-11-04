@@ -177,6 +177,23 @@ export interface CreateAssistanceSpecialRequestInput {
 
 export type RestaurantApprovalStatus = 'pending' | 'approved' | 'rejected';
 
+export interface StaffInvite {
+  id: string;
+  email: string | null;
+  roles: string[];
+  primaryRole: string;
+  expiresAt: string;
+}
+
+export interface StaffInviteSent {
+  id: string;
+  code: string;
+  link: string;
+  email: string | null;
+  emailed: boolean;
+  expiresAt: string;
+}
+
 export interface StaffTask {
   id: string;
   kind: string;
@@ -506,6 +523,11 @@ export interface SupabaseApiAdapter {
   getStaff(restaurantId?: string): Promise<any>;
   upsertStaffRole(restaurantId: string, userId: string, role: string): Promise<any>;
   getTasks(restaurantId: string): Promise<StaffTask[]>;
+  sendStaffInvite(input: { restaurantId: string; email?: string; roles: string[]; primaryRole: string }): Promise<StaffInviteSent>;
+  listStaffInvites(restaurantId: string): Promise<StaffInvite[]>;
+  revokeStaffInvite(inviteId: string): Promise<any>;
+  acceptStaffInvite(code: string): Promise<{ restaurantId: string; alreadyAccepted: boolean }>;
+  claimMyStaffInvites(): Promise<number>;
   setReceptionist(restaurantId: string, userId: string, enabled: boolean): Promise<any>;
   setStaffRoles(restaurantId: string, userId: string, roles: string[], primaryRole: string): Promise<any>;
   deactivateStaff(roleId: string): Promise<any>;
@@ -632,6 +654,24 @@ async function resolveRestaurantId(restaurantId?: string): Promise<string> {
 }
 
 // A tela decide a mensagem pelo código que a Edge Function devolve em `error`.
+/**
+ * O erro real de uma Edge Function. O fetch do React Native pode criar a resposta em outro realm, onde
+ * `context instanceof Response` é falso: por isso o teste por forma, para mostrar a mensagem da API
+ * em vez do genérico "Edge Function returned a non-2xx status code".
+ */
+async function functionError(error: unknown): Promise<unknown> {
+  const context = (error as { context?: unknown }).context;
+  if (context && typeof context === 'object' && 'json' in context) {
+    const json = (context as { json?: () => Promise<unknown> }).json;
+    if (typeof json === 'function') {
+      const body = await json.call(context).catch(() => null) as { error?: unknown; message?: unknown } | null;
+      const message = body?.error ?? body?.message;
+      if (message) return new Error(String(message));
+    }
+  }
+  return error;
+}
+
 async function invokePaymentAccount(body: Record<string, unknown>) {
   const { data, error } = await getSupabaseClient().functions.invoke('payments-account', { body });
   if (!error) return data;
@@ -1894,6 +1934,37 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
+  async sendStaffInvite(input: { restaurantId: string; email?: string; roles: string[]; primaryRole: string }) {
+    const { data, error } = await getSupabaseClient().functions.invoke('send-staff-invite', { body: input });
+    if (error) throw await functionError(error);
+    if (data?.error) throw new Error(data.error);
+    return data as StaffInviteSent;
+  },
+
+  async listStaffInvites(restaurantId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_list_staff_invites', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return (Array.isArray(data) ? data : []) as StaffInvite[];
+  },
+
+  async revokeStaffInvite(inviteId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_revoke_staff_invite', { p_invite_id: inviteId });
+    if (error) throw error;
+    return data;
+  },
+
+  async acceptStaffInvite(code: string) {
+    const { data, error } = await getSupabaseClient().rpc('staff_accept_invite', { p_code: code });
+    if (error) throw error;
+    return data;
+  },
+
+  async claimMyStaffInvites() {
+    const { data, error } = await getSupabaseClient().rpc('staff_claim_my_invites');
+    if (error) throw error;
+    return Number(data ?? 0);
+  },
+
   async getTasks(restaurantId: string) {
     const { data, error } = await getSupabaseClient().rpc('restaurant_list_tasks', { p_restaurant_id: restaurantId });
     if (error) throw error;
@@ -1957,22 +2028,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     const { data, error } = await getSupabaseClient().functions.invoke('create-staff-user', {
       body: { restaurantId, email, password, fullName, role },
     });
-    if (error) {
-      const context = (error as { context?: unknown }).context;
-      // React Native's fetch polyfill may create the response in another JS
-      // realm, where `context instanceof Response` is false. Use duck typing
-      // so the API's actual message is shown instead of the SDK's generic
-      // "Edge Function returned a non-2xx status code" error.
-      if (context && typeof context === 'object' && 'json' in context) {
-        const json = (context as { json?: () => Promise<unknown> }).json;
-        if (typeof json === 'function') {
-          const body = await json.call(context).catch(() => null) as { error?: unknown; message?: unknown } | null;
-          const message = body?.error ?? body?.message;
-          if (message) throw new Error(String(message));
-        }
-      }
-      throw error;
-    }
+    if (error) throw await functionError(error);
     if (data?.error) throw new Error(data.error);
     return data;
   },

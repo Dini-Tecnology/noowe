@@ -18,3 +18,4 @@
 12. O dia operacional vai de um fechamento do dia ao seguinte; sem caixa aberto, vira no horário configurado (padrão 6h), definido por Dono e Gerente.
 13. Sem fechamento até a virada, Gerente e Dono recebem alerta, e nada fecha sozinho.
 14. Maquininha da casa registra a forma (crédito, débito, Pix ou vale) como pagamento externo, fora do índice dos créditos; dinheiro segue a pendência 36.
+15. O fechamento continua chamando `private.cash_closed_by_receiver` (O3): caixa fechado por quem recebeu dinheiro fica registrado e avisa o Dono. Quando o dinheiro passar a quitar parcela, a função muda de fonte.

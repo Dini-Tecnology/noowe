@@ -11,6 +11,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import * as WebBrowser from 'expo-web-browser';
 import { authService } from '@/shared/services/auth';
 import { StaffPushBridge, StaffPushOpener } from './StaffPushBridge';
+import { StaffInviteBridge } from './StaffInviteBridge';
+import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { socialAuthService } from '@/shared/services/social-auth';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { logger } from '@/shared/utils/logger';
@@ -594,8 +596,17 @@ function AuthenticatedGate() {
   }, []);
 
   const handleRefreshAccess = useCallback(async () => {
+    // Quem foi convidado pelo e-mail confirmado entra aqui, sem digitar nada.
+    await supabaseApiAdapter.claimMyStaffInvites().catch(() => 0);
     return reloadRole();
   }, [reloadRole]);
+
+  const handleAcceptInvite = useCallback(async (code: string) => {
+    await supabaseApiAdapter.acceptStaffInvite(code);
+    const linked = await reloadRole();
+    await reloadRestaurants();
+    return linked;
+  }, [reloadRole, reloadRestaurants]);
 
   if (roleLoading || roleIntent === undefined) {
     return <BootFallback />;
@@ -628,6 +639,7 @@ function AuthenticatedGate() {
     return (
       <WaitingAccessScreen
         onRefresh={handleRefreshAccess}
+        onAcceptInvite={handleAcceptInvite}
         onChangeRole={handleChangeRole}
       />
     );
@@ -641,6 +653,7 @@ function AuthenticatedRoot() {
   return (
     <RestaurantRoleProvider>
       <StaffPushBridge />
+      <StaffInviteBridge />
       <AuthenticatedGate />
     </RestaurantRoleProvider>
   );

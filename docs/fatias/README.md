@@ -100,7 +100,7 @@ Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercia
 | [V1](V1-vale-refeicao.md) | Vale-refeição | G5, M2 |
 | [T1](T1-tap-to-pay.md) | Tap to Pay pronto para ativar | G5, M2, O8 (critério 1: nada) |
 
-## Andamento (03/11/2026)
+## Andamento (04/11/2026)
 
 | Fatia | Situação |
 |---|---|
@@ -108,7 +108,8 @@ Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercia
 | T1 (critério 1) | Tap oculto nos dois apps e recusado no servidor. O restante da T1 espera o fornecedor |
 | Respostas 31 e 32 | QR com a comanda aberta e Dono sem aprovação, no banco e no código |
 | M1, segunda carga | Business 8.000, conveniência desligada, teste, plano sugerido, empresa e Tap em parâmetro |
-| O3, G5, O8, M2–M6, P3, V1 | A fazer, nesta ordem (plano de 03/11) |
+| O3 | Feita, no GitHub e no banco Noowe. Falta conferir as telas no simulador |
+| G5, O8, M2–M6, P3, V1 | A fazer, nesta ordem (plano de 03/11) |
 
 ## Correspondência com o faseamento da spec (§8)
 

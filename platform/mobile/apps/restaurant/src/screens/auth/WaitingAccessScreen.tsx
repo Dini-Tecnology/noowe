@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -12,23 +13,45 @@ import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { authService } from '@/shared/services/auth';
 import Haptic from '@/shared/utils/haptics';
-import { showErrorToast, showSuccessToast } from '@/shared/utils/error-handler';
+import { getErrorMessage, showErrorToast, showSuccessToast } from '@/shared/utils/error-handler';
 import { AuthScreenHeader } from '../../components/auth/AuthScreenHeader';
 import { AUTH_BRAND } from '../../components/auth/authScreenTheme';
+import { normalizeStaffInviteCode } from '../v2/shared/staffInvite';
 
 interface WaitingAccessScreenProps {
   onRefresh: () => Promise<boolean>;
+  onAcceptInvite: (code: string) => Promise<boolean>;
   onChangeRole: () => Promise<void> | void;
 }
 
 export default function WaitingAccessScreen({
   onRefresh,
+  onAcceptInvite,
   onChangeRole,
 }: WaitingAccessScreenProps) {
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [refreshing, setRefreshing] = useState(false);
   const [changingRole, setChangingRole] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [accepting, setAccepting] = useState(false);
+
+  const handleAcceptInvite = async () => {
+    if (accepting) return;
+    const code = normalizeStaffInviteCode(inviteCode);
+    if (!code) {
+      showErrorToast('Código inválido. Confira o código do convite.');
+      return;
+    }
+    setAccepting(true);
+    try {
+      if (await onAcceptInvite(code)) showSuccessToast('Acesso liberado!');
+    } catch (error) {
+      showErrorToast(getErrorMessage(error));
+    } finally {
+      setAccepting(false);
+    }
+  };
 
   const handleRefresh = async () => {
     if (refreshing) return;
@@ -88,6 +111,28 @@ export default function WaitingAccessScreen({
           </Text>
         </View>
 
+        <View style={styles.inviteRow}>
+          <TextInput
+            value={inviteCode}
+            onChangeText={setInviteCode}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="Tenho um código de convite"
+            placeholderTextColor={colors.foregroundMuted}
+            accessibilityLabel="Código de convite"
+            style={[styles.inviteInput, { color: colors.foreground, borderColor: AUTH_BRAND.inputBorder, backgroundColor: colors.card }]}
+          />
+          <TouchableOpacity
+            style={[styles.inviteButton, { backgroundColor: colors.primary, opacity: accepting || !inviteCode.trim() ? 0.6 : 1 }]}
+            onPress={() => void handleAcceptInvite()}
+            disabled={accepting || !inviteCode.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Usar código de convite"
+          >
+            {accepting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Usar</Text>}
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: colors.primary }, refreshing && styles.buttonDisabled]}
           onPress={() => void handleRefresh()}
@@ -133,6 +178,9 @@ export default function WaitingAccessScreen({
 
 const createStyles = (colors: ReturnType<typeof useColors>) =>
   StyleSheet.create({
+    inviteRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+    inviteInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12 },
+    inviteButton: { paddingHorizontal: 18, paddingVertical: 13, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
     container: {
       flex: 1,
       backgroundColor: colors.background,

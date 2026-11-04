@@ -49,6 +49,10 @@ verify_jwt = false
 # using asymmetric signing keys.
 verify_jwt = false
 
+[functions.send-staff-invite]
+# Exige o login de quem convida: restaurant_create_staff_invite roda com o token da pessoa.
+verify_jwt = true
+
 [functions.send-push-notification]
 # The function additionally requires the service_role claim, but gateway JWT
 # verification must remain enabled so that claim cannot be forged.
