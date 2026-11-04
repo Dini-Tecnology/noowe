@@ -732,7 +732,10 @@ export type CashRegisterSession = {
   cashSales: number;
   cardSales: number;
   pixSales: number;
-  expectedBalance: number;
+  /** Null enquanto o caixa está aberto para quem não é Dono: o fechamento é cego. */
+  expectedBalance: number | null;
+  /** O dinheiro na gaveta passou do limite configurado. */
+  suggestSangria: boolean;
 };
 
 function mapCashRegister(raw: any): CashRegisterSession {
@@ -750,7 +753,8 @@ function mapCashRegister(raw: any): CashRegisterSession {
     cashSales: toNumber(session?.cash_sales, inflows),
     cardSales: toNumber(session?.card_sales),
     pixSales: toNumber(session?.pix_sales),
-    expectedBalance: toNumber(session?.expected_balance, toNumber(session?.opening_balance)),
+    expectedBalance: session?.expected_balance == null ? null : toNumber(session.expected_balance),
+    suggestSangria: session?.suggest_sangria === true,
   };
 }
 

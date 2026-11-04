@@ -60,6 +60,9 @@ import { ConfigHubContent } from './config/ConfigHubContent';
 import { PersonalSettingsContent } from './config/PersonalSettingsContent';
 import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
+import { MyTipsPanel } from './shared/MyTipsPanel';
+import { DayClosePanel } from './shared/DayClosePanel';
+import { PaymentActionsPanel } from './shared/PaymentActionsPanel';
 import { canApproveRequest } from './shared/staffRoles';
 import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 import type { TableBill, ServiceCall } from './shared/useRestaurantOperations';
@@ -300,6 +303,7 @@ export default function OwnerHubScreen() {
         </View>
 
         <MyRolesTasksPanel />
+        <MyTipsPanel />
 
         {isOwner ? (
           <DashboardTab onNavigate={openScreen} colors={colors} />
@@ -1437,12 +1441,30 @@ function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors>
   );
 }
 
+/** Só depois de contar a pessoa vê o esperado. */
+function closeCashMessage(closed: any): string {
+  const difference = Number(closed?.difference_cents ?? 0);
+  const label = difference === 0 ? 'Sem diferença.' : `Diferença de ${formatCurrency(difference / 100)}.`;
+  return closed?.needs_owner_review ? `${label} Acima do limite: o Dono foi avisado.` : label;
+}
+
 function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
   const { restaurantId } = useRestaurantRole();
   const { data: session, loading: sessionLoading, error: sessionError, refresh: refreshSession } = useCashRegister();
   const { data: movements, loading: movementsLoading, refresh: refreshMovements } = useCashMovements();
   const [amount, setAmount] = useState(0);
+  const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Sangria e reforço exigem motivo: ficam registrados com responsável.
+  const parseReason = (): string | null => {
+    const value = reason.trim();
+    if (!value) {
+      Alert.alert('Motivo obrigatório', 'Diga o motivo do movimento.');
+      return null;
+    }
+    return value;
+  };
 
   const parseAmount = (): number | null => {
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -1457,6 +1479,7 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
     try {
       await action();
       setAmount(0);
+      setReason('');
       await Promise.all([refreshSession(), refreshMovements()]);
     } catch (err) {
       Alert.alert(`Falha em ${label}`, userErrorMessage(err, 'Tente novamente.'));
@@ -1475,15 +1498,17 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
   const handleSangria = () => {
     if (!session?.sessionId) return;
     const amount = parseAmount();
-    if (amount === null) return;
-    void runAction('sangria', () => supabaseApiAdapter.addCashMovement(session.sessionId!, MANAGER_CASH_MOVEMENT_TYPES.withdrawal, amount, 'Sangria'));
+    const motive = parseReason();
+    if (amount === null || motive === null) return;
+    void runAction('sangria', () => supabaseApiAdapter.addCashMovement(session.sessionId!, MANAGER_CASH_MOVEMENT_TYPES.withdrawal, amount, motive));
   };
 
   const handleReforco = () => {
     if (!session?.sessionId) return;
     const amount = parseAmount();
-    if (amount === null) return;
-    void runAction('reforço', () => supabaseApiAdapter.addCashMovement(session.sessionId!, MANAGER_CASH_MOVEMENT_TYPES.reinforcement, amount, 'Reforço'));
+    const motive = parseReason();
+    if (amount === null || motive === null) return;
+    void runAction('reforço', () => supabaseApiAdapter.addCashMovement(session.sessionId!, MANAGER_CASH_MOVEMENT_TYPES.reinforcement, amount, motive));
   };
 
   const handleCloseCashRegister = () => {
@@ -1495,7 +1520,11 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
       {
         text: 'Fechar',
         style: 'destructive',
-        onPress: () => void runAction('fechar caixa', () => supabaseApiAdapter.closeCashRegister(session.sessionId!, amount)),
+        onPress: () => void runAction('fechar caixa', async () => {
+          // Só depois de contar a pessoa vê o esperado.
+          const closed = await supabaseApiAdapter.closeCashRegister(session.sessionId!, amount);
+          Alert.alert('Caixa fechado', closeCashMessage(closed));
+        }),
       },
     ]);
   };
@@ -1518,10 +1547,13 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
           <View style={styles.cashMetricRow}>
             <CashMetric label="Abertura" value={formatCurrency(session.openingBalance)} />
             <CashMetric label="Entradas" value={formatCurrency(session.cashSales + session.cardSales + session.pixSales)} success />
-            <CashMetric label="Saldo" value={formatCurrency(session.expectedBalance)} />
+            {session.expectedBalance != null ? <CashMetric label="Saldo" value={formatCurrency(session.expectedBalance)} /> : null}
           </View>
         )}
       </View>
+      {session?.isOpen && session.suggestSangria ? (
+        <InlineNotice message="O dinheiro na gaveta passou do limite: considere uma sangria." colors={colors} />
+      ) : null}
       <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <Text style={[styles.panelTitle, { color: colors.foreground }]}>Movimentações</Text>
         {movementsLoading ? (
@@ -1546,6 +1578,16 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
         <CurrencyInput value={amount} onChangeValue={setAmount} />
       </View>
       {session?.isOpen ? (
+        <TextInput
+          value={reason}
+          onChangeText={setReason}
+          placeholder="Motivo (sangria e reforço)"
+          placeholderTextColor={colors.foregroundSecondary}
+          accessibilityLabel="Motivo do movimento"
+          style={[styles.cashReasonInput, { borderColor: colors.border, color: colors.foreground }]}
+        />
+      ) : null}
+      {session?.isOpen ? (
         <View style={styles.cashActions}>
           <TouchableOpacity disabled={submitting} onPress={handleSangria} style={[styles.cashAction, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
             <Text style={[styles.cashActionText, { color: '#F59E0B' }]}>Sangria</Text>
@@ -1562,6 +1604,8 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
           <Text style={[styles.wideActionText, { color: '#FFF' }]}>Abrir Caixa</Text>
         </TouchableOpacity>
       )}
+      <DayClosePanel />
+      <PaymentActionsPanel />
     </View>
   );
 }
@@ -2781,6 +2825,7 @@ function WaiterChargeBody({
           Quem pagou pelo app aparece automaticamente. Cobre apenas quem precisa.
         </Text>
       </View>
+      <PaymentActionsPanel />
 
       {loading && bills.length === 0 ? (
         <InlineNotice message="Carregando contas..." colors={colors} />
@@ -3433,6 +3478,7 @@ const styles = StyleSheet.create({
   cashActions: { flexDirection: 'row', gap: 8 },
   cashAction: { flex: 1, minHeight: 38, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   cashActionText: { fontSize: 12, fontWeight: '800' },
+  cashReasonInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, height: 44, marginBottom: 10 },
   cashAmountInput: { marginBottom: 10 },
   tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tableCard: { width: '31.5%', minHeight: 94, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', padding: 10, backgroundColor: '#FFF' },

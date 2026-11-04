@@ -78,3 +78,9 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 55 | **Teto da gorjeta** | Não definido; já existia teto de 100% do valor | Mantido | — |
 | 56 | **Pagamento presencial sem participante** | Mesa aberta pela equipe não tem participante | A parcela fica sem participante, e aparece como "Pago no salão" | — |
 | 57 | **Divisa com a O8** | Dinheiro em caixa e rateio são da O8 | G5 abate o saldo e desmarca a taxa. Gaveta, fechamento cego e rateio ficam na O8 | — |
+| 58 | **Dinheiro sem caixa aberto** | O garçom recebe em dinheiro e ninguém abriu o caixa | O pagamento vale e abate o saldo; fica registrado como dinheiro fora do caixa, para o gerente | — |
+| 59 | **Quem aparece no rateio** | "Todos do turno" pode ser a escala ou o ponto | Quem está na escala do dia, sem turno cancelado. Por horas usa a entrada e saída, quando houver | — |
+| 60 | **Ninguém na escala** | O dia fechou com gorjeta e sem pessoas para ratear | Fica sem rateio, à vista no relatório, e gerente e Dono são avisados | — |
+| 61 | **Gorjeta e taxa de quem pagou no dia** | A apuração pode ser por dia do pagamento ou do consumo | Pelo dia do pagamento. O estorno total sai da apuração só se vier antes do fechamento do dia | — |
+| 62 | **Nota de comanda reaberta** | Nota já emitida não cobre o que foi acrescentado | A nota emitida continua; o acréscimo não gera nova nota sozinho. Precisa da orientação do contador | Fiscal |
+| 63 | **Estorno parcial e nota** | A venda segue, e a nota já emitida fica pelo total | Não cancela: registra e avisa gerente e Dono para revisar | Fiscal |

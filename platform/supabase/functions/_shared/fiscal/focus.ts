@@ -8,7 +8,7 @@ const BASE_URL: Record<FiscalEnvironment, string> = {
 
 // Tabela tPag da NFC-e. Meio desconhecido falha fechado: nunca declaramos à SEFAZ um pagamento que não houve.
 const PAYMENT_CODE: Record<string, string> = {
-  cash: "01", credit_card: "03", debit_card: "04", pix: "17", wallet: "18",
+  cash: "01", credit_card: "03", debit_card: "04", voucher: "11", pix: "17", wallet: "18",
   apple_pay: "03", google_pay: "03", tap_to_pay: "03",
 };
 const NEEDS_INTEGRATION_TYPE = new Set(["03", "04", "17"]);

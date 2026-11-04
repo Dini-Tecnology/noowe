@@ -11,6 +11,7 @@ const METHODS = [
   { id: 'credit_card', label: 'Crédito' },
   { id: 'debit_card', label: 'Débito' },
   { id: 'pix', label: 'Pix' },
+  { id: 'voucher', label: 'Vale' },
 ] as const;
 
 const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
@@ -85,6 +86,18 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
             <Text style={{ color: colors.foregroundSecondary }}>Saldo da conta</Text>
             <Text style={{ color: colors.foreground, fontWeight: '700' }}>{bill ? formatCents(bill.balanceCents) : '—'}</Text>
           </View>
+
+          {bill?.payers?.length ? (
+            <View>
+              <Text style={[styles.label, { color: colors.foregroundSecondary }]}>Quem já pagou</Text>
+              {bill.payers.map((payer, index) => (
+                <View key={`${payer.name}-${index}`} style={styles.row}>
+                  <Text style={{ color: colors.foreground }}>{payer.name}</Text>
+                  <Text style={{ color: colors.foregroundSecondary }}>{formatCents(payer.baseCents)}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           <Text style={[styles.label, { color: colors.foregroundSecondary }]}>Consumo a receber (vazio é o saldo todo)</Text>
           <TextInput

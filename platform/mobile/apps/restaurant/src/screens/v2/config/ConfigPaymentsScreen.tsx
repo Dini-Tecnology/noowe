@@ -13,6 +13,7 @@ import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from '../shared/V2Shell';
 import type { PaymentMethods } from '../shared/v2Types';
 import { ChargePolicyCard } from './ChargePolicyCard';
+import { CashSettingsCard, TipRulesCard } from './CashAndTipsCards';
 import type { IconComponent } from './configTypes';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
@@ -202,6 +203,8 @@ export default function ConfigPaymentsScreen() {
           </View>
 
           <ChargePolicyCard restaurantId={restaurantId} />
+          <TipRulesCard restaurantId={restaurantId} />
+          <CashSettingsCard restaurantId={restaurantId} />
 
           {error ? (
             <Text style={{ textAlign: 'center', color: '#EF4444', marginTop: 8 }}>{error}</Text>

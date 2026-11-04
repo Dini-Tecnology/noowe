@@ -142,6 +142,11 @@ Tabela `noowe_tap_settings`, uma linha só: `provider` e `active` (hoje vazio e 
 fornecedor. **As credenciais não ficam aqui:** vão em segredo, porque o histórico copiaria o valor. Para ligar quando houver
 contrato, altere esta linha e ligue `tap_to_pay` em `noowe_plan_features`.
 
+## Teto de retenção da gorjeta
+
+Tabela `noowe_tip_retention_caps`: `regime` e `cap_bps` (Simples Nacional, 20%; demais, 33%). O restaurante escolhe a retenção de 0% até o teto do
+próprio regime. Sem regime informado no Perfil, vale o teto menor.
+
 ## Códigos promocionais
 
 Tabela `noowe_promo_codes`, um registro por código, sempre em maiúsculas. Começa vazia.

@@ -5,6 +5,23 @@ import { getOptionalSupabaseSessionUser } from './supabase-auth';
 import type { ServiceType } from '../config/service-types';
 import type { Json } from '../types/database.generated';
 
+export type TipMode = 'equal' | 'points' | 'hours';
+export type CashSettings = { openingFloatCents: number; sangriaSuggestCents: number | null; breakLimitCents: number; dayTurnover: string };
+export type DayStatus = {
+  dayId: string; businessDate: string; startedAt: string; openSessions: number; cashOpen: boolean;
+  unclosedDays: { dayId: string; businessDate: string }[];
+  pendingBreaks: { sessionId: string; differenceCents: number; closedAt: string }[];
+};
+export type TipRules = {
+  mode: TipMode; retentionBps: number; rolePoints: Record<string, number>; capBps: number; taxRegime: 'simples_nacional' | 'outros' | null;
+  pending: { mode: TipMode; retentionBps: number; rolePoints: Record<string, number>; effectiveDay: string } | null;
+};
+export type MyTip = { businessDate: string; role: string | null; amountCents: number; mode: TipMode };
+export type RefundablePayment = {
+  paymentId: string; method: string; provider: string; amountCents: number; availableCents: number; createdAt: string;
+  tableSessionId: string | null; orderId: string | null; tableNumber: string | null; pendingApproval: boolean;
+};
+
 export type SessionBill = {
   balanceCents: number;
   chargeBaseCents: number;
@@ -13,6 +30,8 @@ export type SessionBill = {
   feeBps: number;
   feeOrTipMode: 'service_fee' | 'tip';
   adjusted: boolean;
+  /** Quem já pagou nesta mesa. */
+  payers: { name: string; baseCents: number; method: string | null }[];
 };
 
 export type ChargePolicyRow = {
@@ -606,6 +625,19 @@ export interface SupabaseApiAdapter {
   /** Pagamento presencial: abate do mesmo saldo da comanda (ADR-032). */
   recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string }): Promise<any>;
   getChargePolicies(restaurantId: string): Promise<ChargePolicyRow[]>;
+  /** Caixa, dia operacional, gorjeta e estorno (O8). Tudo em centavos. */
+  getCashSettings(restaurantId: string): Promise<CashSettings>;
+  updateCashSettings(restaurantId: string, input: { openingFloatCents: number; sangriaSuggestCents: number | null; dayTurnover: string; breakLimitCents?: number | null }): Promise<CashSettings>;
+  getDayStatus(restaurantId: string): Promise<DayStatus>;
+  closeOperationalDay(restaurantId: string, dayId?: string | null): Promise<any>;
+  reviewCashBreak(sessionId: string, note: string): Promise<any>;
+  getTipRules(restaurantId: string): Promise<TipRules>;
+  updateTipRules(restaurantId: string, input: { mode: TipMode; retentionBps: number; rolePoints: Record<string, number> }): Promise<TipRules>;
+  setTaxRegime(restaurantId: string, regime: 'simples_nacional' | 'outros'): Promise<any>;
+  getMyTips(restaurantId: string): Promise<MyTip[]>;
+  getRefundablePayments(restaurantId: string): Promise<RefundablePayment[]>;
+  requestRefund(paymentId: string, reason: string, amountCents?: number | null): Promise<any>;
+  requestBillReopen(tableSessionId: string, reason: string): Promise<any>;
   updateChargePolicy(restaurantId: string, serviceModel: string, input: { feeOrTipMode: 'service_fee' | 'tip'; serviceFeeBps?: number | null; tipPresetsBps?: number[] | null; tipDefaultBps?: number | null; splitModes?: string[] | null }): Promise<any>;
   exportUserData(): Promise<any>;
   requestAccountDeletion(): Promise<any>;
@@ -712,6 +744,12 @@ async function invokePaymentAccount(body: Record<string, unknown>) {
     code: failure?.error,
     providerMessage: failure?.message ?? null,
   });
+}
+
+async function rpcData<T = any>(name: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await (getSupabaseClient() as any).rpc(name, args);
+  if (error) throw error;
+  return data as T;
 }
 
 export const supabaseApiAdapter: SupabaseApiAdapter = {
@@ -2343,6 +2381,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       balanceCents: Number(raw.balanceCents ?? 0), chargeBaseCents: Number(raw.chargeBaseCents ?? 0), feeCents: Number(raw.feeCents ?? 0),
       totalWithFeeCents: Number(raw.totalWithFeeCents ?? 0), feeBps: Number(raw.feeBps ?? 0),
       feeOrTipMode: raw.feeOrTipMode === 'tip' ? 'tip' : 'service_fee', adjusted: raw.adjusted === true,
+      payers: Array.isArray(raw.payers) ? (raw.payers as SessionBill['payers']) : [],
     } as SessionBill;
   },
 
@@ -2353,6 +2392,59 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     });
     if (error) throw error;
     return data;
+  },
+
+  async getCashSettings(restaurantId: string) {
+    return rpcData<CashSettings>('restaurant_get_cash_settings', { p_restaurant_id: restaurantId });
+  },
+
+  async updateCashSettings(restaurantId, input) {
+    return rpcData<CashSettings>('restaurant_update_cash_settings', {
+      p_restaurant_id: restaurantId, p_opening_float_cents: input.openingFloatCents, p_sangria_suggest_cents: input.sangriaSuggestCents,
+      p_day_turnover: input.dayTurnover, p_break_limit_cents: input.breakLimitCents ?? null,
+    });
+  },
+
+  async getDayStatus(restaurantId: string) {
+    return rpcData<DayStatus>('restaurant_get_day_status', { p_restaurant_id: restaurantId });
+  },
+
+  async closeOperationalDay(restaurantId: string, dayId?: string | null) {
+    return rpcData('restaurant_close_operational_day', { p_restaurant_id: restaurantId, p_day_id: dayId ?? null });
+  },
+
+  async reviewCashBreak(sessionId: string, note: string) {
+    return rpcData('restaurant_review_cash_break', { p_session_id: sessionId, p_note: note });
+  },
+
+  async getTipRules(restaurantId: string) {
+    return rpcData<TipRules>('restaurant_get_tip_rules', { p_restaurant_id: restaurantId });
+  },
+
+  async updateTipRules(restaurantId, input) {
+    return rpcData<TipRules>('restaurant_update_tip_rules', {
+      p_restaurant_id: restaurantId, p_mode: input.mode, p_retention_bps: input.retentionBps, p_role_points: input.rolePoints,
+    });
+  },
+
+  async setTaxRegime(restaurantId, regime) {
+    return rpcData('restaurant_set_tax_regime', { p_restaurant_id: restaurantId, p_regime: regime });
+  },
+
+  async getMyTips(restaurantId: string) {
+    return rpcData<MyTip[]>('restaurant_my_tips', { p_restaurant_id: restaurantId });
+  },
+
+  async getRefundablePayments(restaurantId: string) {
+    return rpcData<RefundablePayment[]>('restaurant_list_refundable_payments', { p_restaurant_id: restaurantId });
+  },
+
+  async requestRefund(paymentId: string, reason: string, amountCents?: number | null) {
+    return rpcData('restaurant_request_refund', { p_transaction_id: paymentId, p_reason: reason, p_amount_cents: amountCents ?? null });
+  },
+
+  async requestBillReopen(tableSessionId: string, reason: string) {
+    return rpcData('restaurant_request_bill_reopen', { p_table_session_id: tableSessionId, p_reason: reason });
   },
 
   async getChargePolicies(restaurantId: string) {
