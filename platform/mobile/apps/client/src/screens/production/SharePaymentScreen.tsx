@@ -105,6 +105,8 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   const canPay = !!quote.data && quote.data.tipCents === chosenTipCents;
 
   const [couponCode, setCouponCode] = useState('');
+  // Cupom digitado e não aplicado não pode sumir em silêncio: pagar espera o "Aplicar".
+  const couponPending = couponCode.trim().length > 0;
   const coupon = useMutation({
     mutationFn: () => (myOpen!.couponDiscountCents > 0 && !couponCode.trim() ? billShares.removeCoupon(myOpen!.id) : billShares.applyCoupon(myOpen!.id, couponCode.trim())),
     onSuccess: () => setCouponCode(''),
@@ -419,7 +421,7 @@ export default function SharePaymentScreen({ route, navigation }: any) {
                     accessibilityLabel="Cupom"
                   />
                   {couponCode.trim() ? (
-                    <TouchableOpacity onPress={() => coupon.mutate()} disabled={coupon.isPending} accessibilityRole="button">
+                    <TouchableOpacity onPress={() => coupon.mutate()} disabled={coupon.isPending} accessibilityRole="button" accessibilityLabel="Aplicar cupom">
                       <Text style={styles.chipLabelActive}>Aplicar</Text>
                     </TouchableOpacity>
                   ) : myOpen.couponDiscountCents > 0 ? (
@@ -457,9 +459,9 @@ export default function SharePaymentScreen({ route, navigation }: any) {
             </View>
 
             <TouchableOpacity
-              style={[styles.cta, (!canPay || pay.isPending) && styles.ctaDisabled]}
+              style={[styles.cta, (!canPay || pay.isPending || couponPending) && styles.ctaDisabled]}
               onPress={() => pay.mutate()}
-              disabled={!canPay || pay.isPending}
+              disabled={!canPay || pay.isPending || couponPending}
               accessibilityRole="button"
             >
               <Text style={styles.ctaText}>{pay.isPending ? 'Gerando cobrança…' : method === 'pix' ? 'Gerar PIX' : 'Pagar com cartão'}</Text>

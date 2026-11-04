@@ -219,6 +219,16 @@ test('cupom: vai ao servidor, e a mensagem de por que não vale chega à pessoa 
   await waitFor(() => expect(require('react-native').Alert.alert).toHaveBeenCalledWith('Cupom não aplicado', 'Válido de terça a quinta, das 15h às 18h'));
 });
 
+test('cupom digitado e não aplicado trava o pagamento, para o desconto não sumir (P3)', async () => {
+  mockList.mockResolvedValue([{ ...myShare, couponDiscountCents: 0 }]);
+  mockTips.mockResolvedValue([{ percent: 10, cents: 442, totalCents: 5300 }]);
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  fireEvent.changeText(await screen.findByLabelText('Cupom'), 'dez');
+  fireEvent.press(screen.getByText(/Gerar PIX|Pagar/));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(mockPay).not.toHaveBeenCalled();
+});
+
 test('cupom aplicado aparece no resumo, com o valor do servidor', async () => {
   mockList.mockResolvedValue([{ ...myShare, couponDiscountCents: 500 }]);
   mockTips.mockResolvedValue([]);

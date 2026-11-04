@@ -62,6 +62,8 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   // O que vale é o código confirmado no "Aplicar": digitar não consulta nem cobra.
   const [couponCode, setCouponCode] = useState('');
   const lastAppliedCoupon = useRef('');
+  // Cupom digitado e não aplicado não pode sumir em silêncio: pagar espera o "Aplicar".
+  const couponPending = couponInput.trim() !== couponCode;
   const [tipBps, setTipBps] = useState(0);
   const [tipDigits, setTipDigits] = useState('');
   const tipCents = tipDigits ? parseInt(tipDigits, 10) : 0;
@@ -498,9 +500,9 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
               />
             ) : (
             <TouchableOpacity
-              style={[styles.cta, (place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable) && styles.ctaDisabled]}
+              style={[styles.cta, (place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable || couponPending) && styles.ctaDisabled]}
               onPress={() => place.mutate()}
-              disabled={place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable}
+              disabled={place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable || couponPending}
               activeOpacity={0.9}
               accessibilityRole="button"
               accessibilityLabel="Confirmar pagamento"

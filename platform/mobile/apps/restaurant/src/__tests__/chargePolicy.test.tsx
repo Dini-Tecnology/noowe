@@ -144,6 +144,17 @@ describe('cobrança presencial (G5)', () => {
     expect(keys[2]).not.toBe(keys[1]);
   });
 
+  it('cupom digitado e não aplicado trava a cobrança, para o desconto não sumir (P3)', async () => {
+    const view = scene();
+    await waitFor(() => expect(view.getByText(/66,00/)).toBeTruthy());
+    fireEvent.changeText(view.getByLabelText('Cupom do cliente'), 'DEZ');
+    expect(view.getByText(/Toque em Aplicar/)).toBeTruthy();
+    fireEvent.press(view.getByText('Dinheiro'));
+    expect(mockRecord).not.toHaveBeenCalled();
+    fireEvent.press(view.getByText('Aplicar'));
+    await waitFor(() => expect(view.queryByText(/Toque em Aplicar/)).toBeNull());
+  });
+
   it('cupom: o valor a receber vem do servidor, já com o desconto; recusado diz o motivo e não vai (P3)', async () => {
     mockBill.mockImplementation(async (_s: string, _b: number | null, code: string | null) => (code === 'DEZ'
       ? { ...bill, couponDiscountCents: 1000, feeCents: 500, totalWithFeeCents: 5500, totalWithoutFeeCents: 5000 }

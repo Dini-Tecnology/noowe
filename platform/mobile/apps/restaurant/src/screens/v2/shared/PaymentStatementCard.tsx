@@ -8,6 +8,11 @@ import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 
 const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 const METHOD_LABEL: Record<string, string> = { cash: 'Dinheiro', pix: 'Pix', credit_card: 'Crédito', debit_card: 'Débito', voucher: 'Vale', tap_card: 'Aproximação' };
+/** Pagamento fora do app passou pela maquininha da casa, menos dinheiro, que vai para a gaveta. */
+export function statementLabel(method: string, external: boolean): string {
+  const label = METHOD_LABEL[method] ?? method;
+  return external && method !== 'cash' ? `Maquininha – ${label.toLowerCase()}` : label;
+}
 
 /** Extrato do Dono: valor pago, taxa NOOWE Pay e líquido por pagamento. Só o Dono vê; o servidor recusa os demais. */
 export function PaymentStatementCard() {
@@ -35,7 +40,7 @@ export function PaymentStatementCard() {
       {statement.payments.slice(0, 20).map((payment) => (
         <View key={payment.paymentId} style={[styles.line, { borderTopColor: colors.border }]}>
           <View style={styles.row}>
-            <Text style={{ color: colors.foreground }}>{payment.external ? 'Maquininha – ' + (METHOD_LABEL[payment.method] ?? payment.method).toLowerCase() : METHOD_LABEL[payment.method] ?? payment.method}</Text>
+            <Text style={{ color: colors.foreground }}>{statementLabel(payment.method, payment.external)}</Text>
             <Text style={{ color: colors.foreground, fontWeight: '600' }}>{formatCents(payment.paidCents)}</Text>
           </View>
           <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>

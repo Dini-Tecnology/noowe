@@ -68,7 +68,9 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
   }, [tableSessionId, baseCents, coupon]);
 
   const hasFee = bill?.feeOrTipMode === 'service_fee' && bill.feeBps > 0;
-  const ready = !!bill && billFor === baseCents;
+  // Cupom digitado e não aplicado não pode sumir em silêncio: cobrar espera o "Aplicar".
+  const couponPending = couponInput.trim() !== coupon;
+  const ready = !!bill && billFor === baseCents && !couponPending;
   const total = !ready ? null : hasFee && keepFee ? bill.totalWithFeeCents : bill.totalWithoutFeeCents;
   const couponRefused = !!bill?.couponRefusal;
 
@@ -212,6 +214,7 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
               <Text style={{ color: colors.primary, fontWeight: '700' }}>Aplicar</Text>
             </Pressable>
           </View>
+          {couponPending ? <Text style={[styles.adjusted, { color: colors.warning ?? colors.primary }]} accessibilityRole="alert">Toque em Aplicar para usar o cupom.</Text> : null}
           {bill?.couponRefusal ? <Text style={[styles.adjusted, { color: colors.warning ?? colors.primary }]} accessibilityRole="alert">{bill.couponRefusal}</Text> : null}
           {bill && bill.couponDiscountCents > 0 ? (
             <View style={styles.row}>
