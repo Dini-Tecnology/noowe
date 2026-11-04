@@ -96,3 +96,6 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 73 | **Horário que passa da meia-noite** | "15h às 18h" não cobre 22h às 2h | Recusado na criação: o fim precisa ser depois do início | P3 |
 | 74 | **Cupom de item grátis na conta dividida** | Um cupom vale só para a parte de quem aplicou, mas o item pode ser de outra pessoa | O desconto é o menor valor entre o item e a parte de quem aplicou | P3 |
 | 75 | **Cupom na comanda sem cliente identificado** | Garçom aplica para cliente sem app | Vale só cupom para "todos": grupo da ficha exige saber quem é. Limite por cliente não se aplica | P3 |
+| 76 | **Maître cobra sem ver "valores detalhados"** | O aditivo manda o Maître cobrar e também não ver valores | Vê o saldo e o valor que está cobrando. Não vê o valor de cada pagamento já feito nem o total de cada mesa na lista | Item G |
+| 77 | **Barman "nas bebidas do Quick"** | Um pedido pode misturar bebida e comida | Barman cobra pedido de balcão (sem mesa), inteiro | Item G |
+| 78 | **% das mesas pagas pelo app** | O aditivo não diz a base | Consumo pago pelo app sobre o consumo pago nas mesas do garçom, no dia operacional aberto. Vale fica fora, como no índice | Item G |

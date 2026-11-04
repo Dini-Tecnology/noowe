@@ -110,7 +110,7 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
               {bill.payers.map((payer, index) => (
                 <View key={`${payer.name}-${index}`} style={styles.row}>
                   <Text style={{ color: colors.foreground }}>{payer.name}</Text>
-                  <Text style={{ color: colors.foregroundSecondary }}>{formatCents(payer.baseCents)}</Text>
+                  <Text style={{ color: colors.foregroundSecondary }}>{payer.baseCents != null ? formatCents(payer.baseCents) : 'Pago'}</Text>
                 </View>
               ))}
             </View>

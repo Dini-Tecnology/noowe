@@ -73,7 +73,8 @@ export type SessionBill = {
   acceptedVouchers: string[];
   tapActive: boolean;
   /** Quem já pagou nesta mesa. */
-  payers: { name: string; baseCents: number; method: string | null }[];
+  // Maître vê quem pagou, sem o valor.
+  payers: { name: string; baseCents: number | null; method: string | null }[];
 };
 
 export type ChargePolicyRow = {
@@ -674,6 +675,7 @@ export interface SupabaseApiAdapter {
   saveCoupon(restaurantId: string, coupon: Record<string, unknown>): Promise<any>;
   setCouponActive(couponId: string, active: boolean): Promise<void>;
   endCoupon(couponId: string): Promise<void>;
+  getMyAppShare(restaurantId: string): Promise<{ percent: number | null }>;
   sendCoupon(couponId: string): Promise<{ recipients: number }>;
   /** Módulos e plano (M4, M5, M6). Só o Dono; o Gerente vê índice e faixa. */
   getPlanSummary(restaurantId: string): Promise<PlanSummary>;
@@ -2479,6 +2481,9 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   },
   async setCouponActive(couponId: string, active: boolean) {
     await rpcData('restaurant_set_coupon_active', { p_coupon_id: couponId, p_active: active });
+  },
+  async getMyAppShare(restaurantId: string) {
+    return rpcData<{ percent: number | null }>('restaurant_my_app_share', { p_restaurant_id: restaurantId });
   },
   async endCoupon(couponId: string) {
     await rpcData('restaurant_end_coupon', { p_coupon_id: couponId });

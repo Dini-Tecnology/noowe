@@ -62,6 +62,7 @@ import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
 import { MyTipsPanel } from './shared/MyTipsPanel';
 import { CouponsEntry } from './shared/CouponsEntry';
+import { WaiterAppShareCard } from './shared/WaiterAppShareCard';
 import { PlanGateBanner } from './shared/PlanGateBanner';
 import { DayClosePanel } from './shared/DayClosePanel';
 import { PaymentActionsPanel } from './shared/PaymentActionsPanel';
@@ -305,6 +306,7 @@ export default function OwnerHubScreen() {
 
         <MyRolesTasksPanel />
         <MyTipsPanel />
+        <WaiterAppShareCard />
         <CouponsEntry onOpen={openScreen} />
         <PlanGateBanner />
 

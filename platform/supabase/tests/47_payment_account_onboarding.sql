@@ -80,7 +80,7 @@ select is((select count(*)::int from public.restaurant_payment_accounts), 0, 'ou
 select _test.as_user(pg_temp.id('waiter'));
 select is((select count(*)::int from public.restaurant_payment_accounts), 0, 'garçom não vê a conta');
 select _test.as_user(pg_temp.id('manager'));
-select is((select count(*)::int from public.restaurant_payment_accounts), 1, 'gerente da unidade vê a conta');
+select is((select count(*)::int from public.restaurant_payment_accounts), 0, 'subconta e dados bancários: só o Dono, nem o gerente da unidade');
 select _test.as_user(pg_temp.id('owner'));
 select throws_ok($$ select api_key_secret_id from public.restaurant_payment_accounts $$, '42501', null, 'o dono não lê o id do segredo');
 select throws_ok($$ update public.restaurant_payment_accounts set status = 'active' $$, '42501', null, 'o dono não muda o status direto');

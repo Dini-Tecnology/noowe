@@ -3,10 +3,12 @@ import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import PromotionsScreen from '../screens/v2/PromotionsScreen';
 import { CouponsEntry } from '../screens/v2/shared/CouponsEntry';
+import { WaiterAppShareCard } from '../screens/v2/shared/WaiterAppShareCard';
 import { couponLink, couponSentence, draftToPayload, duplicateDraft, emptyDraft, isoDate, rowToDraft } from '../screens/v2/shared/coupons';
 
 const mockApi = { listCoupons: jest.fn(), saveCoupon: jest.fn(), setCouponActive: jest.fn(), sendCoupon: jest.fn(), endCoupon: jest.fn(), getMenu: jest.fn() };
 jest.mock('react-native-qrcode-svg', () => 'QRCode');
+jest.mock('@react-navigation/native', () => ({ useFocusEffect: (fn: () => void) => { require('react').useEffect(fn, []); } }));
 let mockRoles = ['owner'];
 jest.mock('@okinawa/shared/contexts/ThemeContext', () => ({ useColors: () => new Proxy({}, { get: () => '#333333' }) }));
 jest.mock('../contexts/RestaurantRoleContext', () => ({ useRestaurantRole: () => ({ restaurantId: 'r1', serverRoles: mockRoles }) }));
@@ -87,6 +89,28 @@ describe('quem chega aos cupons (critério 9)', () => {
   it.each(['chef', 'cook', 'barman'])('%s não vê a entrada', (role) => {
     mockRoles = [role];
     expect(render(<CouponsEntry onOpen={jest.fn()} />).toJSON()).toBeNull();
+  });
+});
+
+describe('incentivo do garçom (item G)', () => {
+  it('mostra só o percentual', async () => {
+    mockRoles = ['waiter'];
+    (api as any).getMyAppShare = jest.fn().mockResolvedValue({ percent: 62 });
+    const view = render(<WaiterAppShareCard />);
+    expect(await view.findByText('62%')).toBeTruthy();
+    expect(view.getByText(/pagas pelo app/)).toBeTruthy();
+  });
+
+  it('não aparece para quem não é garçom, nem sem pagamento no dia', async () => {
+    mockRoles = ['manager'];
+    (api as any).getMyAppShare = jest.fn().mockResolvedValue({ percent: 62 });
+    expect(render(<WaiterAppShareCard />).toJSON()).toBeNull();
+    expect((api as any).getMyAppShare).not.toHaveBeenCalled();
+    mockRoles = ['waiter'];
+    (api as any).getMyAppShare = jest.fn().mockResolvedValue({ percent: null });
+    const view = render(<WaiterAppShareCard />);
+    await waitFor(() => expect((api as any).getMyAppShare).toHaveBeenCalled());
+    expect(view.toJSON()).toBeNull();
   });
 });
 

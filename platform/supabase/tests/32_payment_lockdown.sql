@@ -42,8 +42,7 @@ select throws_ok(
   '42501', null, 'cliente não apaga transação');
 
 select is(
-  (select count(*)::int from public.gateway_transactions where idempotency_key = 'lockdown-own'),
-  1, 'cliente lê a própria transação');
+  (select count(*)::int from public.gateway_transactions where idempotency_key = 'lockdown-own'), 0, 'a tabela de pagamentos é fechada, inclusive para o cliente: traz a taxa NOOWE');
 
 select throws_ok(
   $$ select count(*) from public.gateway_configs $$,

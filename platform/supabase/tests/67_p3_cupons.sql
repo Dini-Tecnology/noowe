@@ -340,7 +340,7 @@ begin
   assert pg_temp.state_of(format($q$select public.restaurant_set_coupon_active(%L, false)$q$, c)) = '42501', 'garçom não pausa';
   -- Outro garçom não aplica nesta mesa; o dela, sim.
   perform pg_temp.act(g2);
-  assert pg_temp.msg_of(format($q$select public.restaurant_record_bill_payment(%L, 'cash', %L, 1000, false, 0, null, null, 'NOVE')$q$, s->>'sid', gen_random_uuid())) = 'Este cupom só pode ser aplicado nas suas mesas', 'mesa de outro garçom';
+  assert pg_temp.msg_of(format($q$select public.restaurant_record_bill_payment(%L, 'cash', %L, 1000, false, 0, null, null, 'NOVE')$q$, s->>'sid', gen_random_uuid())) = 'Esta mesa é de outro garçom', 'mesa de outro garçom';
   perform pg_temp.act(g);
   j := public.restaurant_record_bill_payment((s->>'sid')::uuid, 'cash', gen_random_uuid(), 1000, false, 0, null, null, 'NOVE');
   assert (select coupon_id from public.bill_shares where id = (j->>'shareId')::uuid) = c, 'garçom aplica na mesa dele';
