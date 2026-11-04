@@ -26,8 +26,15 @@ export type FiscalResult =
   | { outcome: "already_processed" }
   | { outcome: "not_found" };
 
+export type FiscalCancelResult =
+  | { outcome: "cancelled" }
+  // Decisão final, como prazo vencido na SEFAZ: precisa de gente.
+  | { outcome: "rejected"; errorMessage: string }
+  | { outcome: "transient"; errorMessage: string };
+
 // Contrato mínimo usado pela Edge Function; outro emissor entra por aqui (ADR-030).
 export interface FiscalProvider {
   emit(credentials: FiscalCredentials, input: EmitInput): Promise<FiscalResult>;
   consult(credentials: FiscalCredentials, ref: string): Promise<FiscalResult>;
+  cancel(credentials: FiscalCredentials, ref: string, justification: string): Promise<FiscalCancelResult>;
 }

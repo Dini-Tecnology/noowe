@@ -110,6 +110,7 @@ Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercia
 | M1, segunda carga | Business 8.000, conveniência desligada, teste, plano sugerido, empresa e Tap em parâmetro |
 | O3 | Feita, no GitHub e no banco Noowe. Falta conferir as telas no simulador |
 | G5 | Feita, no GitHub e no banco Noowe. Falta conferir as telas no simulador |
+| N4, estorno real | Estorno com aprovação chega ao Asaas por uma fila, e o cancelamento fiscal acompanha. No banco e nas funções. Sem teste contra o sandbox do Asaas e a homologação da Focus; a tela vem com a O8 |
 | O8, M2–M6, P3, V1 | A fazer, nesta ordem (plano de 03/11) |
 
 ## Correspondência com o faseamento da spec (§8)

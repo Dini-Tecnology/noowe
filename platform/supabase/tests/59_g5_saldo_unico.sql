@@ -184,7 +184,8 @@ begin
   -- Pago por B; o Pix de A, que expirou, é confirmado depois: volta para A, sem abater duas vezes.
   perform pg_temp.pay(s, 1);
   perform private.apply_payment_event(t.id, 'simulated', 'tardio:' || t.id, 'RECEIVED', 'confirmed', t.amount_cents);
-  assert (select status from public.gateway_transactions where id = t.id) = 'refund_pending', 'pagamento tardio entra em estorno';
+  -- Provedor simulado devolve na hora; com o Asaas, passa pela fila (60_n4_estorno).
+  assert (select status from public.gateway_transactions where id = t.id) = 'refunded', 'pagamento tardio é estornado';
   assert (select sum(base_cents) from public.bill_shares where table_session_id = (s->>'sid')::uuid and status = 'paid') = 5000, 'consumo pago continua exato';
 end $$;
 select pass('critério 5: reserva não deixa abater além do saldo; falha e expiração devolvem; tardio é estornado');

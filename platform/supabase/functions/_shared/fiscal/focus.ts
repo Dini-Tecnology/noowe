@@ -1,5 +1,5 @@
 import { centsToAsaasValue } from "../payments/money.ts";
-import type { EmitInput, FiscalCredentials, FiscalEnvironment, FiscalItem, FiscalPayment, FiscalProvider, FiscalResult } from "./types.ts";
+import type { EmitInput, FiscalCancelResult, FiscalCredentials, FiscalEnvironment, FiscalItem, FiscalPayment, FiscalProvider, FiscalResult } from "./types.ts";
 
 const BASE_URL: Record<FiscalEnvironment, string> = {
   homologation: "https://homologacao.focusnfe.com.br",
@@ -150,5 +150,25 @@ export class FocusNfeClient implements FiscalProvider {
 
   consult(credentials: FiscalCredentials, ref: string): Promise<FiscalResult> {
     return this.call(credentials, "GET", `/nfce/${encodeURIComponent(ref)}`);
+  }
+
+  async cancel(credentials: FiscalCredentials, ref: string, justification: string): Promise<FiscalCancelResult> {
+    const base = focusBaseUrl(credentials.environment);
+    let response: Response;
+    try {
+      response = await this.fetchFn(`${base}/v2/nfce/${encodeURIComponent(ref)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Basic ${btoa(`${credentials.token}:`)}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ justificativa: justification }),
+      });
+    } catch (err) {
+      return { outcome: "transient", errorMessage: String(err) };
+    }
+    const raw = await response.text();
+    let body: Record<string, unknown> = {};
+    try { body = JSON.parse(raw); } catch { /* 401 da Focus vem em texto puro */ }
+    if (response.status === 200 && body.status === "cancelado") return { outcome: "cancelled" };
+    if (response.status === 429 || response.status >= 500) return { outcome: "transient", errorMessage: `Focus respondeu HTTP ${response.status}` };
+    return { outcome: "rejected", errorMessage: text(body.mensagem_sefaz) ?? text(body.mensagem) ?? `Focus respondeu HTTP ${response.status}` };
   }
 }

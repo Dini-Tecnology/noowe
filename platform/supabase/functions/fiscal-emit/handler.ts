@@ -1,5 +1,4 @@
-import { bearer, json, type RpcResult } from "../_shared/payments/deps.ts";
-import { timingSafeEqual } from "../_shared/payments/crypto.ts";
+import { bearer, isServiceRole, json, type RpcResult } from "../_shared/payments/deps.ts";
 import type { FiscalCredentials, FiscalProvider, FiscalResult } from "../_shared/fiscal/types.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -19,6 +18,8 @@ export async function handleFiscalEmit(req: Request, deps: FiscalDeps): Promise<
   if (!isServiceRole(bearer(req), deps.env("SUPABASE_SERVICE_ROLE_KEY") ?? "")) return json({ error: "unauthorized" }, 401);
   const body = await req.json().catch(() => null);
   if (!UUID.test(body?.documentId ?? "")) return json({ error: "invalid_request" }, 400);
+
+  if (body.action === "cancel") return cancelNote(deps, body.documentId);
 
   const claim = await deps.rpc("service_fiscal_claim", { p_document_id: body.documentId });
   if (claim.error) {
@@ -41,18 +42,26 @@ export async function handleFiscalEmit(req: Request, deps: FiscalDeps): Promise<
   return json({ ok: true, status: recorded.data?.status });
 }
 
-// O gateway valida a assinatura do JWT (verify_jwt = true); aqui só conferimos o papel, como em send-push-notification.
-function isServiceRole(token: string, serviceKey: string): boolean {
-  if (!token) return false;
-  if (serviceKey && timingSafeEqual(token, serviceKey)) return true;
-  try {
-    const encoded = token.split(".")[1];
-    if (!encoded) return false;
-    const padded = encoded.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(encoded.length / 4) * 4, "=");
-    return JSON.parse(atob(padded)).role === "service_role";
-  } catch {
-    return false;
+// Cancela a nota de uma venda estornada por inteiro. Só a SEFAZ diz se ainda dá: fora do prazo, a recusa vai para uma pessoa.
+async function cancelNote(deps: FiscalDeps, documentId: string): Promise<Response> {
+  const claim = await deps.rpc("service_fiscal_cancel_claim", { p_document_id: documentId });
+  if (claim.error) {
+    console.error("fiscal-emit cancel claim error:", claim.error.message);
+    return json({ error: "internal_error" }, 500);
   }
+  const job = claim.data;
+  if (!job?.claimed) return json({ ok: true, skipped: job?.blocked ?? "not_due" });
+  const result = await deps.provider.cancel({ token: job.token, environment: job.environment }, job.ref, job.justification);
+  const saved = await deps.rpc("service_fiscal_cancel_record", {
+    p_document_id: job.documentId,
+    p_outcome: result.outcome === "cancelled" ? "cancelled" : result.outcome === "transient" ? "transient" : "failed",
+    p_error: result.outcome === "cancelled" ? null : result.errorMessage,
+  });
+  if (saved.error) {
+    console.error("fiscal-emit cancel record error:", saved.error.message);
+    return json({ error: "internal_error" }, 500);
+  }
+  return json({ ok: true, cancelStatus: saved.data?.cancelStatus });
 }
 
 type Final = Exclude<FiscalResult, { outcome: "already_processed" } | { outcome: "not_found" }>;

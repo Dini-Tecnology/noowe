@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "./crypto.ts";
 import type { PaymentProvider } from "./types.ts";
 
 export interface RpcResult { data: any; error: { code?: string; message: string } | null }
@@ -37,5 +38,19 @@ export function mapRpcError(code?: string): { status: number; error: string } {
     case "P0012": return { status: 409, error: "bill_changed" };
     case "23514": return { status: 422, error: "invalid_amount" };
     default: return { status: 500, error: "internal_error" };
+  }
+}
+
+// O gateway valida a assinatura do JWT (verify_jwt = true); aqui só conferimos o papel.
+export function isServiceRole(token: string, serviceKey: string): boolean {
+  if (!token) return false;
+  if (serviceKey && timingSafeEqual(token, serviceKey)) return true;
+  try {
+    const encoded = token.split(".")[1];
+    if (!encoded) return false;
+    const padded = encoded.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(encoded.length / 4) * 4, "=");
+    return JSON.parse(atob(padded)).role === "service_role";
+  } catch {
+    return false;
   }
 }

@@ -62,6 +62,10 @@ verify_jwt = true
 # O usuário é validado dentro da função (admin.auth.getUser).
 verify_jwt = false
 
+[functions.payments-refund]
+# Só o banco chama (pg_net), com a service role; a função confere o papel e o gateway valida o JWT.
+verify_jwt = true
+
 [functions.fiscal-emit]
 # Só o banco chama (pg_net), com a service role; a função compara o token e o gateway valida o JWT.
 verify_jwt = true
