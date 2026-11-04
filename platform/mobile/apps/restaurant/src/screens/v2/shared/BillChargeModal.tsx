@@ -33,6 +33,7 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
   const [digits, setDigits] = useState('');
   const [keepFee, setKeepFee] = useState(true);
   const [reason, setReason] = useState('');
+  const [coupon, setCoupon] = useState('');
   const [submitting, setSubmitting] = useState(false);
   // Repetir depois de uma falha usa a mesma chave: nunca lança o pagamento duas vezes.
   const key = useRef('');
@@ -44,6 +45,7 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
     setDigits('');
     setKeepFee(true);
     setReason('');
+    setCoupon('');
     setBill(null);
     setBillFor(undefined);
   }, [tableSessionId]);
@@ -81,7 +83,7 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
     setSubmitting(true);
     try {
       await supabaseApiAdapter.recordBillPayment(tableSessionId, {
-        method, baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, idempotencyKey: key.current, voucherKind: voucherKind ?? null,
+        method, baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, idempotencyKey: key.current, voucherKind: voucherKind ?? null, couponCode: coupon.trim() || null,
       });
       await onCharged();
       onClose();
@@ -152,8 +154,18 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
             </>
           )}
 
+          <TextInput
+            value={coupon}
+            onChangeText={setCoupon}
+            autoCapitalize="characters"
+            placeholder="Cupom do cliente (opcional)"
+            placeholderTextColor={colors.foregroundMuted}
+            accessibilityLabel="Cupom do cliente"
+            style={[styles.input, { color: colors.foreground, backgroundColor: colors.backgroundTertiary }]}
+          />
+
           <View style={styles.row}>
-            <Text style={[styles.totalLabel, { color: colors.foreground }]}>Receber</Text>
+            <Text style={[styles.totalLabel, { color: colors.foreground }]}>{coupon.trim() ? 'Receber, antes do cupom' : 'Receber'}</Text>
             <Text style={[styles.totalValue, { color: colors.primary }]}>{total != null ? formatCents(total) : '—'}</Text>
           </View>
 

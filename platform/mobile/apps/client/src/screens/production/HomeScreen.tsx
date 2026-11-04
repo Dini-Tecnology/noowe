@@ -33,6 +33,7 @@ import { useTableQrHandler } from '../../hooks/useTableQrHandler';
 import { INVITE_FAILURE_MESSAGES, inviteLinkFailureDestination, useTableInviteHandler } from '../../hooks/useTableInviteHandler';
 import { takePendingTableQr } from '../../utils/pending-table-qr';
 import { takePendingTableInvite } from '../../utils/pending-table-invite';
+import { takePendingCouponLink } from '../../utils/pending-coupon-link';
 import customerBackend, { type CustomerRestaurant } from '../../services/customer-backend';
 import {
   featuredScore,
@@ -129,6 +130,8 @@ export default function HomeScreen({ navigation }: any) {
   // app/t/invite/[token].tsx.
   useEffect(() => {
     (async () => {
+      const coupon = await takePendingCouponLink();
+      if (coupon) rootNavigate(navigation, 'Restaurant', { restaurantId: coupon.restaurantId, couponCode: coupon.code });
       const token = await takePendingTableInvite();
       if (!token) return;
       const outcome = await handleInviteToken(token);

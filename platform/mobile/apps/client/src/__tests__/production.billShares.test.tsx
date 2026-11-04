@@ -34,6 +34,7 @@ const mockSavedCards = jest.fn();
 const mockSummary = jest.fn();
 const mockQuote = jest.fn();
 const mockWaive = jest.fn();
+const mockCoupon = jest.fn();
 const mockLatestReceipt = jest.fn().mockResolvedValue(null);
 jest.mock('../services/bill-shares', () => ({
   SPLIT_ERRORS: { P0012: 'A conta mudou. Confira os valores atualizados.' },
@@ -45,6 +46,7 @@ jest.mock('../services/bill-shares', () => ({
     summary: (...a: unknown[]) => mockSummary(...a),
     tipQuote: (...a: unknown[]) => mockQuote(...a),
     setFeeWaived: (...a: unknown[]) => mockWaive(...a),
+    applyCoupon: (...a: unknown[]) => mockCoupon(...a), removeCoupon: jest.fn(),
     tipOptions: (...a: unknown[]) => mockTips(...a), pay: (...a: unknown[]) => mockPay(...a), abandon: jest.fn(),
     subscribe: () => ({ unsubscribe: jest.fn() }),
   },
@@ -204,6 +206,26 @@ test('pagamento: conta que mudou não cobra e volta para escolher de novo', asyn
   await waitFor(() => expect(screen.getAllByText(/R\$\s53,00/).length).toBeGreaterThan(0));
   fireEvent.press(screen.getByText('Gerar PIX'));
   await waitFor(() => expect(require('react-native').Alert.alert).toHaveBeenCalledWith('A conta mudou', expect.any(String), expect.anything()));
+});
+
+test('cupom: vai ao servidor, e a mensagem de por que não vale chega à pessoa (P3)', async () => {
+  mockList.mockResolvedValue([{ ...myShare, couponDiscountCents: 0 }]);
+  mockTips.mockResolvedValue([{ percent: 10, cents: 442, totalCents: 5300 }]);
+  mockCoupon.mockRejectedValueOnce(new Error('Válido de terça a quinta, das 15h às 18h')).mockResolvedValue(undefined);
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  fireEvent.changeText(await screen.findByLabelText('Cupom'), 'dez');
+  fireEvent.press(screen.getByText('Aplicar'));
+  await waitFor(() => expect(mockCoupon).toHaveBeenCalledWith('sh1', 'dez'));
+  await waitFor(() => expect(require('react-native').Alert.alert).toHaveBeenCalledWith('Cupom não aplicado', 'Válido de terça a quinta, das 15h às 18h'));
+});
+
+test('cupom aplicado aparece no resumo, com o valor do servidor', async () => {
+  mockList.mockResolvedValue([{ ...myShare, couponDiscountCents: 500 }]);
+  mockTips.mockResolvedValue([]);
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  expect(await screen.findByText('Cupom')).toBeTruthy();
+  expect(screen.getByText(/5,00/)).toBeTruthy();
+  expect(screen.getByText('Remover')).toBeTruthy();
 });
 
 const tips = [

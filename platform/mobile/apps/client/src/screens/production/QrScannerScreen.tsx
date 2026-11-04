@@ -10,6 +10,7 @@ import { DevTableScanButton } from '../../components/dev/DevTableScanButton';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { showTableQrOutcome } from '../../hooks/qr-scan-outcome';
 import { useTableQrHandler } from '../../hooks/useTableQrHandler';
+import { extractCouponLink } from '../../hooks/qr-payload';
 
 /**
  * Depois de recusar um QR, a câmera continua apontada para ele e o expo-camera
@@ -38,6 +39,12 @@ export default function QrScannerScreen({ navigation, route }: any) {
     if (rejected && rejected.data === data && Date.now() - rejected.at < REJECTED_QR_COOLDOWN_MS) return;
     scanning.current = true;
     setLocked(true);
+    // QR de cupom não abre mesa: leva à página do restaurante, com o código à vista.
+    const coupon = extractCouponLink(data);
+    if (coupon) {
+      navigation.replace('Restaurant', { restaurantId: coupon.restaurantId, couponCode: coupon.code });
+      return;
+    }
     const outcome = await handleQrScanned(data, {
       contextRestaurant: contextRestaurantId ? { id: contextRestaurantId, name: contextRestaurantName } : undefined,
     });

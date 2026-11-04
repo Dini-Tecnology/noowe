@@ -74,12 +74,13 @@ function PhotoGalleryModal({
  */
 export default function RestaurantScreen({ route, navigation }: any) {
   const colors = useColors();
-  const { restaurantId, serviceModel: routeModel } = route.params;
+  const { restaurantId, serviceModel: routeModel, couponCode } = route.params;
   const queryClient = useQueryClient();
 
   const [galleryOpen, setGalleryOpen] = useState(false);
 
   const query = useQuery({ queryKey: ['restaurant', restaurantId], queryFn: () => customerBackend.getRestaurant(restaurantId) });
+  const coupons = useQuery({ queryKey: ['promotions', restaurantId], queryFn: () => customerBackend.listPromotions(restaurantId) });
   const { session, selectRestaurant } = useVisitSession();
   // A experiência vem da mesa aberta, do chip da descoberta ou do seletor desta página (ADR-017).
   const journeyModel = useJourneyModel(restaurantId, routeModel);
@@ -369,6 +370,8 @@ export default function RestaurantScreen({ route, navigation }: any) {
         isFavorite={isFavorite}
         favoritePending={favorite.isPending}
         journeyActions={journeyActions}
+        coupons={coupons.data}
+        linkedCouponCode={couponCode}
         entryNotice={entryNotice}
         comandaCard={comandaCard}
         leaveLabel={leaveLabel}

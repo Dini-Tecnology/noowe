@@ -90,3 +90,9 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 67 | **Restaurante sem CNPJ na fatura** | O Asaas pede documento para cobrar | A fatura fica em aberto, com o motivo registrado, sem chamar o provedor | — |
 | 68 | **Cadeado no recurso fora do plano** | "Só o Dono vê com cadeado" pode ser em cada tela | Lista "Fora do seu plano" em Módulos e plano. Nas telas do dia a dia, o recurso some para todos | — |
 | 69 | **Reembolso ao cancelar o anual** | Sem reembolso | Como o aditivo; a tela avisa antes | — |
+| 70 | **Garçom em mesa sem responsável** | "Garçom (mesas dele)" não diz o caso da mesa sem garçom definido | Pode aplicar. Mesa de outro garçom é recusada | P3 |
+| 71 | **Faturamento das contas com cupom** | O aditivo não define a base | Consumo pago da conta inteira, já sem o desconto, sem taxa nem gorjeta | P3 |
+| 72 | **Cliente novo trazido** | Sem definição | Quem usou o cupom sem nenhum pedido anterior nesta casa | P3 |
+| 73 | **Horário que passa da meia-noite** | "15h às 18h" não cobre 22h às 2h | Recusado na criação: o fim precisa ser depois do início | P3 |
+| 74 | **Cupom de item grátis na conta dividida** | Um cupom vale só para a parte de quem aplicou, mas o item pode ser de outra pessoa | O desconto é o menor valor entre o item e a parte de quem aplicou | P3 |
+| 75 | **Cupom na comanda sem cliente identificado** | Garçom aplica para cliente sem app | Vale só cupom para "todos": grupo da ficha exige saber quem é. Limite por cliente não se aplica | P3 |

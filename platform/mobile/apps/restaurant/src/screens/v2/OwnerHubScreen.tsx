@@ -61,6 +61,7 @@ import { PersonalSettingsContent } from './config/PersonalSettingsContent';
 import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
 import { MyTipsPanel } from './shared/MyTipsPanel';
+import { CouponsEntry } from './shared/CouponsEntry';
 import { PlanGateBanner } from './shared/PlanGateBanner';
 import { DayClosePanel } from './shared/DayClosePanel';
 import { PaymentActionsPanel } from './shared/PaymentActionsPanel';
@@ -81,7 +82,6 @@ import {
   useDashboardSnapshot,
   useKdsOrders,
   useMenuItems,
-  usePromotions,
   useReservations,
   useRestaurantOrders,
   useRestaurantTables,
@@ -305,6 +305,7 @@ export default function OwnerHubScreen() {
 
         <MyRolesTasksPanel />
         <MyTipsPanel />
+        <CouponsEntry onOpen={openScreen} />
         <PlanGateBanner />
 
         {isOwner ? (
@@ -370,7 +371,6 @@ function managerViewTitle(view: ManagerRoleView) {
     'manager-staff': 'Gestão de Equipe',
     'manager-report': 'Relatório do Dia',
     'manager-stock': 'Controle de Estoque',
-    'manager-promotions': 'Promoções & Campanhas',
     'manager-qr': 'QR Codes',
     'manager-settings': 'Central de Configuração',
   };
@@ -638,7 +638,6 @@ function ManagerContent({
   if (view === 'manager-staff') return <ManagerStaffView colors={colors} />;
   if (view === 'manager-report') return <ManagerReportView colors={colors} />;
   if (view === 'manager-stock') return <ManagerStockView colors={colors} />;
-  if (view === 'manager-promotions') return <ManagerPromotionsView colors={colors} />;
   if (view === 'manager-qr') return <ManagerQrView colors={colors} onNavigate={onNavigate} />;
   if (view === 'manager-settings') return <ManagerSettingsView />;
   return <ManagerDashboardTab setView={setView} onNavigate={onNavigate} colors={colors} />;
@@ -1726,46 +1725,6 @@ function ManagerStockView({ colors, roleName = 'Gerente' }: { colors: ReturnType
               <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{item.category}</Text>
             </View>
             <StatusChip label={`${item.currentLevel} ${item.unit}`} tone={item.isLow ? 'danger' : 'success'} />
-          </View>
-        ))
-      )}
-    </View>
-  );
-}
-
-function formatPromotionWindow(from: string, until: string): string {
-  const opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit' };
-  return `${new Date(from).toLocaleDateString('pt-BR', opts)} a ${new Date(until).toLocaleDateString('pt-BR', opts)}`;
-}
-
-function ManagerPromotionsView({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const { data: promotions, loading, error, refresh } = usePromotions();
-
-  return (
-    <View style={styles.section}>
-      <View style={[styles.tipBanner, { backgroundColor: V2_TONE.danger.bg, borderColor: '#FECACA' }]}>
-        <Zap size={16} color="#FF5A3D" />
-        <Text style={styles.tipBannerText}>Campanhas ativas, cupons e happy hour</Text>
-      </View>
-      {loading ? (
-        <InlineNotice message="Carregando promoções..." colors={colors} />
-      ) : error ? (
-        <InlineNotice message={error} actionLabel="Recarregar" onPress={() => void refresh()} colors={colors} />
-      ) : promotions.length === 0 ? (
-        <InlineNotice message="Nenhuma campanha ativa." colors={colors} />
-      ) : (
-        promotions.map((promo) => (
-          <View key={promo.id} style={[styles.campaignCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-            <View style={styles.managerOrderHeader}>
-              <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{promo.title}</Text>
-              <StatusChip label="Ativa" tone="success" />
-            </View>
-            <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
-              {promo.discountValue ? `${promo.discountValue}% off` : promo.type}
-            </Text>
-            <Text style={[styles.approvalMeta, { color: colors.foregroundSecondary }]}>
-              {formatPromotionWindow(promo.validFrom, promo.validUntil)}
-            </Text>
           </View>
         ))
       )}

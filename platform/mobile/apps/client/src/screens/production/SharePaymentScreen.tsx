@@ -103,6 +103,14 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   });
   const canPay = !!quote.data && quote.data.tipCents === chosenTipCents;
 
+  const [couponCode, setCouponCode] = useState('');
+  const coupon = useMutation({
+    mutationFn: () => (myOpen!.couponDiscountCents > 0 && !couponCode.trim() ? billShares.removeCoupon(myOpen!.id) : billShares.applyCoupon(myOpen!.id, couponCode.trim())),
+    onSuccess: () => setCouponCode(''),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['bill-shares', tableSessionId] }),
+    onError: (error: Error) => Alert.alert('Cupom não aplicado', error.message),
+  });
+
   const waiveFee = useMutation({
     mutationFn: (waived: boolean) => billShares.setFeeWaived(myOpen!.id, waived),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['bill-shares', tableSessionId] }),
@@ -392,6 +400,34 @@ export default function SharePaymentScreen({ route, navigation }: any) {
                 <Text style={styles.summaryLabel}>Sua parte do consumo</Text>
                 <Text style={styles.summaryValue}>{moneyCents(myOpen.baseCents)}</Text>
               </View>
+              {myOpen.couponDiscountCents > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Cupom</Text>
+                  <Text style={styles.summaryValue}>− {moneyCents(myOpen.couponDiscountCents)}</Text>
+                </View>
+              )}
+              {myOpen.status === 'open' && (
+                <View style={styles.tipInputRow}>
+                  <TextInput
+                    style={styles.tipInput}
+                    placeholder="Tem um cupom?"
+                    placeholderTextColor={colors.foregroundMuted}
+                    autoCapitalize="characters"
+                    value={couponCode}
+                    onChangeText={setCouponCode}
+                    accessibilityLabel="Cupom"
+                  />
+                  {couponCode.trim() ? (
+                    <TouchableOpacity onPress={() => coupon.mutate()} disabled={coupon.isPending} accessibilityRole="button">
+                      <Text style={styles.chipLabelActive}>Aplicar</Text>
+                    </TouchableOpacity>
+                  ) : myOpen.couponDiscountCents > 0 ? (
+                    <TouchableOpacity onPress={() => coupon.mutate()} disabled={coupon.isPending} accessibilityRole="button">
+                      <Text style={styles.chipValue}>Remover</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              )}
               {!tipMode && (summary.data?.feeBps ?? 0) > 0 && (
                 <View style={styles.feeRow}>
                   <View style={{ flex: 1 }}>

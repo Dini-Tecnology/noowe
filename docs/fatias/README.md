@@ -118,7 +118,7 @@ Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercia
 | T1 | Pronto e desligado: fornecedor entra por parâmetro e pela camada em `functions/_shared/tap`. Falta o contrato e o SDK |
 | M4 | Assinatura, teste de 30 dias, troca de plano, uso e faturas, no banco e na tela. Falta a chave raiz do Asaas e o token do webhook nas funções, e os dados da empresa para a nota (pendência 34) |
 | M5, M6 | Créditos e códigos, no banco e na tela |
-| P3 | A fazer (plano de 03/11) |
+| P3 | Cupons no banco e nas telas: 3 passos, painel com status e relatório, link e QR, visíveis na página, aplicar no app e na comanda, com o mínimo da P2 (grupos da ficha). O link depende de `/c/*` no arquivo de universal links do site noowebr.com |
 
 ## Correspondência com o faseamento da spec (§8)
 

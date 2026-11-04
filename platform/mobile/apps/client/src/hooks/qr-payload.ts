@@ -22,3 +22,16 @@ export function classifyQrPayload(raw: string): NooweQrKind | null {
   if (!match) return null;
   return match[1] === 't' ? 'table' : 'counter';
 }
+
+/** Link e QR de cupom do restaurante: `https://noowebr.com/c/<restaurante>/<código>`. Leva à página dele, com o código à vista. */
+const COUPON_LINK_PATTERN = /^https:\/\/(?:www\.)?noowebr\.com\/c\/([0-9a-fA-F-]{36})\/([^/?#]{1,64})$/;
+
+export function extractCouponLink(raw: string): { restaurantId: string; code: string } | null {
+  const match = COUPON_LINK_PATTERN.exec(raw.trim());
+  if (!match) return null;
+  try {
+    return { restaurantId: match[1], code: decodeURIComponent(match[2]) };
+  } catch {
+    return null;
+  }
+}

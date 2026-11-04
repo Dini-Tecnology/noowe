@@ -58,6 +58,7 @@ export type BillShare = {
   amountCents: number;
   tipCents: number;
   feeWaived: boolean;
+  couponDiscountCents: number;
   status: BillShareStatus;
 };
 
@@ -179,13 +180,13 @@ export const billShares = {
 
   async list(tableSessionId: string): Promise<BillShare[]> {
     const { data, error } = await client().from('bill_shares')
-      .select('id, participant_id, mode, base_cents, service_fee_cents, amount_cents, tip_cents, fee_waived_at, status')
+      .select('id, participant_id, mode, base_cents, service_fee_cents, amount_cents, tip_cents, fee_waived_at, coupon_discount_cents, status')
       .eq('table_session_id', tableSessionId).in('status', ['open', 'pending_payment', 'paid']).order('created_at');
     if (error) throw error;
     return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
       id: String(row.id), participantId: row.participant_id == null ? null : String(row.participant_id), mode: row.mode as SplitMode,
       baseCents: num(row.base_cents), feeCents: num(row.service_fee_cents), amountCents: num(row.amount_cents), tipCents: num(row.tip_cents),
-      feeWaived: row.fee_waived_at != null, status: row.status as BillShareStatus,
+      feeWaived: row.fee_waived_at != null, couponDiscountCents: num(row.coupon_discount_cents), status: row.status as BillShareStatus,
     }));
   },
 
@@ -230,6 +231,17 @@ export const billShares = {
       p_restaurant_id: restaurantId, p_amount_cents: amountCents, p_scheduled: input.scheduled, p_tip_bps: input.tipBps, p_tip_cents: input.tipCents,
     }));
     return { tipCents: num(data.tipCents), totalCents: num(data.totalCents), convenienceCents: num(data.convenienceCents) };
+  },
+
+  /** O servidor valida e diz por que não vale: a mensagem do erro é para a pessoa. */
+  async applyCoupon(shareId: string, code: string): Promise<void> {
+    await rpc('customer_apply_coupon', { p_share_id: shareId, p_code: code });
+  },
+  async removeCoupon(shareId: string): Promise<void> {
+    await rpc('customer_remove_coupon', { p_share_id: shareId });
+  },
+  async applyCouponToOrder(orderId: string, code: string): Promise<void> {
+    await rpc('customer_apply_coupon_to_order', { p_order_id: orderId, p_code: code });
   },
 
   /** Um toque, sem aprovação, e fica registrado. Vale só para a parte da própria pessoa. */

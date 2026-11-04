@@ -73,6 +73,7 @@ import FinancialScreen from '../screens/v2/FinancialScreen';
 import ReportsScreen from '../screens/v2/ReportsScreen';
 import ReviewsScreen from '../screens/v2/ReviewsScreen';
 import PromotionsScreen from '../screens/v2/PromotionsScreen';
+import { COUPON_ROLES } from '../screens/v2/shared/CouponsEntry';
 import LoyaltyScreen from '../screens/v2/LoyaltyScreen';
 import RoleDashboardScreen from '../screens/v2/RoleDashboardScreen';
 import WaiterScreen from '../screens/v2/WaiterScreen';
@@ -204,6 +205,7 @@ function withServiceGuard<P extends object>(
 }
 
 const GuardedFinancial = withRoleGuard(FinancialScreen, ['owner', 'manager']);
+const GuardedPromotions = withRoleGuard(PromotionsScreen, [...COUPON_ROLES]);
 const GuardedReports = withRoleGuard(ReportsScreen, ['owner', 'manager']);
 const GuardedStaff = withRoleGuard(StaffScreen, ['owner', 'manager']);
 const GuardedRestaurantProfile = withRoleGuard(RestaurantProfileScreen, ['owner', 'manager']);
@@ -514,7 +516,7 @@ function MainStack() {
       <Stack.Screen name="Financial" component={GuardedFinancial} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Reports" component={GuardedReports} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Reviews" component={ReviewsScreen} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="Promotions" component={PromotionsScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Promotions" component={GuardedPromotions} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Loyalty" component={LoyaltyScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RoleDashboard" component={RoleDashboardScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Waiter" component={JourneyWaiter} options={scaleFadeScreenOptions} />

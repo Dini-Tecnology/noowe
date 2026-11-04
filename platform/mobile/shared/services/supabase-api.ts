@@ -5,6 +5,15 @@ import { getOptionalSupabaseSessionUser } from './supabase-auth';
 import type { ServiceType } from '../config/service-types';
 import type { Json } from '../types/database.generated';
 
+export type CouponRow = {
+  id: string; code: string; title: string; status: 'active' | 'scheduled' | 'paused' | 'sold_out' | 'ended'; discountKind: 'percent' | 'fixed' | 'free_item'; discountBps: number | null; discountCents: number | null;
+  freeItemId: string | null; minOrderCents: number | null; services: string[] | null; scope: 'bill' | 'categories' | 'items'; scopeIds: string[] | null; dow: number[] | null; hoursFrom: string | null; hoursUntil: string | null;
+  audience: string; inactiveDays: number | null; maxUses: number | null; maxUsesPerUser: number | null; validFrom: string; validUntil: string;
+  isAuto: boolean; isVisible: boolean; locked: boolean;
+  // Relatório: só vem para Dono e Gerente.
+  uses?: number; discountGivenCents?: number; revenueCents?: number; avgTicketCents?: number; newCustomers?: number;
+};
+
 export type BillingCycle = 'monthly' | 'annual';
 export type PlanSummary = {
   needsChoice: boolean; trialDays?: number; planCode?: string; planName?: string; isContract?: boolean; cycle?: BillingCycle; status?: string; priceCents?: number | null;
@@ -646,7 +655,6 @@ export interface SupabaseApiAdapter {
   getTableQRCodes(restaurantId?: string): Promise<TableQRCode[]>;
   generateTableQR(tableId: string): Promise<any>;
   generateCounterQR(restaurantId: string, label?: string): Promise<{ id: string; restaurantId: string; label: string; qrData: string; createdAt: string }>;
-  getPromotions(restaurantId?: string, status?: string): Promise<any>;
   closePromotion(promotionId: string): Promise<any>;
   getReviews(restaurantId?: string, limit?: number): Promise<any>;
   respondReview(reviewId: string, response: string): Promise<any>;
@@ -656,12 +664,17 @@ export interface SupabaseApiAdapter {
   /** Saldo e valores prontos para cobrar uma comanda aberta. `baseCents` nulo é o saldo todo. */
   getSessionBill(tableSessionId: string, baseCents?: number | null): Promise<SessionBill>;
   /** Pagamento presencial: abate do mesmo saldo da comanda (ADR-032). */
-  recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string; voucherKind?: string | null }): Promise<any>;
+  recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string; voucherKind?: string | null; couponCode?: string | null }): Promise<any>;
   /** Inicia a cobrança por aproximação. A resposta nunca significa pago: quem confirma é o fornecedor. */
   startTapCharge(tableSessionId: string, input: { baseCents?: number | null; waiveFee?: boolean; idempotencyKey: string }): Promise<{ paymentId: string; amountCents: number; sdkPayload: Record<string, unknown> }>;
   setAcceptedVouchers(restaurantId: string, kinds: string[]): Promise<any>;
   getPaymentOptions(restaurantId: string): Promise<{ tapActive: boolean; acceptedVouchers: string[] }>;
   getChargePolicies(restaurantId: string): Promise<ChargePolicyRow[]>;
+  listCoupons(restaurantId: string): Promise<CouponRow[]>;
+  saveCoupon(restaurantId: string, coupon: Record<string, unknown>): Promise<any>;
+  setCouponActive(couponId: string, active: boolean): Promise<void>;
+  endCoupon(couponId: string): Promise<void>;
+  sendCoupon(couponId: string): Promise<{ recipients: number }>;
   /** Módulos e plano (M4, M5, M6). Só o Dono; o Gerente vê índice e faixa. */
   getPlanSummary(restaurantId: string): Promise<PlanSummary>;
   listPlans(restaurantId: string): Promise<PlanOption[]>;
@@ -2383,15 +2396,6 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
-  async getPromotions(restaurantId?: string, status?: string) {
-    const resolvedId = await resolveRestaurantId(restaurantId);
-    const { data, error } = await getSupabaseClient().rpc('restaurant_get_promotions', {
-      p_restaurant_id: resolvedId,
-      p_status: status ?? null,
-    });
-    if (error) throw error;
-    return data;
-  },
 
   async closePromotion(promotionId: string) {
     const { data, error } = await getSupabaseClient().rpc('restaurant_close_promotion', {
@@ -2441,7 +2445,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_record_bill_payment', {
       p_table_session_id: tableSessionId, p_payment_method: input.method, p_idempotency_key: input.idempotencyKey,
       p_base_cents: input.baseCents ?? null, p_waive_fee: input.waiveFee === true, p_tip_cents: input.tipCents ?? 0, p_reason: input.reason ?? null,
-      p_voucher_kind: input.voucherKind ?? null,
+      p_voucher_kind: input.voucherKind ?? null, p_coupon_code: input.couponCode ?? null,
     });
     if (error) throw error;
     return data;
@@ -2465,6 +2469,22 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
   async setConvenienceAbsorbed(restaurantId: string, absorbed: boolean) {
     return rpcData('restaurant_set_convenience_absorbed', { p_restaurant_id: restaurantId, p_absorbed: absorbed });
+  },
+
+  async listCoupons(restaurantId: string) {
+    return rpcData<CouponRow[]>('restaurant_list_coupons', { p_restaurant_id: restaurantId });
+  },
+  async saveCoupon(restaurantId: string, coupon: Record<string, unknown>) {
+    return rpcData('restaurant_upsert_coupon', { p_restaurant_id: restaurantId, p_coupon: coupon });
+  },
+  async setCouponActive(couponId: string, active: boolean) {
+    await rpcData('restaurant_set_coupon_active', { p_coupon_id: couponId, p_active: active });
+  },
+  async endCoupon(couponId: string) {
+    await rpcData('restaurant_end_coupon', { p_coupon_id: couponId });
+  },
+  async sendCoupon(couponId: string) {
+    return rpcData('restaurant_send_coupon', { p_coupon_id: couponId });
   },
 
   async getPlanSummary(restaurantId: string) {

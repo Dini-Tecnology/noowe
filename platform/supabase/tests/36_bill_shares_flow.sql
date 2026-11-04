@@ -20,7 +20,7 @@ create function pg_temp.over_covered(p_sid uuid) returns int language sql as $$
 -- As contas de cada parcela: valor = consumo + taxa, e nunca taxa com gorjeta.
 create function pg_temp.bad_shares(p_sid uuid) returns int language sql as $$
   select count(*)::int from public.bill_shares
-  where table_session_id = p_sid and (amount_cents <> base_cents + service_fee_cents or (service_fee_cents > 0 and tip_cents > 0)) $$;
+  where table_session_id = p_sid and (amount_cents <> base_cents - coupon_discount_cents + service_fee_cents or (service_fee_cents > 0 and tip_cents > 0)) $$;
 
 create temp table _ctx(k text primary key, v uuid);
 

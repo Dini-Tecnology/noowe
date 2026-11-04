@@ -725,7 +725,6 @@ export interface CustomerBackend {
   listLoyalty(): Promise<CustomerLoyalty[]>;
   redeemLoyaltyReward(programId: string, rewardCode: string): Promise<void>;
   listPromotions(restaurantId?: string): Promise<CustomerPromotion[]>;
-  redeemPromotion(id: string): Promise<void>;
   getWalletSnapshot(): Promise<CustomerWalletSnapshot>;
   addPixPaymentMethod(pixKey: string, setDefault?: boolean): Promise<CustomerWalletSnapshot>;
   addCardPaymentMethod(input: CustomerCardInput): Promise<CustomerWalletSnapshot>;
@@ -2217,11 +2216,6 @@ export const customerBackend: CustomerBackend = {
     const { data, error } = await query;
     if (error) throw error;
     return (data ?? []).map((row) => ({ id: row.id, restaurantId: row.restaurant_id, code: row.code, title: row.title, description: row.description, validUntil: row.valid_until }));
-  },
-
-  async redeemPromotion(id) {
-    const { error } = await getSupabaseClient().rpc('customer_redeem_promotion', { p_promotion_id: id });
-    if (error) throw error;
   },
 
   async getWalletSnapshot() {

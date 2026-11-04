@@ -58,6 +58,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   const [needsDocument, setNeedsDocument] = useState(false);
   const [document, setDocument] = useState('');
   // Gorjeta opcional, sem nada marcado: é a pessoa que escolhe (ADR-032).
+  const [couponCode, setCouponCode] = useState('');
   const [tipBps, setTipBps] = useState(0);
   const [tipDigits, setTipDigits] = useState('');
   const tipCents = tipDigits ? parseInt(tipDigits, 10) : 0;
@@ -113,6 +114,8 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
         items: orderItems,
       });
       // Mudar a gorjeta muda o valor: a cobrança antiga não serve mais.
+      // O servidor valida e diz por que não vale. O total cobrado já sai com o desconto.
+      if (couponCode.trim()) await billShares.applyCouponToOrder(order.id, couponCode.trim());
       if (!chargeKeys.current.has(selectedMethod)) chargeKeys.current.set(selectedMethod, Crypto.randomUUID());
       const payment = await customerBackend.startPayment({
         orderId: order.id,
@@ -149,6 +152,11 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
       }
       if (kind) {
         Alert.alert(QUICK_ORDER_ERROR_COPY[kind].title, QUICK_ORDER_ERROR_COPY[kind].message);
+        return;
+      }
+      // Cupom recusado vem com o motivo: o pedido segue sem ele, se a pessoa quiser.
+      if ((error as { code?: string }).code === 'P0017') {
+        Alert.alert('Cupom não aplicado', (error as Error).message);
         return;
       }
       Alert.alert('Pagamento não confirmado', translateOrderError(error));
@@ -343,6 +351,21 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
                   value={tipCents > 0 ? moneyCents(tipCents).replace(/^R\$\s?/, '') : ''}
                   onChangeText={(text) => chooseTip(0, centsFromDigits(text))}
                   accessibilityLabel="Gorjeta em valor"
+                />
+              </View>
+            )}
+
+            {!pix && (
+              <View style={styles.policyCard}>
+                <Text style={styles.sectionTitle}>Cupom</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Tem um cupom?"
+                  placeholderTextColor={colors.foregroundMuted}
+                  autoCapitalize="characters"
+                  value={couponCode}
+                  onChangeText={setCouponCode}
+                  accessibilityLabel="Cupom"
                 />
               </View>
             )}

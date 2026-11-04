@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import type {
   CustomerRestaurant,
+  CustomerPromotion,
   QuickServiceStatus,
   RestaurantLiveStatus,
 } from '../../services/customer-backend';
@@ -27,6 +28,7 @@ import { tableLabel } from './shared';
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80';
 
+const COUPON_HINT = 'Use este código no resumo do pedido ou na hora de pagar.';
 const CHIP_GAP = 8;
 const ACTION_GAP = 10;
 const PAGE_PADDING = 16;
@@ -90,6 +92,10 @@ export interface RestaurantDetailViewProps {
   favoritePending: boolean;
   /** Entry points enabled for this restaurant (QR, reserva, fila, garçom). */
   journeyActions: RestaurantJourneyAction[];
+  /** Cupons que o restaurante marcou como visíveis. */
+  coupons?: CustomerPromotion[];
+  /** Código que veio de um link ou QR de cupom. */
+  linkedCouponCode?: string;
   entryNotice?: RestaurantEntryNotice;
   comandaCard?: RestaurantComandaCard;
   /** Rótulo da saída da mesa: "Sair da mesa" ou, com saldo, "Pagar minha parte". */
@@ -123,6 +129,8 @@ export default function RestaurantDetailView({
   isFavorite,
   favoritePending,
   journeyActions,
+  coupons,
+  linkedCouponCode,
   entryNotice,
   comandaCard,
   leaveLabel = 'Sair da mesa',
@@ -542,6 +550,26 @@ export default function RestaurantDetailView({
             )}
           </View>
         )}
+
+        {linkedCouponCode && !coupons?.some((coupon) => coupon.code.toUpperCase() === linkedCouponCode.toUpperCase()) ? (
+          <View style={styles.noticeCard} testID="restaurant-linked-coupon">
+            <View style={styles.noticeHeader}>
+              <Ionicons name="pricetag" size={18} color={colors.primary} />
+              <Text style={styles.noticeTitle}>Cupom {linkedCouponCode}</Text>
+            </View>
+            <Text style={styles.noticeMessage}>{COUPON_HINT}</Text>
+          </View>
+        ) : null}
+        {(coupons ?? []).map((coupon) => (
+          <View key={coupon.id} style={styles.noticeCard} testID={`restaurant-coupon-${coupon.code}`}>
+            <View style={styles.noticeHeader}>
+              <Ionicons name="pricetag" size={18} color={colors.primary} />
+              <Text style={styles.noticeTitle}>{coupon.title} · {coupon.code}</Text>
+            </View>
+            {coupon.description ? <Text style={styles.noticeMessage}>{coupon.description}</Text> : null}
+            <Text style={styles.noticeMessage}>{COUPON_HINT}</Text>
+          </View>
+        ))}
 
         {comandaCard && (
           <TouchableOpacity

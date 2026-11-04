@@ -19,6 +19,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 jest.mock('../components/cart/FloatingCartBar', () => ({ FloatingCartBar: () => null }));
 
 const mockGetRestaurant = jest.fn();
+const mockListPromotions = jest.fn();
 const mockGetCapabilities = jest.fn();
 const mockGetLiveStatus = jest.fn();
 const mockListFavorites = jest.fn();
@@ -31,6 +32,7 @@ jest.mock('../services/customer-backend', () => ({
   __esModule: true,
   default: {
     getRestaurant: (...args: unknown[]) => mockGetRestaurant(...args),
+    listPromotions: (...args: unknown[]) => mockListPromotions(...args),
     getRestaurantCapabilities: (...args: unknown[]) => mockGetCapabilities(...args),
     getRestaurantLiveStatus: (...args: unknown[]) => mockGetLiveStatus(...args),
     listFavorites: (...args: unknown[]) => mockListFavorites(...args),
@@ -142,7 +144,7 @@ function buildContract(
   };
 }
 
-function renderScreen(params: { serviceModel?: ServiceModel } = {}) {
+function renderScreen(params: { serviceModel?: ServiceModel; couponCode?: string } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const main = { name: 'Main', key: 'Main-1' };
   const navigation = {
@@ -171,6 +173,7 @@ function renderScreen(params: { serviceModel?: ServiceModel } = {}) {
 const SERVICE_MODELS: ServiceModel[] = ['fine_dining', 'casual_dining', 'quick_service'];
 
 beforeEach(() => {
+  mockListPromotions.mockResolvedValue([]);
   mockGetActiveVisit.mockResolvedValue(null);
   mockGetMyBalance.mockResolvedValue({ owedCents: 0, hasConsumption: false });
   mockGetLiveStatus.mockResolvedValue(null);
@@ -219,6 +222,27 @@ describe('RestaurantScreen — one page for every service model', () => {
     expect(queryByText('Entrar no Restaurante')).toBeNull();
     expect(queryByText('Reservar mesa')).toBeNull();
     expect(queryByText('Walk-in com fila inteligente ou reserve antecipado')).toBeNull();
+  });
+
+  it('mostra os cupons visíveis, e o código que veio do link (P3)', async () => {
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('casual_dining'));
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+    mockListPromotions.mockResolvedValue([{ id: 'p1', restaurantId: 'r1', code: 'DEZ', title: 'Dez', description: null, validUntil: '2026-12-31' }]);
+    const { findByText, queryByTestId, getAllByText } = renderScreen({ couponCode: 'SEGREDO' });
+    expect(await findByText('Dez · DEZ')).toBeTruthy();
+    expect(await findByText('Cupom SEGREDO')).toBeTruthy();
+    expect(getAllByText(/Use este código/).length).toBe(2);
+    expect(mockListPromotions).toHaveBeenCalledWith('r1');
+    expect(queryByTestId('restaurant-coupon-SEGREDO')).toBeNull();
+  });
+
+  it('o código do link que já está na lista aparece uma vez só', async () => {
+    mockGetRestaurant.mockResolvedValue(buildRestaurant('casual_dining'));
+    mockGetCapabilities.mockResolvedValue(buildContract('casual_dining'));
+    mockListPromotions.mockResolvedValue([{ id: 'p1', restaurantId: 'r1', code: 'DEZ', title: 'Dez', description: null, validUntil: '2026-12-31' }]);
+    const { findByText, queryByTestId } = renderScreen({ couponCode: 'dez' });
+    expect(await findByText('Dez · DEZ')).toBeTruthy();
+    expect(queryByTestId('restaurant-linked-coupon')).toBeNull();
   });
 
   it('não mostra preço quando o restaurante não cadastrou o preço médio', async () => {

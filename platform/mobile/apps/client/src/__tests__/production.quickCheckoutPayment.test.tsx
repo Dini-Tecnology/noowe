@@ -15,7 +15,8 @@ jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({
 const mockPolicies = jest.fn().mockReturnValue(null);
 jest.mock('../hooks/useServiceTypeFeatures', () => ({ useServiceTypeFor: () => ({ policies: mockPolicies() }) }));
 const mockTipQuote = jest.fn();
-jest.mock('../services/bill-shares', () => ({ billShares: { checkoutQuote: (...a: unknown[]) => mockTipQuote(...a) } }));
+const mockOrderCoupon = jest.fn();
+jest.mock('../services/bill-shares', () => ({ billShares: { checkoutQuote: (...a: unknown[]) => mockTipQuote(...a), applyCouponToOrder: (...a: unknown[]) => mockOrderCoupon(...a) } }));
 jest.mock('../hooks/useDistanceToRestaurant', () => ({ useDistanceToRestaurant: () => null }));
 const mockClearCart = jest.fn();
 jest.mock('@/shared/contexts/CartContext', () => ({ useCart: () => ({
@@ -166,5 +167,19 @@ test('taxa de conveniência desligada: a linha não aparece', async () => {
   const { view, client } = renderScreen();
   await waitFor(() => expect(mockTipQuote).toHaveBeenCalled());
   expect(view.queryByText('Taxa de conveniência NOOWE')).toBeNull();
+  client.clear();
+});
+
+test('cupom no pedido: aplica antes de cobrar; recusado não cobra e diz o motivo (P3)', async () => {
+  mockStart.mockResolvedValue({ ...charge, pixCode: 'pix' });
+  mockOrderCoupon.mockRejectedValueOnce(Object.assign(new Error('Pedido mínimo de R$ 80,00'), { code: 'P0017' })).mockResolvedValue(undefined);
+  const { view, client } = renderScreen();
+  fireEvent.changeText(view.getByLabelText('Cupom'), 'DEZ');
+  await acceptAndPay(view);
+  await waitFor(() => expect(require('react-native').Alert.alert).toHaveBeenCalledWith('Cupom não aplicado', 'Pedido mínimo de R$ 80,00'));
+  expect(mockStart).not.toHaveBeenCalled();
+  fireEvent.press(view.getByLabelText('Confirmar pagamento'));
+  await waitFor(() => expect(mockStart).toHaveBeenCalled());
+  expect(mockOrderCoupon).toHaveBeenLastCalledWith('o1', 'DEZ');
   client.clear();
 });

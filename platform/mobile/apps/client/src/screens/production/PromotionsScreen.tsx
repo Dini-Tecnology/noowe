@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
@@ -12,18 +12,8 @@ import { StateView, useQueryRefreshControl } from './shared';
 export default function PromotionsScreen({ navigation }: any) {
   const colors = useColors();
   const visit = useVisitSession();
-  const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ['promotions', visit.session?.restaurantId], queryFn: () => customerBackend.listPromotions(visit.session?.restaurantId) });
   const refreshControl = useQueryRefreshControl([query]);
-  const redeem = useMutation({
-    mutationFn: (id: string) => customerBackend.redeemPromotion(id),
-    onSuccess: () => {
-      Alert.alert('Cupom reservado', 'O restaurante validará o benefício no atendimento.');
-      queryClient.invalidateQueries({ queryKey: ['promotions'] });
-    },
-    onError: (error: Error) => Alert.alert('Cupom indisponível', error.message),
-  });
-
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -37,8 +27,7 @@ export default function PromotionsScreen({ navigation }: any) {
         name: { fontSize: 16, fontWeight: '700', color: colors.foreground },
         desc: { fontSize: 13, color: colors.foregroundSecondary },
         code: { fontSize: 13, fontWeight: '700', color: colors.primary, marginTop: 4 },
-        btn: { alignSelf: 'flex-start', marginTop: 8, backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 12 },
-        btnText: { color: colors.primaryForeground, fontSize: 13, fontWeight: '700' },
+        hint: { fontSize: 12, color: colors.foregroundSecondary },
       }),
     [colors],
   );
@@ -74,9 +63,7 @@ export default function PromotionsScreen({ navigation }: any) {
             </View>
             {item.description ? <Text style={styles.desc}>{item.description}</Text> : null}
             <Text style={styles.code}>Código: {item.code}</Text>
-            <TouchableOpacity style={styles.btn} onPress={() => redeem.mutate(item.id)} disabled={redeem.isPending} accessibilityRole="button">
-              <Text style={styles.btnText}>{redeem.isPending ? 'Resgatando...' : 'Resgatar'}</Text>
-            </TouchableOpacity>
+            <Text style={styles.hint}>Use este código no resumo do pedido ou na hora de pagar.</Text>
           </View>
         ))}
       </ScrollView>

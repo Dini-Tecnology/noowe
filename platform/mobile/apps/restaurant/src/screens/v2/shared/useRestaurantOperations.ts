@@ -962,58 +962,6 @@ export function useStock(): AsyncState<StockItem[]> {
   return { data, loading, error, refresh };
 }
 
-export type Promotion = {
-  id: string;
-  title: string;
-  type: string;
-  discountValue: number | null;
-  validFrom: string;
-  validUntil: string;
-};
-
-function mapPromotion(raw: {
-  id: string;
-  title: string;
-  type?: string | null;
-  discount_value?: number | string | null;
-  valid_from: string;
-  valid_until: string;
-}): Promotion {
-  return {
-    id: raw.id,
-    title: raw.title,
-    type: raw.type || 'discount',
-    discountValue: raw.discount_value != null ? toNumber(raw.discount_value) : null,
-    validFrom: raw.valid_from,
-    validUntil: raw.valid_until,
-  };
-}
-
-export function usePromotions(): AsyncState<Promotion[]> {
-  const [data, setData] = useState<Promotion[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { restaurantId } = useRestaurantRole();
-
-  const refresh = useCallback(async () => {
-    if (!restaurantId) return;
-    setError(null);
-    try {
-      const raw = await supabaseApiAdapter.getPromotions(restaurantId, 'active');
-      setData((Array.isArray(raw) ? raw : []).map(mapPromotion));
-    } catch (err) {
-      setError(userErrorMessage(err, 'Erro ao carregar promoções'));
-    } finally {
-      setLoading(false);
-    }
-  }, [restaurantId]);
-
-  useRegisterRemoteRefresh(refresh);
-  useEffect(() => { void refresh(); }, [refresh]);
-
-  return { data, loading, error, refresh };
-}
-
 export function useMenuItems(): AsyncState<MenuItemSummary[]> {
   const [data, setData] = useState<MenuItemSummary[]>([]);
   const [loading, setLoading] = useState(true);

@@ -50,7 +50,6 @@ export type ManagerRoleView =
   | 'manager-staff'
   | 'manager-report'
   | 'manager-stock'
-  | 'manager-promotions'
   | 'manager-qr'
   | 'manager-settings';
 
