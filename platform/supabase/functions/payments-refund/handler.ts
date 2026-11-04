@@ -21,7 +21,7 @@ export async function handleRefund(req: Request, deps: PaymentDeps): Promise<Res
   const job = claim.data;
   if (!job?.claimed) return json({ ok: true, skipped: true });
 
-  const record = async (outcome: "sent" | "transient" | "failed", error?: string) => {
+  const record = async (outcome: "sent" | "transient" | "failed" | "deferred", error?: string) => {
     const saved = await deps.rpc("service_refund_record", { p_refund_id: job.refundId, p_outcome: outcome, p_error: error ?? null });
     if (saved.error) console.error("payments-refund record error:", saved.error.message);
     return json({ ok: !saved.error, outcome }, saved.error ? 500 : 200);
@@ -58,6 +58,10 @@ export async function handleRefund(req: Request, deps: PaymentDeps): Promise<Res
     await deps.provider.refund(apiKey, job.providerRef, job.amountCents, String(job.reason ?? "").slice(0, 200));
     return record("sent");
   } catch (err) {
+    // Estorno parcial de cartão no mesmo dia: o Asaas pede para esperar (spike de 04/11).
+    if (err instanceof AsaasError && err.status === 400 && /pr[oó]ximo dia/i.test(JSON.stringify(err.body))) {
+      return record("deferred", "O Asaas só aceita este estorno parcial no dia seguinte");
+    }
     if (err instanceof AsaasError && err.status >= 400 && err.status < 500 && err.status !== 429) {
       return record("failed", `Asaas recusou o estorno (HTTP ${err.status})`);
     }

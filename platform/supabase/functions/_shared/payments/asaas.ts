@@ -89,9 +89,6 @@ export class AsaasClient implements PaymentProvider {
       dueDate: input.dueDate,
       externalReference: input.externalReference,
       description: input.description,
-      split: input.split && input.split.feeCents > 0
-        ? [{ walletId: input.split.walletId, fixedValue: centsToAsaasValue(input.split.feeCents) }]
-        : undefined,
       callback: input.successUrl && !input.creditCardToken ? { successUrl: input.successUrl, autoRedirect: true } : undefined,
       creditCardToken: input.creditCardToken ?? undefined,
       remoteIp: input.creditCardToken ? input.remoteIp ?? undefined : undefined,
@@ -110,6 +107,13 @@ export class AsaasClient implements PaymentProvider {
 
   getPixQrCode(apiKey: string, id: string) {
     return this.request<AsaasPix>(apiKey, "GET", `/payments/${encodeURIComponent(id)}/pixQrCode`);
+  }
+
+  // Split em cobrança pendente: o valor só é conhecido depois de ler o líquido na criação (ADR-031).
+  async setSplit(apiKey: string, id: string, walletId: string, cents: number) {
+    await this.request<AsaasPayment>(apiKey, "PUT", `/payments/${encodeURIComponent(id)}`, {
+      split: cents > 0 ? [{ walletId, fixedValue: centsToAsaasValue(cents) }] : [],
+    });
   }
 
   async cancelCharge(apiKey: string, id: string) {

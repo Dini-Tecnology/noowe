@@ -5,6 +5,14 @@ import { getOptionalSupabaseSessionUser } from './supabase-auth';
 import type { ServiceType } from '../config/service-types';
 import type { Json } from '../types/database.generated';
 
+export type PaymentStatement = {
+  paidCents: number; feeCents: number; refundedCents: number; netCents: number;
+  payments: {
+    paymentId: string; paidAt: string; method: string; external: boolean; paidCents: number; feeCents: number; netCents: number;
+    refundedCents: number; status: string; feeDestination: 'returned' | 'kept' | null;
+  }[];
+};
+
 export type TipMode = 'equal' | 'points' | 'hours';
 export type CashSettings = { openingFloatCents: number; sangriaSuggestCents: number | null; breakLimitCents: number; dayTurnover: string };
 export type DayStatus = {
@@ -625,6 +633,8 @@ export interface SupabaseApiAdapter {
   /** Pagamento presencial: abate do mesmo saldo da comanda (ADR-032). */
   recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string }): Promise<any>;
   getChargePolicies(restaurantId: string): Promise<ChargePolicyRow[]>;
+  /** Extrato do Dono: valor pago, taxa e líquido. Tarifa e margem não saem do servidor. */
+  getPaymentStatement(restaurantId: string): Promise<PaymentStatement>;
   /** Caixa, dia operacional, gorjeta e estorno (O8). Tudo em centavos. */
   getCashSettings(restaurantId: string): Promise<CashSettings>;
   updateCashSettings(restaurantId: string, input: { openingFloatCents: number; sangriaSuggestCents: number | null; dayTurnover: string; breakLimitCents?: number | null }): Promise<CashSettings>;
@@ -2392,6 +2402,10 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     });
     if (error) throw error;
     return data;
+  },
+
+  async getPaymentStatement(restaurantId: string) {
+    return rpcData<PaymentStatement>('restaurant_get_payment_statement', { p_restaurant_id: restaurantId });
   },
 
   async getCashSettings(restaurantId: string) {

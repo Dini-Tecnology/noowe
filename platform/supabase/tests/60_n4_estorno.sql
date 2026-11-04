@@ -42,7 +42,7 @@ end $$;
 do $$
 declare r uuid := 'c1000000-0000-4000-8000-000000000002'; m uuid := gen_random_uuid();
 begin
-  insert into public.restaurant_payment_accounts(restaurant_id, provider, status, platform_fee_bps) values (r, 'asaas', 'active', 100) on conflict do nothing;
+  insert into public.restaurant_payment_accounts(restaurant_id, provider, status) values (r, 'asaas', 'active') on conflict do nothing;
   update public.restaurant_payment_accounts set status = 'active' where restaurant_id = r;
   update public.restaurant_model_policies set fee_or_tip_mode = 'service_fee', service_fee_bps = 1000, split_modes = '{by_owner,equal,by_item,fixed_amount}'
     where restaurant_id = r and not prepaid_required;

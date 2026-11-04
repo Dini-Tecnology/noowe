@@ -55,6 +55,13 @@ test("recusa da Asaas é definitiva e vai para uma pessoa", async () => {
   assert.equal(outcome(calls).p_outcome, "failed");
 });
 
+test("estorno parcial no mesmo dia espera o dia seguinte, sem virar falha", async () => {
+  const body = { errors: [{ code: "invalid_action", description: "Esta transação só pode ser estornada parcialmente no próximo dia." }] };
+  const { deps, calls } = setup({ job: { ...job, total: false }, refund: async () => { throw new AsaasError(400, body, "x"); } });
+  await handleRefund(req(), deps);
+  assert.equal(outcome(calls).p_outcome, "deferred");
+});
+
 test("queda de rede em estorno total tenta de novo", async () => {
   const { deps, calls } = setup({ refund: async () => { throw new AsaasError(503, {}, "fora"); } });
   await handleRefund(req(), deps);

@@ -46,6 +46,21 @@ acima do líquido é recusado na criação. Falta confirmar:
 3. **Estorno:** o split volta? A tarifa do Asaas é devolvida? Quem arca (pendência 21).
 4. O Asaas aceita vale-refeição online? Assinatura recorrente na conta raiz da NOOWE?
 
+### Confirmado no sandbox em 04/11/2026
+
+1. **A tarifa vem na própria cobrança.** `netValue` já volta no `POST /payments`, antes de pagar, e `PUT /payments/{id}` aceita definir, trocar ou remover o split em
+   cobrança pendente, de Pix e de cartão. Por isso a cobrança nasce sem split, a tarifa é `value − netValue`, e o split é definido antes de o cliente receber o QR
+   ou a página. A tabela de tarifas não é necessária. `fixedValue` acima do líquido é recusado também no `PUT`.
+2. **Crédito × débito não é problema no nosso fluxo.** Criamos a cobrança já com `PIX` ou `CREDIT_CARD`, e a página não troca o meio. `DEBIT_CARD` é recusado na criação.
+   `UNDEFINED` existe, mas não o usamos: o meio final só seria conhecido depois.
+3. **Estorno total cancela o split** (`cancellationReason: PAYMENT_REFUNDED`) e fica `REFUNDED` na hora. Observado em cartão, com o split ainda aguardando crédito. **Pix não foi
+   observado**: o sandbox pede chave Pix na subconta. Conferir no primeiro estorno real. Devolução da tarifa não foi observável: o saldo da subconta segue zero no sandbox.
+4. **Estorno parcial de cartão no mesmo dia é recusado:** "só pode ser estornada parcialmente no próximo dia". A fila espera o dia seguinte, sem gastar tentativa.
+5. **Mínimo de R$ 5,00** por cobrança, em Pix e cartão (`noowe_billing_settings.min_online_charge_cents`). Parcela menor é recusada antes de chegar ao Asaas.
+6. **Vale online não existe** na API: nenhum `billingType` aceita. V1 fica em maquininha da casa e, depois, Tap.
+7. **Assinatura na conta raiz funciona:** `POST /subscriptions` com Pix mensal, troca de valor e cancelamento.
+8. As tarifas do sandbox variam por conta (a subconta nova vem com desconto: 1,99% + R$ 0,49 no crédito, R$ 0,99 no Pix). Ler o líquido de cada cobrança evita depender delas.
+
 ## Consequências
 
 - Com a tarifa pública de Pix (R$ 0,99 fixos, observados no sandbox) e taxa de 0,99%, **todo Pix abaixo de R$ 100 fica

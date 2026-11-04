@@ -96,13 +96,15 @@ begin
   insert into public.orders(restaurant_id, customer_id, total_cents)
     values (pg_temp.r(1), v_customer, 11000) returning id into v_order;
   insert into public.gateway_transactions(restaurant_id, order_id, customer_id, provider, status, payment_method,
-      amount_cents, platform_fee_cents, idempotency_key, created_at, updated_at)
-    values (pg_temp.r(1), v_order, v_customer, 'asaas', 'completed', 'credit_card', 11000, 6, gen_random_uuid()::text, now(), now())
+      amount_cents, idempotency_key, created_at, updated_at)
+    values (pg_temp.r(1), v_order, v_customer, 'asaas', 'completed', 'credit_card', 11000, gen_random_uuid()::text, now(), now())
     returning id into v_tx;
+  insert into private.noowe_pay_transaction_fees(gateway_transaction_id, restaurant_id, payment_method, rate_bps, amount_cents, fee_cents, tariff_cents, split_cents)
+    values (v_tx, pg_temp.r(1), 'credit_card', 349, 11000, 384, 378, 6);
   create temp table _tx on commit drop as select v_tx as id;
 end $$;
 update private.noowe_pay_rates set rate_bps = 999 where payment_method = 'credit_card';
-select is((select platform_fee_cents from public.gateway_transactions where id = (select id from _tx)), 6::bigint,
+select is((select split_cents from private.noowe_pay_transaction_fees where gateway_transaction_id = (select id from _tx)), 6::bigint,
   'critério 5: a cobrança gerada guarda o valor dela');
 select is((select noowe_split_cents from private.noowe_report_payment_margin where payment_id = (select id from _tx)), 6::bigint,
   'a consulta de margem lê o valor gravado, não a tabela atual');

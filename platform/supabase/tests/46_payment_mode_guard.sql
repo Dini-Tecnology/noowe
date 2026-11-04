@@ -42,8 +42,8 @@ update private.dev_flags set enabled = true where key = 'simulate_order_payment'
 select is(public.customer_order_payment_mode((select v from _ctx where k = 'r')), 'simulated',
   'com a flag ligada e sem conta o modo é simulado');
 
-insert into public.restaurant_payment_accounts(restaurant_id, provider, status, platform_fee_bps)
-  values ((select v from _ctx where k = 'r'), 'asaas', 'active', 0);
+insert into public.restaurant_payment_accounts(restaurant_id, provider, status)
+  values ((select v from _ctx where k = 'r'), 'asaas', 'active');
 select is(public.customer_order_payment_mode((select v from _ctx where k = 'r')), 'asaas',
   'conta ativa vence a flag: o restaurante cobra de verdade');
 select is(pg_temp.state_of(format($q$select public.customer_start_payment(%L, 'credit_card', gen_random_uuid())$q$,

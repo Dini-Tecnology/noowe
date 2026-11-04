@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import { TrendingUp, TrendingDown, DollarSign, Percent, Receipt, Plus, Check, Trash2 } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import { PaymentStatementCard } from './shared/PaymentStatementCard';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2Shell } from './shared/V2Shell';
 import { V2FormSheet } from './shared/V2FormSheet';
@@ -290,6 +291,7 @@ export default function FinancialScreen() {
               </SectionCard>
             </>
           )}
+          <PaymentStatementCard />
         </ScrollView>
       </V2Shell>
 

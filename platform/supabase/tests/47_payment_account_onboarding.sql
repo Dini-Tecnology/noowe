@@ -1,7 +1,7 @@
 -- ADR-020: cadastro da conta de recebimento Asaas. A apiKey fica no Vault, do token só o sha256,
 -- a comissão vem de parâmetro, `active` só depois do KYC e outro restaurante não vê a conta.
 begin;
-select plan(32);
+select plan(29);
 
 create temp table _acct(k text primary key, v uuid);
 grant select on _acct to authenticated, anon;
@@ -25,14 +25,6 @@ begin
     ((select v from _acct where k = 'waiter'), r, 'waiter');
 end $$;
 
--- Comissão: parâmetro do banco, sem valor padrão no código.
-delete from private.payment_platform_config;
-select is(public.service_payment_account_begin(pg_temp.id('owner'), pg_temp.id('r'), pg_temp.hash())->>'error',
-  'platform_fee_not_configured', 'sem comissão configurada o cadastro não começa');
-select is((select count(*)::int from public.restaurant_payment_accounts where restaurant_id = pg_temp.id('r')), 0, 'a tentativa não deixa linha');
-
-insert into private.payment_platform_config (platform_fee_bps) values (137);
-
 -- Só o dono inicia.
 select throws_ok(format($$ select public.service_payment_account_begin(%L, %L, %L) $$, pg_temp.id('manager'), pg_temp.id('r'), pg_temp.hash()),
   '42501', null, 'gerente não inicia o cadastro');
@@ -44,7 +36,6 @@ select throws_ok(format($$ select public.service_payment_account_begin(%L, %L, %
 select lives_ok(format($$ insert into _acct select 'acct', (public.service_payment_account_begin(%L, %L, %L)->>'accountId')::uuid $$,
   pg_temp.id('owner'), pg_temp.id('r'), pg_temp.hash()), 'dono inicia o cadastro');
 select is((select status::text from public.restaurant_payment_accounts where id = pg_temp.id('acct')), 'creating', 'começa em creating');
-select is((select platform_fee_bps from public.restaurant_payment_accounts where id = pg_temp.id('acct')), 137, 'a comissão vem do parâmetro');
 select is((select webhook_token_hash from public.restaurant_payment_accounts where id = pg_temp.id('acct')), pg_temp.hash(), 'guarda o hash do token');
 select ok(exists (select 1 from public.audit_logs where entity_id = pg_temp.id('acct') and action = 'payment_account_started'
     and user_id = pg_temp.id('owner') and reason is not null), 'início do cadastro fica no audit log');

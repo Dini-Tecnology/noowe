@@ -94,14 +94,6 @@ test("quem não é dono recebe 403 e o Asaas não é chamado", async () => {
   assert.equal(created.length, 0);
 });
 
-test("sem comissão configurada: 503 e o Asaas não é chamado", async () => {
-  const { deps, created } = setup({ begun: { error: "platform_fee_not_configured" } });
-  const res = await handleAccount(req(startBody), deps);
-  assert.equal(res.status, 503);
-  assert.equal((await res.json()).error, "platform_fee_not_configured");
-  assert.equal(created.length, 0);
-});
-
 test("ambiente sem chave raiz: 503 antes de reservar a conta", async () => {
   const { deps, calls } = setup({ env: { ASAAS_ROOT_API_KEY: undefined } });
   assert.equal((await handleAccount(req(startBody), deps)).status, 503);

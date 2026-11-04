@@ -104,7 +104,7 @@ begin
   res := public.restaurant_record_bill_payment(sid, 'voucher', gen_random_uuid(), 1000);
   assert (select expected_cents from public.cash_register_sessions where id = caixa) = e, 'maquininha não entra na gaveta';
   assert (select (metadata->>'external')::boolean from public.gateway_transactions where id = (res->>'transactionId')::uuid), 'registrada como externa';
-  assert (select coalesce(platform_fee_cents, 0) from public.gateway_transactions where id = (res->>'transactionId')::uuid) = 0, 'sem taxa NOOWE';
+  assert not exists (select 1 from private.noowe_pay_transaction_fees where gateway_transaction_id = (res->>'transactionId')::uuid), 'sem taxa NOOWE';
   assert (select payment_method from public.gateway_transactions where id = (res->>'transactionId')::uuid) = 'voucher', 'guarda a forma';
   assert private.session_consumption_balance(sid) = 2000, 'tudo abate o mesmo saldo';
   -- Pagamento digital não mexe na gaveta, e o resto quita a comanda.

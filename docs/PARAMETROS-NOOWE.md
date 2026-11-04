@@ -55,6 +55,10 @@ values ('pix', '<id do restaurante>', 79, 'Negociação de 03/11');
 
 Meio sem taxa definida não tem cobrança: o sistema trata como indisponível, nunca como zero.
 
+## Mínimo por cobrança
+
+`noowe_billing_settings.min_online_charge_cents`: hoje 500, o mínimo do Asaas. Abaixo disso, o app avisa, e a pessoa combina com a equipe.
+
 ## Taxa de conveniência
 
 Tabela `noowe_convenience_fees`. Campos: `flow`, `restaurant_id`, `fee_cents`, `enabled`, `note`.
@@ -175,5 +179,10 @@ where paid_at >= date_trunc('month', now())
 group by 1, 2;
 ```
 
-Diferenças a compensar, receita de conveniência e créditos gerados, usados, expirados e a liberar ainda não têm consulta:
-dependem dos registros criados nas fatias M2, M3 e M5.
+Diferenças a compensar, por restaurante, tipo e situação:
+
+```sql
+select * from private.noowe_report_compensations where status = 'open';
+```
+
+Receita de conveniência e créditos gerados, usados, expirados e a liberar ainda não têm consulta: dependem das fatias M3 e M5.

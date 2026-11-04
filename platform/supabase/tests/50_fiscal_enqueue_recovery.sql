@@ -102,8 +102,7 @@ create function pg_temp.notices() returns integer language sql as $$
 do $$
 declare r uuid := 'c1000000-0000-4000-8000-000000000002';
 begin
-  insert into public.restaurant_payment_accounts(restaurant_id, provider, status, platform_fee_bps)
-    values (r, 'asaas', 'active', 100) on conflict do nothing;
+  insert into public.restaurant_payment_accounts(restaurant_id, provider, status) values (r, 'asaas', 'active') on conflict do nothing;
   update public.restaurant_payment_accounts set status = 'active' where restaurant_id = r;
   perform public.service_fiscal_configure(r, jsonb_build_object(
     'cnpj', '12345678000123', 'razaoSocial', 'Casa LTDA', 'stateCode', 'SP', 'regimeTributario', 'simples_nacional',

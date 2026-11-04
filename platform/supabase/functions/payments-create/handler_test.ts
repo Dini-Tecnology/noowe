@@ -19,8 +19,9 @@ function setup(over: { reserved?: any; reserveError?: any; customerId?: string |
       if (fn === "service_payment_reserve_order" || fn === "service_pay_share") {
         if (over.reserveError) return { data: null, error: over.reserveError };
         return { data: over.reserved ?? { paymentId: PAY, orderId: ORDER, status: "creating", method: "pix", amountCents: 5000,
-          platformFeeCents: 250, paymentAccountId: ACCT, providerRef: null, pixPayload: null, expiresAt: null, alreadyPaid: false }, error: null };
+          paymentAccountId: ACCT, providerRef: null, pixPayload: null, expiresAt: null, alreadyPaid: false }, error: null };
       }
+      if (fn === "service_payment_set_split") return over.splitError ? { data: null, error: over.splitError } : { data: { splitCents: over.splitCents ?? 250 }, error: null };
       if (fn === "service_payment_set_card_options") return { data: null, error: over.optionsError ?? null };
       if (fn === "service_payment_card_token") return { data: over.cardToken ?? null, error: null };
       if (fn === "service_payment_account_secrets") return { data: { apiKey: "ak" }, error: null };
@@ -35,7 +36,11 @@ function setup(over: { reserved?: any; reserveError?: any; customerId?: string |
         provider.push("createCharge");
         if (over.createThrows) throw new AsaasError(500, null, "boom");
         (provider as any).input = i;
-        return { id: "pay_asaas", status: "PENDING", value: 50, invoiceUrl: "https://asaas/i/1" };
+        return { id: "pay_asaas", status: "PENDING", value: 50, netValue: 49.01, invoiceUrl: "https://asaas/i/1" };
+      },
+      setSplit: async (_k: string, _id: string, wallet: string, cents: number) => {
+        if (over.setSplitThrows) throw new AsaasError(500, null, "boom");
+        provider.push(`setSplit:${wallet}:${cents}`);
       },
       getPixQrCode: async () => { provider.push("pix"); return { payload: "000201-copia-e-cola", expirationDate: "2026-10-23 23:59:59" }; },
     } as any,
@@ -68,11 +73,12 @@ test("PIX: cria cliente, cobrança com split NOOWE e QR; devolve pendente (nunca
   const body = await res.json();
   assert.equal(body.status, "pending");
   assert.equal(body.pix.payload, "000201-copia-e-cola");
-  assert.deepEqual(provider.slice(0, 4), ["createCustomer:12345678909", "find", "createCharge", "pix"]);
+  assert.deepEqual(provider.slice(0, 5), ["createCustomer:12345678909", "find", "createCharge", "setSplit:wallet-noowe:250", "pix"]);
   const input = (provider as any).input;
   assert.equal(input.valueCents, 5000);
   assert.equal(input.dueDate, "2026-10-23");
-  assert.deepEqual(input.split, { walletId: "wallet-noowe", feeCents: 250 });
+  assert.equal(input.split, undefined);
+  assert.equal(calls.find((c) => c.fn === "service_payment_set_split")?.args.p_net_cents, 4901);
   assert.equal(input.externalReference, PAY);
   assert.ok(calls.some((c) => c.fn === "service_payment_attach_provider" && c.args.p_provider_ref === "pay_asaas"));
   assert.ok(!calls.some((c) => c.fn === "service_payment_apply_event"));
@@ -85,7 +91,6 @@ test("cartão: devolve a página hospedada e não pede QR", async () => {
   assert.equal(body.checkoutUrl, "https://asaas/i/1");
   assert.equal(body.pix, null);
   assert.ok(!provider.includes("pix"));
-  assert.equal((provider as any).input.split, null);
 });
 
 test("documento do pagador é exigido só na primeira vez", async () => {
@@ -108,7 +113,7 @@ test("reenvio com a mesma chave não chama o provedor de novo", async () => {
 });
 
 test("recupera cobrança já criada no Asaas por externalReference sem duplicar", async () => {
-  const { deps, provider } = setup({ existing: { id: "pay_asaas", status: "PENDING", value: 50, invoiceUrl: "https://asaas/i/1" } });
+  const { deps, provider } = setup({ existing: { id: "pay_asaas", status: "PENDING", value: 50, netValue: 49.01, invoiceUrl: "https://asaas/i/1" } });
   const res = await handleCreate(req(valid), deps);
   assert.equal(res.status, 200);
   assert.ok(!provider.includes("createCharge"));
@@ -215,4 +220,27 @@ test("cartão salvo inexistente, de outro usuário ou removido: 404 e nada é co
   const res2 = await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }), rejected.deps);
   assert.equal(res2.status, 404);
   assert.equal(rejected.provider.includes("createCharge"), false);
+});
+
+test("split: taxa menor que a tarifa não mexe na cobrança, e o cliente recebe como pagar", async () => {
+  const { deps, provider } = setup({ splitCents: 0 });
+  const res = await handleCreate(req(valid), deps);
+  assert.equal(res.status, 200);
+  assert.ok(!provider.some((p) => p.startsWith("setSplit")));
+});
+
+test("split: sem conseguir definir, o cliente não recebe o QR, e repetir retoma", async () => {
+  const { deps, provider, calls } = setup({ setSplitThrows: true });
+  const res = await handleCreate(req(valid), deps);
+  assert.equal(res.status, 502);
+  assert.ok(!provider.includes("pix"));
+  assert.ok(!calls.some((c) => c.fn === "service_payment_attach_provider"));
+});
+
+test("abaixo do mínimo: resposta própria, sem chamar o provedor", async () => {
+  const { deps, provider } = setup({ reserveError: { code: "P0013", message: "x" } });
+  const res = await handleCreate(req(valid), deps);
+  assert.equal(res.status, 422);
+  assert.equal((await res.json()).error, "below_minimum");
+  assert.equal(provider.length, 0);
 });

@@ -64,6 +64,7 @@ export async function handleWebhook(req: Request, deps: PaymentDeps): Promise<Re
       p_provider: "asaas", p_provider_event_id: eventId, p_event_type: type,
       p_payment_account_id: accountId, p_payload: event,
     });
+    await deps.rpc("service_payment_mark_chargeback", { p_payment_id: local.paymentId });
     console.error("payments-webhook-asaas CHARGEBACK", { paymentId, type });
     return json({ ok: true, ignored: "chargeback_alerted" });
   }

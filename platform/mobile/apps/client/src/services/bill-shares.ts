@@ -298,6 +298,7 @@ export const PAYMENT_ERRORS: Record<string, string> = {
   invalid_request: 'Dados de pagamento inválidos.',
   provider_unavailable: 'O provedor de pagamento está indisponível. Tente novamente em instantes.',
   bill_changed: 'A conta mudou. Confira os valores atualizados.',
+  below_minimum: 'O valor mínimo para pagar pelo app é R$ 5,00. Combine com a equipe no salão, ou pague um valor maior.',
 };
 
 export const SPLIT_ERRORS: Record<string, string> = {

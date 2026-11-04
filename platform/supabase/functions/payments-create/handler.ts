@@ -1,5 +1,6 @@
 import { AsaasError } from "../_shared/payments/asaas.ts";
 import { bearer, json, mapRpcError, saoPauloDate, type PaymentDeps } from "../_shared/payments/deps.ts";
+import { asaasValueToCents } from "../_shared/payments/money.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DOCUMENT = /^(\d{11}|\d{14})$/;
@@ -106,11 +107,20 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
         customer: customerId, billingType: method === "pix" ? "PIX" : "CREDIT_CARD",
         valueCents: r.amountCents, dueDate: saoPauloDate(deps.now?.() ?? new Date()),
         externalReference: r.paymentId, description: purpose === "bill_share" ? "Conta da mesa NOOWE" : "Pedido NOOWE",
-        split: deps.env("NOOWE_ASAAS_WALLET_ID") && r.platformFeeCents > 0
-          ? { walletId: deps.env("NOOWE_ASAAS_WALLET_ID")!, feeCents: r.platformFeeCents } : null,
         successUrl: returnUrl ? `${returnUrl}?pid=${r.paymentId}` : null,
         creditCardToken, remoteIp: creditCardToken ? remoteIp : null,
       });
+    }
+
+    // A tarifa real vem na própria cobrança. O split é definido antes de o cliente receber como pagar.
+    if (typeof charge.netValue !== "number") throw new Error("Cobrança sem valor líquido");
+    const split = await deps.rpc("service_payment_set_split", { p_payment_id: r.paymentId, p_net_cents: asaasValueToCents(charge.netValue) });
+    if (split.error) throw new Error(`split: ${split.error.message}`);
+    const splitCents: number = split.data?.splitCents ?? 0;
+    if (splitCents > 0) {
+      const wallet = deps.env("NOOWE_ASAAS_WALLET_ID");
+      if (!wallet) throw new Error("Carteira da NOOWE não configurada");
+      await deps.provider.setSplit(apiKey, charge.id, wallet, splitCents);
     }
 
     let pixPayload: string | null = null;

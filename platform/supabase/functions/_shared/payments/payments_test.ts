@@ -69,7 +69,7 @@ test("GET é repetido em 5xx; POST de criação nunca é repetido", async () => 
   assert.equal(postCalls.length, 1);
 });
 
-test("createCharge envia valor em reais exato, split e callback", async () => {
+test("createCharge envia valor em reais exato e callback; o split vem depois, com a tarifa real", async () => {
   let sent: any;
   const fetchImpl = (async (_u: string, init: RequestInit) => {
     sent = JSON.parse(String(init.body));
@@ -78,12 +78,27 @@ test("createCharge envia valor em reais exato, split e callback", async () => {
   const client = new AsaasClient({ baseUrl: "https://x", fetchImpl });
   await client.createCharge("k", {
     customer: "cus_1", billingType: "CREDIT_CARD", valueCents: 1005, dueDate: "2026-10-23",
-    externalReference: "ext", description: "d", split: { walletId: "w1", feeCents: 101 }, successUrl: "https://app/return",
+    externalReference: "ext", description: "d", successUrl: "https://app/return",
   });
   assert.equal(sent.value, 10.05);
-  assert.deepEqual(sent.split, [{ walletId: "w1", fixedValue: 1.01 }]);
+  assert.equal(sent.split, undefined);
   assert.deepEqual(sent.callback, { successUrl: "https://app/return", autoRedirect: true });
   assert.equal(sent.externalReference, "ext");
+});
+
+test("setSplit envia o valor em reais; zero remove o split", async () => {
+  const sent: any[] = [];
+  const fetchImpl = (async (url: string, init: RequestInit) => {
+    sent.push({ url, method: init.method, body: JSON.parse(String(init.body)) });
+    return new Response(JSON.stringify({ id: "pay_1", status: "PENDING", value: 110 }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const client = new AsaasClient({ baseUrl: "https://x", fetchImpl });
+  await client.setSplit("k", "pay_1", "w1", 6);
+  await client.setSplit("k", "pay_1", "w1", 0);
+  assert.equal(sent[0].method, "PUT");
+  assert.match(sent[0].url, /\/payments\/pay_1$/);
+  assert.deepEqual(sent[0].body.split, [{ walletId: "w1", fixedValue: 0.06 }]);
+  assert.deepEqual(sent[1].body.split, []);
 });
 
 import { asaasBaseUrlForKey } from "./environment.ts";

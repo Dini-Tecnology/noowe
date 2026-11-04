@@ -36,6 +36,7 @@ export function mapRpcError(code?: string): { status: number; error: string } {
     // A conta mudou desde a divisão, ou já foi quitada (ADR-032).
     case "P0011":
     case "P0012": return { status: 409, error: "bill_changed" };
+    case "P0013": return { status: 422, error: "below_minimum" };
     case "23514": return { status: 422, error: "invalid_amount" };
     default: return { status: 500, error: "internal_error" };
   }

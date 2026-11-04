@@ -56,7 +56,6 @@ const STATUS_COPY: Record<Exclude<AccountStatus, 'none' | 'creating'>, { title: 
 const ERROR_COPY: Record<string, string> = {
   forbidden: 'Só o dono do restaurante pode cadastrar a conta de recebimento.',
   invalid_request: 'Confira os campos do formulário.',
-  platform_fee_not_configured: 'O recebimento online ainda não foi liberado pela NOOWE. Fale com o suporte.',
   payments_not_configured: 'O recebimento online ainda não foi liberado pela NOOWE. Fale com o suporte.',
   provider_account_exists: 'Este CNPJ já tem uma conta no Asaas. Fale com o suporte da NOOWE para vinculá-la.',
   provider_unavailable: 'O Asaas não respondeu. Tente de novo em alguns minutos.',

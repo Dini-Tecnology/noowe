@@ -553,7 +553,7 @@ declare
 begin
   update public.restaurant_model_policies set fee_or_tip_mode = 'tip', tip_presets_bps = '{1000}', tip_default_bps = null, orders_paused = false
     where restaurant_id = r and service_model = 'quick_service';
-  insert into public.restaurant_payment_accounts(restaurant_id, provider, status, platform_fee_bps) values (r, 'asaas', 'active', 100) on conflict do nothing;
+  insert into public.restaurant_payment_accounts(restaurant_id, provider, status) values (r, 'asaas', 'active') on conflict do nothing;
   update public.restaurant_payment_accounts set status = 'active' where restaurant_id = r;
 
   c := pg_temp.new_customer();
