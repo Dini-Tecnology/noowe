@@ -22,7 +22,7 @@ begin
   insert into public.orders(restaurant_id, customer_id, table_session_id) values (r, a, sid) returning id into o;
   insert into public.order_items(order_id, menu_item_id, quantity, unit_price, total_price) values (o, menu, 1, 40, 40);
   execute format(act, a);
-  perform public.customer_bill_split_commit(sid, 'equal', '{}', null, gen_random_uuid());
+  perform public.customer_bill_split_commit(sid, 'by_owner', '{}', null, gen_random_uuid());
   insert into _rls values ('a', a), ('b', b), ('x', x), ('owner', owner_id), ('sid', sid);
 end $$;
 

@@ -733,7 +733,7 @@ describe('RestaurantScreen — a comanda é a casa do cliente (ADR-021)', () => 
     expect(await first.findByText('Mesa Salão 1 · Sair da mesa')).toBeTruthy();
     first.unmount();
 
-    mockGetMyBalance.mockResolvedValue({ owedCents: 4500, hasConsumption: true });
+    mockGetMyBalance.mockResolvedValue({ owedCents: 4500, hasConsumption: true, isHost: true });
     const { findByText, navigation } = renderScreen();
     fireEvent.press(await findByText('Mesa Salão 1 · Pagar minha parte'));
     expect(alertSpy).not.toHaveBeenCalled();

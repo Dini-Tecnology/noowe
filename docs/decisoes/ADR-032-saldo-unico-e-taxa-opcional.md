@@ -5,7 +5,7 @@
 **Substitui:** `split_fixed_remainder` e o `redistribute_unpaid` do ADR-010; a ordem de cálculo de `04-calculo-financeiro`
 na parte "taxa dentro do total". **Resolve:** pendências 8 e 16.
 **Impacta:** fatia G5 (reescreve parte da G3), teste de propriedade do ADR-001, `CLAUDE.md` (invariante 4).
-**Regras isoladas em função nomeada (a criar):** `private.session_consumption_balance`, `private.fee_or_tip_mode`, `private.adjust_to_balance`.
+**Regras isoladas em função nomeada:** `private.session_consumption_balance`, `private.fee_or_tip_mode`, `private.adjust_to_balance`, `private.split_out_of_total`, `private.share_fits_balance`. Implementado na fatia G5 (04/11/2026).
 
 ## Decisão
 
@@ -44,3 +44,8 @@ na parte "taxa dentro do total". **Resolve:** pendências 8 e 16.
   gorjeta em valor livre entra por cima do valor fixo, mostrada à parte.
 - **Partes iguais dividem o consumo.** A taxa é de cada um: em R$ 300 entre 3 com taxa de 10%, quem retirou paga R$ 100,
   e os outros, R$ 110.
+
+## Decisões provisórias da implementação (a confirmar com Pedro)
+
+Pendências 46 a 57 em [`PENDENCIAS-perfis-workflows`](PENDENCIAS-perfis-workflows.md). Cada uma é uma regra só, fácil de trocar.
+

@@ -6,8 +6,8 @@ import { tableLabel } from '../screens/production/shared';
 import { useMyTableBalance } from './useMyTableBalance';
 
 /**
- * "Sair da mesa" (ADR-021): só sem consumo ou com a parte da pessoa paga. Com saldo, o botão vira
- * "Pagar minha parte" e leva à conta, dentro da comanda. O servidor continua sendo quem recusa (P0004).
+ * "Sair da mesa" (ADR-021 e ADR-032): com saldo, o botão vira "Pagar minha parte". Quem abriu a comanda responde por
+ * ela e vai para a conta; os demais podem sair confirmando, e a parte fica com o titular. O servidor é quem recusa (P0004).
  */
 export function useLeaveTable(navigation: any) {
   const { session, leaveTable } = useVisitSession();
@@ -21,8 +21,26 @@ export function useLeaveTable(navigation: any) {
   );
 
   const run = useCallback(() => {
-    if (mustPay) {
+    if (mustPay && balance.data?.isHost) {
       goPay();
+      return;
+    }
+    if (mustPay) {
+      Alert.alert(
+        'Você ainda tem saldo nesta mesa',
+        'Se sair sem pagar, sua parte fica com quem abriu a comanda, e essa pessoa será avisada.',
+        [
+          { text: 'Agora não', style: 'cancel' },
+          { text: 'Pagar minha parte', onPress: goPay },
+          {
+            text: 'Sair sem pagar',
+            style: 'destructive',
+            onPress: () => {
+              void leaveTable(true).catch(() => Alert.alert('Não foi possível sair', 'Verifique sua conexão e tente novamente.'));
+            },
+          },
+        ],
+      );
       return;
     }
     Alert.alert(
@@ -48,7 +66,7 @@ export function useLeaveTable(navigation: any) {
         },
       ],
     );
-  }, [mustPay, goPay, leaveTable, session?.tableNumber]);
+  }, [mustPay, balance.data?.isHost, goPay, leaveTable, session?.tableNumber]);
 
   return { run, mustPay, label: mustPay ? 'Pagar minha parte' : 'Sair da mesa' };
 }

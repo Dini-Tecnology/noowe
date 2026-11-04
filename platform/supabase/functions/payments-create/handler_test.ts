@@ -127,6 +127,7 @@ test("falha do provedor: 502 retomável e cobrança marcada com erro (N4 #6)", a
 
 test("erros da reserva viram status HTTP; pedido já pago não cobra de novo", async () => {
   assert.equal((await handleCreate(req(valid), setup({ reserveError: { code: "P0007", message: "x" } }).deps)).status, 409);
+  assert.equal((await handleCreate(req(valid), setup({ reserveError: { code: "P0012", message: "x" } }).deps)).status, 409);
   assert.equal((await handleCreate(req(valid), setup({ reserveError: { code: "P0002", message: "x" } }).deps)).status, 404);
   const paid = setup({ reserved: { alreadyPaid: true, orderId: ORDER } });
   const res = await handleCreate(req(valid), paid.deps);

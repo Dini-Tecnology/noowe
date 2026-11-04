@@ -1,5 +1,8 @@
 # ADR-010 — Regras de fechamento que diferem entre Fine e Casual
 
+> **Atualização (04/11/2026, ADR-032):** o destino do restante do valor fixo saiu. `split_fixed_remainder` foi removido: com o saldo único, o
+> restante fica no saldo. O destino da gorjeta (`tip_allocation`) continua valendo como está aqui.
+
 **Status:** ACEITO (2026-09-14) — opção "política por unidade" escolhida pelo responsável do produto
 **Origem:** spec §3.4 × §4.4 e §4.2 (etapa 9); tarefa T-X-22
 **Impacta:** Fatia G3 (split e pagamento parcial), Fatia F3 (configuração), Fatia S1 (cobrança na mesa)

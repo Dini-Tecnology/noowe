@@ -18,7 +18,8 @@ import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { useDistanceToRestaurant } from '../../hooks/useDistanceToRestaurant';
 import { PixPendingPanel } from '../../components/quick/PixPendingPanel';
 import { QUICK_ORDER_ERROR_COPY, duplicateOrderId, quickOrderErrorKind } from '../../services/quick-service-errors';
-import { money, translateOrderError } from './shared';
+import { billShares } from '../../services/bill-shares';
+import { centsFromDigits, money, moneyCents, percentFromBps, translateOrderError } from './shared';
 import { formatDistance, isFarFromRestaurant, pickupPolicyText } from './quick-service-ui';
 
 const HEADER_GRADIENT = ['#FF5724', '#F97316', '#F59E0B'] as const;
@@ -56,10 +57,16 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   const [pix, setPix] = useState<PendingCharge | null>(null);
   const [needsDocument, setNeedsDocument] = useState(false);
   const [document, setDocument] = useState('');
+  // Gorjeta opcional, sem nada marcado: é a pessoa que escolhe (ADR-032).
+  const [tipBps, setTipBps] = useState(0);
+  const [tipDigits, setTipDigits] = useState('');
+  const tipCents = tipDigits ? parseInt(tipDigits, 10) : 0;
   const checkoutKey = useRef(Crypto.randomUUID());
   // Uma cobrança por forma de pagamento: repetir a mesma retoma, trocar a forma não reaproveita a errada.
   const chargeKeys = useRef(new Map<PaymentMethodType, string>());
   const { policies } = useServiceTypeFor(cart.restaurantId, 'quick_service');
+  const tipOptions = policies?.feeOrTipMode === 'tip' ? policies.tipPresetsBps : [];
+  const tipOffered = tipOptions.length > 0;
   const restaurant = useQuery({
     queryKey: ['restaurant', cart.restaurantId],
     queryFn: () => customerBackend.getRestaurant(cart.restaurantId!),
@@ -82,6 +89,13 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
 
   // O total cobrado é o que o servidor calcular no pedido; o carrinho é só a prévia.
   const total = cart.total;
+  const hasTip = tipBps > 0 || tipCents > 0;
+  // Prévia da gorjeta: quem calcula é o servidor, sobre o total do pedido.
+  const tipQuote = useQuery({
+    queryKey: ['quick-tip-quote', total, tipBps, tipCents],
+    queryFn: () => billShares.tipQuote(Math.round(total * 100), { tipBps, tipCents }),
+    enabled: hasTip,
+  });
 
   const place = useMutation({
     mutationFn: async () => {
@@ -97,12 +111,15 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
         pickupPolicyAccepted: policyAccepted,
         items: orderItems,
       });
+      // Mudar a gorjeta muda o valor: a cobrança antiga não serve mais.
       if (!chargeKeys.current.has(selectedMethod)) chargeKeys.current.set(selectedMethod, Crypto.randomUUID());
       const payment = await customerBackend.startPayment({
         orderId: order.id,
         restaurantId: cart.restaurantId!,
         paymentMethod: selectedMethod,
         idempotencyKey: chargeKeys.current.get(selectedMethod)!,
+        tipBps,
+        tipCents,
         payerCpfCnpj: document.replace(/\D/g, '') || undefined,
       });
       return { order, payment };
@@ -172,6 +189,11 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   });
 
   const selectMethod = useCallback((method: PaymentMethodType) => setSelectedMethod(method), []);
+  const chooseTip = useCallback((bps: number, digits: string) => {
+    setTipBps(bps);
+    setTipDigits(digits);
+    chargeKeys.current.clear();
+  }, []);
 
   const styles = useMemo(
     () =>
@@ -194,6 +216,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
         methodItem: {
           width: '31%', minHeight: 80, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', gap: 6,
         },
+        tipChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5 },
         methodSelected: { borderColor: colors.primary, backgroundColor: 'rgba(234, 88, 12, 0.08)' },
         methodUnselected: { borderColor: colors.border, backgroundColor: colors.card },
         methodLabel: { fontSize: 12, fontWeight: '700' },
@@ -292,16 +315,53 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
               </View>
             )}
 
+            {tipOffered && !pix && (
+              <View style={styles.policyCard}>
+                <Text style={styles.sectionTitle}>Gorjeta (opcional)</Text>
+                <View style={styles.methodGrid}>
+                  {[0, ...tipOptions].map((bps) => {
+                    const selected = tipBps === bps && tipCents === 0;
+                    return (
+                      <TouchableOpacity
+                        key={bps}
+                        style={[styles.tipChip, selected ? styles.methodSelected : styles.methodUnselected]}
+                        onPress={() => chooseTip(bps, '')}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                      >
+                        <Text style={[styles.methodLabel, { color: selected ? colors.primary : colors.foreground }]}>{bps ? `${percentFromBps(bps)}%` : 'Sem'}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Outro valor (R$)"
+                  placeholderTextColor={colors.foregroundMuted}
+                  keyboardType="number-pad"
+                  value={tipCents > 0 ? moneyCents(tipCents).replace(/^R\$\s?/, '') : ''}
+                  onChangeText={(text) => chooseTip(0, centsFromDigits(text))}
+                  accessibilityLabel="Gorjeta em valor"
+                />
+              </View>
+            )}
+
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Resumo</Text>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal ({cart.itemCount} {cart.itemCount === 1 ? 'item' : 'itens'})</Text>
                 <Text style={styles.summaryValue}>{money(cart.total)}</Text>
               </View>
+              {hasTip && tipQuote.data && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Gorjeta</Text>
+                  <Text style={styles.summaryValue}>{moneyCents(tipQuote.data.tipCents)}</Text>
+                </View>
+              )}
               <View style={styles.divider} />
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValue}>{money(total)}</Text>
+                <Text style={styles.totalValue}>{hasTip && tipQuote.data ? moneyCents(tipQuote.data.totalCents) : money(total)}</Text>
               </View>
             </View>
 

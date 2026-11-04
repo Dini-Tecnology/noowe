@@ -5,6 +5,26 @@ import { getOptionalSupabaseSessionUser } from './supabase-auth';
 import type { ServiceType } from '../config/service-types';
 import type { Json } from '../types/database.generated';
 
+export type SessionBill = {
+  balanceCents: number;
+  chargeBaseCents: number;
+  feeCents: number;
+  totalWithFeeCents: number;
+  feeBps: number;
+  feeOrTipMode: 'service_fee' | 'tip';
+  adjusted: boolean;
+};
+
+export type ChargePolicyRow = {
+  serviceModel: string;
+  feeOrTipMode: string;
+  serviceFeeBps: number;
+  tipPresetsBps: number[];
+  tipDefaultBps: number | null;
+  splitModes: string[];
+  prepaid: boolean;
+};
+
 export type SupabaseOrderItemInput = {
   menu_item_id: string;
   quantity: number;
@@ -581,6 +601,12 @@ export interface SupabaseApiAdapter {
   getMyLoyalty(restaurantId: string): Promise<any>;
   // ── Payment ────────────────────────────────────────────────────────────────────
   recordPayment(orderId: string, paymentMethod: string, amount: number, tipAmount?: number, notes?: string): Promise<any>;
+  /** Saldo e valores prontos para cobrar uma comanda aberta. `baseCents` nulo é o saldo todo. */
+  getSessionBill(tableSessionId: string, baseCents?: number | null): Promise<SessionBill>;
+  /** Pagamento presencial: abate do mesmo saldo da comanda (ADR-032). */
+  recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string }): Promise<any>;
+  getChargePolicies(restaurantId: string): Promise<ChargePolicyRow[]>;
+  updateChargePolicy(restaurantId: string, serviceModel: string, input: { feeOrTipMode: 'service_fee' | 'tip'; serviceFeeBps?: number | null; tipPresetsBps?: number[] | null; tipDefaultBps?: number | null; splitModes?: string[] | null }): Promise<any>;
   exportUserData(): Promise<any>;
   requestAccountDeletion(): Promise<any>;
   getBills(restaurantId?: string, status?: string): Promise<any>;
@@ -2307,6 +2333,44 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   },
 
   // ── Payment ────────────────────────────────────────────────────────────────
+  async getSessionBill(tableSessionId: string, baseCents?: number | null) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_get_session_bill', {
+      p_table_session_id: tableSessionId, p_base_cents: baseCents ?? null,
+    });
+    if (error) throw error;
+    const raw = (data ?? {}) as Record<string, unknown>;
+    return {
+      balanceCents: Number(raw.balanceCents ?? 0), chargeBaseCents: Number(raw.chargeBaseCents ?? 0), feeCents: Number(raw.feeCents ?? 0),
+      totalWithFeeCents: Number(raw.totalWithFeeCents ?? 0), feeBps: Number(raw.feeBps ?? 0),
+      feeOrTipMode: raw.feeOrTipMode === 'tip' ? 'tip' : 'service_fee', adjusted: raw.adjusted === true,
+    } as SessionBill;
+  },
+
+  async recordBillPayment(tableSessionId, input) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_record_bill_payment', {
+      p_table_session_id: tableSessionId, p_payment_method: input.method, p_idempotency_key: input.idempotencyKey,
+      p_base_cents: input.baseCents ?? null, p_waive_fee: input.waiveFee === true, p_tip_cents: input.tipCents ?? 0, p_reason: input.reason ?? null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async getChargePolicies(restaurantId: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_get_charge_policies', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return (Array.isArray(data) ? data : []) as ChargePolicyRow[];
+  },
+
+  async updateChargePolicy(restaurantId, serviceModel, input) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_update_charge_policy', {
+      p_restaurant_id: restaurantId, p_service_model: serviceModel, p_fee_or_tip_mode: input.feeOrTipMode,
+      p_service_fee_bps: input.serviceFeeBps ?? null, p_tip_presets_bps: input.tipPresetsBps ?? null,
+      p_tip_default_bps: input.tipDefaultBps ?? null, p_split_modes: input.splitModes ?? null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
   async recordPayment(orderId: string, paymentMethod: string, amount: number, tipAmount = 0, notes?: string) {
     // The server now dedupes on (order_id, idempotency_key) instead of
     // always minting a fresh key itself — but that protection only kicks in

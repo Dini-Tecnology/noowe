@@ -14,10 +14,8 @@ import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useBillShares } from '../../hooks/useBillShares';
 import customerBackend from '../../services/customer-backend';
 import { billShares, type SharePayment } from '../../services/bill-shares';
-import { moneyCents, StateView } from './shared';
+import { centsFromDigits, moneyCents, percentFromBps, StateView } from './shared';
 
-// Sugestões de gorjeta em % da parcela; os centavos vêm do servidor (customer_share_tip_options).
-const TIP_PERCENTS = [0, 10, 15, 20];
 const METHODS = [
   { id: 'pix', label: 'PIX', icon: 'qr-code-outline' },
   { id: 'credit_card', label: 'Cartão de crédito', icon: 'card-outline' },
@@ -32,7 +30,10 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   const { session, completeCheckout } = useVisitSession();
   const tableSessionId: string | undefined = route?.params?.tableSessionId ?? session?.tableSessionId;
   const restaurantName: string | undefined = route?.params?.restaurantName;
-  const [tipPercent, setTipPercent] = useState(10);
+  // null até a pessoa escolher: vale a sugestão do restaurante. 0 é "Sem".
+  const [tipPercent, setTipPercent] = useState<number | null>(null);
+  const [freeTipDigits, setFreeTipDigits] = useState('');
+  const freeTipCents = freeTipDigits ? parseInt(freeTipDigits, 10) : 0;
   const [method, setMethod] = useState<Method>('pix');
   const [payment, setPayment] = useState<SharePayment | null>(null);
   const [needsDocument, setNeedsDocument] = useState(false);
@@ -49,12 +50,20 @@ export default function SharePaymentScreen({ route, navigation }: any) {
     enabled: !!tableSessionId,
   });
   const { shares } = useBillShares(tableSessionId, payment ? 4000 : false);
+  const summary = useQuery({
+    queryKey: ['bill-summary', tableSessionId, shares.dataUpdatedAt],
+    queryFn: () => billShares.summary(tableSessionId!),
+    enabled: !!tableSessionId,
+    placeholderData: (previous) => previous,
+  });
+  const tipMode = summary.data?.feeOrTipMode === 'tip';
   const me = bill.data?.participants.find((p) => p.isMe);
   const list = shares.data ?? [];
   const mine = list.filter((s) => s.participantId === me?.dinerId);
   const myOpen = mine.find((s) => s.status === 'open' || s.status === 'pending_payment');
   const myPaid = !myOpen && mine.some((s) => s.status === 'paid');
-  const nameOf = (participantId: string) => {
+  const nameOf = (participantId: string | null) => {
+    if (!participantId) return 'Pago no salão';
     const diner = bill.data?.participants.find((p) => p.dinerId === participantId);
     return diner?.isMe ? 'Você' : (diner?.displayName ?? 'Convidado');
   };
@@ -72,20 +81,41 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   }
   const activeSavedCard = method === 'credit_card' ? cards.find((c) => c.id === savedCardId) ?? null : null;
 
+  // Valor fixo já decidiu a gorjeta na tela anterior. Em modo taxa, não há gorjeta.
+  const choosesTip = tipMode && !!myOpen && myOpen.mode !== 'fixed_amount';
   const tips = useQuery({
-    queryKey: ['share-tip-options', myOpen?.id, myOpen?.amountCents],
-    queryFn: () => billShares.tipOptions(myOpen!.id, TIP_PERCENTS),
-    enabled: !!myOpen,
+    queryKey: ['share-tip-options', myOpen?.id, myOpen?.baseCents],
+    queryFn: () => billShares.tipOptions(myOpen!.id),
+    enabled: choosesTip,
   });
-  const selectedTip = tips.data?.find((option) => option.percent === tipPercent);
+  const defaultTipPercent = summary.data?.tipDefaultBps ? percentFromBps(summary.data.tipDefaultBps) : 0;
+  const activeTipPercent = tipPercent ?? defaultTipPercent;
+  const chosenTipCents = !choosesTip
+    ? myOpen?.tipCents ?? 0
+    : freeTipCents > 0
+      ? freeTipCents
+      : tips.data?.find((option) => option.percent === activeTipPercent)?.cents ?? 0;
+  // O total vem do servidor, com a gorjeta escolhida.
+  const quote = useQuery({
+    queryKey: ['share-tip-quote', myOpen?.amountCents, chosenTipCents],
+    queryFn: () => billShares.tipQuote(myOpen!.amountCents, { tipCents: chosenTipCents }),
+    enabled: !!myOpen && !!summary.data && (!choosesTip || !!tips.data),
+  });
+  const canPay = !!quote.data && quote.data.tipCents === chosenTipCents;
+
+  const waiveFee = useMutation({
+    mutationFn: (waived: boolean) => billShares.setFeeWaived(myOpen!.id, waived),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['bill-shares', tableSessionId] }),
+    onError: (error: Error) => Alert.alert('Não foi possível alterar a taxa', error.message),
+  });
 
   const pay = useMutation({
     mutationFn: async () => {
-      if (!myOpen || !selectedTip) throw new Error('Parcela indisponível.');
-      const slot = `${myOpen.id}:${method}:${selectedTip.cents}:${activeSavedCard?.id ?? (saveCard ? 'save' : 'new')}`;
+      if (!myOpen || !canPay) throw new Error('Parcela indisponível.');
+      const slot = `${myOpen.id}:${method}:${chosenTipCents}:${activeSavedCard?.id ?? (saveCard ? 'save' : 'new')}`;
       if (!keys.current.has(slot)) keys.current.set(slot, Crypto.randomUUID());
       return billShares.pay({
-        shareId: myOpen.id, method, tipCents: selectedTip.cents, idempotencyKey: keys.current.get(slot)!,
+        shareId: myOpen.id, method, tipCents: chosenTipCents, idempotencyKey: keys.current.get(slot)!,
         payerCpfCnpj: document.replace(/\D/g, '') || undefined,
         ...(activeSavedCard ? { paymentMethodId: activeSavedCard.id } : method === 'credit_card' && saveCard ? { saveCard: true } : {}),
       });
@@ -98,6 +128,12 @@ export default function SharePaymentScreen({ route, navigation }: any) {
     },
     onError: (error) => {
       if ((error as { code?: string }).code === 'payer_document_required') { setNeedsDocument(true); return; }
+      // A conta mudou desde a divisão: nunca cobra um valor que a pessoa não viu.
+      if (['bill_changed', 'P0011', 'P0012'].includes((error as { code?: string }).code ?? '')) {
+        void queryClient.invalidateQueries({ queryKey: ['bill-shares', tableSessionId] });
+        Alert.alert('A conta mudou', 'Confira os valores atualizados e escolha de novo como pagar.', [{ text: 'Voltar', onPress: () => navigation.goBack() }]);
+        return;
+      }
       if ((error as { code?: string }).code === 'card_not_found') { setSavedCardId(null); void queryClient.invalidateQueries({ queryKey: ['saved-cards'] }); }
       Alert.alert('Pagamento não iniciado', error.message);
     },
@@ -111,7 +147,7 @@ export default function SharePaymentScreen({ route, navigation }: any) {
 
   const confirmAbandon = useCallback(() => Alert.alert(
     'Não vou pagar',
-    'Sua parte será redistribuída entre quem ainda não pagou. Deseja continuar?',
+    'Sua parte fica com quem abriu a comanda, e essa pessoa será avisada. Deseja continuar?',
     [{ text: 'Voltar', style: 'cancel' }, { text: 'Não vou pagar', style: 'destructive', onPress: () => abandon.mutate() }],
   ), [abandon]);
 
@@ -163,6 +199,9 @@ export default function SharePaymentScreen({ route, navigation }: any) {
     pixBox: { alignItems: 'center', gap: 12 },
     pixCode: { fontSize: 11, color: colors.foregroundSecondary, textAlign: 'center' },
     hint: { fontSize: 12, color: colors.foregroundSecondary, textAlign: 'center' },
+    feeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    tipInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, paddingHorizontal: 14, height: 48, backgroundColor: colors.backgroundTertiary },
+    tipInput: { flex: 1, fontSize: 16, fontWeight: '700', color: colors.foreground },
     shareRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
     shareName: { fontSize: 13, color: colors.foreground },
     shareStatus: { fontSize: 12, fontWeight: '700' },
@@ -208,7 +247,11 @@ export default function SharePaymentScreen({ route, navigation }: any) {
         {myPaid && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Pagamento confirmado</Text>
-            <Text style={styles.hint}>Obrigado! Sua parte está paga. A mesa fecha quando todos pagarem, e a nota fiscal sai no fechamento.</Text>
+            <Text style={styles.hint}>
+              {summary.data && summary.data.balanceCents > 0
+                ? `Obrigado! Sua parte está paga. Ainda faltam ${moneyCents(summary.data.balanceCents)} nesta comanda; a nota fiscal sai no fechamento.`
+                : 'Obrigado! Sua parte está paga. A nota fiscal sai no fechamento.'}
+            </Text>
             {receipt.data && (
               <TouchableOpacity style={styles.cta} onPress={() => navigation.navigate('DigitalReceipt', { receiptId: receipt.data })} accessibilityRole="button">
                 <Text style={styles.ctaText}>Ver recibo</Text>
@@ -229,25 +272,49 @@ export default function SharePaymentScreen({ route, navigation }: any) {
 
         {myOpen && !payment && (
           <>
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Gorjeta</Text>
-              <View style={styles.row}>
-                {(tips.data ?? []).map((option) => (
+            {choosesTip && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Gorjeta (opcional)</Text>
+                <View style={styles.row}>
                   <TouchableOpacity
-                    key={option.percent}
-                    style={[styles.chip, tipPercent === option.percent && styles.chipActive]}
-                    onPress={() => setTipPercent(option.percent)}
+                    style={[styles.chip, activeTipPercent === 0 && freeTipCents === 0 && styles.chipActive]}
+                    onPress={() => { setTipPercent(0); setFreeTipDigits(''); }}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: tipPercent === option.percent }}
+                    accessibilityState={{ selected: activeTipPercent === 0 && freeTipCents === 0 }}
                   >
-                    <Text style={[styles.chipLabel, tipPercent === option.percent && styles.chipLabelActive]}>
-                      {option.percent === 0 ? 'Sem' : `${option.percent}%`}
-                    </Text>
-                    <Text style={styles.chipValue}>{moneyCents(option.cents)}</Text>
+                    <Text style={[styles.chipLabel, activeTipPercent === 0 && freeTipCents === 0 && styles.chipLabelActive]}>Sem</Text>
+                    <Text style={styles.chipValue}>{moneyCents(0)}</Text>
                   </TouchableOpacity>
-                ))}
+                  {(tips.data ?? []).map((option) => {
+                    const selected = activeTipPercent === option.percent && freeTipCents === 0;
+                    return (
+                      <TouchableOpacity
+                        key={option.percent}
+                        style={[styles.chip, selected && styles.chipActive]}
+                        onPress={() => { setTipPercent(option.percent); setFreeTipDigits(''); }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                      >
+                        <Text style={[styles.chipLabel, selected && styles.chipLabelActive]}>{option.percent}%</Text>
+                        <Text style={styles.chipValue}>{moneyCents(option.cents)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <View style={styles.tipInputRow}>
+                  <Text style={styles.chipValue}>Outro valor R$</Text>
+                  <TextInput
+                    style={styles.tipInput}
+                    placeholder="0,00"
+                    placeholderTextColor={colors.foregroundMuted}
+                    keyboardType="number-pad"
+                    value={freeTipCents > 0 ? moneyCents(freeTipCents).replace(/^R\$\s?/, '') : ''}
+                    onChangeText={(text) => setFreeTipDigits(centsFromDigits(text))}
+                    accessibilityLabel="Gorjeta em valor"
+                  />
+                </View>
               </View>
-            </View>
+            )}
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Forma de pagamento</Text>
@@ -322,30 +389,49 @@ export default function SharePaymentScreen({ route, navigation }: any) {
 
             <View style={styles.card}>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Sua parte (com taxa de serviço)</Text>
-                <Text style={styles.summaryValue}>{moneyCents(myOpen.amountCents)}</Text>
+                <Text style={styles.summaryLabel}>Sua parte do consumo</Text>
+                <Text style={styles.summaryValue}>{moneyCents(myOpen.baseCents)}</Text>
               </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Gorjeta</Text>
-                <Text style={styles.summaryValue}>{selectedTip ? moneyCents(selectedTip.cents) : '—'}</Text>
-              </View>
+              {!tipMode && (summary.data?.feeBps ?? 0) > 0 && (
+                <View style={styles.feeRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.summaryLabel}>Taxa de serviço (opcional)</Text>
+                    <Text style={styles.summaryValue}>{myOpen.feeWaived ? 'Retirada' : moneyCents(myOpen.feeCents)}</Text>
+                  </View>
+                  <Switch
+                    value={!myOpen.feeWaived}
+                    disabled={myOpen.status !== 'open' || waiveFee.isPending}
+                    onValueChange={(keep) => waiveFee.mutate(!keep)}
+                    accessibilityLabel="Taxa de serviço opcional"
+                    testID="service-fee-switch"
+                  />
+                </View>
+              )}
+              {tipMode && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Gorjeta</Text>
+                  <Text style={styles.summaryValue}>{moneyCents(chosenTipCents)}</Text>
+                </View>
+              )}
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total a pagar</Text>
-                <Text style={styles.totalValue}>{selectedTip ? moneyCents(selectedTip.totalCents) : '—'}</Text>
+                <Text style={styles.totalValue}>{quote.data ? moneyCents(quote.data.totalCents) : '—'}</Text>
               </View>
             </View>
 
             <TouchableOpacity
-              style={[styles.cta, (!selectedTip || pay.isPending) && styles.ctaDisabled]}
+              style={[styles.cta, (!canPay || pay.isPending) && styles.ctaDisabled]}
               onPress={() => pay.mutate()}
-              disabled={!selectedTip || pay.isPending}
+              disabled={!canPay || pay.isPending}
               accessibilityRole="button"
             >
               <Text style={styles.ctaText}>{pay.isPending ? 'Gerando cobrança…' : method === 'pix' ? 'Gerar PIX' : 'Pagar com cartão'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.link} onPress={confirmAbandon} accessibilityRole="button">
-              <Text style={styles.linkText}>Não vou pagar</Text>
-            </TouchableOpacity>
+            {!me?.isHost && (
+              <TouchableOpacity style={styles.link} onPress={confirmAbandon} accessibilityRole="button">
+                <Text style={styles.linkText}>Não vou pagar</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
 

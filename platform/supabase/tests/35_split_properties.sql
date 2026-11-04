@@ -47,13 +47,13 @@ select is((select count(*)::int from _w where exists (
   0, 'allocate_proportional: cada parcela a menos de 1 centavo do ideal');
 
 select is((select count(*)::int from _dc where
-    (select sum(base_cents) from private.decompose_amounts(a, base_rem)) <> base_rem),
-  0, 'decompose_amounts: as bases somam a base restante');
+    (private.split_out_of_total(tot, ((g % 30) * 100)::int)).base_cents + (private.split_out_of_total(tot, ((g % 30) * 100)::int)).rest_cents <> tot
+    or (private.split_out_of_total(tot, ((g % 30) * 100)::int)).rest_cents < 0),
+  0, 'split_out_of_total: consumo + o que vem por cima é exatamente o valor pedido');
 
-select is((select count(*)::int from _dc where
-    (select min(fee_cents) from private.decompose_amounts(a, base_rem)) < 0
-    or (select sum(fee_cents) from private.decompose_amounts(a, base_rem)) <> tot - base_rem),
-  0, 'decompose_amounts: taxas não negativas e somam o resto');
+select is(array[(private.split_out_of_total(5000, 1000)).base_cents, (private.split_out_of_total(5000, 1000)).rest_cents,
+                (private.split_out_of_total(5000, 0)).base_cents, private.adjust_to_balance(9000, 5000), private.adjust_to_balance(3000, 5000)],
+  array[4545, 455, 5000, 5000, 3000]::bigint[], 'R$ 50 a 10% dá 45,45 + 4,55; o valor pedido nunca passa do saldo');
 
 select is(private.allocate_proportional(0, array[0, 0, 0]::bigint[]), array[0, 0, 0]::bigint[],
   'allocate_proportional: pesos zerados com total zero');

@@ -109,7 +109,8 @@ Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercia
 | Respostas 31 e 32 | QR com a comanda aberta e Dono sem aprovação, no banco e no código |
 | M1, segunda carga | Business 8.000, conveniência desligada, teste, plano sugerido, empresa e Tap em parâmetro |
 | O3 | Feita, no GitHub e no banco Noowe. Falta conferir as telas no simulador |
-| G5, O8, M2–M6, P3, V1 | A fazer, nesta ordem (plano de 03/11) |
+| G5 | Feita, no GitHub e no banco Noowe. Falta conferir as telas no simulador |
+| O8, M2–M6, P3, V1 | A fazer, nesta ordem (plano de 03/11) |
 
 ## Correspondência com o faseamento da spec (§8)
 

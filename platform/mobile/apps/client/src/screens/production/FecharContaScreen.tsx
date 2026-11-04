@@ -49,6 +49,14 @@ export default function FecharContaScreen({ route, navigation }: any) {
   });
   const myShare = plan.data?.shares.find((share) => share.participantId === me?.dinerId);
   const { shares } = useBillShares(tableSessionId);
+  const summary = useQuery({
+    queryKey: ['bill-summary', tableSessionId, bill.dataUpdatedAt, shares.dataUpdatedAt],
+    queryFn: () => billShares.summary(tableSessionId!),
+    enabled: !!tableSessionId,
+    placeholderData: (previous) => previous,
+  });
+  const balanceCents = summary.data?.balanceCents ?? plan.data?.balanceCents;
+  const leftWithoutPaying = me?.isHost ? summary.data?.leftWithoutPaying ?? [] : [];
   // Parcela já criada (ou cobrança em andamento): retoma em vez de refazer a divisão.
   const myActiveShare = shares.data?.find((share) => share.participantId === me?.dinerId && (share.status === 'open' || share.status === 'pending_payment'));
 
@@ -65,7 +73,7 @@ export default function FecharContaScreen({ route, navigation }: any) {
   });
 
   const finishVisit = useMutation({
-    mutationFn: leaveTable,
+    mutationFn: () => leaveTable(),
     onSuccess: () => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }),
     onError: (error: Error) => Alert.alert('Não foi possível encerrar a visita', error.message),
   });
@@ -138,6 +146,8 @@ export default function FecharContaScreen({ route, navigation }: any) {
         cta: { paddingVertical: 16, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center' },
         ctaDisabled: { opacity: 0.6 },
         ctaText: { color: colors.primaryForeground, fontSize: 16, fontWeight: '700' },
+        leftCard: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, backgroundColor: colors.backgroundTertiary, borderWidth: 1, borderColor: colors.border },
+        leftText: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.foreground },
         successWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 32 },
         successCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#DCFCE7', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
         successTitle: { fontSize: 20, fontWeight: '700', color: colors.foreground },
@@ -168,7 +178,7 @@ export default function FecharContaScreen({ route, navigation }: any) {
           </TouchableOpacity>
           <View>
             <Text style={styles.headerTotalLabel}>Falta pagar</Text>
-            <Text style={styles.headerTotalValue}>{plan.data ? moneyCents(plan.data.totalRemCents) : '—'}</Text>
+            <Text style={styles.headerTotalValue}>{balanceCents != null ? moneyCents(balanceCents) : '—'}</Text>
           </View>
         </View>
         <Text style={styles.headerTitle}>Fechar Conta</Text>
@@ -182,6 +192,15 @@ export default function FecharContaScreen({ route, navigation }: any) {
 
         {bill.data && (
           <>
+            {leftWithoutPaying.length > 0 && (
+              <View style={styles.leftCard} accessibilityRole="alert">
+                <Ionicons name="alert-circle-outline" size={18} color={colors.warning ?? colors.primary} />
+                <Text style={styles.leftText}>
+                  {leftWithoutPaying.map((person) => person.name).join(', ')} saiu sem pagar. A parte ficou com você.
+                </Text>
+              </View>
+            )}
+
             <View>
               <View style={styles.sectionRow}>
                 <Text style={styles.sectionTitle}>Na mesa ({bill.data.participants.length})</Text>
@@ -223,19 +242,31 @@ export default function FecharContaScreen({ route, navigation }: any) {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Resumo</Text>
+              {(summary.data?.paidCents ?? 0) > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Já pago nesta comanda</Text>
+                  <Text style={styles.summaryValue}>{moneyCents(summary.data!.paidCents)}</Text>
+                </View>
+              )}
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryLabel}>Sua parte do consumo</Text>
                 <Text style={styles.summaryValue}>{moneyCents(myShare?.baseCents ?? 0)}</Text>
               </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Taxa de serviço{bill.data.serviceFeePercent != null ? ` (${bill.data.serviceFeePercent}%)` : ''}</Text>
-                <Text style={styles.summaryValue}>{moneyCents(myShare?.feeCents ?? 0)}</Text>
-              </View>
+              {summary.data?.feeOrTipMode !== 'tip' && (myShare?.feeCents ?? 0) > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Taxa de serviço (opcional){bill.data.serviceFeePercent != null ? ` · ${bill.data.serviceFeePercent}%` : ''}</Text>
+                  <Text style={styles.summaryValue}>{moneyCents(myShare?.feeCents ?? 0)}</Text>
+                </View>
+              )}
               <View style={styles.payRow}>
                 <Text style={styles.payLabel}>Você paga</Text>
                 <Text style={styles.payValue}>{moneyCents(myShare?.amountCents ?? 0)}</Text>
               </View>
-              <Text style={styles.summaryLabel}>A gorjeta é opcional e escolhida na próxima etapa.</Text>
+              <Text style={styles.summaryLabel}>
+                {summary.data?.feeOrTipMode === 'tip'
+                  ? 'A gorjeta é opcional e escolhida na próxima etapa.'
+                  : 'Dá para retirar a taxa de serviço na próxima etapa.'}
+              </Text>
             </View>
 
             <TouchableOpacity
@@ -243,6 +274,8 @@ export default function FecharContaScreen({ route, navigation }: any) {
               onPress={() => {
                 if (myActiveShare) navigation.navigate('SharePayment', { tableSessionId, restaurantName: restaurant.data?.name });
                 else if (myShare) payMine.mutate();
+                // Ainda há saldo, mas nada marcado como seu: a pessoa escolhe como ajudar a quitar.
+                else if ((balanceCents ?? 0) > 0) navigation.navigate('SplitBill', { tableSessionId, restaurantName: restaurant.data?.name });
                 else finishVisit.mutate();
               }}
               disabled={finishVisit.isPending || payMine.isPending}
@@ -253,7 +286,9 @@ export default function FecharContaScreen({ route, navigation }: any) {
                   ? 'Continuar pagamento'
                   : myShare
                     ? (payMine.isPending ? 'Preparando…' : 'Pagar e concluir minha conta')
-                    : finishVisit.isPending ? 'Encerrando…' : 'Encerrar visita sem saldo pendente'}
+                    : (balanceCents ?? 0) > 0
+                      ? 'Escolher como pagar'
+                      : finishVisit.isPending ? 'Encerrando…' : 'Encerrar visita sem saldo pendente'}
               </Text>
             </TouchableOpacity>
             {bill.data.participants.length > 1 ? (

@@ -32,7 +32,7 @@ export type VisitSession = {
   billingStatus?: 'open' | 'billing';
 };
 
-export type MyTableBalance = { owedCents: number; hasConsumption: boolean };
+export type MyTableBalance = { owedCents: number; hasConsumption: boolean; isHost: boolean };
 
 export type ServiceQrResolution =
   | { kind: 'counter'; restaurantId: string; serviceModel: 'quick_service'; counterLabel: string }
@@ -603,14 +603,15 @@ export interface CustomerBackend {
   devPickTableQr(restaurantId?: string): Promise<{ qrCodeData: string; restaurantId: string; tableNumber: string }>;
   /** Development only. Marks the caller's order ready so the prep wait can be skipped. */
   devSkipPrep(orderId: string): Promise<void>;
-  leaveTableSession(tableSessionId: string): Promise<void>;
+  /** `confirmUnpaid`: a pessoa confirmou sair sem pagar, e a parte fica com o titular. */
+  leaveTableSession(tableSessionId: string, confirmUnpaid?: boolean): Promise<void>;
   /** Quanto a pessoa ainda deve na mesa (ADR-021); o servidor calcula, o app só exibe. */
   getMyTableBalance(tableSessionId: string): Promise<MyTableBalance>;
   placeOrder(input: PlaceOrderInput): Promise<CustomerOrder>;
   /** Como este restaurante cobra pedidos agora; quem decide é o servidor. */
   getOrderPaymentMode(restaurantId: string): Promise<OrderPaymentMode>;
   /** Cria a cobrança do pedido (ADR-020). `confirmed` só existe depois do webhook; a tela nunca confirma nada. */
-  startPayment(input: { orderId: string; restaurantId: string; paymentMethod: string; idempotencyKey?: string; payerCpfCnpj?: string }): Promise<{
+  startPayment(input: { orderId: string; restaurantId: string; paymentMethod: string; idempotencyKey?: string; payerCpfCnpj?: string; tipBps?: number; tipCents?: number }): Promise<{
     transactionId: string; orderId: string; paymentStatus: CustomerPaymentStatus; idempotentReplay: boolean; simulated: boolean;
     fulfillmentStatus: CustomerFulfillmentStatus | null;
     /** Pix pendente: copia-e-cola e prazo (ADR-013). */
@@ -1421,9 +1422,10 @@ export const customerBackend: CustomerBackend = {
     if (error) throw error;
   },
 
-  async leaveTableSession(tableSessionId) {
+  async leaveTableSession(tableSessionId, confirmUnpaid = false) {
     const { error } = await getSupabaseClient().rpc('customer_leave_table_session', {
       p_table_session_id: tableSessionId,
+      p_confirm_unpaid: confirmUnpaid,
     });
     if (error) throw error;
   },
@@ -1434,7 +1436,7 @@ export const customerBackend: CustomerBackend = {
     });
     if (error) throw error;
     const row = objectValue(data);
-    return { owedCents: numberValue(row.owedCents), hasConsumption: Boolean(row.hasConsumption) };
+    return { owedCents: numberValue(row.owedCents), hasConsumption: Boolean(row.hasConsumption), isHost: row.isHost === true };
   },
 
   async placeOrder(input) {
@@ -1486,6 +1488,7 @@ export const customerBackend: CustomerBackend = {
     if (mode === 'asaas') {
       const charge = objectValue(await invokePaymentsCreate({
         purpose: 'order', targetId: input.orderId, method: input.paymentMethod, idempotencyKey,
+        ...(input.tipBps ? { tipBps: input.tipBps } : {}), ...(input.tipCents ? { tipCents: input.tipCents } : {}),
         ...(input.payerCpfCnpj ? { payerCpfCnpj: input.payerCpfCnpj } : {}),
       }));
       return {
@@ -1504,6 +1507,8 @@ export const customerBackend: CustomerBackend = {
       p_order_id: input.orderId,
       p_payment_method: input.paymentMethod,
       p_idempotency_key: idempotencyKey,
+      p_tip_bps: input.tipBps ?? 0,
+      p_tip_cents: input.tipCents ?? 0,
     });
     if (error) throw error;
     const row = objectValue(data);

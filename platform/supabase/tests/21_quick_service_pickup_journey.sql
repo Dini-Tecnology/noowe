@@ -1,7 +1,7 @@
 -- ADR-013 — jornada Quick Service: pedido antecipado, aceite, retirada, estornos.
 -- Cada bloco cobre uma regra do ADR; os critérios de aceite 11–14 da fatia Q1 saem daqui.
 begin;
-select plan(30);
+select plan(31);
 update private.dev_flags set enabled = true where key = 'simulate_order_payment';
 update private.dev_flags set enabled = false where key = 'simulate_pix_payment';
 
@@ -544,6 +544,67 @@ begin
   assert n > 0, 'o dono do pedido vê o próprio log';
 end $$;
 select pass('o log de status respeita RLS: cada cliente vê só os próprios pedidos');
+
+-- G5, critério 7: gorjeta opcional, sem nada marcado, com a conta no servidor e fora da nota.
+do $$
+declare
+  r uuid := (select v from _qs where k = 'restaurant'); c uuid; o uuid; res jsonb; t public.gateway_transactions; v public.orders; st text; o2 uuid; d uuid;
+  fee bigint;
+begin
+  update public.restaurant_model_policies set fee_or_tip_mode = 'tip', tip_presets_bps = '{1000}', tip_default_bps = null, orders_paused = false
+    where restaurant_id = r and service_model = 'quick_service';
+  insert into public.restaurant_payment_accounts(restaurant_id, provider, status, platform_fee_bps) values (r, 'asaas', 'active', 100) on conflict do nothing;
+  update public.restaurant_payment_accounts set status = 'active' where restaurant_id = r;
+
+  c := pg_temp.new_customer();
+  o := pg_temp.new_order(c);
+  select * into v from public.orders where id = o;
+  -- Sem gorjeta escolhida, cobra só o pedido.
+  res := public.service_payment_reserve_order(c, o, 'credit_card', gen_random_uuid());
+  assert (res->>'amountCents')::bigint = v.total_cents, 'sem gorjeta, só o pedido';
+  -- Percentual: o servidor faz a conta.
+  res := public.service_payment_reserve_order(c, o, 'pix', gen_random_uuid(), 1000);
+  select * into t from public.gateway_transactions where id = (res->>'paymentId')::uuid;
+  assert t.tip_cents = div(v.total_cents * 1000 + 5000, 10000) and t.amount_cents = v.total_cents + t.tip_cents, 'gorjeta em % sobre o total';
+  -- Mudou a gorjeta: o Pix anterior não serve.
+  res := public.service_payment_reserve_order(c, o, 'pix', gen_random_uuid(), 0, 300);
+  assert (res->>'amountCents')::bigint = v.total_cents + 300 and (res->>'paymentId')::uuid <> t.id, 'gorjeta em valor gera outra cobrança';
+  select * into t from public.gateway_transactions where id = (res->>'paymentId')::uuid;
+  begin
+    perform public.service_payment_reserve_order(c, o, 'pix', gen_random_uuid(), 1000, 300);
+    raise exception 'aceitou percentual e valor juntos';
+  exception when sqlstate '22023' then null; end;
+  begin
+    perform public.service_payment_reserve_order(c, o, 'pix', gen_random_uuid(), 0, v.total_cents + 1);
+    raise exception 'aceitou gorjeta acima do total';
+  exception when sqlstate '22023' then null; end;
+
+  -- A nota é do pedido: a gorjeta fica de fora das formas de pagamento.
+  perform private.apply_payment_event(t.id, 'asaas', 'evt-' || t.id, 'PAYMENT_RECEIVED', 'confirmed', t.amount_cents);
+  assert (select payment_status from public.orders where id = o) = 'confirmed', 'pedido pago';
+  delete from public.fiscal_documents where order_id = o;
+  d := private.fiscal_enqueue_order(o);
+  assert d is not null, 'nota do pedido';
+  assert (select sum((p->>'weightCents')::bigint) from public.fiscal_documents f, jsonb_array_elements(f.snapshot->'payments') p where f.id = d) = v.total_cents, 'gorjeta fora da nota';
+
+  -- Restaurante em modo taxa não recebe gorjeta, nem no caminho simulado.
+  update public.restaurant_model_policies set fee_or_tip_mode = 'service_fee' where restaurant_id = r and service_model = 'quick_service';
+  c := pg_temp.new_customer();
+  o2 := pg_temp.new_order(c);
+  begin
+    perform public.service_payment_reserve_order(c, o2, 'pix', gen_random_uuid(), 1000);
+    raise exception 'aceitou gorjeta em modo taxa';
+  exception when sqlstate '22023' then null; end;
+  -- Com a conta do provedor ativa, o simulado nem abre: desliga para conferir esse caminho.
+  delete from public.restaurant_payment_accounts where restaurant_id = r;
+  update private.dev_flags set enabled = true where key = 'simulate_order_payment';
+  perform pg_temp.act(c);
+  assert pg_temp.state_of(format($q$select public.customer_start_payment(%L, 'credit_card', %L, 1000)$q$, o2, gen_random_uuid())) = '22023', 'simulado também recusa';
+  update public.restaurant_model_policies set fee_or_tip_mode = 'tip' where restaurant_id = r and service_model = 'quick_service';
+  res := public.customer_start_payment(o2, 'credit_card', gen_random_uuid(), 1000);
+  assert (select tip_cents from public.gateway_transactions where id = (res->>'transactionId')::uuid) > 0, 'simulado grava a gorjeta';
+end $$;
+select pass('gorjeta do Quick: opcional, calculada no servidor e fora da nota');
 
 select * from finish();
 rollback;

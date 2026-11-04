@@ -1,26 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Switch, TouchableOpacity, View, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import {
   ChevronRight,
   CreditCard,
-  Heart,
-  Minus,
-  Percent,
-  Plus,
   Smartphone,
-  User,
-  Users,
-  ClipboardList,
-  DollarSign,
   Landmark,
 } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from '../shared/V2Shell';
 import type { PaymentMethods } from '../shared/v2Types';
-import { ConfigSectionCard } from './ConfigSectionCard';
+import { ChargePolicyCard } from './ChargePolicyCard';
 import type { IconComponent } from './configTypes';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
@@ -59,20 +51,6 @@ const METHOD_GRID: {
   { key: 'googlePay', label: 'Google Pay', Icon: Smartphone, iconColor: '#CA8A04' },
 ];
 
-const SPLIT_ITEMS: {
-  key: keyof Pick<PaymentMethods, 'splitIndividual' | 'splitEqual' | 'splitByItem' | 'splitFixed'>;
-  label: string;
-  subtitle: string;
-  Icon: IconComponent;
-}[] = [
-  { key: 'splitIndividual', label: 'Individual', subtitle: 'Cada um paga o seu', Icon: User },
-  { key: 'splitEqual', label: 'Dividir igualmente', subtitle: 'Total dividido por todos', Icon: Users },
-  { key: 'splitByItem', label: 'Por item', subtitle: 'Selecionar itens para pagar', Icon: ClipboardList },
-  { key: 'splitFixed', label: 'Valor fixo', subtitle: 'Escolher quanto pagar', Icon: DollarSign },
-];
-
-const PREVIEW_SUBTOTAL = 342;
-
 export default function ConfigPaymentsScreen() {
   const colors = useColors();
   const navigation = useNavigation<any>();
@@ -80,7 +58,6 @@ export default function ConfigPaymentsScreen() {
   const [methods, setMethods] = useState<PaymentMethods>(DEFAULT_PAYMENT_METHODS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [previewTip, setPreviewTip] = useState(15);
   const methodsRef = useRef(methods);
   const restaurantIdRef = useRef(restaurantId);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -168,16 +145,6 @@ export default function ConfigPaymentsScreen() {
     }
   };
 
-  const serviceFeeAmount = useMemo(() => {
-    if (!methods.serviceFeeEnabled) return 0;
-    return (PREVIEW_SUBTOTAL * methods.feePercent) / 100;
-  }, [methods.feePercent, methods.serviceFeeEnabled]);
-
-  const tipAmount = useMemo(() => {
-    if (!methods.tipsEnabled) return 0;
-    return (PREVIEW_SUBTOTAL * previewTip) / 100;
-  }, [methods.tipsEnabled, previewTip]);
-
   return (
     <V2Shell
       title="Pagamentos"
@@ -234,120 +201,7 @@ export default function ConfigPaymentsScreen() {
             })}
           </View>
 
-          <ConfigSectionCard title="Taxa de Serviço" Icon={Percent}>
-            <ToggleRow
-              label="Taxa de serviço"
-              subtitle="Incluir automaticamente"
-              value={methods.serviceFeeEnabled}
-              onToggle={() => toggle('serviceFeeEnabled')}
-              colors={colors}
-              showDivider
-            />
-            <StepperRow
-              label="Percentual"
-              value={methods.feePercent}
-              suffix="%"
-              min={0}
-              max={30}
-              step={1}
-              colors={colors}
-              onChange={(feePercent) => update({ feePercent })}
-              showDivider={false}
-            />
-          </ConfigSectionCard>
-
-          <ConfigSectionCard title="Gorjetas" Icon={Heart}>
-            <ToggleRow
-              label="Sistema de gorjetas"
-              subtitle="Sugerir gorjeta no fechamento"
-              value={methods.tipsEnabled}
-              onToggle={() => toggle('tipsEnabled')}
-              colors={colors}
-              showDivider
-            />
-            <View style={[styles.tipBlock, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.tipTitle, { color: colors.foregroundSecondary }]}>Percentuais sugeridos</Text>
-              <View style={styles.tipPills}>
-                {methods.tipOptions.map((option) => (
-                  <View
-                    key={option}
-                    style={[styles.tipPill, { backgroundColor: `${colors.primary}18` }]}
-                  >
-                    <Text style={{ color: colors.primary, fontWeight: '800', fontSize: 13 }}>{option}%</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-            <ToggleRow
-              label="Gorjeta personalizada"
-              subtitle="Permitir valor livre"
-              value={methods.tipAllowCustom}
-              onToggle={() => toggle('tipAllowCustom')}
-              colors={colors}
-              showDivider={false}
-            />
-          </ConfigSectionCard>
-
-          <ConfigSectionCard title="Divisão de Conta" Icon={Users}>
-            {SPLIT_ITEMS.map((item, index) => {
-              const Icon = item.Icon;
-              return (
-                <ToggleRow
-                  key={item.key}
-                  label={item.label}
-                  subtitle={item.subtitle}
-                  Icon={Icon}
-                  value={methods[item.key]}
-                  onToggle={() => toggle(item.key)}
-                  colors={colors}
-                  showDivider={index < SPLIT_ITEMS.length - 1}
-                />
-              );
-            })}
-          </ConfigSectionCard>
-
-          <View style={[styles.previewCard, { backgroundColor: `${colors.primary}12`, borderColor: `${colors.primary}33` }]}>
-            <Text style={[styles.previewEyebrow, { color: colors.foregroundSecondary }]}>
-              Pré-visualização do Cliente: Tela de pagamento
-            </Text>
-            <Text style={[styles.previewTotal, { color: colors.foreground }]}>
-              R$ {PREVIEW_SUBTOTAL.toFixed(2).replace('.', ',')}
-            </Text>
-            {methods.serviceFeeEnabled ? (
-              <Text style={[styles.previewFee, { color: colors.foregroundSecondary }]}>
-                Taxa de serviço: R$ {serviceFeeAmount.toFixed(2).replace('.', ',')} ({methods.feePercent}%)
-              </Text>
-            ) : null}
-            {methods.tipsEnabled ? (
-              <View style={styles.previewTips}>
-                {methods.tipOptions.map((option) => {
-                  const active = previewTip === option;
-                  return (
-                    <TouchableOpacity
-                      key={option}
-                      onPress={() => setPreviewTip(option)}
-                      style={[
-                        styles.previewTipBtn,
-                        {
-                          backgroundColor: active ? colors.primary : colors.card,
-                          borderColor: active ? colors.primary : colors.border,
-                        },
-                      ]}
-                    >
-                      <Text style={{ color: active ? '#FFF' : colors.foreground, fontWeight: '800' }}>
-                        {option}%
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ) : null}
-            {methods.tipsEnabled ? (
-              <Text style={[styles.previewFee, { color: colors.foregroundSecondary, marginTop: 8 }]}>
-                Gorjeta ({previewTip}%): R$ {tipAmount.toFixed(2).replace('.', ',')}
-              </Text>
-            ) : null}
-          </View>
+          <ChargePolicyCard restaurantId={restaurantId} />
 
           {error ? (
             <Text style={{ textAlign: 'center', color: '#EF4444', marginTop: 8 }}>{error}</Text>
@@ -355,100 +209,6 @@ export default function ConfigPaymentsScreen() {
         </>
       )}
     </V2Shell>
-  );
-}
-
-function ToggleRow({
-  label,
-  subtitle,
-  Icon,
-  value,
-  onToggle,
-  colors,
-  showDivider,
-}: {
-  label: string;
-  subtitle: string;
-  Icon?: IconComponent;
-  value: boolean;
-  onToggle: () => void;
-  colors: ReturnType<typeof useColors>;
-  showDivider: boolean;
-}) {
-  return (
-    <View
-      style={[
-        styles.row,
-        showDivider && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-      ]}
-    >
-      {Icon ? (
-        <View style={[styles.itemIcon, { backgroundColor: `${colors.primary}15` }]}>
-          <Icon size={16} color={colors.primary} />
-        </View>
-      ) : null}
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.rowTitle, { color: colors.foreground }]}>{label}</Text>
-        <Text style={[styles.rowSub, { color: colors.foregroundSecondary }]}>{subtitle}</Text>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onToggle}
-        trackColor={{ false: colors.border, true: `${colors.primary}80` }}
-        thumbColor={value ? colors.primary : colors.foregroundSecondary}
-      />
-    </View>
-  );
-}
-
-function StepperRow({
-  label,
-  value,
-  suffix,
-  min,
-  max,
-  step,
-  colors,
-  onChange,
-  showDivider,
-}: {
-  label: string;
-  value: number;
-  suffix: string;
-  min: number;
-  max: number;
-  step: number;
-  colors: ReturnType<typeof useColors>;
-  onChange: (next: number) => void;
-  showDivider: boolean;
-}) {
-  return (
-    <View
-      style={[
-        styles.row,
-        showDivider && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-      ]}
-    >
-      <Text style={[styles.rowTitle, { flex: 1, color: colors.foreground }]}>{label}</Text>
-      <View style={styles.stepper}>
-        <TouchableOpacity
-          style={[styles.stepBtn, { borderColor: colors.border }]}
-          onPress={() => onChange(Math.max(min, value - step))}
-        >
-          <Minus size={14} color={colors.foregroundSecondary} />
-        </TouchableOpacity>
-        <Text style={[styles.stepValue, { color: colors.foreground }]}>
-          {value}
-          {suffix}
-        </Text>
-        <TouchableOpacity
-          style={[styles.stepBtn, { borderColor: colors.border }]}
-          onPress={() => onChange(Math.min(max, value + step))}
-        >
-          <Plus size={14} color={colors.foregroundSecondary} />
-        </TouchableOpacity>
-      </View>
-    </View>
   );
 }
 

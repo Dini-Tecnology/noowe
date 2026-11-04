@@ -1,7 +1,7 @@
 -- T-N4-03 / N4 #4 e #6: emissão fiscal no encerramento, idempotente, com falha recuperável.
 -- Cada bloco cobre um critério; o emissor em si é testado em functions/fiscal-emit.
 begin;
-select plan(47);
+select plan(49);
 
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true) $$;
@@ -59,6 +59,8 @@ begin
     'taxDefaults', jsonb_build_object('ncm', '21069090', 'icms_origem', '0', 'icms_situacao_tributaria', '102',
       'pis_situacao_tributaria', '49', 'cofins_situacao_tributaria', '49')), 'tok-homolog');
   update public.menu_items set ncm = '00000000' where restaurant_id = r;
+  -- Este fluxo paga com gorjeta, que só existe em modo gorjeta. A nota com taxa está no fim do arquivo.
+  update public.restaurant_model_policies set fee_or_tip_mode = 'tip' where restaurant_id = r and not prepaid_required;
   perform pg_temp.new_session('main');
 end $$;
 
@@ -305,6 +307,25 @@ select is((select count(*)::int from public.fiscal_documents), 0, 'cliente não 
 select is(pg_temp.state_of('select count(*) from public.fiscal_configs'), '42501', 'cliente não lê a configuração fiscal');
 select is(pg_temp.state_of(format('select public.service_fiscal_claim(%L)', gen_random_uuid())), '42501', 'cliente não reserva emissão nem lê token');
 select _test.reset_role();
+
+-- Modo taxa, com uma das partes retirando: a nota fecha com o consumo, e a taxa guardada é a efetivamente paga.
+do $$
+declare sid uuid; a uuid; sh uuid;
+begin
+  update public.restaurant_model_policies set fee_or_tip_mode = 'service_fee', service_fee_bps = 1000
+    where restaurant_id = 'c1000000-0000-4000-8000-000000000002' and not prepaid_required;
+  sid := pg_temp.new_session('feeflow');
+  a := (select v from _ctx where k = 'feeflow:a');
+  perform pg_temp.act(a);
+  select s.id into sh from public.bill_shares s join public.table_session_participants p on p.id = s.participant_id
+    where s.table_session_id = sid and p.user_id = a and s.status = 'open';
+  perform public.customer_set_share_fee_waived(sh, true);
+  perform pg_temp.pay_share(sid, a, 'pix');
+  perform pg_temp.pay_share(sid, (select v from _ctx where k = 'feeflow:b'), 'credit_card');
+end $$;
+select is((pg_temp.doc_of((select v from _ctx where k = 'feeflow:sid'))).total_cents, 6000::bigint, 'modo taxa: a nota é o consumo, sem a taxa');
+select is((select sum((l->>'feeCents')::bigint)::bigint from jsonb_array_elements((pg_temp.doc_of((select v from _ctx where k = 'feeflow:sid'))).snapshot->'lines') l),
+  300::bigint, 'modo taxa: guarda só a taxa paga, sem a parte retirada');
 
 select * from finish();
 rollback;

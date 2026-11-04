@@ -55,7 +55,8 @@ type VisitSessionContextValue = {
   /** `serviceModel` é a experiência escolhida na descoberta (ADR-017); ignorado com mesa aberta. */
   selectRestaurant: (restaurantId: string, serviceModel?: ServiceModel) => Promise<void>;
   selectWaitlistJourney: (restaurantId: string, waitlistEntryId: string, serviceModel: 'fine_dining' | 'casual_dining') => Promise<void>;
-  leaveTable: () => Promise<void>;
+  /** `confirmUnpaid`: a pessoa confirmou sair sem pagar, e a parte fica com o titular. */
+  leaveTable: (confirmUnpaid?: boolean) => Promise<void>;
   clearSession: () => Promise<void>;
   refreshSession: () => Promise<VisitSession | null>;
   completeCheckout: (tableSessionId: string) => Promise<void>;
@@ -206,9 +207,9 @@ export function VisitSessionProvider({ children }: React.PropsWithChildren) {
     if (currentSession.current?.tableSessionId === tableSessionId) await persist(null);
   }, [persist]);
 
-  const leaveTable = useCallback(async () => {
+  const leaveTable = useCallback(async (confirmUnpaid?: boolean) => {
     if (session?.tableSessionId) {
-      await customerBackend.leaveTableSession(session.tableSessionId);
+      await customerBackend.leaveTableSession(session.tableSessionId, confirmUnpaid === true);
     }
     await persist(null);
   }, [persist, session]);

@@ -12,7 +12,10 @@ jest.mock('expo-crypto', () => { let n = 0; return { randomUUID: () => `key-${++
 jest.mock('@okinawa/shared/contexts/ThemeContext', () => ({ useColors: () => new Proxy({}, { get: () => '#333333' }) }));
 jest.mock('@okinawa/shared/components/ScreenContainer', () => ({ ScreenContainer: ({ children }: React.PropsWithChildren) => <>{children}</> }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-jest.mock('../hooks/useServiceTypeFeatures', () => ({ useServiceTypeFor: () => ({ policies: null }) }));
+const mockPolicies = jest.fn().mockReturnValue(null);
+jest.mock('../hooks/useServiceTypeFeatures', () => ({ useServiceTypeFor: () => ({ policies: mockPolicies() }) }));
+const mockTipQuote = jest.fn();
+jest.mock('../services/bill-shares', () => ({ billShares: { tipQuote: (...a: unknown[]) => mockTipQuote(...a) } }));
 jest.mock('../hooks/useDistanceToRestaurant', () => ({ useDistanceToRestaurant: () => null }));
 const mockClearCart = jest.fn();
 jest.mock('@/shared/contexts/CartContext', () => ({ useCart: () => ({
@@ -112,5 +115,41 @@ test('restaurante sem pagamento online avisa antes e não cria pedido', async ()
   fireEvent.press(view.getByLabelText('Li e aceito a política de retirada'));
   fireEvent.press(view.getByLabelText('Confirmar pagamento'));
   expect(mockPlace).not.toHaveBeenCalled();
+  client.clear();
+});
+
+test('gorjeta do Quick: opcional e sem nada marcado (G5, 7)', async () => {
+  mockPolicies.mockReturnValue({ feeOrTipMode: 'tip', tipPresetsBps: [1000, 1500], tipDefaultBps: null });
+  mockStart.mockResolvedValue({ ...charge, pixCode: 'pix' });
+  const { view, client } = renderScreen();
+  await waitFor(() => expect(view.getByText('Gorjeta (opcional)')).toBeTruthy());
+  expect(view.getByText('10%')).toBeTruthy();
+  await acceptAndPay(view);
+  await waitFor(() => expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({ tipBps: 0, tipCents: 0 })));
+  expect(mockTipQuote).not.toHaveBeenCalled();
+  mockPolicies.mockReturnValue(null);
+  client.clear();
+});
+
+test('gorjeta do Quick: percentual escolhido vai ao servidor, que faz a conta', async () => {
+  mockPolicies.mockReturnValue({ feeOrTipMode: 'tip', tipPresetsBps: [1000], tipDefaultBps: null });
+  mockTipQuote.mockResolvedValue({ tipCents: 300, totalCents: 3300 });
+  mockStart.mockResolvedValue({ ...charge, pixCode: 'pix' });
+  const { view, client } = renderScreen();
+  fireEvent.press(await view.findByText('10%'));
+  await waitFor(() => expect(mockTipQuote).toHaveBeenCalledWith(3000, { tipBps: 1000, tipCents: 0 }));
+  await waitFor(() => expect(view.getAllByText(/33,00/).length).toBeGreaterThan(0));
+  await acceptAndPay(view);
+  await waitFor(() => expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({ tipBps: 1000, tipCents: 0 })));
+  mockPolicies.mockReturnValue(null);
+  client.clear();
+});
+
+test('restaurante em modo taxa não oferece gorjeta no Quick', async () => {
+  mockPolicies.mockReturnValue({ feeOrTipMode: 'service_fee', tipPresetsBps: [1000], tipDefaultBps: null });
+  const { view, client } = renderScreen();
+  await waitFor(() => expect(mockMode).toHaveBeenCalled());
+  expect(view.queryByText('Gorjeta (opcional)')).toBeNull();
+  mockPolicies.mockReturnValue(null);
   client.clear();
 });

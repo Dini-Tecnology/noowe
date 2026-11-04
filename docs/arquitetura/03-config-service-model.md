@@ -42,7 +42,10 @@ export function capabilitiesFor(config: EstablishmentConfig, model: ServiceModel
 |---|---|---|---|
 | `service_models[]` | enum[] | — | Todos |
 | `service_fee_pct` | int (bps) | 1000 (10%) | Fine, Casual |
-| `tip_presets[]` | int[] (bps) | [1000, 1500, 2000] | Fine, Casual |
+| `fee_or_tip_mode` | `service_fee` ou `tip`, por serviço (ADR-032) | Fine com taxa; Casual e Quick com gorjeta (restaurante existente com taxa fica com taxa) | Todos |
+| `tip_presets[]` | int[] (bps), por serviço | [1000, 1500, 2000] | Todos |
+| `tip_default_bps` | int (bps), gorjeta já marcada | a primeira sugestão no Casual; nenhuma no Fine e no Quick | Fine, Casual |
+| `card_hold_min` | int, reserva do cartão no pagamento | 15 | Fine, Casual |
 | `split_modes[]` | enum[] | todos os 4 | Fine, Casual |
 | `reservation_enabled` | bool | true | Fine, Casual |
 | `queue_enabled` | bool | true | Fine, Casual |
@@ -67,7 +70,6 @@ export function capabilitiesFor(config: EstablishmentConfig, model: ServiceModel
 | `require_guest_account` | bool | false | Fine, Casual |
 | `enforce_table_capacity` | bool | true | Fine, Casual |
 | `capacity_override_roles[]` | enum[] | ['maitre','manager'] | Fine, Casual |
-| `split_fixed_remainder` | enum | `redistribute_unpaid` em Fine, `keep_on_table` em Casual (ADR-010) | Fine, Casual |
 | `tip_allocation` | enum | `table_waiter` em Fine, `team_pool` em Casual (ADR-010) | Fine, Casual |
 | `combo_discount_pct` | int (bps) | 2000 (20%) | Quick |
 | `prepaid_required` | bool | true | Quick |

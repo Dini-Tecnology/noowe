@@ -31,6 +31,9 @@ const mockList = jest.fn();
 const mockPay = jest.fn();
 const mockTips = jest.fn();
 const mockSavedCards = jest.fn();
+const mockSummary = jest.fn();
+const mockQuote = jest.fn();
+const mockWaive = jest.fn();
 const mockLatestReceipt = jest.fn().mockResolvedValue(null);
 jest.mock('../services/bill-shares', () => ({
   SPLIT_ERRORS: { P0012: 'A conta mudou. Confira os valores atualizados.' },
@@ -39,17 +42,25 @@ jest.mock('../services/bill-shares', () => ({
     list: (...a: unknown[]) => mockList(...a), listClaims: async () => [], claimItem: jest.fn(),
     listSavedCards: (...a: unknown[]) => mockSavedCards(...a),
     latestReceiptId: (...a: unknown[]) => mockLatestReceipt(...a),
+    summary: (...a: unknown[]) => mockSummary(...a),
+    tipQuote: (...a: unknown[]) => mockQuote(...a),
+    setFeeWaived: (...a: unknown[]) => mockWaive(...a),
     tipOptions: (...a: unknown[]) => mockTips(...a), pay: (...a: unknown[]) => mockPay(...a), abandon: jest.fn(),
     subscribe: () => ({ unsubscribe: jest.fn() }),
   },
 }));
 jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => undefined);
 
+const baseSummary = {
+  consumptionCents: 8832, paidCents: 0, pendingCents: 0, balanceCents: 8832, settled: false, feeOrTipMode: 'tip', feeBps: 0,
+  tipPresetsBps: [1000, 1500, 2000], tipDefaultBps: 1000, leftWithoutPaying: [], itemsRemaining: [],
+};
+
 const plan = {
-  mode: 'equal', totalRemCents: 9715, unassignedCents: 0, version: 'v1',
+  mode: 'equal', balanceCents: 8832, totalRemCents: 9715, unassignedCents: 0, version: 'v1', adjusted: false, feeOrTipMode: 'service_fee', feeBps: 1000,
   shares: [
-    { participantId: 'p-me', mode: 'equal', baseCents: 4416, feeCents: 442, amountCents: 4858 },
-    { participantId: 'p-bia', mode: 'equal', baseCents: 4416, feeCents: 441, amountCents: 4857 },
+    { participantId: 'p-me', mode: 'equal', baseCents: 4416, feeCents: 442, amountCents: 4858, tipCents: 0, chargeCents: 4858, feeWaived: false },
+    { participantId: 'p-bia', mode: 'equal', baseCents: 4416, feeCents: 441, amountCents: 4857, tipCents: 0, chargeCents: 4857, feeWaived: false },
   ],
 };
 
@@ -59,7 +70,11 @@ function renderWithClient(ui: React.ReactElement) {
 }
 const normalize = (text: string) => text.replace(/ /g, ' ');
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockSummary.mockResolvedValue(baseSummary);
+  mockQuote.mockImplementation(async (amountCents: number, tip: { tipCents: number }) => ({ tipCents: tip.tipCents, totalCents: amountCents + tip.tipCents }));
+});
 
 test('dividir: mostra as parcelas calculadas pelo servidor e confirma com a versão vista', async () => {
   mockPreview.mockResolvedValue(plan);
@@ -94,9 +109,105 @@ test('valor fixo: o campo é máscara de centavos e o app envia inteiros', async
   await waitFor(() => expect(mockPreview).toHaveBeenCalledWith('s1', 'fixed_amount', { amountCents: 3000 }));
 });
 
-const myShare = { id: 'sh1', participantId: 'p-me', mode: 'equal', amountCents: 4858, tipCents: 0, status: 'open' };
+test('valor fixo: acima do saldo, avisa e mostra consumo e taxa antes de confirmar (G5, 4 e 11)', async () => {
+  mockPreview.mockResolvedValue({
+    ...plan, mode: 'fixed_amount', adjusted: true, balanceCents: 5000,
+    shares: [{ participantId: 'p-me', mode: 'fixed_amount', baseCents: 5000, feeCents: 500, amountCents: 5500, tipCents: 0, chargeCents: 5500, feeWaived: false }],
+  });
+  const screen = renderWithClient(<SplitBillScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ navigate: jest.fn(), goBack: jest.fn() }} />);
+  fireEvent.press(await screen.findByText('Valor Fixo'));
+  fireEvent.changeText(await screen.findByLabelText('Valor a pagar'), '999900');
+  expect(await screen.findByText(/Restam só/)).toBeTruthy();
+  expect(screen.getByText('Consumo')).toBeTruthy();
+  expect(screen.getByText('Taxa de serviço (opcional)')).toBeTruthy();
+});
+
+test('valor fixo em modo gorjeta: percentual vai em bps e valor livre vai à parte (G5, 12)', async () => {
+  mockPreview.mockResolvedValue({ ...plan, mode: 'fixed_amount', feeOrTipMode: 'tip', feeBps: 0, shares: [plan.shares[0]] });
+  const screen = renderWithClient(<SplitBillScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ navigate: jest.fn(), goBack: jest.fn() }} />);
+  fireEvent.press(await screen.findByText('Valor Fixo'));
+  fireEvent.changeText(await screen.findByLabelText('Valor a pagar'), '5000');
+  fireEvent.press(await screen.findByText('10%'));
+  await waitFor(() => expect(mockPreview).toHaveBeenCalledWith('s1', 'fixed_amount', { amountCents: 5000, tipBps: 1000 }));
+  fireEvent.changeText(screen.getByLabelText('Gorjeta em valor'), '300');
+  await waitFor(() => expect(mockPreview).toHaveBeenCalledWith('s1', 'fixed_amount', { amountCents: 5000, tipCents: 300 }));
+});
+
+test('valor fixo com gorjeta: "Como fica" mostra o total que sai do cartão (G5, 11 e 12)', async () => {
+  mockPreview.mockResolvedValue({
+    ...plan, mode: 'fixed_amount', feeOrTipMode: 'tip', feeBps: 0,
+    shares: [{ participantId: 'p-me', mode: 'fixed_amount', baseCents: 4545, feeCents: 0, amountCents: 4545, tipCents: 455, chargeCents: 5000, feeWaived: false }],
+  });
+  const screen = renderWithClient(<SplitBillScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ navigate: jest.fn(), goBack: jest.fn() }} />);
+  fireEvent.press(await screen.findByText('Valor Fixo'));
+  fireEvent.changeText(await screen.findByLabelText('Valor a pagar'), '5000');
+  await waitFor(() => expect(screen.getAllByText(/R\$\s50,00/).length).toBeGreaterThan(0));
+  expect(screen.getByText(/R\$\s45,45/)).toBeTruthy();
+  expect(screen.getByText(/R\$\s4,55/)).toBeTruthy();
+});
+
+test('partes iguais: ajustar o número de pessoas manda só esse número (G5)', async () => {
+  mockPreview.mockResolvedValue(plan);
+  const screen = renderWithClient(<SplitBillScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ navigate: jest.fn(), goBack: jest.fn() }} />);
+  fireEvent.press(await screen.findByText('Partes Iguais'));
+  fireEvent.press(await screen.findByLabelText('Mais uma pessoa'));
+  await waitFor(() => expect(mockPreview).toHaveBeenCalledWith('s1', 'equal', { people: 3 }));
+  expect(screen.getByText(/Você paga a sua parte/)).toBeTruthy();
+});
+
+const myShare = { id: 'sh1', participantId: 'p-me', mode: 'equal', baseCents: 4416, feeCents: 442, amountCents: 4858, tipCents: 0, feeWaived: false, status: 'open' };
+
+test('modo taxa: sem gorjeta; a taxa é opcional e retirar vai para o servidor (G5, 6)', async () => {
+  mockSummary.mockResolvedValue({ ...baseSummary, feeOrTipMode: 'service_fee', feeBps: 1000 });
+  mockList.mockResolvedValue([myShare]);
+  mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 4858, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix', expiresAt: null }, alreadyPaid: false });
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  expect(await screen.findByText('Taxa de serviço (opcional)')).toBeTruthy();
+  expect(screen.queryByText('Gorjeta (opcional)')).toBeNull();
+  expect(mockTips).not.toHaveBeenCalled();
+  fireEvent(screen.getByTestId('service-fee-switch'), 'valueChange', false);
+  await waitFor(() => expect(mockWaive.mock.calls[0]).toEqual(['sh1', true]));
+  await waitFor(() => expect(screen.getAllByText(/R\$\s48,58/).length).toBeGreaterThan(0));
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ tipCents: 0 })));
+});
+
+test('modo gorjeta: gorjeta em valor livre, com total vindo do servidor (G5, 12)', async () => {
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue([{ percent: 10, cents: 442, totalCents: 5300 }]);
+  mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 5158, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix', expiresAt: null }, alreadyPaid: false });
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  fireEvent.changeText(await screen.findByLabelText('Gorjeta em valor'), '300');
+  await waitFor(() => expect(mockQuote).toHaveBeenCalledWith(4858, { tipCents: 300 }));
+  await waitFor(() => expect(screen.getAllByText(/R\$\s51,58/).length).toBeGreaterThan(0));
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ tipCents: 300 })));
+});
+
+test('valor fixo: a gorjeta já escolhida não é refeita na tela de pagamento', async () => {
+  mockList.mockResolvedValue([{ ...myShare, mode: 'fixed_amount', tipCents: 455 }]);
+  mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 5313, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix', expiresAt: null }, alreadyPaid: false });
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  expect(screen.queryByText('Gorjeta (opcional)')).toBeNull();
+  await waitFor(() => expect(mockQuote).toHaveBeenCalledWith(4858, { tipCents: 455 }));
+  await waitFor(() => expect(screen.getAllByText(/R\$\s53,13/).length).toBeGreaterThan(0));
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ tipCents: 455 })));
+});
+
+test('pagamento: conta que mudou não cobra e volta para escolher de novo', async () => {
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue([{ percent: 10, cents: 442, totalCents: 5300 }]);
+  mockPay.mockRejectedValue(Object.assign(new Error('x'), { code: 'bill_changed' }));
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await waitFor(() => expect(screen.getAllByText(/R\$\s53,00/).length).toBeGreaterThan(0));
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(require('react-native').Alert.alert).toHaveBeenCalledWith('A conta mudou', expect.any(String), expect.anything()));
+});
+
 const tips = [
-  { percent: 0, cents: 0, totalCents: 4858 }, { percent: 10, cents: 486, totalCents: 5344 },
+  { percent: 10, cents: 486, totalCents: 5344 },
   { percent: 15, cents: 729, totalCents: 5587 }, { percent: 20, cents: 972, totalCents: 5830 },
 ];
 

@@ -32,6 +32,9 @@ export function mapRpcError(code?: string): { status: number; error: string } {
     case "P0002": return { status: 404, error: "not_found" };
     case "P0001": return { status: 409, error: "payment_not_allowed" };
     case "P0007": return { status: 409, error: "payments_unavailable" };
+    // A conta mudou desde a divisão, ou já foi quitada (ADR-032).
+    case "P0011":
+    case "P0012": return { status: 409, error: "bill_changed" };
     case "23514": return { status: 422, error: "invalid_amount" };
     default: return { status: 500, error: "internal_error" };
   }

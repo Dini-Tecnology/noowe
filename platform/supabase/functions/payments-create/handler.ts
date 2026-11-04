@@ -30,12 +30,16 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
   // A gorjeta da parcela é em centavos e o servidor valida o teto; o valor da parcela nunca vem do app.
   const tip = body?.tipCents == null ? null : Number(body.tipCents);
   if (tip !== null && (!Number.isSafeInteger(tip) || tip < 0)) return json({ error: "invalid_request" }, 400);
+  // Gorjeta do pedido (Quick) pode vir em percentual: a conta é do servidor.
+  const tipBps = body?.tipBps == null ? null : Number(body.tipBps);
+  if (tipBps !== null && (!Number.isSafeInteger(tipBps) || tipBps < 0)) return json({ error: "invalid_request" }, 400);
   const reserved = purpose === "bill_share"
     ? await deps.rpc("service_pay_share", {
       p_user_id: user.id, p_share_id: body.targetId, p_method: method, p_tip_cents: tip, p_idempotency_key: body.idempotencyKey,
     })
     : await deps.rpc("service_payment_reserve_order", {
       p_user_id: user.id, p_order_id: body.targetId, p_payment_method: method, p_idempotency_key: body.idempotencyKey,
+      p_tip_bps: tipBps ?? 0, p_tip_cents: tip ?? 0,
     });
   if (reserved.error) {
     const mapped = mapRpcError(reserved.error.code);

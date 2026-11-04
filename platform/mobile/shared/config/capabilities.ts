@@ -57,6 +57,9 @@ export type RestaurantCapabilities = {
 export type RestaurantCapabilityPolicies = {
   serviceFeeBps: number | null;
   tipPresetsBps: number[];
+  /** Taxa de serviço OU gorjeta, por tipo de serviço (ADR-032). Ausente em servidor antigo. */
+  feeOrTipMode?: 'service_fee' | 'tip';
+  tipDefaultBps?: number | null;
   queueCallToleranceMin: number | null;
   reservationNoShowMin: number | null;
   guestLinkTtlMin: number | null;

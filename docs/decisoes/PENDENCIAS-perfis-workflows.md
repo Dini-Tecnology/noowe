@@ -66,3 +66,15 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 43 | **Validade do convite de equipe** | Não definida | 7 dias, em `noowe_billing_settings.staff_invite_days` | — |
 | 44 | **Convite sem e-mail** | "Por e-mail ou link": o link funciona para quem o tiver | Permitido; quem convida escolhe | — |
 | 45 | **Quem vê a escala** | A matriz do PDF inclui Maître e Chef, e hoje só Dono e Gerente leem | Fica para depois: não está nos critérios da O3 | — |
+| 46 | **Prazo da reserva do Pix** | O aditivo fala em 10 minutos e o Quick usa 15 (ADR-013) | 10 no salão, 15 no Quick. `pix_expiry_min`, por serviço | — |
+| 47 | **Fechar a conta manualmente** | O saldo só zera pagando, mas o gerente já tinha fechamento manual | Continua, como exceção auditada, com motivo | — |
+| 48 | **Quem sai sem pagar** | "A parte fica para o titular": falta dizer como se sai | Convidado sai confirmando; a parte fica com o titular, que é avisado | — |
+| 49 | **O próprio titular sai?** | O aditivo não trata | Não sai com saldo. Walk-out do titular mantém o saldo e alerta o gerente | — |
+| 50 | **Restaurantes que já usam taxa** | O padrão sugerido põe Casual em gorjeta; trocar sozinho mudaria o que eles recebem | Quem tem taxa fica com taxa; só restaurante novo nasce com o padrão | — |
+| 51 | **Reserva do cartão** | A página do cartão não tem prazo próprio | 15 minutos, em `card_hold_min` | — |
+| 52 | **Retirada da taxa e nova divisão** | Se outra pessoa refaz a divisão, a retirada se perderia | A retirada acompanha a pessoa até ela pagar | — |
+| 53 | **Motivo da retirada** | "Grava autor, motivo e horário", mas o cliente tem só um toque | Cliente: "A pedido do cliente". Garçom: pode escrever o motivo | — |
+| 54 | **Partes iguais com número ajustado** | "Número ajustado" pode ser gente sem o app | Quem confirma paga a própria parte, e o resto segue no saldo | — |
+| 55 | **Teto da gorjeta** | Não definido; já existia teto de 100% do valor | Mantido | — |
+| 56 | **Pagamento presencial sem participante** | Mesa aberta pela equipe não tem participante | A parcela fica sem participante, e aparece como "Pago no salão" | — |
+| 57 | **Divisa com a O8** | Dinheiro em caixa e rateio são da O8 | G5 abate o saldo e desmarca a taxa. Gaveta, fechamento cego e rateio ficam na O8 | — |

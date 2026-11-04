@@ -462,13 +462,8 @@ export function calculatePaymentsProgress(methods: Record<string, unknown> | nul
   if (enabledMethods === 0) return 15;
 
   let score = Math.min(40, enabledMethods * 8);
-  if (methods.serviceFeeEnabled === true && Number(methods.feePercent ?? 0) >= 0) score += 15;
-  if (methods.tipsEnabled === true && Array.isArray(methods.tipOptions) && methods.tipOptions.length > 0) {
-    score += 20;
-  }
-  const splitKeys = ['splitIndividual', 'splitEqual', 'splitByItem', 'splitFixed'] as const;
-  if (splitKeys.some((key) => Boolean(methods[key]))) score += 15;
-  if (methods.tipAllowCustom === true) score += 10;
+  // Taxa, gorjeta e divisão agora são do servidor, por serviço, e já nascem configuradas (ChargePolicyCard).
+  score += 60;
 
   return Math.min(100, score);
 }

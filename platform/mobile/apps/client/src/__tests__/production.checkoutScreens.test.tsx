@@ -18,9 +18,13 @@ const mockBill = jest.fn();
 const mockPreview = jest.fn();
 const mockCommit = jest.fn();
 const mockShares = jest.fn();
+const mockSummary = jest.fn().mockResolvedValue({ balanceCents: 0, paidCents: 0, feeOrTipMode: 'service_fee', leftWithoutPaying: [] });
 jest.mock('../services/bill-shares', () => ({
   SPLIT_ERRORS: { P0012: 'A conta mudou. Confira os valores atualizados.' },
-  billShares: { preview: (...a: unknown[]) => mockPreview(...a), commit: (...a: unknown[]) => mockCommit(...a) },
+  billShares: {
+    preview: (...a: unknown[]) => mockPreview(...a), commit: (...a: unknown[]) => mockCommit(...a),
+    summary: (...a: unknown[]) => mockSummary(...a),
+  },
 }));
 jest.mock('../hooks/useBillShares', () => ({ useBillShares: () => ({ shares: { data: mockShares() } }) }));
 const mockReviews = jest.fn().mockResolvedValue([]);
@@ -114,3 +118,30 @@ test('split option is hidden when the table has a single person', async () => {
   expect(view.queryByText('Dividir a conta')).toBeNull();
   client.clear();
 });
+
+test('o titular é avisado de quem saiu sem pagar ao abrir a comanda (G5, 9)', async () => {
+  mockBill.mockResolvedValue(soloBill);
+  mockPreview.mockResolvedValue(myPlan);
+  mockShares.mockReturnValue([]);
+  mockSummary.mockResolvedValue({ balanceCents: 2000, paidCents: 0, feeOrTipMode: 'service_fee', leftWithoutPaying: [{ participantId: 'd2', name: 'Bia' }] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const view = render(<QueryClientProvider client={client}><FecharContaScreen navigation={navigation()} route={{}} /></QueryClientProvider>);
+  await waitFor(() => expect(view.getByText(/Bia saiu sem pagar\. A parte ficou com você\./)).toBeTruthy());
+  client.clear();
+});
+
+test('com saldo e sem parte marcada, a pessoa escolhe como pagar em vez de encerrar a visita', async () => {
+  mockBill.mockResolvedValue(soloBill);
+  mockPreview.mockRejectedValue(new Error('sem parte'));
+  mockShares.mockReturnValue([]);
+  mockSummary.mockResolvedValue({ balanceCents: 2000, paidCents: 500, feeOrTipMode: 'service_fee', leftWithoutPaying: [] });
+  const nav = navigation();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const view = render(<QueryClientProvider client={client}><FecharContaScreen navigation={nav} route={{}} /></QueryClientProvider>);
+  await waitFor(() => expect(view.getByText('Escolher como pagar')).toBeTruthy());
+  fireEvent.press(view.getByText('Escolher como pagar'));
+  expect(nav.navigate).toHaveBeenCalledWith('SplitBill', expect.objectContaining({ tableSessionId: 's1' }));
+  client.clear();
+});
+
+afterEach(() => mockSummary.mockResolvedValue({ balanceCents: 0, paidCents: 0, feeOrTipMode: 'service_fee', leftWithoutPaying: [] }));

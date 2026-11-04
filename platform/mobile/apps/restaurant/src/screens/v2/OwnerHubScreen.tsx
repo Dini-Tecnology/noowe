@@ -63,6 +63,7 @@ import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
 import { canApproveRequest } from './shared/staffRoles';
 import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 import type { TableBill, ServiceCall } from './shared/useRestaurantOperations';
+import { BillChargeModal } from './shared/BillChargeModal';
 import { formatTableLabel } from './shared/tableLabel';
 import { cashRegisterStatus, isOpenCall, isTableInService } from './shared/liveStatus';
 import { advanceItems, mapBarQueueRow, type BarQueueItem, type KdsItemState } from './shared/kdsItems';
@@ -2839,7 +2840,14 @@ function WaiterChargeBody({
         })
       )}
 
-      <Modal visible={charging !== null} transparent animationType="fade" onRequestClose={() => !submitting && setCharging(null)}>
+      <BillChargeModal
+        tableSessionId={charging?.tableSessionId ?? null}
+        tableLabel={charging ? formatTableLabel(charging.tableNumber) : ''}
+        onClose={() => setCharging(null)}
+        onCharged={onRefresh}
+      />
+
+      <Modal visible={charging !== null && !charging.tableSessionId} transparent animationType="fade" onRequestClose={() => !submitting && setCharging(null)}>
         <View style={styles.waiterModalOverlay}>
           <View style={[styles.waiterModalCard, { backgroundColor: colors.card }]}>
             <Text style={[styles.panelTitle, { color: colors.foreground, marginBottom: 4 }]}>Cobrar mesa {charging?.tableNumber}</Text>

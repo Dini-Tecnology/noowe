@@ -1,5 +1,8 @@
 # ADR-021 — A comanda é a casa do cliente
 
+> **Atualização (04/11/2026, ADR-032):** sair com saldo mudou. O titular responde pela comanda e não sai sem quitar. Os demais podem sair
+> confirmando, e a parte fica com o titular, que é avisado.
+
 **Status:** PROVISÓRIO (2026-10-25). Origem: retorno do cliente de 25/10 (áudio e documento "Conceito"),
 a partir de um teste do QR Code na Parrilaria Noowe e no BRNDev Restaurant.
 **Impacta:** G1 (sessão, QR, check-in), G2 e G2b (entrada e saída da mesa), G3 (fechamento), E1 (reservas),

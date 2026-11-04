@@ -35,7 +35,7 @@ select is((select payment_status::text from public.orders where id = (select v f
   'o pedido segue sem pagamento');
 select is(pg_temp.state_of(format($q$select public.customer_pay_table_bill(%L, 0, 'pix')$q$,
   (select v from _ctx where k = 's'))), '42501', 'conta da mesa não é paga pelo simulado com a flag desligada');
-select ok(not has_function_privilege('authenticated', 'public.customer_start_payment_simulated(uuid,text,uuid)', 'execute'),
+select ok(not has_function_privilege('authenticated', 'public.customer_start_payment_simulated(uuid,text,uuid,integer,bigint)', 'execute'),
   'o corpo simulado não fica exposto ao cliente');
 
 update private.dev_flags set enabled = true where key = 'simulate_order_payment';

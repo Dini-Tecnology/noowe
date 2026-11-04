@@ -538,6 +538,8 @@ export function useWaitlist(): AsyncState<WaitlistEntry[]> {
 
 export type TableBill = {
   orderId: string;
+  /** Comanda aberta é cobrada pelo saldo da sessão, não pelo pedido. */
+  tableSessionId: string | null;
   tableNumber: string;
   totalAmount: number;
   paymentMethod: string | null;
@@ -548,6 +550,7 @@ export type TableBill = {
 function mapTableBill(raw: any): TableBill {
   return {
     orderId: raw.order_id,
+    tableSessionId: raw.table_session_id ?? null,
     tableNumber: String(raw.table_number ?? '?'),
     totalAmount: toNumber(raw.total_amount, 0),
     paymentMethod: raw.payment_method ?? null,

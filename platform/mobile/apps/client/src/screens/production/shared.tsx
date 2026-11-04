@@ -42,6 +42,12 @@ export const money = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 /** Exibição de valores que o servidor entrega em centavos (conta dividida). Só formata. */
+/** "1000" (basis points) vira "10%". É rótulo, não conta de dinheiro: o valor vem do servidor. */
+export const percentFromBps = (bps: number): number => bps / 100;
+
+/** Campo de valor é máscara de centavos: só dígitos, sem ponto flutuante. */
+export const centsFromDigits = (text: string): string => text.replace(/\D/g, '').replace(/^0+/, '').slice(0, 9);
+
 export const moneyCents = (cents: number) => money(cents / 100);
 
 /**

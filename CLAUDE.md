@@ -45,8 +45,9 @@ Estas regras não são preferências de estilo. Violá-las é um bug, mesmo que 
    Postgres, não por `if` na aplicação. QR físico e link de convite **entram na sessão
    existente** — nunca criam uma segunda comanda para a mesma mesa.
 
-4. **A soma das parcelas é exatamente igual ao total.** Em qualquer um dos 4 modos de divisão,
-   sem centavo perdido nem criado. Existe teste de propriedade para isto (ver ADR-001).
+4. **A soma do consumo pago é exatamente igual ao consumo total.** Em qualquer combinação das
+   4 formas, com ou sem taxa retirada, sem centavo perdido nem criado. Taxa ou gorjeta é de cada
+   pagamento, por cima do consumo. Existe teste de propriedade para isto (ADR-001, ADR-032).
 
 5. **O status do pedido é derivado dos itens, nunca escrito à mão.** Um pedido só é `ready`
    quando todos os itens de todas as estações estão prontos. Cozinha e bar são roteados em
