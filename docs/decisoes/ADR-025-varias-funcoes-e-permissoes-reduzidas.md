@@ -13,7 +13,9 @@
    na atribuição de mesa; o rateio usa a função escalada.
 4. Regras: ninguém aprova o próprio pedido; caixa fechado por quem recebeu dinheiro avisa o Dono; tarefa repetida
    chega uma vez só (`dedupe_key`, ADR-022).
-5. Só o Dono concede as funções Dono e Gerente (já garantido por trigger no ADR-015).
+5. Só o Dono concede ou altera as funções Dono e Gerente, em qualquer caminho. O gatilho do ADR-015 só cobria Dono: um
+   Gerente criava outro Gerente pelas RPCs e pela função de borda. `private.user_roles_grant_guard` fecha isso, e toda
+   mudança de função vai para `audit_logs`.
 6. **Recepcionista** é o perfil Maître com permissões reduzidas (sem aprovar reserva nem isentar no-show), definidas
    pelo Dono ou Gerente em `role_permission_overrides`, com RLS correspondente no servidor.
 7. Balcão do Quick: aba extra por padrão; substitui "Ao Vivo" do Garçom só sem serviço de mesa (pendência 5).

@@ -74,10 +74,13 @@ serve(async (req) => {
       .eq("user_id", caller.id)
       .eq("restaurant_id", restaurantId)
       .eq("is_active", true)
-      .in("role", ["owner", "manager"])
-      .limit(1);
+      .in("role", ["owner", "manager"]);
 
     if (!callerRoles || callerRoles.length === 0) return jsonResponse({ error: "Forbidden" }, 403);
+    // Só o dono concede gerente (ADR-025). Grava com a service role, então o gatilho do banco não vê o usuário.
+    if (role === "manager" && !callerRoles.some((row) => row.role === "owner")) {
+      return jsonResponse({ error: "Somente um dono pode conceder a função de gerente" }, 403);
+    }
 
     const { data: existingProfile } = await supabase
       .from("profiles")
@@ -117,6 +120,19 @@ serve(async (req) => {
       await supabase.auth.admin.deleteUser(created.user.id);
       return jsonResponse({ error: "Failed to assign staff role" }, 500);
     }
+
+    // Sem usuário no banco, o gatilho de auditoria não dispara aqui.
+    const { error: auditError } = await supabase.from("audit_logs").insert({
+      restaurant_id: restaurantId,
+      user_id: caller.id,
+      action: "staff_role_granted",
+      entity_type: "user_roles",
+      reason: "Função concedida ao criar a conta",
+      after: { user_id: created.user.id, role, is_active: true },
+      success: true,
+      metadata: { audit_kind: "operational" },
+    });
+    if (auditError) console.error("Failed to audit staff role:", auditError);
 
     return jsonResponse({
       success: true,
