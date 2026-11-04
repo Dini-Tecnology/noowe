@@ -177,6 +177,17 @@ export interface CreateAssistanceSpecialRequestInput {
 
 export type RestaurantApprovalStatus = 'pending' | 'approved' | 'rejected';
 
+export interface StaffTask {
+  id: string;
+  kind: string;
+  type: 'action' | 'notice';
+  title: string;
+  detail: string | null;
+  priority: number;
+  audienceRoles: string[];
+  primaryRoles: string[];
+}
+
 export interface RestaurantApproval {
   id: string;
   restaurant_id: string;
@@ -493,6 +504,7 @@ export interface SupabaseApiAdapter {
   // ── Staff ──────────────────────────────────────────────────────────────────────
   getStaff(restaurantId?: string): Promise<any>;
   upsertStaffRole(restaurantId: string, userId: string, role: string): Promise<any>;
+  getTasks(restaurantId: string): Promise<StaffTask[]>;
   setStaffRoles(restaurantId: string, userId: string, roles: string[], primaryRole: string): Promise<any>;
   deactivateStaff(roleId: string): Promise<any>;
   reactivateStaff(roleId: string): Promise<any>;
@@ -1856,6 +1868,12 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     });
     if (error) throw error;
     return data;
+  },
+
+  async getTasks(restaurantId: string) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_list_tasks', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return (Array.isArray(data) ? data : []) as StaffTask[];
   },
 
   async setStaffRoles(restaurantId: string, userId: string, roles: string[], primaryRole: string) {

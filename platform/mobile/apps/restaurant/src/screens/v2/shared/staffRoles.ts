@@ -42,3 +42,8 @@ export function toggleRole(roles: readonly string[], role: string): string[] {
 export function keepPrimary(roles: readonly string[], primary: string): string {
   return roles.includes(primary) ? primary : roles[0];
 }
+
+/** Ninguém aprova o próprio pedido, menos o Dono (o servidor também recusa). Desistir continua na tela. */
+export function canApproveRequest(opts: { viewerRole: string | null; viewerUserId: string | null; requesterId: string }): boolean {
+  return opts.viewerRole === 'owner' || opts.viewerUserId !== opts.requesterId;
+}

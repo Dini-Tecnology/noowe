@@ -1,4 +1,4 @@
-import { assignableRoles, canManageMember, keepPrimary, toggleRole } from '../screens/v2/shared/staffRoles';
+import { assignableRoles, canApproveRequest, canManageMember, keepPrimary, toggleRole } from '../screens/v2/shared/staffRoles';
 
 describe('assignableRoles', () => {
   it('dono pode vincular outro dono', () => {
@@ -59,5 +59,16 @@ describe('várias funções (O3)', () => {
   it('a principal acompanha as funções marcadas', () => {
     expect(keepPrimary(['waiter', 'barman'], 'barman')).toBe('barman');
     expect(keepPrimary(['waiter'], 'barman')).toBe('waiter');
+  });
+});
+
+describe('aprovar o próprio pedido (O3, critério 3)', () => {
+  it('o Gerente não vê Aprovar no pedido dele, mas vê no dos outros', () => {
+    expect(canApproveRequest({ viewerRole: 'manager', viewerUserId: 'm', requesterId: 'm' })).toBe(false);
+    expect(canApproveRequest({ viewerRole: 'manager', viewerUserId: 'm', requesterId: 'w' })).toBe(true);
+  });
+
+  it('o Dono vê sempre', () => {
+    expect(canApproveRequest({ viewerRole: 'owner', viewerUserId: 'o', requesterId: 'o' })).toBe(true);
   });
 });

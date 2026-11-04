@@ -1,6 +1,6 @@
 -- Fatia O3 (docs/fatias/O3-funcoes-e-escala.md), um bloco por critério de aceite.
 begin;
-select plan(28);
+select plan(37);
 
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
@@ -100,6 +100,42 @@ select pg_temp.act(pg_temp.ctx('owner'));
 select is(pg_temp.state_of(format($q$select public.restaurant_deactivate_staff((select id from public.user_roles where user_id = %L limit 1))$q$, pg_temp.ctx('duas'))),
   'ok', 'inativar');
 select is((select count(*)::int from public.user_roles where user_id = pg_temp.ctx('duas') and is_active), 0, 'inativar vale para a pessoa inteira');
+
+-- ---------------------------------------------------------------------------
+-- Critério 3: autoaprovação e caixa fechado por quem recebeu dinheiro
+-- ---------------------------------------------------------------------------
+do $$
+declare r uuid := pg_temp.ctx('r'); ambos uuid := pg_temp.new_user('garcom_gerente'); c uuid := pg_temp.new_user('cliente'); o uuid;
+begin
+  perform pg_temp.act(pg_temp.ctx('owner'));
+  perform public.restaurant_set_staff_roles(r, ambos, array['waiter', 'manager'], 'waiter');
+  perform pg_temp.act(ambos);
+  insert into _ctx values ('pedido_ambos', (public.restaurant_request_approval(r, 'other', 'Item', 'Teste', 0)->>'id')::uuid);
+  insert into public.orders(restaurant_id, customer_id, order_type, total_amount, total_cents) values (r, c, 'dine_in', 30, 3000) returning id into o;
+  insert into _ctx values ('pedido_caixa', o);
+  perform pg_temp.act(pg_temp.ctx('manager'));
+  insert into _ctx values ('caixa1', (public.restaurant_open_cash_register(r, 100)->>'id')::uuid);
+end $$;
+select pg_temp.act(pg_temp.ctx('garcom_gerente'));
+select is(pg_temp.state_of(format($q$select public.restaurant_resolve_approval(%L, 'approved')$q$, pg_temp.ctx('pedido_ambos'))), '42501',
+  'critério 3: Garçom e Gerente não aprova o próprio pedido');
+select pg_temp.act(pg_temp.ctx('manager'));
+select is(pg_temp.state_of(format($q$select public.restaurant_close_cash_register(%L, 100)$q$, pg_temp.ctx('caixa1'))), 'ok', 'quem não recebeu dinheiro fecha o caixa');
+select is((select count(*)::int from public.audit_logs where action = 'cash.closed_by_receiver' and entity_id = pg_temp.ctx('caixa1')), 0, 'e não gera aviso');
+
+select pg_temp.act(pg_temp.ctx('manager'));
+do $$ begin insert into _ctx values ('caixa2', (public.restaurant_open_cash_register(pg_temp.ctx('r'), 100)->>'id')::uuid); end $$;
+select is(pg_temp.state_of(format($q$select public.restaurant_record_payment(%L, 'cash', 30, 0)$q$, pg_temp.ctx('pedido_caixa'))), 'ok', 'o Gerente recebe em dinheiro');
+select is(pg_temp.state_of(format($q$select public.restaurant_close_cash_register(%L, 130)$q$, pg_temp.ctx('caixa2'))), 'ok', 'e fecha o mesmo caixa');
+select is((select count(*)::int from public.audit_logs where action = 'cash.closed_by_receiver' and entity_id = pg_temp.ctx('caixa2')), 1, 'critério 3: fica registrado');
+select is((select count(*)::int from public.staff_tasks where kind = 'cash.closed_by_receiver' and entity_id = pg_temp.ctx('caixa2')), 1, 'e o Dono é avisado');
+select ok((select bool_and(n.user_id <> pg_temp.ctx('manager')) from public.notifications n join public.staff_tasks t on t.id = n.related_id
+  where t.kind = 'cash.closed_by_receiver' and t.entity_id = pg_temp.ctx('caixa2')), 'o aviso não volta para quem fechou');
+
+-- Critério 1: a lista diz as funções da tarefa, para a etiqueta e o filtro
+select pg_temp.act(pg_temp.ctx('owner'));
+select ok((select (x->'primaryRoles') ? 'owner' from jsonb_array_elements(public.restaurant_list_tasks(pg_temp.ctx('r'))) x
+  where x->>'kind' = 'cash.closed_by_receiver' limit 1), 'critério 1: a tarefa traz as funções para a etiqueta');
 
 select * from finish();
 rollback;

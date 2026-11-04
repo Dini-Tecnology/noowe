@@ -59,6 +59,9 @@ import { orderStatusLabel, orderStatusTone } from './shared/v2Types';
 import { ConfigHubContent } from './config/ConfigHubContent';
 import { PersonalSettingsContent } from './config/PersonalSettingsContent';
 import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
+import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
+import { canApproveRequest } from './shared/staffRoles';
+import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 import type { TableBill, ServiceCall } from './shared/useRestaurantOperations';
 import { formatTableLabel } from './shared/tableLabel';
 import { cashRegisterStatus, isOpenCall, isTableInService } from './shared/liveStatus';
@@ -294,6 +297,8 @@ export default function OwnerHubScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        <MyRolesTasksPanel />
 
         {isOwner ? (
           <DashboardTab onNavigate={openScreen} colors={colors} />
@@ -1346,6 +1351,11 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
 
 function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors> }) {
   const { data: approvals, loading, error, refresh } = useApprovals();
+  const { serverRole } = useRestaurantRole();
+  const [viewerUserId, setViewerUserId] = useState<string | null>(null);
+  useEffect(() => {
+    void getOptionalSupabaseSessionUser().then(({ user }) => setViewerUserId(user?.id ?? null));
+  }, []);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   const resolve = async (approvalId: string, status: 'approved' | 'rejected') => {
@@ -1392,17 +1402,19 @@ function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors>
               </View>
               <Text style={[styles.approvalReason, { color: colors.foregroundSecondary }]}>{approval.reason}</Text>
               <View style={styles.approvalActions}>
-                <TouchableOpacity
-                  disabled={busy}
-                  activeOpacity={0.78}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Aprovar ${approval.item_name}`}
-                  onPress={() => void resolve(approval.id, 'approved')}
-                  style={[styles.approvalButton, { backgroundColor: '#27B36A', opacity: busy ? 0.6 : 1 }]}
-                >
-                  <CheckCircle size={16} color="#FFF" />
-                  <Text style={styles.approvalButtonText}>{busy ? 'Processando…' : 'Aprovar'}</Text>
-                </TouchableOpacity>
+                {canApproveRequest({ viewerRole: serverRole, viewerUserId, requesterId: approval.requester_id }) ? (
+                  <TouchableOpacity
+                    disabled={busy}
+                    activeOpacity={0.78}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Aprovar ${approval.item_name}`}
+                    onPress={() => void resolve(approval.id, 'approved')}
+                    style={[styles.approvalButton, { backgroundColor: '#27B36A', opacity: busy ? 0.6 : 1 }]}
+                  >
+                    <CheckCircle size={16} color="#FFF" />
+                    <Text style={styles.approvalButtonText}>{busy ? 'Processando…' : 'Aprovar'}</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <TouchableOpacity
                   disabled={busy}
                   activeOpacity={0.78}
