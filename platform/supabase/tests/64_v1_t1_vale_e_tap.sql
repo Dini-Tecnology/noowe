@@ -138,7 +138,7 @@ begin
   assert not exists (select 1 from private.noowe_pay_transaction_fees where gateway_transaction_id = t), 'sem taxa NOOWE';
 end $$;
 select pass('T1, critério 5: até a ativação, o garçom registra como maquininha da casa, sem taxa NOOWE');
-select ok(not has_function_privilege('authenticated', 'public.service_tap_begin(uuid,uuid,uuid,bigint,boolean,bigint,text)', 'EXECUTE')
+select ok(not has_function_privilege('authenticated', 'public.service_tap_begin(uuid,uuid,uuid,bigint,boolean,bigint,text,text)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.service_tap_result(uuid,text,boolean,bigint,bigint)', 'EXECUTE'), 'as portas do Tap não abrem para o app');
 select ok(not has_table_privilege('authenticated', 'private.noowe_tap_settings', 'SELECT'), 'nem o parâmetro');
 select is(jsonb_typeof(public.restaurant_get_payment_options('c1000000-0000-4000-8000-000000000002')->'acceptedVouchers'), 'array', 'vales aceitos na tela');

@@ -48,6 +48,8 @@ export type BillSummary = {
   itemsRemaining: { orderItemId: string; remainingCents: number }[];
 };
 
+export type CouponPreview = { discountCents: number; amountCents: number; refusal: string | null };
+
 export type BillShare = {
   id: string;
   /** Pagamento feito no salão não tem participante. */
@@ -242,6 +244,14 @@ export const billShares = {
   },
   async applyCouponToOrder(orderId: string, code: string): Promise<void> {
     await rpc('customer_apply_coupon_to_order', { p_order_id: orderId, p_code: code });
+  },
+  async removeCouponFromOrder(orderId: string): Promise<void> {
+    await rpc('customer_remove_coupon_from_order', { p_order_id: orderId });
+  },
+  /** O desconto antes de pagar, do servidor. Sem código, mostra o automático, se houver. */
+  async couponPreview(restaurantId: string, code: string | null, amountCents: number, items: { menuItemId: string; quantity: number }[], serviceModel: string): Promise<CouponPreview> {
+    const data = obj(await rpc('customer_coupon_preview', { p_restaurant_id: restaurantId, p_code: code, p_amount_cents: amountCents, p_items: items, p_service_model: serviceModel }));
+    return { discountCents: num(data.discountCents), amountCents: num(data.amountCents), refusal: typeof data.refusal === 'string' ? data.refusal : null };
   },
 
   /** Um toque, sem aprovação, e fica registrado. Vale só para a parte da própria pessoa. */

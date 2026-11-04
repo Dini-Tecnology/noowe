@@ -58,7 +58,10 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   const [needsDocument, setNeedsDocument] = useState(false);
   const [document, setDocument] = useState('');
   // Gorjeta opcional, sem nada marcado: é a pessoa que escolhe (ADR-032).
+  const [couponInput, setCouponInput] = useState('');
+  // O que vale é o código confirmado no "Aplicar": digitar não consulta nem cobra.
   const [couponCode, setCouponCode] = useState('');
+  const lastAppliedCoupon = useRef('');
   const [tipBps, setTipBps] = useState(0);
   const [tipDigits, setTipDigits] = useState('');
   const tipCents = tipDigits ? parseInt(tipDigits, 10) : 0;
@@ -91,10 +94,19 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   // O total cobrado é o que o servidor calcular no pedido; o carrinho é só a prévia.
   const total = cart.total;
   const hasTip = tipBps > 0 || tipCents > 0;
+  const previewItems = useMemo(() => cartOrderItems(cart.items).map((item) => ({ menuItemId: item.menuItemId, quantity: item.quantity })), [cart.items]);
+  // O desconto antes de pagar, inclusive o automático. Quem calcula é o servidor.
+  const coupon = useQuery({
+    queryKey: ['quick-coupon-preview', cart.restaurantId, couponCode, total, previewItems],
+    queryFn: () => billShares.couponPreview(cart.restaurantId!, couponCode || null, Math.round(total * 100), previewItems, 'quick_service'),
+    enabled: !!cart.restaurantId,
+    placeholderData: (previous) => previous,
+  });
+  const couponDiscountCents = coupon.data?.discountCents ?? 0;
   // Prévia do total: quem calcula é o servidor. Gorjeta sobre o pedido; conveniência, quando o parâmetro estiver ligado.
   const quote = useQuery({
-    queryKey: ['quick-checkout-quote', cart.restaurantId, total, tipBps, tipCents, !!params.pickupSlotStart],
-    queryFn: () => billShares.checkoutQuote(cart.restaurantId!, Math.round(total * 100), { scheduled: !!params.pickupSlotStart, tipBps, tipCents }),
+    queryKey: ['quick-checkout-quote', cart.restaurantId, total, coupon.data?.amountCents, tipBps, tipCents, !!params.pickupSlotStart],
+    queryFn: () => billShares.checkoutQuote(cart.restaurantId!, coupon.data?.amountCents ?? Math.round(total * 100), { scheduled: !!params.pickupSlotStart, tipBps, tipCents }),
     enabled: !!cart.restaurantId,
     placeholderData: (previous) => previous,
   });
@@ -115,7 +127,13 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
       });
       // Mudar a gorjeta muda o valor: a cobrança antiga não serve mais.
       // O servidor valida e diz por que não vale. O total cobrado já sai com o desconto.
-      if (couponCode.trim()) await billShares.applyCouponToOrder(order.id, couponCode.trim());
+      if (couponCode && !coupon.data?.refusal) {
+        await billShares.applyCouponToOrder(order.id, couponCode);
+        lastAppliedCoupon.current = couponCode;
+      } else if (lastAppliedCoupon.current) {
+        await billShares.removeCouponFromOrder(order.id);
+        lastAppliedCoupon.current = '';
+      }
       if (!chargeKeys.current.has(selectedMethod)) chargeKeys.current.set(selectedMethod, Crypto.randomUUID());
       const payment = await customerBackend.startPayment({
         orderId: order.id,
@@ -198,6 +216,11 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   });
 
   const selectMethod = useCallback((method: PaymentMethodType) => setSelectedMethod(method), []);
+  // Outro cupom é outro valor: a cobrança antiga não serve mais.
+  const applyCoupon = useCallback(() => {
+    setCouponCode(couponInput.trim());
+    chargeKeys.current.clear();
+  }, [couponInput]);
   const chooseTip = useCallback((bps: number, digits: string) => {
     setTipBps(bps);
     setTipDigits(digits);
@@ -363,10 +386,14 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
                   placeholder="Tem um cupom?"
                   placeholderTextColor={colors.foregroundMuted}
                   autoCapitalize="characters"
-                  value={couponCode}
-                  onChangeText={setCouponCode}
+                  value={couponInput}
+                  onChangeText={setCouponInput}
                   accessibilityLabel="Cupom"
                 />
+                <TouchableOpacity onPress={applyCoupon} accessibilityRole="button">
+                  <Text style={styles.summaryValue}>{couponInput.trim() || !couponCode ? 'Aplicar' : 'Remover'}</Text>
+                </TouchableOpacity>
+                {coupon.data?.refusal ? <Text style={styles.policyText} accessibilityRole="alert">{coupon.data.refusal}</Text> : null}
               </View>
             )}
 
@@ -380,6 +407,12 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Gorjeta</Text>
                   <Text style={styles.summaryValue}>{moneyCents(quote.data.tipCents)}</Text>
+                </View>
+              )}
+              {couponDiscountCents > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Cupom</Text>
+                  <Text style={styles.summaryValue}>− {moneyCents(couponDiscountCents)}</Text>
                 </View>
               )}
               {!!quote.data?.convenienceCents && (

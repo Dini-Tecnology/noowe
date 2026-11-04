@@ -28,7 +28,7 @@ jest.mock('@okinawa/shared/services/supabase-api', () => ({ supabaseApiAdapter: 
 } }));
 const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 
-const bill = { balanceCents: 6000, chargeBaseCents: 6000, feeCents: 600, totalWithFeeCents: 6600, feeBps: 1000, feeOrTipMode: 'service_fee', adjusted: false };
+const bill = { balanceCents: 6000, chargeBaseCents: 6000, feeCents: 600, totalWithFeeCents: 6600, totalWithoutFeeCents: 6000, couponDiscountCents: 0, couponRefusal: null, feeBps: 1000, feeOrTipMode: 'service_fee', adjusted: false };
 const scene = (extra = {}) => render(<BillChargeModal tableSessionId="s1" tableLabel="Mesa 4" onClose={jest.fn()} onCharged={jest.fn().mockResolvedValue(undefined)} {...extra} />);
 
 beforeEach(() => {
@@ -60,7 +60,7 @@ describe('cobrança presencial (G5)', () => {
     const view = scene();
     await waitFor(() => expect(view.getByText(/66,00/)).toBeTruthy());
     fireEvent.changeText(view.getByLabelText('Consumo a receber'), '999900');
-    await waitFor(() => expect(mockBill).toHaveBeenCalledWith('s1', 999900));
+    await waitFor(() => expect(mockBill).toHaveBeenCalledWith('s1', 999900, null));
     expect(await view.findByText(/Restam só/)).toBeTruthy();
   });
 
@@ -110,7 +110,7 @@ describe('cobrança presencial (G5)', () => {
   });
 
   it('vale com gorjeta: a gorjeta vai antes, no cartão, com chave própria; o vale só paga o consumo (V1)', async () => {
-    mockBill.mockResolvedValue({ ...bill, feeOrTipMode: 'tip', feeBps: 0, feeCents: 0, totalWithFeeCents: 6000, acceptedVouchers: ['refeicao'] });
+    mockBill.mockResolvedValue({ ...bill, feeOrTipMode: 'tip', feeBps: 0, feeCents: 0, totalWithFeeCents: 6000, totalWithoutFeeCents: 6000, acceptedVouchers: ['refeicao'] });
     const view = scene();
     await waitFor(() => expect(view.getByText('Vale-refeição')).toBeTruthy());
     fireEvent.changeText(view.getByLabelText('Gorjeta'), '500');
@@ -142,6 +142,23 @@ describe('cobrança presencial (G5)', () => {
     const keys = mockTap.mock.calls.map((c) => c[1].idempotencyKey);
     expect(keys[0]).toBe(keys[1]);
     expect(keys[2]).not.toBe(keys[1]);
+  });
+
+  it('cupom: o valor a receber vem do servidor, já com o desconto; recusado diz o motivo e não vai (P3)', async () => {
+    mockBill.mockImplementation(async (_s: string, _b: number | null, code: string | null) => (code === 'DEZ'
+      ? { ...bill, couponDiscountCents: 1000, feeCents: 500, totalWithFeeCents: 5500, totalWithoutFeeCents: 5000 }
+      : code ? { ...bill, couponRefusal: 'Cupom não encontrado' } : bill));
+    const view = scene();
+    await waitFor(() => expect(view.getByText(/66,00/)).toBeTruthy());
+    fireEvent.changeText(view.getByLabelText('Cupom do cliente'), 'XX');
+    fireEvent.press(view.getByText('Aplicar'));
+    expect(await view.findByText('Cupom não encontrado')).toBeTruthy();
+    fireEvent.changeText(view.getByLabelText('Cupom do cliente'), 'DEZ');
+    fireEvent.press(view.getByText('Aplicar'));
+    await waitFor(() => expect(view.getByText(/55,00/)).toBeTruthy());
+    expect(view.getByText(/− R\$\s10,00/)).toBeTruthy();
+    fireEvent.press(view.getByText('Dinheiro'));
+    await waitFor(() => expect(mockRecord).toHaveBeenCalledWith('s1', expect.objectContaining({ couponCode: 'DEZ' })));
   });
 
   it('em modo gorjeta não há taxa para desmarcar', async () => {

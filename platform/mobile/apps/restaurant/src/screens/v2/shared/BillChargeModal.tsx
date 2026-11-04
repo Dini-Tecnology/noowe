@@ -33,6 +33,8 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
   const [digits, setDigits] = useState('');
   const [keepFee, setKeepFee] = useState(true);
   const [reason, setReason] = useState('');
+  const [couponInput, setCouponInput] = useState('');
+  // Confirmado no "Aplicar": o servidor recalcula o que cobrar.
   const [coupon, setCoupon] = useState('');
   const [submitting, setSubmitting] = useState(false);
   // Repetir depois de uma falha usa a mesma chave: nunca lança o pagamento duas vezes.
@@ -51,6 +53,7 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
     setKeepFee(true);
     setReason('');
     setCoupon('');
+    setCouponInput('');
     setBill(null);
     setBillFor(undefined);
   }, [tableSessionId]);
@@ -58,22 +61,23 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
   useEffect(() => {
     if (!tableSessionId) return undefined;
     let stale = false;
-    supabaseApiAdapter.getSessionBill(tableSessionId, baseCents)
+    supabaseApiAdapter.getSessionBill(tableSessionId, baseCents, coupon || null)
       .then((result) => { if (!stale) { setBill(result); setBillFor(baseCents); } })
       .catch((err) => { if (!stale) Alert.alert('Não foi possível carregar a conta', userErrorMessage(err, 'Tente novamente.')); });
     return () => { stale = true; };
-  }, [tableSessionId, baseCents]);
+  }, [tableSessionId, baseCents, coupon]);
 
   const hasFee = bill?.feeOrTipMode === 'service_fee' && bill.feeBps > 0;
   const ready = !!bill && billFor === baseCents;
-  const total = !ready ? null : hasFee && keepFee ? bill.totalWithFeeCents : bill.chargeBaseCents;
+  const total = !ready ? null : hasFee && keepFee ? bill.totalWithFeeCents : bill.totalWithoutFeeCents;
+  const couponRefused = !!bill?.couponRefusal;
 
   // Aproximação: inicia e espera o fornecedor confirmar. Fechar a tela não confirma nada, e recusado não abate.
   const chargeByTap = async () => {
     if (!tableSessionId || !ready) return;
     setSubmitting(true);
     try {
-      await supabaseApiAdapter.startTapCharge(tableSessionId, { baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, idempotencyKey: key.current });
+      await supabaseApiAdapter.startTapCharge(tableSessionId, { baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, couponCode: couponRefused ? null : coupon || null, idempotencyKey: key.current });
       Alert.alert('Aproxime o cartão', 'A conta só abate quando a cobrança for aprovada.');
       onClose();
     } catch (err) {
@@ -110,7 +114,7 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
         await supabaseApiAdapter.recordBillPayment(tableSessionId, { method: tipMethod, baseCents: 0, tipCents, idempotencyKey: tipKey.current });
       }
       await supabaseApiAdapter.recordBillPayment(tableSessionId, {
-        method, baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, idempotencyKey: key.current, voucherKind: voucherKind ?? null, couponCode: coupon.trim() || null,
+        method, baseCents, waiveFee: hasFee && !keepFee, reason: reason.trim() || null, idempotencyKey: key.current, voucherKind: voucherKind ?? null, couponCode: couponRefused ? null : coupon || null,
         tipCents: method === 'voucher' ? 0 : tipCents,
       });
       await onCharged();
@@ -194,18 +198,30 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
             />
           )}
 
-          <TextInput
-            value={coupon}
-            onChangeText={setCoupon}
-            autoCapitalize="characters"
-            placeholder="Cupom do cliente (opcional)"
-            placeholderTextColor={colors.foregroundMuted}
-            accessibilityLabel="Cupom do cliente"
-            style={[styles.input, { color: colors.foreground, backgroundColor: colors.backgroundTertiary }]}
-          />
+          <View style={styles.row}>
+            <TextInput
+              value={couponInput}
+              onChangeText={setCouponInput}
+              autoCapitalize="characters"
+              placeholder="Cupom do cliente (opcional)"
+              placeholderTextColor={colors.foregroundMuted}
+              accessibilityLabel="Cupom do cliente"
+              style={[styles.input, { flex: 1, color: colors.foreground, backgroundColor: colors.backgroundTertiary }]}
+            />
+            <Pressable accessibilityRole="button" onPress={() => { setCoupon(couponInput.trim()); key.current = Crypto.randomUUID(); }}>
+              <Text style={{ color: colors.primary, fontWeight: '700' }}>Aplicar</Text>
+            </Pressable>
+          </View>
+          {bill?.couponRefusal ? <Text style={[styles.adjusted, { color: colors.warning ?? colors.primary }]} accessibilityRole="alert">{bill.couponRefusal}</Text> : null}
+          {bill && bill.couponDiscountCents > 0 ? (
+            <View style={styles.row}>
+              <Text style={{ color: colors.foregroundSecondary }}>Cupom</Text>
+              <Text style={{ color: colors.foreground, fontWeight: '700' }}>− {formatCents(bill.couponDiscountCents)}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.row}>
-            <Text style={[styles.totalLabel, { color: colors.foreground }]}>{coupon.trim() ? 'Receber, antes do cupom' : 'Receber'}</Text>
+            <Text style={[styles.totalLabel, { color: colors.foreground }]}>Receber</Text>
             <Text style={[styles.totalValue, { color: colors.primary }]}>{total != null ? formatCents(total) : '—'}</Text>
           </View>
 

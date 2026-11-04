@@ -24,6 +24,7 @@ export async function handleTapCharge(req: Request, deps: TapDeps): Promise<Resp
   const begun = await deps.rpc("service_tap_begin", {
     p_user_id: user.id, p_table_session_id: body.tableSessionId, p_idempotency_key: body.idempotencyKey,
     p_base_cents: body.baseCents ?? null, p_waive_fee: body.waiveFee === true, p_tip_cents: body.tipCents ?? 0, p_reason: typeof body.reason === "string" ? body.reason : null,
+    p_coupon_code: typeof body.couponCode === "string" ? body.couponCode : null,
   });
   if (begun.error) {
     const mapped = mapRpcError(begun.error.code);

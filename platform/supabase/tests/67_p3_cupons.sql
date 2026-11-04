@@ -1,6 +1,6 @@
 -- P3: um teste por critério do servidor.
 begin;
-select plan(18);
+select plan(27);
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true) $$;
 create function pg_temp.state_of(p_sql text) returns text language plpgsql as $$
@@ -387,7 +387,197 @@ begin
 end $$;
 select pass('painel: Ativo, Agendado, Pausado, Esgotado e Encerrado; usos, desconto, faturamento, ticket e clientes novos');
 
-select ok(not has_function_privilege('authenticated', 'private.coupon_discount_cents(public.promotions,uuid,uuid,bigint)', 'EXECUTE'), 'o cálculo do desconto não abre para o app');
+-- Revisão: pedido com cupom. Uso reservado vira uso quando paga, e volta quando o pedido não sai.
+create function pg_temp.order_with(p_total bigint) returns public.orders language plpgsql as $$
+declare r uuid := pg_temp.ctx('r'); c uuid := gen_random_uuid(); o public.orders;
+begin
+  insert into auth.users(id, email) values (c, c || '@p3.test');
+  insert into public.profiles(id) values (c) on conflict do nothing;
+  insert into public.orders(restaurant_id, customer_id, service_model, total_cents, total_amount, payment_status)
+    values (r, c, 'quick_service', p_total, p_total::numeric / 100, 'pending') returning * into o;
+  insert into public.order_items(order_id, menu_item_id, quantity, unit_price, total_price, total_price_cents) values (o.id, pg_temp.ctx('item'), 1, p_total::numeric / 100, p_total::numeric / 100, p_total);
+  return o;
+end $$;
+
+do $$
+declare c uuid := pg_temp.coupon('PED', '{"maxUses":1}'); o public.orders := pg_temp.order_with(10000); o2 public.orders := pg_temp.order_with(10000); j jsonb;
+begin
+  perform pg_temp.act(o.customer_id);
+  j := public.customer_apply_coupon_to_order(o.id, 'PED');
+  assert (j->>'totalCents')::bigint = 9000, 'desconto no pedido';
+  assert (select first_used_at from public.promotions where id = c) is null, 'reservar não é usar';
+  assert (select status from public.promotion_redemptions where order_id = o.id) = 'reserved', 'reservado';
+  perform pg_temp.act(o2.customer_id);
+  assert pg_temp.msg_of(format($q$select public.customer_apply_coupon_to_order(%L, 'PED')$q$, o2.id)) = 'Este cupom esgotou', 'a reserva conta no limite';
+  update public.orders set fulfillment_status = 'cancelled' where id = o.id;
+  assert (select status from public.promotion_redemptions where order_id = o.id) = 'cancelled', 'pedido cancelado devolve';
+  assert (public.customer_apply_coupon_to_order(o2.id, 'PED')->>'discountCents')::bigint = 1000, 'o uso voltou';
+  update public.orders set payment_status = 'confirmed' where id = o2.id;
+  assert (select status from public.promotion_redemptions where order_id = o2.id) = 'applied', 'pago vale';
+  assert (select first_used_at from public.promotions where id = c) is not null, 'agora foi usado';
+  assert exists (select 1 from jsonb_array_elements((select public.restaurant_list_coupons(pg_temp.ctx('r')) from pg_temp.act(pg_temp.ctx('dono')))) e where e->>'code' = 'PED' and (e->>'revenueCents')::bigint = 9000), 'entra no relatório';
+end $$;
+select pass('pedido com cupom: reserva vira uso ao pagar, e volta se o pedido não sair');
+
+-- Cobrança de antes do cupom não paga o pedido: volta ao cliente.
+do $$
+declare r uuid := pg_temp.ctx('r'); c uuid := pg_temp.coupon('NOVO'); o public.orders := pg_temp.order_with(10000); a uuid; b uuid; j jsonb;
+begin
+  insert into public.restaurant_payment_accounts(restaurant_id, provider, status) values (r, 'asaas', 'active') on conflict do nothing;
+  update public.restaurant_payment_accounts set status = 'active' where restaurant_id = r;
+  a := (public.service_payment_reserve_order(o.customer_id, o.id, 'credit_card', gen_random_uuid())->>'paymentId')::uuid;
+  assert (select amount_cents from public.gateway_transactions where id = a) = 10000, 'antes do cupom';
+  perform pg_temp.act(o.customer_id);
+  perform public.customer_apply_coupon_to_order(o.id, 'NOVO');
+  j := private.apply_payment_event(a, 'asaas', 'evt-a-' || a, 'PAYMENT_CONFIRMED', 'confirmed', null);
+  assert (j->>'latePayment')::boolean, 'cobrança velha é tardia: ' || j;
+  assert (select payment_status from public.orders where id = o.id) <> 'confirmed', 'o pedido não sai por ela';
+  assert exists (select 1 from public.payment_refunds where gateway_transaction_id = a), 'volta ao cliente';
+  b := (public.service_payment_reserve_order(o.customer_id, o.id, 'pix', gen_random_uuid())->>'paymentId')::uuid;
+  assert (select amount_cents from public.gateway_transactions where id = b) = 9000, 'nova, com o desconto';
+  perform private.apply_payment_event(b, 'asaas', 'evt-b-' || b, 'PAYMENT_RECEIVED', 'confirmed', null);
+  assert (select payment_status from public.orders where id = o.id) = 'confirmed', 'esta paga';
+  perform pg_temp.act(o.customer_id);
+  assert pg_temp.msg_of(format($q$select public.customer_remove_coupon_from_order(%L)$q$, o.id)) = 'Este pedido já foi pago', 'pago não muda';
+end $$;
+select pass('cobrança de antes de o cupom mudar volta ao cliente, e o pedido sai pela certa');
+
+-- O desconto por item vale para a parte da pessoa: o mesmo item não desconta duas vezes.
+do $$
+declare r uuid := pg_temp.ctx('r'); m2 uuid; s jsonb := pg_temp.scene(4, '{17000}'); oi uuid; c uuid; v_sum bigint; sh public.bill_shares; line uuid;
+begin
+  select id into m2 from public.menu_items where restaurant_id = r and id <> pg_temp.ctx('item') limit 1;
+  insert into public.order_items(order_id, menu_item_id, quantity, unit_price, total_price, unit_price_cents, total_price_cents, diner_id) values ((s->>'order')::uuid, m2, 1, 30, 30, 3000, 3000, (s->'parts'->>0)::uuid) returning id into oi;
+  c := pg_temp.coupon('GRATIS', jsonb_build_object('discountKind', 'free_item', 'freeItemId', m2, 'isAuto', true));
+  perform pg_temp.commit_equal(s);
+  select sum(coupon_discount_cents) into v_sum from public.bill_shares where table_session_id = (s->>'sid')::uuid and status = 'open';
+  assert v_sum = 3000, 'um item grátis desconta uma vez na mesa inteira: ' || v_sum;
+  assert (select sum(base_cents) from public.bill_shares where table_session_id = (s->>'sid')::uuid and status = 'open') = 20000, 'a conta segue fechando';
+  -- Com itens marcados, vale o que é da pessoa: quem não pediu não ganha.
+  sh := pg_temp.share(s, 1);
+  insert into public.bill_share_lines(bill_share_id, order_item_id, base_cents) select sh.id, x.id, 5000 from public.order_items x where x.order_id = (s->>'order')::uuid and x.menu_item_id = pg_temp.ctx('item') limit 1;
+  assert private.coupon_discount_cents((select p from public.promotions p where p.id = c), (s->>'sid')::uuid, null, 5000, sh.id) = 0, 'não pediu, não ganha';
+  sh := pg_temp.share(s, 0);
+  insert into public.bill_share_lines(bill_share_id, order_item_id, base_cents) values (sh.id, oi, 3000);
+  assert private.coupon_discount_cents((select p from public.promotions p where p.id = c), (s->>'sid')::uuid, null, 5000, sh.id) = 3000, 'pediu, ganha o item';
+end $$;
+select pass('desconto por item vale para a parte da pessoa; o mesmo item não desconta duas vezes');
+
+-- O desconto não zera a parcela: fica no mínimo de cobrança, e o automático não derruba a divisão da mesa.
+do $$
+declare s jsonb := pg_temp.scene(2, '{2000}'); c uuid := pg_temp.coupon('TUDO', '{"discountBps":10000,"isAuto":true}'); v_min bigint;
+begin
+  select min_online_charge_cents into v_min from private.noowe_billing_settings;
+  perform pg_temp.commit_equal(s);
+  assert (select count(*) from public.bill_shares where table_session_id = (s->>'sid')::uuid and status = 'open') = 2, 'a divisão não caiu';
+  assert (select min(base_cents - coupon_discount_cents) from public.bill_shares where table_session_id = (s->>'sid')::uuid and status = 'open' and coupon_discount_cents > 0) = v_min, 'não fica abaixo do mínimo';
+  update public.promotions set status = 'inactive' where id = c;
+end $$;
+select pass('desconto não leva a cobrança abaixo do mínimo, e o automático não derruba a divisão');
+
+-- Comanda encerrada devolve a reserva; pedido de comanda não recebe cupom.
+do $$
+declare c uuid := pg_temp.coupon('FIM', '{"maxUses":1}'); s jsonb := pg_temp.scene(1, '{10000}'); u uuid;
+begin
+  u := (s->'users'->>0)::uuid;
+  perform pg_temp.commit_equal(s);
+  perform pg_temp.act(u);
+  assert pg_temp.msg_of(format($q$select public.customer_apply_coupon_to_order(%L, 'FIM')$q$, s->>'order')) like 'Nesta comanda%', 'pedido de comanda: cupom é na parcela';
+  perform public.customer_apply_coupon((pg_temp.share(s)).id, 'FIM');
+  assert (select status from public.promotion_redemptions where promotion_id = c) = 'reserved', 'reservado';
+  -- O garçom recebe o saldo inteiro: a parcela do cliente nunca se pagou.
+  perform pg_temp.act(pg_temp.ctx('gerente'));
+  perform public.restaurant_record_bill_payment((s->>'sid')::uuid, 'cash', gen_random_uuid());
+  assert (select status from public.table_sessions where id = (s->>'sid')::uuid) = 'ended', 'quitada';
+  assert (select status from public.promotion_redemptions where promotion_id = c) = 'cancelled', 'comanda encerrada devolve';
+end $$;
+select pass('comanda encerrada devolve o uso reservado, e pedido de comanda não recebe cupom');
+
+-- Retirar e devolver a taxa em valor fixo não desconta de novo.
+do $$
+declare c uuid := pg_temp.coupon('FIXO'); s jsonb := pg_temp.scene(2, '{40000}'); u uuid; sh public.bill_shares; v_amount bigint; i int;
+begin
+  u := (s->'users'->>0)::uuid;
+  perform pg_temp.commit_equal(s);
+  update public.bill_shares set mode = 'fixed_amount' where table_session_id = (s->>'sid')::uuid and status = 'open';
+  perform pg_temp.act(u);
+  perform public.customer_apply_coupon((pg_temp.share(s)).id, 'FIXO');
+  v_amount := (pg_temp.share(s)).amount_cents;
+  for i in 1 .. 3 loop
+    perform public.customer_set_share_fee_waived((pg_temp.share(s)).id, true);
+    assert (pg_temp.share(s)).amount_cents = v_amount, 'retirar não muda o que sai do cartão';
+    perform public.customer_set_share_fee_waived((pg_temp.share(s)).id, false);
+    assert abs((pg_temp.share(s)).amount_cents - v_amount) <= 1, 'devolver também não: ' || (pg_temp.share(s)).amount_cents;
+  end loop;
+end $$;
+select pass('retirar e devolver a taxa em valor fixo não desconta o cupom de novo');
+
+-- Cliente novo não conta a visita atual, mesmo depois de uma hora.
+do $$
+declare r uuid := pg_temp.ctx('r'); s jsonb := pg_temp.scene(1, '{10000}'); u uuid; o public.orders;
+begin
+  u := (s->'users'->>0)::uuid;
+  update public.orders set created_at = now() - interval '3 hours' where id = (s->>'order')::uuid;
+  assert private.customer_in_group(r, u, 'new', null), 'a comanda aberta é a primeira visita';
+  assert not private.customer_in_group(r, u, 'inactive', 30), 'nem conta como quem sumiu';
+  perform pg_temp.act(pg_temp.ctx('gerente'));
+  perform public.restaurant_record_bill_payment((s->>'sid')::uuid, 'cash', gen_random_uuid());
+  assert not private.customer_in_group(r, u, 'new', null), 'encerrada, já é visita anterior';
+  update public.orders set created_at = now() - interval '40 days' where id = (s->>'order')::uuid;
+  assert private.customer_in_group(r, u, 'inactive', 30), 'sem visita há 40 dias';
+  o := pg_temp.order_with(5000);
+  update public.orders set created_at = now() - interval '3 hours' where id = o.id;
+  assert private.customer_in_group(r, o.customer_id, 'new', null), 'pedido ainda sem pagar não é visita';
+  update public.orders set payment_status = 'confirmed' where id = o.id;
+  assert not private.customer_in_group(r, o.customer_id, 'new', null), 'pago, é';
+  perform pg_temp.act(pg_temp.ctx('dono'));
+  assert pg_temp.msg_of(format($q$select public.restaurant_upsert_coupon(%L, %L)$q$, r, jsonb_build_object('title','x','discountKind','percent','discountBps',1000,'audience','inactive','validFrom',now(),'validUntil',now() + interval '1 day'))) like 'Diga há quantos%', 'prazo em branco';
+end $$;
+select pass('cliente novo e sem visita não contam a visita atual, e o prazo vem do cupom');
+
+-- Prévia: a pessoa vê antes de pagar, e quem cobra vê o valor que vai digitar.
+do $$
+declare r uuid := pg_temp.ctx('r'); c uuid := pg_temp.coupon('VE'); o public.orders := pg_temp.order_with(10000); s jsonb := pg_temp.scene(1, '{10000}'); j jsonb; x jsonb;
+begin
+  perform pg_temp.act(o.customer_id);
+  j := public.customer_coupon_preview(r, 'VE', 10000, '[]', 'quick_service');
+  assert (j->>'discountCents')::bigint = 1000 and (j->>'amountCents')::bigint = 9000, 'desconto antes de pagar: ' || j;
+  j := public.customer_coupon_preview(r, 'NAOEXISTE', 10000, '[]', 'quick_service');
+  assert j->>'refusal' = 'Cupom não encontrado' and (j->>'amountCents')::bigint = 10000, 'recusa sem erro';
+  perform pg_temp.act(pg_temp.ctx('gerente'));
+  j := public.restaurant_get_session_bill((s->>'sid')::uuid, null, 'VE');
+  assert (j->>'couponDiscountCents')::bigint = 1000 and (j->>'feeCents')::bigint = 900 and (j->>'totalWithFeeCents')::bigint = 9900 and (j->>'totalWithoutFeeCents')::bigint = 9000, 'valor final: ' || j;
+  j := public.restaurant_get_session_bill((s->>'sid')::uuid, null, 'NAOEXISTE');
+  assert j->>'couponRefusal' = 'Cupom não encontrado' and (j->>'totalWithoutFeeCents')::bigint = 10000, 'recusado mostra sem desconto';
+  -- O automático entra na comanda sem cliente, se for para todos.
+  update public.promotions set is_auto = true where id = c;
+  assert (public.restaurant_get_session_bill((s->>'sid')::uuid)->>'couponDiscountCents')::bigint = 1000, 'automático na prévia';
+  j := public.restaurant_record_bill_payment((s->>'sid')::uuid, 'cash', gen_random_uuid());
+  assert (select coupon_id from public.bill_shares where id = (j->>'shareId')::uuid) = c, 'automático na cobrança';
+  update public.promotions set is_auto = false where id = c;
+  -- Enviar: só ativo.
+  perform pg_temp.act(pg_temp.ctx('dono'));
+  perform public.restaurant_set_coupon_active(c, false);
+  assert pg_temp.msg_of(format($q$select public.restaurant_send_coupon(%L)$q$, c)) like 'Só um cupom ativo%', 'pausado não envia';
+end $$;
+select pass('o desconto aparece antes de pagar e antes de cobrar; automático vale na comanda; pausado não se envia');
+
+-- O recibo traz o desconto.
+do $$
+declare c uuid := pg_temp.coupon('REC'); s jsonb := pg_temp.scene(1, '{10000}'); u uuid; tx public.gateway_transactions;
+begin
+  u := (s->'users'->>0)::uuid;
+  perform pg_temp.commit_equal(s);
+  perform pg_temp.act(u);
+  perform public.customer_apply_coupon((pg_temp.share(s)).id, 'REC');
+  tx := private.reserve_share_payment(u, (pg_temp.share(s)).id, 'credit_card', 0, gen_random_uuid(), 'simulated');
+  perform private.apply_payment_event(tx.id, 'simulated', 'ok-' || tx.id, 'R', 'confirmed', tx.amount_cents);
+  assert (select discount from public.casual_dining_receipts where gateway_transaction_id = tx.id) = 10, 'desconto no recibo';
+  assert (select discount_reason from public.casual_dining_receipts where gateway_transaction_id = tx.id) = 'Cupom', 'com o motivo';
+end $$;
+select pass('o recibo traz o desconto do cupom');
+
+select ok(not has_function_privilege('authenticated', 'private.coupon_discount_cents(public.promotions,uuid,uuid,bigint,uuid)', 'EXECUTE'), 'o cálculo do desconto não abre para o app');
 select ok((select relrowsecurity from pg_class where oid = 'public.promotions'::regclass), 'RLS em promotions');
 select ok((select relrowsecurity from pg_class where oid = 'public.promotion_redemptions'::regclass), 'RLS nos usos');
 select is((select data_type from information_schema.columns where table_schema = 'public' and table_name = 'promotions' and column_name = 'discount_cents'), 'bigint', 'desconto em centavos');

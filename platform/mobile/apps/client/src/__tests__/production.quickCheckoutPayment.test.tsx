@@ -16,7 +16,9 @@ const mockPolicies = jest.fn().mockReturnValue(null);
 jest.mock('../hooks/useServiceTypeFeatures', () => ({ useServiceTypeFor: () => ({ policies: mockPolicies() }) }));
 const mockTipQuote = jest.fn();
 const mockOrderCoupon = jest.fn();
-jest.mock('../services/bill-shares', () => ({ billShares: { checkoutQuote: (...a: unknown[]) => mockTipQuote(...a), applyCouponToOrder: (...a: unknown[]) => mockOrderCoupon(...a) } }));
+const mockOrderCouponRemove = jest.fn();
+const mockCouponPreview = jest.fn();
+jest.mock('../services/bill-shares', () => ({ billShares: { checkoutQuote: (...a: unknown[]) => mockTipQuote(...a), applyCouponToOrder: (...a: unknown[]) => mockOrderCoupon(...a), removeCouponFromOrder: (...a: unknown[]) => mockOrderCouponRemove(...a), couponPreview: (...a: unknown[]) => mockCouponPreview(...a) } }));
 jest.mock('../hooks/useDistanceToRestaurant', () => ({ useDistanceToRestaurant: () => null }));
 const mockClearCart = jest.fn();
 jest.mock('@/shared/contexts/CartContext', () => ({ useCart: () => ({
@@ -170,16 +172,33 @@ test('taxa de conveniência desligada: a linha não aparece', async () => {
   client.clear();
 });
 
-test('cupom no pedido: aplica antes de cobrar; recusado não cobra e diz o motivo (P3)', async () => {
+test('cupom no pedido: mostra o desconto antes, aplica antes de cobrar; recusado não cobra e diz o motivo (P3)', async () => {
   mockStart.mockResolvedValue({ ...charge, pixCode: 'pix' });
+  mockCouponPreview.mockImplementation(async (_r: string, code: string | null, amount: number) => (code ? { discountCents: 500, amountCents: amount - 500, refusal: null } : { discountCents: 0, amountCents: amount, refusal: null }));
   mockOrderCoupon.mockRejectedValueOnce(Object.assign(new Error('Pedido mínimo de R$ 80,00'), { code: 'P0017' })).mockResolvedValue(undefined);
   const { view, client } = renderScreen();
   fireEvent.changeText(view.getByLabelText('Cupom'), 'DEZ');
+  fireEvent.press(view.getByText('Aplicar'));
+  await waitFor(() => expect(view.getByText(/− R\$\s5,00/)).toBeTruthy());
   await acceptAndPay(view);
   await waitFor(() => expect(require('react-native').Alert.alert).toHaveBeenCalledWith('Cupom não aplicado', 'Pedido mínimo de R$ 80,00'));
   expect(mockStart).not.toHaveBeenCalled();
   fireEvent.press(view.getByLabelText('Confirmar pagamento'));
   await waitFor(() => expect(mockStart).toHaveBeenCalled());
   expect(mockOrderCoupon).toHaveBeenLastCalledWith('o1', 'DEZ');
+  client.clear();
+});
+
+test('cupom recusado na prévia diz o motivo, e não vai ao pedido', async () => {
+  mockStart.mockResolvedValue({ ...charge, pixCode: 'pix' });
+  mockCouponPreview.mockImplementation(async (_r: string, code: string | null, amount: number) => (code ? { discountCents: 0, amountCents: amount, refusal: 'Você já usou este cupom' } : { discountCents: 0, amountCents: amount, refusal: null }));
+  mockOrderCoupon.mockClear();
+  const { view, client } = renderScreen();
+  fireEvent.changeText(view.getByLabelText('Cupom'), 'USADO');
+  fireEvent.press(view.getByText('Aplicar'));
+  expect(await view.findByText('Você já usou este cupom')).toBeTruthy();
+  await acceptAndPay(view);
+  await waitFor(() => expect(mockStart).toHaveBeenCalled());
+  expect(mockOrderCoupon).not.toHaveBeenCalled();
   client.clear();
 });

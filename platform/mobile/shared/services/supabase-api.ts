@@ -68,6 +68,10 @@ export type SessionBill = {
   feeCents: number;
   totalWithFeeCents: number;
   feeBps: number;
+  totalWithoutFeeCents: number;
+  /** Desconto do cupom no valor mostrado. Inclui o automático. */
+  couponDiscountCents: number;
+  couponRefusal: string | null;
   feeOrTipMode: 'service_fee' | 'tip';
   adjusted: boolean;
   acceptedVouchers: string[];
@@ -663,11 +667,11 @@ export interface SupabaseApiAdapter {
   // ── Payment ────────────────────────────────────────────────────────────────────
   recordPayment(orderId: string, paymentMethod: string, amount: number, tipAmount?: number, notes?: string): Promise<any>;
   /** Saldo e valores prontos para cobrar uma comanda aberta. `baseCents` nulo é o saldo todo. */
-  getSessionBill(tableSessionId: string, baseCents?: number | null): Promise<SessionBill>;
+  getSessionBill(tableSessionId: string, baseCents?: number | null, couponCode?: string | null): Promise<SessionBill>;
   /** Pagamento presencial: abate do mesmo saldo da comanda (ADR-032). */
   recordBillPayment(tableSessionId: string, input: { method: string; baseCents?: number | null; waiveFee?: boolean; tipCents?: number; reason?: string | null; idempotencyKey: string; voucherKind?: string | null; couponCode?: string | null }): Promise<any>;
   /** Inicia a cobrança por aproximação. A resposta nunca significa pago: quem confirma é o fornecedor. */
-  startTapCharge(tableSessionId: string, input: { baseCents?: number | null; waiveFee?: boolean; reason?: string | null; idempotencyKey: string }): Promise<{ paymentId: string; amountCents: number; sdkPayload: Record<string, unknown> }>;
+  startTapCharge(tableSessionId: string, input: { baseCents?: number | null; waiveFee?: boolean; reason?: string | null; couponCode?: string | null; idempotencyKey: string }): Promise<{ paymentId: string; amountCents: number; sdkPayload: Record<string, unknown> }>;
   setAcceptedVouchers(restaurantId: string, kinds: string[]): Promise<any>;
   getPaymentOptions(restaurantId: string): Promise<{ tapActive: boolean; acceptedVouchers: string[] }>;
   getChargePolicies(restaurantId: string): Promise<ChargePolicyRow[]>;
@@ -685,6 +689,8 @@ export interface SupabaseApiAdapter {
   cancelSubscription(restaurantId: string, reason: string): Promise<PlanSummary>;
   listInvoices(restaurantId: string): Promise<PlanInvoice[]>;
   getCredits(restaurantId: string): Promise<CreditsView>;
+  getPlanLocks(restaurantId: string): Promise<string[]>;
+  notePlanPrompt(restaurantId: string): Promise<void>;
   getCreditIndex(restaurantId: string): Promise<{ indexBps: number; tierName: string | null }>;
   applyPromoCode(restaurantId: string, code: string): Promise<PlanSummary>;
   setConvenienceAbsorbed(restaurantId: string, absorbed: boolean): Promise<any>;
@@ -2427,15 +2433,16 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   },
 
   // ── Payment ────────────────────────────────────────────────────────────────
-  async getSessionBill(tableSessionId: string, baseCents?: number | null) {
+  async getSessionBill(tableSessionId: string, baseCents?: number | null, couponCode?: string | null) {
     const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_get_session_bill', {
-      p_table_session_id: tableSessionId, p_base_cents: baseCents ?? null,
+      p_table_session_id: tableSessionId, p_base_cents: baseCents ?? null, p_coupon_code: couponCode ?? null,
     });
     if (error) throw error;
     const raw = (data ?? {}) as Record<string, unknown>;
     return {
       balanceCents: Number(raw.balanceCents ?? 0), chargeBaseCents: Number(raw.chargeBaseCents ?? 0), feeCents: Number(raw.feeCents ?? 0),
-      totalWithFeeCents: Number(raw.totalWithFeeCents ?? 0), feeBps: Number(raw.feeBps ?? 0),
+      totalWithFeeCents: Number(raw.totalWithFeeCents ?? 0), totalWithoutFeeCents: Number(raw.totalWithoutFeeCents ?? 0), feeBps: Number(raw.feeBps ?? 0),
+      couponDiscountCents: Number(raw.couponDiscountCents ?? 0), couponRefusal: typeof raw.couponRefusal === 'string' ? raw.couponRefusal : null,
       feeOrTipMode: raw.feeOrTipMode === 'tip' ? 'tip' : 'service_fee', adjusted: raw.adjusted === true,
       payers: Array.isArray(raw.payers) ? (raw.payers as SessionBill['payers']) : [],
       acceptedVouchers: Array.isArray(raw.acceptedVouchers) ? (raw.acceptedVouchers as string[]) : [],
@@ -2455,7 +2462,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
   async startTapCharge(tableSessionId, input) {
     const { data, error } = await getSupabaseClient().functions.invoke('tap-charge', {
-      body: { tableSessionId, baseCents: input.baseCents ?? null, waiveFee: input.waiveFee === true, reason: input.reason ?? null, idempotencyKey: input.idempotencyKey },
+      body: { tableSessionId, baseCents: input.baseCents ?? null, waiveFee: input.waiveFee === true, reason: input.reason ?? null, couponCode: input.couponCode ?? null, idempotencyKey: input.idempotencyKey },
     });
     if (error) {
       // O corpo traz o motivo: quem chamou decide se pode tentar com nova chave.
@@ -2516,6 +2523,13 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
   },
   async getCredits(restaurantId: string) {
     return rpcData<CreditsView>('restaurant_get_credits', { p_restaurant_id: restaurantId });
+  },
+  async getPlanLocks(restaurantId: string) {
+    const data = await rpcData<unknown>('restaurant_get_plan_locks', { p_restaurant_id: restaurantId });
+    return Array.isArray(data) ? (data as string[]) : [];
+  },
+  async notePlanPrompt(restaurantId: string) {
+    await rpcData('restaurant_note_plan_prompt', { p_restaurant_id: restaurantId });
   },
   async getCreditIndex(restaurantId: string) {
     return rpcData('restaurant_get_credit_index', { p_restaurant_id: restaurantId });

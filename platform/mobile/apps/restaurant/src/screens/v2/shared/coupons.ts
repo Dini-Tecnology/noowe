@@ -99,7 +99,7 @@ export function draftToPayload(draft: CouponDraft): Record<string, unknown> {
     minOrderCents: draft.minOrderReais.trim() ? cents(draft.minOrderReais) : null,
     services: draft.services.length ? draft.services : null, scope: draft.scope, scopeIds: draft.scope === 'bill' ? null : draft.scopeIds, dow: draft.dow.length ? draft.dow : null,
     hoursFrom: draft.hoursFrom.trim() || null, hoursUntil: draft.hoursUntil.trim() || null,
-    audience: draft.audience, inactiveDays: draft.audience === 'inactive' ? integer(draft.inactiveDays) ?? DEFAULT_VALIDITY_DAYS : null,
+    audience: draft.audience, inactiveDays: draft.audience === 'inactive' ? integer(draft.inactiveDays) : null,
     maxUses: integer(draft.maxUses), maxUsesPerUser: integer(draft.maxUsesPerUser) ?? 1,
     validFrom: from ? startOfDay(from) : null, validUntil: until ? endOfDay(until) : null, isAuto: draft.isAuto, isVisible: draft.isVisible,
   };

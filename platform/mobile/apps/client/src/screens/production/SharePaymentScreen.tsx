@@ -84,7 +84,8 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   // Valor fixo já decidiu a gorjeta na tela anterior. Em modo taxa, não há gorjeta.
   const choosesTip = tipMode && !!myOpen && myOpen.mode !== 'fixed_amount';
   const tips = useQuery({
-    queryKey: ['share-tip-options', myOpen?.id, myOpen?.baseCents],
+    // O cupom muda a base da gorjeta.
+    queryKey: ['share-tip-options', myOpen?.id, myOpen?.baseCents, myOpen?.couponDiscountCents],
     queryFn: () => billShares.tipOptions(myOpen!.id),
     enabled: choosesTip,
   });

@@ -445,7 +445,7 @@ export type CustomerReview = {
   createdAt: string;
 };
 
-export type PaymentMethodType = 'pix' | 'credit_card' | 'debit_card' | 'apple_pay' | 'google_pay' | 'tap_to_pay' | 'wallet';
+export type PaymentMethodType = 'pix' | 'credit_card' | 'debit_card' | 'apple_pay' | 'google_pay' | 'tap_to_pay' | 'tap_card' | 'wallet';
 
 export type TableCheckoutResult = {
   simulated: boolean;
