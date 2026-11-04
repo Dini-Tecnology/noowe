@@ -116,8 +116,9 @@ begin
   insert into public.orders(restaurant_id, customer_id) values (r, c) returning id into o;
   insert into public.order_items(order_id, menu_item_id, quantity, unit_price, total_price, status) values (o, menu, 1, 10, 10, 'cancelled');
   assert private.plan_orders_used(r, v_from, now() + interval '1 hour') = used + 2, 'cancelado não conta';
+  -- Pedido feito na espera é um pedido. Entrar na fila, sem pedir, não conta (resposta 25).
   insert into public.waitlist_entries(restaurant_id, customer_id, customer_name, party_size, position, status) values (r, c, 'Ana', 2, 1, 'seated');
-  assert private.plan_orders_used(r, v_from, now() + interval '1 hour') = used + 3, 'espera da fila conta 1';
+  assert private.plan_orders_used(r, v_from, now() + interval '1 hour') = used + 2, 'entrar na fila não conta';
   assert private.plan_overage_cents(r, 'essencial', 1000) = 0, 'na franquia, sem excedente';
   assert private.plan_overage_cents(r, 'essencial', 1010) = 150, 'R$ 0,15 por pedido acima';
   perform pg_temp.act(pg_temp.ctx('dono'));
@@ -150,6 +151,8 @@ begin
   sid := (public.customer_open_table_session(tbl->>'qr_code')->>'tableSessionId')::uuid;
   update public.subscription_invoices set status = 'paid' where restaurant_id = r;
   insert into public.subscription_invoices(restaurant_id, kind, period_start, period_end, subtotal_cents, total_cents, due_at) values (r, 'renewal', now(), now(), 100, 100, now() - interval '1 day') returning * into i;
+  -- Só vence o que virou cobrança.
+  update public.subscription_invoices set provider_ref = 'pay_m4' where restaurant_id = r and status = 'open';
   perform private.subscription_tick();
   assert (select status from public.subscription_invoices where id = i.id) = 'overdue', 'vencida';
   assert (select status from public.restaurant_subscriptions where restaurant_id = r) = 'past_due', 'em atraso';
@@ -165,7 +168,8 @@ begin
   assert o is not null, 'comanda aberta continua pedindo';
   assert (select status from public.table_sessions where id = sid) = 'active', 'e aberta';
   assert pg_temp.state_of(format($q$insert into public.orders(restaurant_id, customer_id) values (%L, %L)$q$, r, c)) = 'P0015', 'pedido fora de comanda, não';
-  assert pg_temp.state_of(format($q$insert into public.table_sessions(restaurant_id, table_id, status) select %L, id, 'active' from public.tables where restaurant_id = %L and status = 'available' limit 1$q$, r, r)) in ('P0015', 'ok'), 'comanda nova, não';
+  perform pg_temp.act(pg_temp.ctx('dono'));
+  assert pg_temp.state_of(format($q$insert into public.table_sessions(restaurant_id, table_id, status) values (%L, %L, 'active')$q$, r, (public.restaurant_create_table(r, 'susp-' || gen_random_uuid(), 2)->>'id')::uuid)) = 'P0015', 'comanda nova, não';
   -- Dados seguem acessíveis.
   perform pg_temp.act(pg_temp.ctx('dono'));
   assert public.restaurant_get_plan_summary(r) ? 'status', 'dados seguem acessíveis';

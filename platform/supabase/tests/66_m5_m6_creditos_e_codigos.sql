@@ -204,11 +204,13 @@ begin
   assert (select amount_cents from public.subscription_invoice_lines where invoice_id = i.id and kind = 'promo') = -9950, 'linha do código';
   -- Crédito entra depois do código, com o limite de 30% sobre o que sobrou.
   update private.noowe_credit_lots set remaining_cents = 20000, available_from = current_date - 1, expires_at = current_date + 90 where id = pg_temp.ctx('lot');
+  update private.noowe_promo_redemptions set status = 'active', months_billed = 0 where restaurant_id = r and code = 'METADE';
   i := private.invoice_create(r, 'renewal', now(), now() + interval '1 month', 19900, 'Plano');
   assert i.total_cents = 9950 - 2985, 'depois do código, até 30%: ' || i.total_cents;
   -- Piso de fatura.
   perform set_config('noowe.param_author', 'teste M6', true);
   update private.noowe_credit_settings set min_invoice_cents = 9000;
+  update private.noowe_promo_redemptions set status = 'active', months_billed = 0 where restaurant_id = r and code = 'METADE';
   i := private.invoice_create(r, 'renewal', now(), now() + interval '1 month', 19900, 'Plano');
   assert i.total_cents = 9000, 'respeita o piso: ' || i.total_cents;
   update private.noowe_credit_settings set min_invoice_cents = 0;
@@ -230,11 +232,11 @@ begin
   select * into i from public.subscription_invoices where restaurant_id = r and kind = 'renewal';
   assert i.total_cents = 0 and i.status = 'paid', 'primeiros meses grátis';
   select * into rd from private.noowe_promo_redemptions where restaurant_id = r;
-  update private.noowe_promo_redemptions set started_at = now() - interval '7 months' where id = rd.id;
+  update private.noowe_promo_redemptions set months_billed = 7 where id = rd.id;
   update private.noowe_credit_lots set remaining_cents = 0 where restaurant_id = r;
   i := private.invoice_create(r, 'renewal', now(), now() + interval '1 month', 19900, 'Plano');
   assert i.total_cents = 9950, 'depois, 50% no restante do primeiro ano: ' || i.total_cents;
-  update private.noowe_promo_redemptions set started_at = now() - interval '13 months' where id = rd.id;
+  update private.noowe_promo_redemptions set months_billed = 12 where id = rd.id;
   i := private.invoice_create(r, 'renewal', now(), now() + interval '1 month', 19900, 'Plano');
   assert i.total_cents = 19900, 'acabou o benefício';
   assert (select status from private.noowe_promo_redemptions where id = rd.id) = 'ended', 'encerrado';
@@ -246,9 +248,9 @@ do $$
 declare r uuid := pg_temp.ctx('r');
 begin
   delete from private.noowe_promo_redemptions where restaurant_id = r;
-  insert into private.noowe_promo_redemptions(restaurant_id, code, started_at) values (r, 'FUNDADOR', now() - interval '2 months');
+  insert into private.noowe_promo_redemptions(restaurant_id, code, started_at, months_billed) values (r, 'FUNDADOR', now() - interval '2 months', 2);
   assert private.promo_free_during(r, now()), 'isenção total';
-  update private.noowe_promo_redemptions set started_at = now() - interval '7 months' where restaurant_id = r;
+  update private.noowe_promo_redemptions set months_billed = 8 where restaurant_id = r;
   assert not private.promo_free_during(r, now()), 'desconto parcial';
 end $$;
 select pass('M6, critério 3: durante a isenção total não gera crédito; em desconto parcial, gera');

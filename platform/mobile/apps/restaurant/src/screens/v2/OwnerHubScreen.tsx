@@ -63,6 +63,8 @@ import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
 import { MyTipsPanel } from './shared/MyTipsPanel';
 import { CouponsEntry } from './shared/CouponsEntry';
 import { WaiterAppShareCard } from './shared/WaiterAppShareCard';
+import { CreditIndexCard } from './shared/CreditIndexCard';
+import { usePlanLocks } from './shared/usePlanLocks';
 import { PlanGateBanner } from './shared/PlanGateBanner';
 import { DayClosePanel } from './shared/DayClosePanel';
 import { PaymentActionsPanel } from './shared/PaymentActionsPanel';
@@ -307,6 +309,7 @@ export default function OwnerHubScreen() {
         <MyRolesTasksPanel />
         <MyTipsPanel />
         <WaiterAppShareCard />
+        <CreditIndexCard />
         <CouponsEntry onOpen={openScreen} />
         <PlanGateBanner />
 
@@ -470,11 +473,12 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
   const { data: snapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useDashboardSnapshot();
   const { data: recentOrders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useRestaurantOrders();
   const { data: serviceCalls, loading: callsLoading, error: callsError, refresh: refreshCalls } = useServiceCalls();
+  const locks = usePlanLocks();
   const primaryActions: { title: string; detail: string; screen: string; icon: IconComponent }[] = [
     { title: 'Cardápio', detail: 'Itens e preços', screen: 'Menu', icon: UtensilsCrossed },
     { title: 'Equipe', detail: 'Staff e turnos', screen: 'Staff', icon: Users },
     { title: 'Financeiro', detail: 'Receita e composição', screen: 'Financial', icon: CreditCardIcon },
-    { title: 'Integrações', detail: 'Delivery', screen: 'Integrations', icon: Plug },
+    ...(locks.includes('delivery_integrations') ? [] : [{ title: 'Integrações', detail: 'Delivery', screen: 'Integrations', icon: Plug }]),
   ];
   const secondaryActions: { title: string; screen: string; icon: IconComponent }[] = [
     { title: 'Relatórios', screen: 'Reports', icon: BarChart },

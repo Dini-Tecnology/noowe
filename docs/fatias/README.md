@@ -119,6 +119,8 @@ Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercia
 | M4 | Assinatura, teste de 30 dias, troca de plano, uso e faturas, no banco e na tela. Falta a chave raiz do Asaas e o token do webhook nas funções, e os dados da empresa para a nota (pendência 34) |
 | M5, M6 | Créditos e códigos, no banco e na tela |
 | P3 | Cupons no banco e nas telas: 3 passos, painel com status e relatório, link e QR, visíveis na página, aplicar no app e na comanda, com o mínimo da P2 (grupos da ficha). O link depende de `/c/*` no arquivo de universal links do site noowebr.com |
+| Item G | Matriz de perfis com teste perfil por perfil e entre estabelecimentos. A cozinha ainda consegue ler `orders` pela API, porque o KDS depende do Realtime nessa tabela; a tela não mostra desconto |
+| Item H | Parâmetros em tabela e quatro consultas internas prontas, em `docs/PARAMETROS-NOOWE.md` |
 
 ## Correspondência com o faseamento da spec (§8)
 

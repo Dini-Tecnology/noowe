@@ -6,6 +6,9 @@ import { PlanGateBanner } from '../screens/v2/shared/PlanGateBanner';
 import { planChangeKind, usagePercent } from '../screens/v2/config/planView';
 
 const mockApi = {
+  notePlanPrompt: jest.fn().mockResolvedValue(undefined),
+  getPlanLocks: jest.fn().mockResolvedValue([]),
+  getCreditIndex: jest.fn(),
   getPlanSummary: jest.fn(), listPlans: jest.fn(), choosePlan: jest.fn(), changePlan: jest.fn(), cancelSubscription: jest.fn(),
   listInvoices: jest.fn(), getCredits: jest.fn(), applyPromoCode: jest.fn(),
 };
@@ -74,6 +77,14 @@ describe('Escolha seu plano (M4, critérios 10, 11 e 12)', () => {
 });
 
 describe('Meu plano (M4 e M5)', () => {
+  it('o plano atual muda de ciclo a qualquer momento', async () => {
+    (api as any).changePlan = jest.fn().mockResolvedValue({});
+    const view = render(<PlanScreen />);
+    fireEvent.press(await view.findByText('Anual'));
+    fireEvent.press(await view.findByText('Mudar para anual'));
+    await waitFor(() => expect((api as any).changePlan).toHaveBeenCalledWith('r1', 'essencial', 'annual'));
+  });
+
   it('uso, previsão e código com até quando vale', async () => {
     const view = render(<PlanScreen />);
     expect(await view.findByText(/900 de 1000 pedidos/)).toBeTruthy();
@@ -154,5 +165,20 @@ describe('aviso de plano', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(api.getPlanSummary).not.toHaveBeenCalled();
     expect(view.toJSON()).toBeNull();
+  });
+});
+
+describe('Índice e cadeado (M4, M5)', () => {
+  it('o Gerente vê índice e faixa, sem valores, e o Dono não precisa deste cartão', async () => {
+    const { CreditIndexCard } = require('../screens/v2/shared/CreditIndexCard');
+    mockRoles = ['manager'];
+    (api as any).getCreditIndex.mockResolvedValue({ indexBps: 6200, tierName: 'Ouro' });
+    const view = render(<CreditIndexCard />);
+    expect(await view.findByText('62%')).toBeTruthy();
+    expect(view.getByText(/faixa Ouro/)).toBeTruthy();
+    expect(view.queryByText(/R\$/)).toBeNull();
+    mockRoles = ['owner'];
+    expect(render(<CreditIndexCard />).toJSON()).toBeNull();
+    mockRoles = ['owner'];
   });
 });

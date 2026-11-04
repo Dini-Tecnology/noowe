@@ -179,6 +179,11 @@ export default function PlanScreen() {
                 </>
               )}
               <Text style={[muted, { fontSize: 12 }]}>{plan.features.map((key) => FEATURE_LABELS[key] ?? key).join(' · ')}</Text>
+              {current && !summary.needsChoice && !plan.isContract && cycle !== summary.cycle ? (
+                <Pressable accessibilityRole="button" disabled={busy} onPress={() => void act(() => supabaseApiAdapter.changePlan(restaurantId!, plan.code, cycle), 'Muda no próximo ciclo.')} style={[styles.action, { backgroundColor: colors.primary }]}>
+                  <Text style={styles.actionText}>{cycle === 'annual' ? 'Mudar para anual' : 'Mudar para mensal'}</Text>
+                </Pressable>
+              ) : null}
               {!current ? (
                 <Pressable accessibilityRole="button" disabled={busy} onPress={() => pick(plan)} style={[styles.action, { backgroundColor: colors.primary, opacity: busy ? 0.6 : 1 }]}>
                   <Text style={styles.actionText}>{plan.isContract ? 'Falar com a NOOWE' : summary.needsChoice ? 'Começar o teste' : 'Trocar para este'}</Text>

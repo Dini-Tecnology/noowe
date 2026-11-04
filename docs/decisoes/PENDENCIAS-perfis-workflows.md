@@ -100,3 +100,5 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 77 | **Barman "nas bebidas do Quick"** | Um pedido pode misturar bebida e comida | Barman cobra pedido de balcão (sem mesa), inteiro | Item G |
 | 78 | **% das mesas pagas pelo app** | O aditivo não diz a base | Consumo pago pelo app sobre o consumo pago nas mesas do garçom, no dia operacional aberto. Vale fica fora, como no índice | Item G |
 | 79 | **Cupom de 100%** | O aditivo não trata desconto que zera a conta | O desconto para no mínimo de cobrança (hoje R$ 5). Abaixo disso, pagar pelo app não é possível. Conta menor que o mínimo não recebe desconto | P3 |
+| 80 | **Restaurante com plano cancelado** | O aditivo não diz o que resta depois do fim do período | Fica sem os recursos que dependem de plano (divisão, reservas, fila, fidelidade, NFC-e, app do garçom). Cardápio e pedido seguem | M4 |
+| 81 | **Plano sem NFC-e** | A resposta lista NFC-e só no Business, mas emitir nota é obrigação do restaurante | Sem emitir: a nota fica bloqueada, com o motivo. Vale confirmar com o contador | M4 |

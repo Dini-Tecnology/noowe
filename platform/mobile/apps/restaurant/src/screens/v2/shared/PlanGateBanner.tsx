@@ -16,7 +16,11 @@ export function PlanGateBanner() {
 
   useFocusEffect(useCallback(() => {
     if (!restaurantId || !isOwner) return;
-    supabaseApiAdapter.getPlanSummary(restaurantId).then(setSummary).catch(() => setSummary(null));
+    supabaseApiAdapter.getPlanSummary(restaurantId).then((result) => {
+      setSummary(result);
+      // Quem ainda não escolheu: os dias do teste contam deste acesso.
+      if (result.needsChoice) void supabaseApiAdapter.notePlanPrompt(restaurantId).catch(() => undefined);
+    }).catch(() => setSummary(null));
   }, [isOwner, restaurantId]));
 
   if (!isOwner || !summary) return null;

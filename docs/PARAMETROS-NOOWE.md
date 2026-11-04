@@ -115,6 +115,8 @@ Tabela `noowe_billing_settings`.
 | `trial_days` (teste sem cartão para quem não usa código) | 30 |
 | `staff_invite_days` (validade do convite de equipe) | 7 |
 
+Também em `noowe_billing_settings`: `invoice_due_days`, prazo de vencimento da fatura, contado de novo se a cobrança só sair depois. Em `noowe_credit_settings`: `expiry_notice_days`, aviso antes de o crédito expirar.
+
 ## Plano sugerido por tipo de serviço
 
 Tabela `noowe_plan_suggestions`. O app só sugere; o restaurante escolhe.
@@ -183,7 +185,7 @@ O piso de fatura depois dos créditos fica em `noowe_credit_settings.min_invoice
 
 ## Consultas internas
 
-Margem por pagamento, sem pagamentos simulados. `noowe_split_cents` é o que a NOOWE recebeu:
+Margem por pagamento, sem pagamentos simulados. `noowe_split_cents` é o que a NOOWE recebeu de taxa, sem a conveniência, que tem consulta própria:
 
 ```sql
 select restaurant_id, payment_method, count(*), sum(amount_cents) as pago_cents, sum(noowe_split_cents) as split_cents
