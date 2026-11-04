@@ -166,7 +166,20 @@ insert into private.noowe_promo_codes(code, kind, duration_months, valid_until, 
 values ('FUNDADORES', 'free_months', 6, '2027-06-30', 20, true);
 ```
 
-Outros campos: `valid_from`, `plan_codes` (vazio vale para todos), `allow_monthly`, `allow_annual`, `is_active`.
+Outros campos: `valid_from`, `plan_codes` (vazio vale para todos), `allow_monthly`, `allow_annual`, `is_active`, `skips_trial` (dispensa o teste) e
+`grants_category` (marca o restaurante, como "Parceiro Fundador", e a marca fica depois que o benefício acaba).
+
+Código com fases, como o de fundador (6 meses grátis e 50% no restante do primeiro ano), usa `noowe_promo_code_phases`:
+
+```sql
+insert into private.noowe_promo_codes(code, kind, duration_months, skips_trial, grants_category)
+values ('FUNDADOR', 'free_months', 12, true, 'Parceiro Fundador');
+insert into private.noowe_promo_code_phases(code, phase_order, kind, duration_months, percent_off_bps) values
+  ('FUNDADOR', 1, 'free_months', 6, null),
+  ('FUNDADOR', 2, 'percent_off', 6, 5000);
+```
+
+O piso de fatura depois dos créditos fica em `noowe_credit_settings.min_invoice_cents`.
 
 ## Consultas internas
 
@@ -191,4 +204,8 @@ Receita de conveniência, por restaurante e mês:
 select * from private.noowe_report_convenience order by month desc;
 ```
 
-Créditos gerados, usados, expirados e a liberar ainda não têm consulta: dependem da fatia M5.
+Créditos gerados, usados, expirados e a liberar:
+
+```sql
+select * from private.noowe_report_credits order by month desc;
+```

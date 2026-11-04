@@ -1201,6 +1201,8 @@ export const customerBackend: CustomerBackend = {
     const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
     let query = getSupabaseClient().from('restaurants').select('*')
       .eq('is_active', true)
+      // Assinatura em atraso depois da tolerância: sai da busca. Comanda aberta continua.
+      .eq('billing_hidden', false)
       .overlaps('service_models', ['fine_dining', 'casual_dining', 'quick_service'])
       .order('id', { ascending: true }).limit(limit + 1);
     if (input.search?.trim()) query = query.ilike('name', `%${input.search.trim()}%`);

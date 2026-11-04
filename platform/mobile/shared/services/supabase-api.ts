@@ -5,6 +5,29 @@ import { getOptionalSupabaseSessionUser } from './supabase-auth';
 import type { ServiceType } from '../config/service-types';
 import type { Json } from '../types/database.generated';
 
+export type BillingCycle = 'monthly' | 'annual';
+export type PlanSummary = {
+  needsChoice: boolean; trialDays?: number; planCode?: string; planName?: string; isContract?: boolean; cycle?: BillingCycle; status?: string; priceCents?: number | null;
+  trialEndsAt?: string | null; periodEnd?: string; nextPlanCode?: string | null; nextCycle?: BillingCycle | null; cancelAt?: string | null;
+  usage?: { orders: number; allowance: number | null; projectedOrders: number; projectedOverageCents: number; overageCents: number };
+  promo?: { code: string; endsAt: string | null; startsWithFirstInvoice: boolean; priceAfterCents: number } | null;
+  category?: string | null; billingHidden?: boolean; ordersSuspended?: boolean; locked?: string[];
+};
+export type PlanOption = {
+  code: string; name: string; isContract: boolean; monthlyCents: number | null; annualCents: number | null; annualSavingsCents: number | null;
+  orderAllowance: number | null; overageCents: number | null; features: string[]; suggested: boolean;
+};
+export type PlanInvoice = {
+  id: string; kind: string; status: string; totalCents: number; dueAt: string; paidAt: string | null; periodStart: string; periodEnd: string;
+  checkoutUrl: string | null; nfseStatus: string; nfseUrl: string | null; lines: { kind: string; description: string; amountCents: number }[];
+};
+export type CreditsView = {
+  indexBps: number; tierCode: string | null; paidCents: number; revenueCents: number; minVolumeCents: number | null;
+  marks: { code: string; name: string; minIndexBps: number; creditBps: number }[]; forecastCents: number;
+  nextTier: { name: string; missingCents: number } | null; balanceCents: number; toRelease: { amountCents: number; availableFrom: string }[];
+  expiringSoonCents: number; statement: { kind: string; amountCents: number; at: string; invoiceId: string | null; month: string | null }[];
+};
+
 export type PaymentStatement = {
   paidCents: number; feeCents: number; refundedCents: number; netCents: number;
   payments: {
@@ -639,6 +662,16 @@ export interface SupabaseApiAdapter {
   setAcceptedVouchers(restaurantId: string, kinds: string[]): Promise<any>;
   getPaymentOptions(restaurantId: string): Promise<{ tapActive: boolean; acceptedVouchers: string[] }>;
   getChargePolicies(restaurantId: string): Promise<ChargePolicyRow[]>;
+  /** Módulos e plano (M4, M5, M6). Só o Dono; o Gerente vê índice e faixa. */
+  getPlanSummary(restaurantId: string): Promise<PlanSummary>;
+  listPlans(restaurantId: string): Promise<PlanOption[]>;
+  choosePlan(restaurantId: string, planCode: string, cycle: BillingCycle): Promise<PlanSummary>;
+  changePlan(restaurantId: string, planCode: string, cycle?: BillingCycle | null): Promise<PlanSummary>;
+  cancelSubscription(restaurantId: string, reason: string): Promise<PlanSummary>;
+  listInvoices(restaurantId: string): Promise<PlanInvoice[]>;
+  getCredits(restaurantId: string): Promise<CreditsView>;
+  getCreditIndex(restaurantId: string): Promise<{ indexBps: number; tierName: string | null }>;
+  applyPromoCode(restaurantId: string, code: string): Promise<PlanSummary>;
   setConvenienceAbsorbed(restaurantId: string, absorbed: boolean): Promise<any>;
   /** Extrato do Dono: valor pago, taxa e líquido. Tarifa e margem não saem do servidor. */
   getPaymentStatement(restaurantId: string): Promise<PaymentStatement>;
@@ -2432,6 +2465,34 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
   async setConvenienceAbsorbed(restaurantId: string, absorbed: boolean) {
     return rpcData('restaurant_set_convenience_absorbed', { p_restaurant_id: restaurantId, p_absorbed: absorbed });
+  },
+
+  async getPlanSummary(restaurantId: string) {
+    return rpcData<PlanSummary>('restaurant_get_plan_summary', { p_restaurant_id: restaurantId });
+  },
+  async listPlans(restaurantId: string) {
+    return rpcData<PlanOption[]>('restaurant_list_plans', { p_restaurant_id: restaurantId });
+  },
+  async choosePlan(restaurantId: string, planCode: string, cycle: BillingCycle) {
+    return rpcData<PlanSummary>('restaurant_choose_plan', { p_restaurant_id: restaurantId, p_plan_code: planCode, p_cycle: cycle });
+  },
+  async changePlan(restaurantId: string, planCode: string, cycle?: BillingCycle | null) {
+    return rpcData<PlanSummary>('restaurant_change_plan', { p_restaurant_id: restaurantId, p_plan_code: planCode, p_cycle: cycle ?? null });
+  },
+  async cancelSubscription(restaurantId: string, reason: string) {
+    return rpcData<PlanSummary>('restaurant_cancel_subscription', { p_restaurant_id: restaurantId, p_reason: reason });
+  },
+  async listInvoices(restaurantId: string) {
+    return rpcData<PlanInvoice[]>('restaurant_list_invoices', { p_restaurant_id: restaurantId });
+  },
+  async getCredits(restaurantId: string) {
+    return rpcData<CreditsView>('restaurant_get_credits', { p_restaurant_id: restaurantId });
+  },
+  async getCreditIndex(restaurantId: string) {
+    return rpcData('restaurant_get_credit_index', { p_restaurant_id: restaurantId });
+  },
+  async applyPromoCode(restaurantId: string, code: string) {
+    return rpcData<PlanSummary>('restaurant_apply_promo_code', { p_restaurant_id: restaurantId, p_code: code });
   },
 
   async getPaymentStatement(restaurantId: string) {

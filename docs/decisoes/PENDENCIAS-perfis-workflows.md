@@ -84,3 +84,9 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 61 | **Gorjeta e taxa de quem pagou no dia** | A apuração pode ser por dia do pagamento ou do consumo | Pelo dia do pagamento. O estorno total sai da apuração só se vier antes do fechamento do dia | — |
 | 62 | **Nota de comanda reaberta** | Nota já emitida não cobre o que foi acrescentado | A nota emitida continua; o acréscimo não gera nova nota sozinho. Precisa da orientação do contador | Fiscal |
 | 63 | **Estorno parcial e nota** | A venda segue, e a nota já emitida fica pelo total | Não cancela: registra e avisa gerente e Dono para revisar | Fiscal |
+| 64 | **Tarifa no estorno total no mesmo dia** | "A NOOWE assume a tarifa", mas o sandbox não mostrou se o Asaas devolve a tarifa à subconta | A tarifa inteira vira crédito na fatura do restaurante. Se o Asaas devolver, o crédito sobra e precisa sair | Contrato Asaas |
+| 65 | **Piso de fatura com crédito** | O aditivo cita um piso, sem valor | R$ 0, em `noowe_credit_settings.min_invoice_cents` | — |
+| 66 | **Vencimento da fatura** | Não definido | 3 dias depois de gerada | — |
+| 67 | **Restaurante sem CNPJ na fatura** | O Asaas pede documento para cobrar | A fatura fica em aberto, com o motivo registrado, sem chamar o provedor | — |
+| 68 | **Cadeado no recurso fora do plano** | "Só o Dono vê com cadeado" pode ser em cada tela | Lista "Fora do seu plano" em Módulos e plano. Nas telas do dia a dia, o recurso some para todos | — |
+| 69 | **Reembolso ao cancelar o anual** | Sem reembolso | Como o aditivo; a tela avisa antes | — |

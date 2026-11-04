@@ -161,7 +161,8 @@ begin
   perform private.apply_payment_event(t.id, 'asaas', 'ok-' || t.id, 'RECEIVED', 'confirmed', t.amount_cents);
   perform private.apply_payment_event(t.id, 'asaas', 're-' || t.id, 'PAYMENT_REFUNDED', 'refunded', null, '{}', 'refunded');
   assert (pg_temp.fee(t.id)).fee_returned, 'mesmo dia: a taxa volta';
-  assert (select status from private.noowe_pay_compensations where gateway_transaction_id = t.id) = 'voided', 'e a diferença não fica com o restaurante';
+  assert (select status from private.noowe_pay_compensations where gateway_transaction_id = t.id and kind = 'tariff_over_fee') = 'voided', 'a diferença dá lugar à tarifa inteira';
+  assert (select amount_cents from private.noowe_pay_compensations where gateway_transaction_id = t.id and kind = 'tariff_on_refund') = 99, 'a NOOWE assume a tarifa';
   -- Total, depois do dia: a taxa não volta. O Asaas cancela o split, então o valor vai para o razão.
   t := pg_temp.share(11000);
   perform public.service_payment_set_split(t.id, 10622);

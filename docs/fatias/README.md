@@ -116,7 +116,9 @@ Origem: [`docs/spec/aditivo-comercial-e-pagamentos.md`](../spec/aditivo-comercia
 | M3 | Feita e desligada: a taxa fica em R$ 0 até o contador confirmar (pendência 38) |
 | V1 | Maquininha da casa: feita. Online e por aproximação dependem do provedor; o Asaas não aceita vale online (ADR-031) |
 | T1 | Pronto e desligado: fornecedor entra por parâmetro e pela camada em `functions/_shared/tap`. Falta o contrato e o SDK |
-| M4–M6, P3 | A fazer, nesta ordem (plano de 03/11) |
+| M4 | Assinatura, teste de 30 dias, troca de plano, uso e faturas, no banco e na tela. Falta a chave raiz do Asaas e o token do webhook nas funções, e os dados da empresa para a nota (pendência 34) |
+| M5, M6 | Créditos e códigos, no banco e na tela |
+| P3 | A fazer (plano de 03/11) |
 
 ## Correspondência com o faseamento da spec (§8)
 

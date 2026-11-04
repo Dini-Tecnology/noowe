@@ -61,6 +61,7 @@ import { PersonalSettingsContent } from './config/PersonalSettingsContent';
 import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
 import { MyTipsPanel } from './shared/MyTipsPanel';
+import { PlanGateBanner } from './shared/PlanGateBanner';
 import { DayClosePanel } from './shared/DayClosePanel';
 import { PaymentActionsPanel } from './shared/PaymentActionsPanel';
 import { canApproveRequest } from './shared/staffRoles';
@@ -304,6 +305,7 @@ export default function OwnerHubScreen() {
 
         <MyRolesTasksPanel />
         <MyTipsPanel />
+        <PlanGateBanner />
 
         {isOwner ? (
           <DashboardTab onNavigate={openScreen} colors={colors} />

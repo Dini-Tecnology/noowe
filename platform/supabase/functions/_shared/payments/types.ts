@@ -2,7 +2,7 @@ export interface AsaasCustomerInput {
   name: string; cpfCnpj: string; email?: string | null; mobilePhone?: string | null; externalReference: string;
 }
 export interface AsaasChargeInput {
-  customer: string; billingType: "PIX" | "CREDIT_CARD"; valueCents: number; dueDate: string;
+  customer: string; billingType: "PIX" | "CREDIT_CARD" | "UNDEFINED"; valueCents: number; dueDate: string;
   externalReference: string; description: string;
   successUrl?: string | null;
   // Cobrança em um toque com cartão salvo (F6): o token vem da nossa tabela privada, nunca do app.
