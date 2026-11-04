@@ -109,6 +109,7 @@ Tabela `noowe_billing_settings`.
 | `suspend_orders_after_days` (suspende pedidos pelo app) | 30 |
 | `renewal_notice_days` (aviso antes da renovação) | 30 |
 | `trial_days` (teste sem cartão para quem não usa código) | 30 |
+| `staff_invite_days` (validade do convite de equipe) | 7 |
 
 ## Plano sugerido por tipo de serviço
 

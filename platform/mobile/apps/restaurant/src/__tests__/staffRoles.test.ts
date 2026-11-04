@@ -43,6 +43,12 @@ describe('canManageMember', () => {
     expect(canManageMember({ viewerRole: 'owner', viewerUserId: 'u-owner', member: manager })).toBe(true);
   });
 
+  it('gerente não mexe na função de garçom de quem também é gerente', () => {
+    expect(canManageMember({ viewerRole: 'manager', viewerUserId: 'u-m', member: waiter, memberRoles: ['waiter', 'manager'] })).toBe(false);
+    expect(canManageMember({ viewerRole: 'manager', viewerUserId: 'u-m', member: waiter, memberRoles: ['waiter', 'barman'] })).toBe(true);
+    expect(canManageMember({ viewerRole: 'owner', viewerUserId: 'u-o', member: waiter, memberRoles: ['waiter', 'manager'] })).toBe(true);
+  });
+
   it('quem não é dono nem gerente não gerencia ninguém', () => {
     expect(canManageMember({ viewerRole: 'waiter', viewerUserId: 'u-w', member: waiter })).toBe(false);
     expect(canManageMember({ viewerRole: null, viewerUserId: null, member: waiter })).toBe(false);

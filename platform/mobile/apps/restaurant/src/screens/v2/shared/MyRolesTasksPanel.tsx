@@ -1,20 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter, type StaffTask } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import { filterTasksByRole, taskFilterRoles, taskRoleTag } from './roleTasks';
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Dono',
-  manager: 'Gerente',
-  maitre: 'Maître',
-  chef: 'Chef',
-  barman: 'Barman',
-  cook: 'Cozinheiro',
-  waiter: 'Garçom',
-};
+import { ROLE_LABELS } from './staffRoles';
 
 /**
  * Tarefas de todas as funções da pessoa, com etiqueta e filtro. Só aparece para quem acumula funções. A aba de
@@ -38,12 +30,15 @@ export function MyRolesTasksPanel() {
     }
   }, [restaurantId]);
 
-  useEffect(() => {
+  // Sem Realtime aqui (é da O4): recarrega ao voltar para a tela.
+  useFocusEffect(useCallback(() => {
     if (multiRole) void load();
-  }, [load, multiRole]);
+  }, [load, multiRole]));
 
   const roles = useMemo(() => taskFilterRoles(tasks, serverRoles), [serverRoles, tasks]);
-  const visible = useMemo(() => filterTasksByRole(tasks, serverRoles, filter), [filter, serverRoles, tasks]);
+  // Filtro de uma função que não tem mais tarefas não pode esconder a lista inteira.
+  const activeFilter = filter && roles.includes(filter) ? filter : null;
+  const visible = useMemo(() => filterTasksByRole(tasks, serverRoles, activeFilter), [activeFilter, serverRoles, tasks]);
 
   if (!multiRole) return null;
 
@@ -53,7 +48,7 @@ export function MyRolesTasksPanel() {
       {roles.length > 1 ? (
         <View style={styles.filters}>
           {[null, ...roles].map((role) => {
-            const active = filter === role;
+            const active = activeFilter === role;
             return (
               <Pressable
                 key={role ?? 'todas'}

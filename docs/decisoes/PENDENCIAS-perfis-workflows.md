@@ -63,6 +63,6 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 40 | **Recepcionista recusa reserva?** | O PDF diz que ela não pode "aprovar, recusar" | Não recusa; só o Maître completo, Gerente e Dono | — |
 | 41 | **O que é "isentar no-show" sem taxa?** | A taxa está oculta (resposta 10) e não há o que isentar | Reverter o no-show; quando a taxa existir, a permissão é a mesma | — |
 | 42 | **Gerente altera outro Gerente?** | Item G só diz que o Dono "concede" | Só o Dono altera ou inativa Gerente | — |
-| 43 | **Validade do convite de equipe** | Não definida | 7 dias, em `private.staff_invite_ttl` | — |
+| 43 | **Validade do convite de equipe** | Não definida | 7 dias, em `noowe_billing_settings.staff_invite_days` | — |
 | 44 | **Convite sem e-mail** | "Por e-mail ou link": o link funciona para quem o tiver | Permitido; quem convida escolhe | — |
 | 45 | **Quem vê a escala** | A matriz do PDF inclui Maître e Chef, e hoje só Dono e Gerente leem | Fica para depois: não está nos critérios da O3 | — |

@@ -1,6 +1,6 @@
 -- Fatia O3 (docs/fatias/O3-funcoes-e-escala.md), um bloco por critério de aceite.
 begin;
-select plan(82);
+select plan(98);
 
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
@@ -281,6 +281,51 @@ select is(pg_temp.state_of(format($q$select public.staff_accept_invite(%L)$q$, (
 set local role authenticated;
 select is(pg_temp.state_of($q$select count(*) from public.staff_invites$q$), '42501', 'o app não lê a tabela de convites');
 reset role;
+
+-- ---------------------------------------------------------------------------
+-- Correções da revisão de código
+-- ---------------------------------------------------------------------------
+do $$
+declare r uuid := pg_temp.ctx('r'); c uuid := pg_temp.ctx('cliente'); a uuid; b uuid; g uuid := pg_temp.new_user('gerente_r'); w uuid := pg_temp.new_user('garcom_r'); e uuid := pg_temp.new_user('volta');
+begin
+  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status) values (r, c, now() + interval '3 day', 2, 'pending') returning id into a;
+  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status) values (r, c, now() + interval '4 day', 2, 'cancelled') returning id into b;
+  insert into _ctx values ('res_p', a), ('res_c', b);
+  perform pg_temp.act(pg_temp.ctx('owner'));
+  perform public.restaurant_set_staff_roles(r, g, array['manager'], 'manager');
+  perform public.restaurant_set_staff_roles(r, w, array['waiter'], 'waiter');
+  perform public.restaurant_set_staff_roles(r, e, array['waiter', 'barman'], 'barman');
+end $$;
+select pg_temp.act(pg_temp.ctx('recep'));
+select is(pg_temp.state_of(format($q$select public.restaurant_update_reservation_status(%L, 'seated')$q$, pg_temp.ctx('res_p'))), '42501', 'revisão: Recepcionista não senta reserva pendente');
+select is(pg_temp.state_of(format($q$select public.restaurant_update_reservation_status(%L, 'confirmed')$q$, pg_temp.ctx('res_c'))), '42501', 'revisão: nem reconfirma reserva cancelada');
+
+select pg_temp.act(pg_temp.ctx('gerente_r'));
+select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L, %L, array['owner', 'waiter'], 'waiter')$q$, pg_temp.ctx('r'), pg_temp.ctx('owner'))), '42501',
+  'revisão: Gerente não mexe nas funções do Dono');
+select is(pg_temp.state_of(format($q$select public.restaurant_upsert_staff_role(%L, %L, 'waiter')$q$, pg_temp.ctx('r'), pg_temp.ctx('owner'))), '42501', 'revisão: nem pela RPC antiga');
+select is(pg_temp.state_of(format($q$select public.restaurant_upsert_staff_role(%L, %L, 'chef')$q$, pg_temp.ctx('r'), pg_temp.ctx('gerente_r'))), '42501', 'revisão: nem nas próprias');
+
+select pg_temp.act(pg_temp.ctx('owner'));
+select lives_ok(format($q$select public.restaurant_deactivate_staff((select id from public.user_roles where user_id = %L limit 1))$q$, pg_temp.ctx('volta')), 'inativar a pessoa');
+select lives_ok(format($q$select public.restaurant_reactivate_staff((select id from public.user_roles where user_id = %L limit 1))$q$, pg_temp.ctx('volta')), 'reativar a pessoa');
+select is((select count(*)::int from public.user_roles where user_id = pg_temp.ctx('volta') and is_active), 2, 'revisão: reativar traz as duas funções');
+select lives_ok(format($q$select public.restaurant_set_staff_roles(%L, %L, array['barman'], 'barman')$q$, pg_temp.ctx('r'), pg_temp.ctx('volta')), 'tirar uma função');
+select is((select count(*)::int from public.user_roles where user_id = pg_temp.ctx('volta')), 1, 'revisão: a função tirada não fica como inativa');
+select is((select count(*)::int from public.audit_logs where action = 'staff_role_revoked' and "before"->>'user_id' = pg_temp.ctx('volta')::text and "before"->>'role' = 'waiter'), 2,
+  'revisão: tirar a função fica em audit_logs');
+
+-- A pessoa perdeu a função escalada, e o turno ainda pode ser cancelado.
+insert into public.shifts(staff_id, restaurant_id, date, start_time, end_time, role, status, is_overtime, created_at, updated_at)
+  values (pg_temp.ctx('volta'), pg_temp.ctx('r'), now(), '10:00', '12:00', 'waiter', 'scheduled', false, now(), now());
+select lives_ok(format($q$select public.restaurant_update_shift((select id from public.shifts where staff_id = %L), p_status => 'cancelled')$q$, pg_temp.ctx('volta')),
+  'revisão: cancelar turno de função que a pessoa não tem mais');
+select is(pg_temp.state_of(format($q$select public.restaurant_update_shift((select id from public.shifts where staff_id = %L), p_role => 'chef')$q$, pg_temp.ctx('volta'))), '22023',
+  'mudar para função que ela não tem segue recusado');
+select lives_ok(format($q$select public.restaurant_update_shift((select id from public.shifts where staff_id = %L), p_role => '')$q$, pg_temp.ctx('volta')), 'limpar a função');
+select is((select role from public.shifts where staff_id = pg_temp.ctx('volta')), null, 'revisão: função vazia limpa');
+
+select is((select extract(day from private.staff_invite_ttl())::int), 7, 'a validade do convite vem do parâmetro');
 
 select * from finish();
 rollback;

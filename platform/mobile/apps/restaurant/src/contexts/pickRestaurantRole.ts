@@ -36,13 +36,6 @@ export interface MyRoles {
   permissions: string[];
 }
 
-/** Sem resposta do servidor: o que cada função pode antes de qualquer redução. */
-function defaultPermissions(roles: readonly RestaurantRole[]): string[] {
-  return roles.some((role) => role === 'owner' || role === 'manager' || role === 'maitre')
-    ? ['reservation.approve', 'reservation.waive_no_show']
-    : [];
-}
-
 function knownRoles(values: readonly unknown[]): RestaurantRole[] {
   const unique = new Set(values.filter((value): value is RestaurantRole =>
     typeof value === 'string' && ROLE_PRECEDENCE.includes(value as RestaurantRole)));
@@ -52,7 +45,8 @@ function knownRoles(values: readonly unknown[]): RestaurantRole[] {
 /** Todas as funções da pessoa no restaurante, a partir das linhas de `user_roles`. */
 export function pickRestaurantRoles(rows: readonly UserRoleRow[], restaurantId: string): MyRoles {
   const roles = knownRoles(rows.filter((row) => row.restaurant_id === restaurantId).map((row) => row.role));
-  return { roles, primary: roles[0] ?? null, permissions: defaultPermissions(roles) };
+  // Sem a resposta do servidor não dá para saber das reduções: esconde, e o servidor segue decidindo.
+  return { roles, primary: roles[0] ?? null, permissions: [] };
 }
 
 /** Resposta de `restaurant_get_my_roles`. Sem funções conhecidas, devolve `null` para o chamador usar as linhas. */
@@ -66,6 +60,6 @@ export function parseMyRoles(data: unknown): MyRoles | null {
     primary: roles.includes(raw.primary as RestaurantRole) ? (raw.primary as RestaurantRole) : roles[0],
     permissions: Array.isArray(raw.permissions)
       ? raw.permissions.filter((item): item is string => typeof item === 'string')
-      : defaultPermissions(roles),
+      : [],
   };
 }

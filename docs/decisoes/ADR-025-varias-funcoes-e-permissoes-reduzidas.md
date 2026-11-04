@@ -36,11 +36,13 @@ A spec não define estes pontos. Cada um está isolado e entra na lista de pend�
 - **Recepcionista:** não aprova nem recusa reserva, porque a linha do PDF diz "aprovar, recusar".
 - **Gerente e outro Gerente:** o texto só diz "concede". Só o Dono altera ou inativa um Gerente, e o Gerente também não altera
   a própria função de Gerente.
-- **Convite:** vale 7 dias (`private.staff_invite_ttl`). Com e-mail, só para quem confirmou esse e-mail; sem e-mail, o código
+- **Convite:** vale 7 dias (`noowe_billing_settings.staff_invite_days`). Com e-mail, só para quem confirmou esse e-mail; sem e-mail, o código
   serve para quem o tiver. Quem convidou precisa ainda ter a função na hora do aceite.
 - **Função principal:** define só a tela de abertura; o Dono pode ter outra principal. Dono e Gerente definem, dentro do que
   cada um pode conceder.
-- **Inativar:** vale para a pessoa inteira na unidade. Tirar uma função é na edição.
+- **Inativar e reativar:** valem para a pessoa inteira na unidade. Tirar uma função é na edição e apaga a linha.
+- **Quem não pode alterar uma função da pessoa não mexe nas outras:** um Gerente não dá funções ao Dono, a outro Gerente nem a si
+  mesmo, e não troca a principal deles.
 - **Duas funções no mesmo horário:** uma linha de escala por função, com sobreposição permitida; área e estação são opcionais.
 - **Aviso de caixa:** avisa o Dono quando quem lançou dinheiro desde a abertura fecha o caixa. Lê o log do motor em
   `private.cash_closed_by_receiver`; a O8 troca a fonte e precisa seguir chamando essa função.

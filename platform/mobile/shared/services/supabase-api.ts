@@ -1658,10 +1658,10 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_date: patch.date || null,
       p_start_time: patch.start_time || null,
       p_end_time: patch.end_time || null,
-      p_role: patch.role || null,
+      // Vazio limpa função e área; ausente mantém.
+      p_role: patch.role ?? null,
       p_status: patch.status || null,
       p_notes: patch.notes || null,
-      // Vazio limpa a área; ausente mantém.
       p_area: patch.area ?? null,
       p_station_id: patch.station_id || null,
       p_clear_station: patch.station_id === '',

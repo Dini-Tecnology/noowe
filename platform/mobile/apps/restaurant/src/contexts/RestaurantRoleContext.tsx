@@ -218,7 +218,9 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       setServerRole('owner');
       setServerRoles(['owner']);
       setPrimaryRole('owner');
-      setPermissions(['reservation.approve', 'reservation.waive_no_show']);
+      const { data: ownerRoles } = await getSupabaseClient()
+        .rpc('restaurant_get_my_roles', { p_restaurant_id: owned.id });
+      setPermissions(parseMyRoles(ownerRoles)?.permissions ?? []);
       setRoleState('owner');
       setRestaurantId(owned.id as string);
       setActiveRestaurantId(owned.id as string);

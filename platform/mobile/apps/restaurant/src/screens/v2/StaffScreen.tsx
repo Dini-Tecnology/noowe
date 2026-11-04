@@ -7,7 +7,7 @@ import { supabaseApiAdapter, type StaffInvite, type StaffInviteSent } from '@oki
 import { staffInviteShareMessage } from './shared/staffInvite';
 import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabase-auth';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
-import { assignableRoles, canManageMember, keepPrimary, toggleRole } from './shared/staffRoles';
+import { ROLE_LABELS, assignableRoles, canManageMember, keepPrimary, toggleRole } from './shared/staffRoles';
 import { V2Shell } from './shared/V2Shell';
 import { V2FormSheet } from './shared/V2FormSheet';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
@@ -45,16 +45,6 @@ type DeleteState =
   | { kind: 'deactivate'; member: StaffMember }
   | { kind: 'reactivate'; member: StaffMember }
   | { kind: 'remove'; member: StaffMember };
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Dono',
-  manager: 'Gerente',
-  maitre: 'Maître',
-  chef: 'Chef',
-  barman: 'Barman',
-  cook: 'Cozinheiro',
-  waiter: 'Garçom',
-};
 
 const ROLE_COLORS: Record<string, string> = {
   owner: '#7C3AED',
@@ -183,10 +173,10 @@ export default function StaffScreen() {
         return;
       }
       setFoundUser(result);
-      if (result.already_in_this_restaurant && result.existing_roles?.length) {
-        setSelectedRoles(result.existing_roles);
-        setPrimaryRole(result.primary_role ?? result.existing_roles[0]);
-      }
+      // Sempre a partir da pessoa encontrada: as funções da busca anterior não valem para esta.
+      const roles = result.already_in_this_restaurant && result.existing_roles?.length ? result.existing_roles : ['waiter'];
+      setSelectedRoles(roles);
+      setPrimaryRole(result.primary_role ?? roles[0]);
     } catch (err) {
       setSearchError(getErrorMessage(err, 'Não foi possível buscar o usuário.'));
     } finally {
@@ -354,7 +344,7 @@ export default function StaffScreen() {
                           )}
                           <StaffFacts member={member} />
                         </View>
-                        {canManageMember({ viewerRole: serverRole, viewerUserId, member }) ? (
+                        {canManageMember({ viewerRole: serverRole, viewerUserId, member, memberRoles: active.filter((row) => row.user_id === member.user_id).map((row) => row.role) }) ? (
                           <View style={styles.rowActions}>
                             <IconAction label="Editar função" onPress={() => openEdit(member)}>
                               <Pencil size={15} color={colors.foregroundSecondary} />

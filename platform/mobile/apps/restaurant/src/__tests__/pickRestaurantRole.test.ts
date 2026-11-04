@@ -35,7 +35,7 @@ describe('todas as funções da pessoa (O3, critério 2)', () => {
 
   it('pega as funções do restaurante, da mais para a menos poderosa, sem as que o app não conhece', () => {
     expect(pickRestaurantRoles(rows, 'A')).toEqual({
-      roles: ['manager', 'waiter'], primary: 'manager', permissions: ['reservation.approve', 'reservation.waive_no_show'],
+      roles: ['manager', 'waiter'], primary: 'manager', permissions: [],
     });
   });
 
@@ -58,8 +58,7 @@ describe('todas as funções da pessoa (O3, critério 2)', () => {
     expect(parseMyRoles({ roles: ['maitre'], primary: 'maitre', permissions: [] })?.permissions).toEqual([]);
   });
 
-  it('sem resposta sobre permissões, vale o padrão da função', () => {
-    expect(parseMyRoles({ roles: ['maitre'], primary: 'maitre' })?.permissions).toContain('reservation.approve');
-    expect(parseMyRoles({ roles: ['waiter'], primary: 'waiter' })?.permissions).toEqual([]);
+  it('sem resposta sobre permissões, não oferece: quem decide é o servidor', () => {
+    expect(parseMyRoles({ roles: ['maitre'], primary: 'maitre' })?.permissions).toEqual([]);
   });
 });

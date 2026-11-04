@@ -137,9 +137,9 @@ function normalizeMenu(raw: unknown): MenuCategory[] {
 
 export default function MenuScreen() {
   const colors = useColors();
-  const { restaurantId, serverRole } = useRestaurantRole();
+  const { restaurantId, serverRole, serverRoles } = useRestaurantRole();
   const canManage = serverRole === 'owner' || serverRole === 'manager';
-  const canToggle = canManage || serverRole === 'chef';
+  const canToggle = canManage || serverRoles.includes('chef');
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

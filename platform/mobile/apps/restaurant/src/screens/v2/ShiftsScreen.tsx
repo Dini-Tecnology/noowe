@@ -11,6 +11,7 @@ import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { DateInput, saoPauloDateToIso } from './shared/DateInput';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { toShiftStaffOptions, type StaffOption } from './shared/shiftStaff';
+import { ROLE_LABELS } from './shared/staffRoles';
 
 interface Shift {
   id: string;
@@ -34,16 +35,6 @@ const STATUS_META: Record<Shift['status'], { label: string; bg: string; color: s
   completed: { label: 'Concluído', bg: '#F3F4F6', color: '#4B5563' },
   cancelled: { label: 'Cancelado', bg: '#FEF2F2', color: '#DC2626' },
   no_show: { label: 'Faltou', bg: '#FFF7ED', color: '#C2410C' },
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Dono',
-  manager: 'Gerente',
-  maitre: 'Maître',
-  chef: 'Chef',
-  barman: 'Barman',
-  cook: 'Cozinheiro',
-  waiter: 'Garçom',
 };
 
 const WEEKDAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -210,7 +201,7 @@ export default function ShiftsScreen() {
           date,
           start_time: startTime.trim(),
           end_time: endTime.trim(),
-          role: role || null,
+          role,
           area,
           station_id: stationId,
         });

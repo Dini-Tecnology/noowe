@@ -4,6 +4,16 @@
  */
 export const ASSIGNABLE_ROLES = ['manager', 'maitre', 'chef', 'barman', 'cook', 'waiter'] as const;
 
+export const ROLE_LABELS: Record<string, string> = {
+  owner: 'Dono',
+  manager: 'Gerente',
+  maitre: 'Maître',
+  chef: 'Chef',
+  barman: 'Barman',
+  cook: 'Cozinheiro',
+  waiter: 'Garçom',
+};
+
 /** Funções que só um dono concede ou altera (ADR-025). */
 const OWNER_ONLY_ROLES = ['owner', 'manager'];
 
@@ -24,9 +34,12 @@ export function canManageMember(opts: {
   viewerRole: string | null;
   viewerUserId: string | null;
   member: { role: string; user_id: string };
+  /** Todas as funções da pessoa: quem não pode alterar uma delas não mexe nas outras. */
+  memberRoles?: readonly string[];
 }): boolean {
   const { viewerRole, viewerUserId, member } = opts;
   if (viewerRole !== 'owner' && viewerRole !== 'manager') return false;
+  if (viewerRole === 'manager' && opts.memberRoles?.some((role) => OWNER_ONLY_ROLES.includes(role))) return false;
   if (!OWNER_ONLY_ROLES.includes(member.role)) return true;
   if (viewerRole !== 'owner') return false;
   return member.role !== 'owner' || member.user_id !== viewerUserId;
