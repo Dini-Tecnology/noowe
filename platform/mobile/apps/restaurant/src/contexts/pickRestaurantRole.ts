@@ -32,6 +32,15 @@ export interface MyRoles {
   roles: RestaurantRole[];
   /** Define a tela de abertura, nunca o que a pessoa pode fazer. */
   primary: RestaurantRole | null;
+  /** O que pode ser reduzido por pessoa (Recepcionista). O servidor é quem barra; a tela só esconde. */
+  permissions: string[];
+}
+
+/** Sem resposta do servidor: o que cada função pode antes de qualquer redução. */
+function defaultPermissions(roles: readonly RestaurantRole[]): string[] {
+  return roles.some((role) => role === 'owner' || role === 'manager' || role === 'maitre')
+    ? ['reservation.approve', 'reservation.waive_no_show']
+    : [];
 }
 
 function knownRoles(values: readonly unknown[]): RestaurantRole[] {
@@ -43,14 +52,20 @@ function knownRoles(values: readonly unknown[]): RestaurantRole[] {
 /** Todas as funções da pessoa no restaurante, a partir das linhas de `user_roles`. */
 export function pickRestaurantRoles(rows: readonly UserRoleRow[], restaurantId: string): MyRoles {
   const roles = knownRoles(rows.filter((row) => row.restaurant_id === restaurantId).map((row) => row.role));
-  return { roles, primary: roles[0] ?? null };
+  return { roles, primary: roles[0] ?? null, permissions: defaultPermissions(roles) };
 }
 
 /** Resposta de `restaurant_get_my_roles`. Sem funções conhecidas, devolve `null` para o chamador usar as linhas. */
 export function parseMyRoles(data: unknown): MyRoles | null {
-  const raw = data as { roles?: unknown; primary?: unknown } | null;
+  const raw = data as { roles?: unknown; primary?: unknown; permissions?: unknown } | null;
   if (!raw || !Array.isArray(raw.roles)) return null;
   const roles = knownRoles(raw.roles);
   if (roles.length === 0) return null;
-  return { roles, primary: roles.includes(raw.primary as RestaurantRole) ? (raw.primary as RestaurantRole) : roles[0] };
+  return {
+    roles,
+    primary: roles.includes(raw.primary as RestaurantRole) ? (raw.primary as RestaurantRole) : roles[0],
+    permissions: Array.isArray(raw.permissions)
+      ? raw.permissions.filter((item): item is string => typeof item === 'string')
+      : defaultPermissions(roles),
+  };
 }

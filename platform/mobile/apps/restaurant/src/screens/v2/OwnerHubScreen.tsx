@@ -984,6 +984,7 @@ function useFreeTableCount(): number {
 }
 
 function MaitreReservationsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const { permissions } = useRestaurantRole();
   const { data: reservations, loading, error, refresh } = useReservations();
   const freeTables = useFreeTableCount();
   const [acting, setActing] = useState<string | null>(null);
@@ -1029,7 +1030,7 @@ function MaitreReservationsView({ colors }: { colors: ReturnType<typeof useColor
               <StatusChip label={RESERVATION_STATUS_LABEL[reservation.status] || reservation.status} tone={RESERVATION_STATUS_TONE[reservation.status] || 'info'} />
             </View>
             {!!reservation.specialRequests && <Text style={[styles.reservationNote, { color: colors.foregroundSecondary }]}>{reservation.specialRequests}</Text>}
-            {reservation.status === 'pending' && (
+            {reservation.status === 'pending' && permissions.includes('reservation.approve') && (
               <View style={styles.approvalActions}>
                 <TouchableOpacity
                   disabled={acting === reservation.id}

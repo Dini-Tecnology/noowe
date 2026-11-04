@@ -102,6 +102,8 @@ interface RestaurantRoleContextValue {
   serverRoles: RestaurantRole[];
   /** A função que abre o app. */
   primaryRole: RestaurantRole | null;
+  /** Permissões que podem ser reduzidas por pessoa, como aprovar reserva (ADR-025). */
+  permissions: string[];
   restaurantId: string | null;
   serviceType: ServiceType | null;
   serviceFeatures: ServiceTypeFeatures;
@@ -142,6 +144,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
   const [serverRole, setServerRole] = useState<RestaurantRole | null>(null);
   const [serverRoles, setServerRoles] = useState<RestaurantRole[]>([]);
   const [primaryRole, setPrimaryRole] = useState<RestaurantRole | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState(true);
   const [role, setRoleState] = useState<RestaurantRole>('owner');
@@ -182,6 +185,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       setServerRole(loaded);
       setServerRoles(mine.roles.length > 0 ? mine.roles : [loaded]);
       setPrimaryRole(mine.primary ?? loaded);
+      setPermissions(mine.permissions);
       setRoleState(mine.primary ?? loaded);
       setRestaurantId(data.restaurant_id as string);
       setActiveRestaurantId(data.restaurant_id as string);
@@ -204,6 +208,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       setServerRole(null);
       setServerRoles([]);
       setPrimaryRole(null);
+      setPermissions([]);
       setRestaurantId(null);
       setActiveRestaurantId(null);
       return false;
@@ -213,6 +218,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       setServerRole('owner');
       setServerRoles(['owner']);
       setPrimaryRole('owner');
+      setPermissions(['reservation.approve', 'reservation.waive_no_show']);
       setRoleState('owner');
       setRestaurantId(owned.id as string);
       setActiveRestaurantId(owned.id as string);
@@ -222,6 +228,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
     setServerRole(null);
     setServerRoles([]);
     setPrimaryRole(null);
+    setPermissions([]);
     setRestaurantId(null);
     setActiveRestaurantId(null);
     return false;
@@ -365,6 +372,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       serverRole,
       serverRoles,
       primaryRole,
+      permissions,
       restaurantId,
       serviceType,
       serviceFeatures: capabilities
@@ -397,7 +405,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [role, serverRole, serverRoles, primaryRole, restaurantId, roleLoading, reloadRole, restaurants, restaurantsLoading, reloadRestaurants, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView, capabilities],
+    [role, serverRole, serverRoles, primaryRole, permissions, restaurantId, roleLoading, reloadRole, restaurants, restaurantsLoading, reloadRestaurants, switchRestaurant, managerView, maitreView, chefView, barmanView, cookView, waiterView, capabilities],
   );
 
   return (

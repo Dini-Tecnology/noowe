@@ -505,6 +505,7 @@ export interface SupabaseApiAdapter {
   getStaff(restaurantId?: string): Promise<any>;
   upsertStaffRole(restaurantId: string, userId: string, role: string): Promise<any>;
   getTasks(restaurantId: string): Promise<StaffTask[]>;
+  setReceptionist(restaurantId: string, userId: string, enabled: boolean): Promise<any>;
   setStaffRoles(restaurantId: string, userId: string, roles: string[], primaryRole: string): Promise<any>;
   deactivateStaff(roleId: string): Promise<any>;
   reactivateStaff(roleId: string): Promise<any>;
@@ -1865,6 +1866,16 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_restaurant_id: restaurantId,
       p_user_id: userId,
       p_role: role,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async setReceptionist(restaurantId: string, userId: string, enabled: boolean) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_set_receptionist', {
+      p_restaurant_id: restaurantId,
+      p_user_id: userId,
+      p_enabled: enabled,
     });
     if (error) throw error;
     return data;

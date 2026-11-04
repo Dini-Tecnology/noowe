@@ -117,7 +117,7 @@ function uniqueReservations(rows: Reservation[]): Reservation[] {
 
 export default function ReservationsScreen() {
   const colors = useColors();
-  const { restaurantId } = useRestaurantRole();
+  const { restaurantId, permissions } = useRestaurantRole();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -286,7 +286,7 @@ export default function ReservationsScreen() {
                 </View>
               </View>
 
-              {res.status === 'pending' && (
+              {res.status === 'pending' && permissions.includes('reservation.approve') && (
                 <View style={styles.cardActions}>
                   <TouchableOpacity
                     style={[styles.btn, { backgroundColor: '#EF4444', opacity: acting === res.id ? 0.6 : 1 }]}

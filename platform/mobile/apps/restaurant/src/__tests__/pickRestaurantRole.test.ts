@@ -34,19 +34,32 @@ describe('todas as funções da pessoa (O3, critério 2)', () => {
   ];
 
   it('pega as funções do restaurante, da mais para a menos poderosa, sem as que o app não conhece', () => {
-    expect(pickRestaurantRoles(rows, 'A')).toEqual({ roles: ['manager', 'waiter'], primary: 'manager' });
+    expect(pickRestaurantRoles(rows, 'A')).toEqual({
+      roles: ['manager', 'waiter'], primary: 'manager', permissions: ['reservation.approve', 'reservation.waive_no_show'],
+    });
   });
 
   it('usa a função principal que o servidor devolve', () => {
-    expect(parseMyRoles({ roles: ['manager', 'waiter'], primary: 'waiter' })).toEqual({ roles: ['manager', 'waiter'], primary: 'waiter' });
+    expect(parseMyRoles({ roles: ['manager', 'waiter'], primary: 'waiter', permissions: [] }))
+      .toEqual({ roles: ['manager', 'waiter'], primary: 'waiter', permissions: [] });
   });
 
   it('principal desconhecida cai na mais poderosa', () => {
-    expect(parseMyRoles({ roles: ['waiter', 'barman'], primary: 'host' })).toEqual({ roles: ['barman', 'waiter'], primary: 'barman' });
+    expect(parseMyRoles({ roles: ['waiter', 'barman'], primary: 'host', permissions: [] }))
+      .toEqual({ roles: ['barman', 'waiter'], primary: 'barman', permissions: [] });
   });
 
   it('resposta vazia ou inválida não vale', () => {
     expect(parseMyRoles(null)).toBeNull();
     expect(parseMyRoles({ roles: ['customer'] })).toBeNull();
+  });
+
+  it('Recepcionista não recebe a permissão de aprovar, mesmo sendo Maître', () => {
+    expect(parseMyRoles({ roles: ['maitre'], primary: 'maitre', permissions: [] })?.permissions).toEqual([]);
+  });
+
+  it('sem resposta sobre permissões, vale o padrão da função', () => {
+    expect(parseMyRoles({ roles: ['maitre'], primary: 'maitre' })?.permissions).toContain('reservation.approve');
+    expect(parseMyRoles({ roles: ['waiter'], primary: 'waiter' })?.permissions).toEqual([]);
   });
 });

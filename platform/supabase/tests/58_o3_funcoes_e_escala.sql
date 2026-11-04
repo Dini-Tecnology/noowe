@@ -1,6 +1,6 @@
 -- Fatia O3 (docs/fatias/O3-funcoes-e-escala.md), um bloco por critério de aceite.
 begin;
-select plan(37);
+select plan(49);
 
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
@@ -71,7 +71,7 @@ select pg_temp.act(pg_temp.ctx('owner'));
 select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L, %L, array['waiter', 'barman'], 'waiter')$q$, pg_temp.ctx('r'), pg_temp.ctx('duas'))),
   'ok', 'a mesma pessoa recebe duas funções de uma vez');
 select pg_temp.act(pg_temp.ctx('duas'));
-select is(public.restaurant_get_my_roles(pg_temp.ctx('r')), '{"roles": ["barman", "waiter"], "primary": "waiter"}'::jsonb,
+select is(public.restaurant_get_my_roles(pg_temp.ctx('r')), '{"roles": ["barman", "waiter"], "primary": "waiter", "permissions": []}'::jsonb,
   'a pessoa vê as duas funções e a principal');
 select ok(private.has_restaurant_role(pg_temp.ctx('r'), array['waiter']::public.user_roles_role_enum[])
   and private.has_restaurant_role(pg_temp.ctx('r'), array['barman']::public.user_roles_role_enum[]), 'critério 2: as duas valem no servidor');
@@ -85,7 +85,7 @@ select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L
 select is(pg_temp.state_of(format($q$select public.restaurant_set_staff_roles(%L, %L, array['barman', 'chef'], 'chef')$q$, pg_temp.ctx('r'), pg_temp.ctx('duas'))),
   'ok', 'trocar as funções');
 select pg_temp.act(pg_temp.ctx('duas'));
-select is(public.restaurant_get_my_roles(pg_temp.ctx('r')), '{"roles": ["chef", "barman"], "primary": "chef"}'::jsonb, 'quem saiu perde a função, e a principal acompanha');
+select is(public.restaurant_get_my_roles(pg_temp.ctx('r')), '{"roles": ["chef", "barman"], "primary": "chef", "permissions": []}'::jsonb, 'quem saiu perde a função, e a principal acompanha');
 select ok(not private.has_restaurant_role(pg_temp.ctx('r'), array['waiter']::public.user_roles_role_enum[]), 'a função retirada deixa de valer no servidor');
 select is((select count(*)::int from public.user_roles where user_id = pg_temp.ctx('duas') and is_primary), 1, 'só uma linha é a principal');
 select is((select count(*)::int from public.audit_logs where action = 'staff_primary_changed' and entity_id = pg_temp.ctx('duas')), 2, 'cada troca da principal fica em audit_logs');
@@ -136,6 +136,45 @@ select ok((select bool_and(n.user_id <> pg_temp.ctx('manager')) from public.noti
 select pg_temp.act(pg_temp.ctx('owner'));
 select ok((select (x->'primaryRoles') ? 'owner' from jsonb_array_elements(public.restaurant_list_tasks(pg_temp.ctx('r'))) x
   where x->>'kind' = 'cash.closed_by_receiver' limit 1), 'critério 1: a tarefa traz as funções para a etiqueta');
+
+-- ---------------------------------------------------------------------------
+-- Critério 5: Recepcionista é o Maître sem aprovar reserva nem isentar no-show
+-- ---------------------------------------------------------------------------
+do $$
+declare r uuid := pg_temp.ctx('r'); c uuid := pg_temp.ctx('cliente'); m uuid := pg_temp.new_user('maitre'); rc uuid := pg_temp.new_user('recep'); x uuid := pg_temp.new_user('recep_gerente');
+  a uuid; b uuid; ns uuid;
+begin
+  perform pg_temp.act(pg_temp.ctx('owner'));
+  perform public.restaurant_set_staff_roles(r, m, array['maitre'], 'maitre');
+  perform public.restaurant_set_staff_roles(r, rc, array['maitre'], 'maitre');
+  perform public.restaurant_set_staff_roles(r, x, array['maitre', 'manager'], 'maitre');
+  perform public.restaurant_set_receptionist(r, rc, true);
+  perform public.restaurant_set_receptionist(r, x, true);
+  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status) values (r, c, now() + interval '1 day', 2, 'pending') returning id into a;
+  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status) values (r, c, now() + interval '2 day', 2, 'pending') returning id into b;
+  insert into public.reservations(restaurant_id, customer_id, reservation_time, party_size, status) values (r, c, now() - interval '1 day', 2, 'no_show') returning id into ns;
+  insert into _ctx values ('res_a', a), ('res_b', b), ('res_ns', ns);
+end $$;
+select pg_temp.act(pg_temp.ctx('recep'));
+select is(pg_temp.state_of(format($q$select public.restaurant_update_reservation_status(%L, 'confirmed')$q$, pg_temp.ctx('res_a'))), '42501', 'critério 5: Recepcionista não aprova reserva');
+select is(pg_temp.state_of(format($q$select public.restaurant_update_reservation_status(%L, 'cancelled')$q$, pg_temp.ctx('res_a'))), '42501', 'critério 5: nem recusa');
+select is(pg_temp.state_of(format($q$select public.restaurant_update_reservation_status(%L, 'confirmed')$q$, pg_temp.ctx('res_ns'))), '42501', 'critério 5: nem isenta no-show');
+select is(public.restaurant_get_my_roles(pg_temp.ctx('r'))->'permissions', '[]'::jsonb, 'o app recebe que ela não tem essas permissões');
+select pg_temp.act(pg_temp.ctx('maitre'));
+select is(pg_temp.state_of(format($q$select public.restaurant_update_reservation_status(%L, 'confirmed')$q$, pg_temp.ctx('res_a'))), 'ok', 'o Maître completo aprova');
+select is((select count(*)::int from public.audit_logs where action = 'reservation.confirmed' and entity_id = pg_temp.ctx('res_a')), 1, 'aprovar fica registrado');
+select pg_temp.act(pg_temp.ctx('recep_gerente'));
+select is(pg_temp.state_of(format($q$select public.restaurant_update_reservation_status(%L, 'confirmed')$q$, pg_temp.ctx('res_b'))), 'ok', 'Recepcionista que também é Gerente segue podendo: é a soma');
+select pg_temp.act(pg_temp.ctx('owner'));
+select is(pg_temp.state_of(format($q$select public.restaurant_update_reservation_status(%L, 'confirmed')$q$, pg_temp.ctx('res_ns'))), 'ok', 'o Dono isenta o no-show');
+select is((select count(*)::int from public.audit_logs where action = 'reservation.no_show_waived' and entity_id = pg_temp.ctx('res_ns')), 1, 'e fica registrado');
+select is(pg_temp.state_of(format($q$select public.restaurant_set_receptionist(%L, %L, true)$q$, pg_temp.ctx('r'), pg_temp.ctx('waiter'))), '22023', 'só quem é Maître vira Recepcionista');
+select pg_temp.act(pg_temp.ctx('recep'));
+select is(pg_temp.state_of(format($q$select public.restaurant_set_receptionist(%L, %L, false)$q$, pg_temp.ctx('r'), pg_temp.ctx('recep'))), '42501', 'ela não tira a própria redução');
+select pg_temp.act(pg_temp.ctx('recep'));
+set local role authenticated;
+select is(pg_temp.state_of(format($q$delete from public.role_permission_overrides where user_id = %L$q$, pg_temp.ctx('recep'))), '42501', 'nem direto na tabela');
+reset role;
 
 select * from finish();
 rollback;

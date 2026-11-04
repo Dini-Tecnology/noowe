@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, TextInput, View, StyleSheet } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, TextInput, View, StyleSheet, Switch } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Users, Shield, UserCheck, UserX, Plus, Pencil, Ban, CheckCircle2, Trash2, Search } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -21,6 +21,7 @@ interface StaffMember {
   role: string;
   is_active: boolean;
   is_primary?: boolean;
+  is_receptionist?: boolean;
   created_at: string;
   shift?: { id: string; start_time: string; end_time: string; status: string } | null;
   sales_value?: number | string | null;
@@ -99,6 +100,7 @@ export default function StaffScreen() {
   const [foundUser, setFoundUser] = useState<FoundUser | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<string[]>(['waiter']);
   const [primaryRole, setPrimaryRole] = useState('waiter');
+  const [receptionist, setReceptionist] = useState(false);
   const [newFullName, setNewFullName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
@@ -138,6 +140,7 @@ export default function StaffScreen() {
     setSearchError(null);
     setSelectedRoles(['waiter']);
     setPrimaryRole('waiter');
+    setReceptionist(false);
     setNewFullName('');
     setNewPassword('');
     setInviteMode('link');
@@ -150,6 +153,7 @@ export default function StaffScreen() {
     setEditingMember(member);
     setSelectedRoles(rows.map((row) => row.role));
     setPrimaryRole(rows.find((row) => row.is_primary)?.role ?? member.role);
+    setReceptionist(rows.some((row) => row.is_receptionist));
     setSearchError(null);
     setInviteOpen(true);
   };
@@ -197,6 +201,9 @@ export default function StaffScreen() {
     try {
       if (editingMember) {
         await supabaseApiAdapter.setStaffRoles(restaurantId, editingMember.user_id, selectedRoles, primaryRole);
+        if (selectedRoles.includes('maitre')) {
+          await supabaseApiAdapter.setReceptionist(restaurantId, editingMember.user_id, receptionist);
+        }
       } else if (inviteMode === 'link') {
         if (foundUser) await supabaseApiAdapter.setStaffRoles(restaurantId, foundUser.id, selectedRoles, primaryRole);
       } else {
@@ -572,6 +579,17 @@ export default function StaffScreen() {
           </Field>
         ) : null}
 
+        {editingMember && selectedRoles.includes('maitre') ? (
+          <Field label="Recepcionista">
+            <View style={styles.receptionistRow}>
+              <Text style={{ flex: 1, fontSize: 13, color: colors.foregroundSecondary }}>
+                Atende a porta e a fila, sem aprovar reserva nem isentar no-show.
+              </Text>
+              <Switch value={receptionist} onValueChange={setReceptionist} accessibilityLabel="Recepcionista" />
+            </View>
+          </Field>
+        ) : null}
+
         {selectedRoles.length > 1 && (editingMember || inviteMode === 'create' || foundUser) ? (
           <Field label="Função principal (abre o app)" required>
             <View style={styles.roleOptions}>
@@ -680,6 +698,7 @@ function IconAction({ label, onPress, children }: { label: string; onPress: () =
 }
 
 const styles = StyleSheet.create({
+  receptionistRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   addHeaderButton: { minHeight: 38, paddingHorizontal: 12, borderRadius: 13, flexDirection: 'row', alignItems: 'center', gap: 5 },
   addHeaderLabel: { color: '#FFF', fontSize: 12, fontWeight: '800' },
   summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
