@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { closeAccountMessage } from './shared/closeAccountMessage';
+import { waiterCanCloseBill } from './shared/waiterCloseBill';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2FormSheet } from './shared/V2FormSheet';
@@ -417,7 +418,7 @@ export default function TablesScreen() {
                       </View>
                     )}
                   </View>
-                  {selectedTable.status === 'occupied' || selectedTable.status === 'payment' || selectedTable.totalSpent > 0 ? (
+                  {waiterCanCloseBill(selectedTable) ? (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Fechar conta da mesa ${selectedTable.label}`}
@@ -772,7 +773,7 @@ const TableCell = React.memo(function TableCell({
             <Text numberOfLines={1} style={[styles.tableStatusText, { color: meta.color }]}>{tableStatusLabel(table.status)}</Text>
           </View>
         </View>
-        <Text style={[styles.capacityText, { color: colors.foregroundSecondary }]}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.capacityText, { color: colors.foregroundSecondary }]}>
           {table.sessionId
             ? `${table.guests} ${table.guests === 1 ? 'pessoa' : 'pessoas'}${table.spentHidden ? '' : ` · ${formatCurrency(table.totalSpent)}`}`
             : table.reservationGuests > 0
@@ -784,7 +785,7 @@ const TableCell = React.memo(function TableCell({
           <Text numberOfLines={1} testID={`table-origin-${table.id}`} style={[styles.originChip, { color: colors.foregroundSecondary }]}>{table.originLabel}</Text>
         ) : null}
         {table.idleMinutes != null ? (
-          <Text numberOfLines={1} testID={`table-idle-${table.id}`} style={styles.idleBadge}>Parada há {formatIdle(table.idleMinutes)}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} testID={`table-idle-${table.id}`} style={styles.idleBadge}>Parada há {formatIdle(table.idleMinutes)}</Text>
         ) : null}
       </Animated.View>
     </Pressable>

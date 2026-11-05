@@ -6,6 +6,7 @@ import { CashSettingsCard, TipRulesCard } from '../screens/v2/config/CashAndTips
 import { DayClosePanel } from '../screens/v2/shared/DayClosePanel';
 import { MyTipsPanel } from '../screens/v2/shared/MyTipsPanel';
 import { closeAccountMessage } from '../screens/v2/shared/closeAccountMessage';
+import { waiterCanCloseBill } from '../screens/v2/shared/waiterCloseBill';
 import { ManagerSummaryCard } from '../screens/v2/shared/ManagerSummaryCard';
 import { MyCashInHandCard } from '../screens/v2/shared/MyCashInHandCard';
 import { TableSettlementLines } from '../screens/v2/shared/TableSettlementLines';
@@ -272,6 +273,19 @@ describe('Painel do Gerente (aditivo G)', () => {
     const view = render(<ManagerSummaryCard />);
     expect(await view.findByText('Sem plano escolhido')).toBeTruthy();
     expect(view.getByText('Nenhum pagamento no dia.')).toBeTruthy();
+  });
+});
+
+describe('Fechar conta do Garçom', () => {
+  it('aparece na mesa dele com comanda ou consumo', () => {
+    expect(waiterCanCloseBill({ status: 'occupied', totalSpent: 0 })).toBe(true);
+    expect(waiterCanCloseBill({ status: 'payment', totalSpent: 0 })).toBe(true);
+    expect(waiterCanCloseBill({ status: 'cleaning', totalSpent: 2500 })).toBe(true);
+  });
+
+  it('não aparece em mesa livre sem consumo nem em mesa de outro garçom', () => {
+    expect(waiterCanCloseBill({ status: 'available', totalSpent: 0 })).toBe(false);
+    expect(waiterCanCloseBill({ status: 'occupied', totalSpent: 0, spentHidden: true })).toBe(false);
   });
 });
 
