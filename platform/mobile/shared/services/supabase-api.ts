@@ -706,6 +706,7 @@ export interface SupabaseApiAdapter {
   updateTipRules(restaurantId: string, input: { mode: TipMode; retentionBps: number; rolePoints: Record<string, number> }): Promise<TipRules>;
   setTaxRegime(restaurantId: string, regime: 'simples_nacional' | 'outros'): Promise<any>;
   getMyTips(restaurantId: string): Promise<MyTip[]>;
+  getMyCashInHand(restaurantId: string): Promise<{ open: boolean; cents: number; since?: string }>;
   getRefundablePayments(restaurantId: string): Promise<RefundablePayment[]>;
   requestRefund(paymentId: string, reason: string, amountCents?: number | null): Promise<any>;
   requestBillReopen(tableSessionId: string, reason: string): Promise<any>;
@@ -2579,6 +2580,9 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return rpcData('restaurant_set_tax_regime', { p_restaurant_id: restaurantId, p_regime: regime });
   },
 
+  async getMyCashInHand(restaurantId: string) {
+    return rpcData<{ open: boolean; cents: number; since?: string }>('restaurant_my_cash_in_hand', { p_restaurant_id: restaurantId });
+  },
   async getMyTips(restaurantId: string) {
     return rpcData<MyTip[]>('restaurant_my_tips', { p_restaurant_id: restaurantId });
   },

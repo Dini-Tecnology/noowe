@@ -61,6 +61,8 @@ import { PersonalSettingsContent } from './config/PersonalSettingsContent';
 import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
 import { MyTipsPanel } from './shared/MyTipsPanel';
+import { MyCashInHandCard } from './shared/MyCashInHandCard';
+import { TableSettlementLines } from './shared/TableSettlementLines';
 import { CouponsEntry } from './shared/CouponsEntry';
 import { WaiterAppShareCard } from './shared/WaiterAppShareCard';
 import { CreditIndexCard } from './shared/CreditIndexCard';
@@ -2796,6 +2798,7 @@ function WaiterChargeBody({
           Quem pagou pelo app aparece automaticamente. Cobre apenas quem precisa.
         </Text>
       </View>
+      <MyCashInHandCard />
       <PaymentActionsPanel />
 
       {loading && bills.length === 0 ? (
@@ -2821,6 +2824,9 @@ function WaiterChargeBody({
                 </View>
                 <StatusChip label={`${paid}/${total}`} tone={unpaid === 0 ? 'success' : 'warning'} />
               </View>
+              {tableBills[0]?.tableSessionId ? (
+                <TableSettlementLines tableSessionId={tableBills[0].tableSessionId} refreshKey={paid} />
+              ) : null}
               {tableBills.map((bill, index) => (
                 <View
                   key={bill.orderId}

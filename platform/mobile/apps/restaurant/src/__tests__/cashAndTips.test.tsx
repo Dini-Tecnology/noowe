@@ -5,11 +5,13 @@ import { centsFromText, textFromCents } from '../screens/v2/config/cashSettings'
 import { CashSettingsCard, TipRulesCard } from '../screens/v2/config/CashAndTipsCards';
 import { DayClosePanel } from '../screens/v2/shared/DayClosePanel';
 import { MyTipsPanel } from '../screens/v2/shared/MyTipsPanel';
+import { MyCashInHandCard } from '../screens/v2/shared/MyCashInHandCard';
+import { TableSettlementLines } from '../screens/v2/shared/TableSettlementLines';
 import { PaymentActionsPanel } from '../screens/v2/shared/PaymentActionsPanel';
 
 const mockApi = {
   getCashSettings: jest.fn(), updateCashSettings: jest.fn(), getDayStatus: jest.fn(), closeOperationalDay: jest.fn(), reviewCashBreak: jest.fn(),
-  getTipRules: jest.fn(), updateTipRules: jest.fn(), setTaxRegime: jest.fn(), getMyTips: jest.fn(), getRefundablePayments: jest.fn(),
+  getTipRules: jest.fn(), updateTipRules: jest.fn(), setTaxRegime: jest.fn(), getMyTips: jest.fn(), getMyCashInHand: jest.fn(), getSessionBill: jest.fn(), getRefundablePayments: jest.fn(),
   requestRefund: jest.fn(), requestBillReopen: jest.fn(), getPaymentOptions: jest.fn(), setAcceptedVouchers: jest.fn(),
 };
 let mockRoles = ['owner'];
@@ -210,5 +212,31 @@ describe('Estornar valor e reabrir (critério 8)', () => {
     expect(await view.findByText(/aguardando aprovação/)).toBeTruthy();
     fireEvent.press(view.getByText('Estornar valor'));
     expect(view.queryByText('Pedir')).toBeNull();
+  });
+});
+
+describe('Dinheiro em mãos e pagamentos parciais do Garçom (aditivo G)', () => {
+  it('Garçom vê o dinheiro que recebeu; com o caixa fechado, o cartão some; Dono não vê', async () => {
+    mockRoles = ['waiter'];
+    api.getMyCashInHand.mockResolvedValue({ open: true, cents: 5000 });
+    const view = render(<MyCashInHandCard />);
+    expect(await view.findByText(/50,00/)).toBeTruthy();
+    expect(view.getByText('Dinheiro em mãos')).toBeTruthy();
+    api.getMyCashInHand.mockResolvedValue({ open: false, cents: 0 });
+    const closed = render(<MyCashInHandCard />);
+    await waitFor(() => expect(api.getMyCashInHand).toHaveBeenCalledTimes(2));
+    expect(closed.queryByText('Dinheiro em mãos')).toBeNull();
+    mockRoles = ['owner'];
+    api.getMyCashInHand.mockClear();
+    render(<MyCashInHandCard />);
+    expect(api.getMyCashInHand).not.toHaveBeenCalled();
+  });
+
+  it('mostra quem pagou, quanto, como e o saldo da mesa', async () => {
+    api.getSessionBill.mockResolvedValue({ balanceCents: 6600, payers: [{ name: 'Ana', baseCents: 2200, method: 'cash' }] });
+    const view = render(<TableSettlementLines tableSessionId="s1" refreshKey={0} />);
+    expect(await view.findByText(/Ana · Dinheiro/)).toBeTruthy();
+    expect(view.getByText(/22,00/)).toBeTruthy();
+    expect(view.getByText(/66,00/)).toBeTruthy();
   });
 });
