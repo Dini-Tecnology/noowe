@@ -5,13 +5,14 @@ import { centsFromText, textFromCents } from '../screens/v2/config/cashSettings'
 import { CashSettingsCard, TipRulesCard } from '../screens/v2/config/CashAndTipsCards';
 import { DayClosePanel } from '../screens/v2/shared/DayClosePanel';
 import { MyTipsPanel } from '../screens/v2/shared/MyTipsPanel';
+import { ManagerSummaryCard } from '../screens/v2/shared/ManagerSummaryCard';
 import { MyCashInHandCard } from '../screens/v2/shared/MyCashInHandCard';
 import { TableSettlementLines } from '../screens/v2/shared/TableSettlementLines';
 import { PaymentActionsPanel } from '../screens/v2/shared/PaymentActionsPanel';
 
 const mockApi = {
   getCashSettings: jest.fn(), updateCashSettings: jest.fn(), getDayStatus: jest.fn(), closeOperationalDay: jest.fn(), reviewCashBreak: jest.fn(),
-  getTipRules: jest.fn(), updateTipRules: jest.fn(), setTaxRegime: jest.fn(), getMyTips: jest.fn(), getMyCashInHand: jest.fn(), getSessionBill: jest.fn(), getRefundablePayments: jest.fn(),
+  getTipRules: jest.fn(), updateTipRules: jest.fn(), setTaxRegime: jest.fn(), getMyTips: jest.fn(), getMyCashInHand: jest.fn(), getManagerSummary: jest.fn(), getSessionBill: jest.fn(), getRefundablePayments: jest.fn(),
   requestRefund: jest.fn(), requestBillReopen: jest.fn(), getPaymentOptions: jest.fn(), setAcceptedVouchers: jest.fn(),
 };
 let mockRoles = ['owner'];
@@ -238,5 +239,37 @@ describe('Dinheiro em mãos e pagamentos parciais do Garçom (aditivo G)', () =>
     expect(await view.findByText(/Ana · Dinheiro/)).toBeTruthy();
     expect(view.getByText(/22,00/)).toBeTruthy();
     expect(view.getByText(/66,00/)).toBeTruthy();
+  });
+});
+
+describe('Painel do Gerente (aditivo G)', () => {
+  const summary = {
+    plan: { name: 'Profissional', status: 'active' },
+    cash: [{ method: 'pix', external: false, netCents: 9700 }, { method: 'credit_card', external: true, netCents: 4000 }, { method: 'cash', external: true, netCents: null }],
+    tips: { poolTodayCents: 1500, last: { businessDate: '2026-11-03', mode: 'equal', poolCents: 2500, retainedCents: 0, distributedCents: 2500, lines: [{ name: 'Rita', role: 'waiter', amountCents: 2500 }] } },
+  };
+
+  it('mostra plano, caixa líquido por forma e o rateio por pessoa', async () => {
+    api.getManagerSummary.mockResolvedValue(summary);
+    const view = render(<ManagerSummaryCard />);
+    expect(await view.findByText('Plano Profissional · ativo')).toBeTruthy();
+    expect(view.getByText(/97,00/)).toBeTruthy();
+    expect(view.getByText('Maquininha – crédito')).toBeTruthy();
+    expect(view.getByText(/15,00/)).toBeTruthy();
+    expect(view.getByText('Rita · Garçom')).toBeTruthy();
+    expect(view.getByText(/25,00/)).toBeTruthy();
+  });
+
+  it('dinheiro sem valor não vira zero: fechamento cego', async () => {
+    api.getManagerSummary.mockResolvedValue(summary);
+    const view = render(<ManagerSummaryCard />);
+    expect(await view.findByText('Na contagem do fechamento')).toBeTruthy();
+  });
+
+  it('sem plano e sem pagamento, diz isso em vez de mostrar zeros', async () => {
+    api.getManagerSummary.mockResolvedValue({ plan: { name: null, status: null }, cash: [], tips: { poolTodayCents: 0, last: null } });
+    const view = render(<ManagerSummaryCard />);
+    expect(await view.findByText('Sem plano escolhido')).toBeTruthy();
+    expect(view.getByText('Nenhum pagamento no dia.')).toBeTruthy();
   });
 });

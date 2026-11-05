@@ -62,6 +62,17 @@ export type RefundablePayment = {
   tableSessionId: string | null; orderId: string | null; tableNumber: string | null; pendingApproval: boolean;
 };
 
+export type ManagerSummary = {
+  plan: { name: string | null; status: string | null };
+  /** Líquido por forma de pagamento no dia aberto. Dinheiro vem nulo com o caixa aberto (fechamento cego). */
+  cash: { method: string; external: boolean; netCents: number | null }[];
+  tips: {
+    poolTodayCents: number;
+    last: { businessDate: string; mode: TipMode; poolCents: number; retainedCents: number; distributedCents: number;
+      lines: { name: string; role: string | null; amountCents: number }[] } | null;
+  };
+};
+
 export type SessionBill = {
   balanceCents: number;
   chargeBaseCents: number;
@@ -706,6 +717,7 @@ export interface SupabaseApiAdapter {
   updateTipRules(restaurantId: string, input: { mode: TipMode; retentionBps: number; rolePoints: Record<string, number> }): Promise<TipRules>;
   setTaxRegime(restaurantId: string, regime: 'simples_nacional' | 'outros'): Promise<any>;
   getMyTips(restaurantId: string): Promise<MyTip[]>;
+  getManagerSummary(restaurantId: string): Promise<ManagerSummary>;
   getMyCashInHand(restaurantId: string): Promise<{ open: boolean; cents: number; since?: string }>;
   getRefundablePayments(restaurantId: string): Promise<RefundablePayment[]>;
   requestRefund(paymentId: string, reason: string, amountCents?: number | null): Promise<any>;
@@ -2582,6 +2594,9 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
   async getMyCashInHand(restaurantId: string) {
     return rpcData<{ open: boolean; cents: number; since?: string }>('restaurant_my_cash_in_hand', { p_restaurant_id: restaurantId });
+  },
+  async getManagerSummary(restaurantId: string) {
+    return rpcData<ManagerSummary>('restaurant_manager_summary', { p_restaurant_id: restaurantId });
   },
   async getMyTips(restaurantId: string) {
     return rpcData<MyTip[]>('restaurant_my_tips', { p_restaurant_id: restaurantId });

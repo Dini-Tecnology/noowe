@@ -62,6 +62,7 @@ import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
 import { MyTipsPanel } from './shared/MyTipsPanel';
 import { MyCashInHandCard } from './shared/MyCashInHandCard';
+import { ManagerSummaryCard } from './shared/ManagerSummaryCard';
 import { TableSettlementLines } from './shared/TableSettlementLines';
 import { CouponsEntry } from './shared/CouponsEntry';
 import { WaiterAppShareCard } from './shared/WaiterAppShareCard';
@@ -648,7 +649,12 @@ function ManagerContent({
   if (view === 'manager-stock') return <ManagerStockView colors={colors} />;
   if (view === 'manager-qr') return <ManagerQrView colors={colors} onNavigate={onNavigate} />;
   if (view === 'manager-settings') return <ManagerSettingsView />;
-  return <ManagerDashboardTab setView={setView} onNavigate={onNavigate} colors={colors} />;
+  return (
+    <>
+      <ManagerSummaryCard />
+      <ManagerDashboardTab setView={setView} onNavigate={onNavigate} colors={colors} />
+    </>
+  );
 }
 
 function MaitreContent({
