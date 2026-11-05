@@ -1,7 +1,7 @@
 -- ADR-020: cadastro da conta de recebimento Asaas. A apiKey fica no Vault, do token só o sha256,
 -- a comissão vem de parâmetro, `active` só depois do KYC e outro restaurante não vê a conta.
 begin;
-select plan(29);
+select plan(31);
 
 create temp table _acct(k text primary key, v uuid);
 grant select on _acct to authenticated, anon;
@@ -57,6 +57,10 @@ select ok((select string_agg(coalesce("after"::text, '') || coalesce(reason, '')
   'o audit log não contém a chave');
 select throws_ok(format($$ select public.service_payment_account_attach(%L, %L, 'acc_2', 'wallet_2', 'outra', %L) $$, pg_temp.id('acct'), pg_temp.id('owner'), repeat('c', 64)),
   'P0001', null, 'não vincula uma segunda subconta');
+-- O que as Edge Functions leem para cobrar e autenticar o webhook.
+select is(public.service_payment_account_secrets(pg_temp.id('acct'))->>'apiKey', '$aact_hmlg_chave_de_teste',
+  'as Edge Functions recebem a chave da subconta');
+select is(public.service_payment_account_secrets(pg_temp.id('acct'))->>'walletId', 'wallet_1', 'e a carteira da subconta');
 
 -- Repetir o início não cria outra conta.
 select ok((public.service_payment_account_begin(pg_temp.id('owner'), pg_temp.id('r'), pg_temp.hash())->>'alreadyCreated')::boolean, 'repetir informa que já foi criada');
