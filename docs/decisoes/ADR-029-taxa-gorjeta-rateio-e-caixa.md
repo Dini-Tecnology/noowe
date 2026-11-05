@@ -50,3 +50,10 @@ Taxa ou gorjeta foi para o ADR-032. **Ainda bloqueado:** pendências 10, 11b, 19
 - **No-show e pré-autorização (10):** ocultos na primeira versão. No Fine, a reserva segue sem garantia de cartão.
 - **Tap to Pay (11):** tela oculta enquanto não houver fornecedor ativo, e ela nunca marca a conta como paga sem cobrança
   real. Até lá, o garçom registra como "Maquininha da casa". Detalhes na fatia T1.
+
+## Acerto do garçom
+
+- Quem recebe dinheiro (Garçom, Maître, Barman) entrega ao caixa, e Dono ou Gerente registra quanto recebeu (`restaurant_settle_staff_cash`).
+- O dinheiro já conta no esperado da gaveta desde o recebimento. O acerto zera o saldo da pessoa em "Dinheiro em mãos".
+- **Provisório, pendências 88 e 89:** cego para o Gerente. A diferença exige motivo, sai do esperado da gaveta e, acima do limite de quebra, avisa o Dono.
+- Ninguém acerta o próprio dinheiro, salvo o Dono (pendência 32). Fechar o caixa não é bloqueado por acerto pendente: o painel avisa.

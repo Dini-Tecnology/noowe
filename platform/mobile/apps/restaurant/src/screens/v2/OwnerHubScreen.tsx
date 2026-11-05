@@ -62,6 +62,8 @@ import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
 import { MyTipsPanel } from './shared/MyTipsPanel';
 import { MyCashInHandCard } from './shared/MyCashInHandCard';
+import { CounterChargePanel } from './shared/CounterChargePanel';
+import { TeamCashPanel } from './shared/TeamCashPanel';
 import { ManagerSummaryCard } from './shared/ManagerSummaryCard';
 import { TableSettlementLines } from './shared/TableSettlementLines';
 import { CouponsEntry } from './shared/CouponsEntry';
@@ -699,7 +701,12 @@ function BarmanContent({
   if (view === 'bar-recipes') return <BarmanRecipesView colors={colors} />;
   if (view === 'bar-stock') return <BarmanStockView colors={colors} />;
   if (view === 'barman-settings') return <PersonalSettingsView />;
-  return <BarmanQueueView colors={colors} mode={view === 'bar-kds' ? 'kds' : 'station'} />;
+  return (
+    <>
+      <CounterChargePanel />
+      <BarmanQueueView colors={colors} mode={view === 'bar-kds' ? 'kds' : 'station'} />
+    </>
+  );
 }
 
 function CookContent({
@@ -1620,6 +1627,7 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
           <Text style={[styles.wideActionText, { color: '#FFF' }]}>Abrir Caixa</Text>
         </TouchableOpacity>
       )}
+      <TeamCashPanel />
       <DayClosePanel />
       <PaymentActionsPanel />
     </View>

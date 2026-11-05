@@ -2,6 +2,7 @@ import { centsToAsaasValue } from "./money.ts";
 import type {
   AsaasAccount, AsaasAccountDocument, AsaasAccountInput, AsaasAccountStatus,
   AsaasChargeInput, AsaasCustomerInput, AsaasPayment, AsaasPix, PaymentProvider,
+  AsaasInvoiceInput,
 } from "./types.ts";
 
 // O POST /accounts levou 5,6 s no sandbox, contra 10 s do timeout padrão.
@@ -125,6 +126,21 @@ export class AsaasClient implements PaymentProvider {
   async refund(apiKey: string, id: string, valueCents: number, description?: string) {
     await this.request<unknown>(apiKey, "POST", `/payments/${encodeURIComponent(id)}/refund`, {
       value: centsToAsaasValue(valueCents), description,
+    });
+  }
+
+  async findInvoiceByExternalRef(apiKey: string, externalReference: string) {
+    const res = await this.request<{ data: { id: string }[] }>(
+      apiKey, "GET", `/invoices?externalReference=${encodeURIComponent(externalReference)}&limit=1`);
+    return res.data?.[0] ?? null;
+  }
+
+  scheduleInvoice(apiKey: string, input: AsaasInvoiceInput) {
+    return this.request<{ id: string }>(apiKey, "POST", "/invoices", {
+      payment: input.payment, value: centsToAsaasValue(input.valueCents), deductions: 0, effectiveDate: input.effectiveDate,
+      serviceDescription: input.serviceDescription, observations: input.observations,
+      municipalServiceId: input.municipalServiceId ?? undefined, municipalServiceCode: input.municipalServiceCode ?? undefined,
+      municipalServiceName: input.municipalServiceName, externalReference: input.externalReference, taxes: input.taxes,
     });
   }
 

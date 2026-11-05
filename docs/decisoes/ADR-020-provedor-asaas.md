@@ -51,7 +51,7 @@
 
 - A conta só vira `active` por `service_payment_account_apply_status`, com `general` reconsultado no Asaas. O corpo do webhook nunca decide.
 - `private.platform_fee_bps()` lê `private.payment_platform_config`. Sem linha nessa tabela, o cadastro não começa. O valor é da NOOWE e fica fora do alcance do restaurante, por isso não está em configuração do estabelecimento. **Substituído pelo ADR-031:** a taxa passa a ser por meio de pagamento, e esta tabela não deve ser preenchida; sai na M2.
-- A chave raiz fica em `ASAAS_ROOT_API_KEY`, nos segredos das Edge Functions. Só `payments-account` a usa.
+- A chave raiz fica em `ASAAS_ROOT_API_KEY`, nos segredos das Edge Functions. `payments-account` a usa para criar subcontas; `billing-charge` e `billing-nfse`, para cobrar a assinatura e agendar a NFS-e.
 - O cadastro aceita só CNPJ. Restaurante em CPF exigiria `birthDate` e uma nova decisão.
 
 ## Consequências

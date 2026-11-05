@@ -20,6 +20,13 @@ export interface AsaasAccountInput {
   address: string; addressNumber: string; province: string; postalCode: string;
   webhook: { url: string; email: string; authToken: string; events: string[] };
 }
+// NFS-e agendada no módulo de notas do Asaas, vinculada à cobrança. Tributos em percentual, como a API pede.
+export interface AsaasInvoiceInput {
+  payment: string; valueCents: number; effectiveDate: string; serviceDescription: string; observations: string;
+  municipalServiceId?: string | null; municipalServiceCode?: string | null; municipalServiceName: string;
+  externalReference: string;
+  taxes: { retainIss: boolean; iss: number; pis: number; cofins: number; csll: number; inss: number; ir: number };
+}
 export interface AsaasAccount { id: string; walletId: string; apiKey: string }
 export interface AsaasAccountStatus { id?: string; general: string }
 export interface AsaasAccountDocument { id: string; status: string; onboardingUrl?: string | null }
@@ -40,4 +47,6 @@ export interface PaymentProvider {
   findAccountByDocument(rootApiKey: string, cpfCnpj: string): Promise<{ id: string } | null>;
   getAccountStatus(apiKey: string): Promise<AsaasAccountStatus>;
   listAccountDocuments(apiKey: string): Promise<AsaasAccountDocument[]>;
+  findInvoiceByExternalRef(apiKey: string, externalReference: string): Promise<{ id: string } | null>;
+  scheduleInvoice(apiKey: string, input: AsaasInvoiceInput): Promise<{ id: string }>;
 }

@@ -142,6 +142,10 @@ values ('<id do restaurante>', 'enterprise', 1200000, 20000, 'Contrato de 03/11'
 Tabela `noowe_company`, uma linha só. Hoje só o CNPJ (`64159447000190`) está preenchido. Razão social, endereço, inscrição
 municipal e regime tributário esperam o Pedro (pendência 34), e nenhuma nota é emitida sem eles.
 
+Para a NFS-e da fatura, a mesma linha guarda também o que vem do contador: `municipal_service_id` ou `municipal_service_code`, `municipal_service_name`,
+`service_description`, `iss_bps`, `pis_bps`, `cofins_bps`, `csll_bps`, `inss_bps`, `ir_bps` e `retain_iss`. Sem eles nenhuma nota sai. Quando entrarem, a
+varredura `nfse-sweep` emite as notas das faturas pagas que esperavam. `nfse_max_attempts` limita as tentativas (padrão 5).
+
 ## Fornecedor de Tap to Pay
 
 Tabela `noowe_tap_settings`, uma linha só: `provider` e `active` (hoje vazio e falso). O banco recusa `active = true` sem

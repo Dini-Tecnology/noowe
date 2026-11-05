@@ -2,6 +2,10 @@ import { timingSafeEqual } from "../_shared/payments/crypto.ts";
 import { json, type PaymentDeps } from "../_shared/payments/deps.ts";
 
 const PAID = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]);
+// Só a autorização faz a nota valer: agendada ou sincronizada ainda pode ser recusada pela prefeitura.
+const NFSE_RESULT: Record<string, "issued" | "failed"> = {
+  INVOICE_AUTHORIZED: "issued", INVOICE_ERROR: "failed", INVOICE_CANCELED: "failed", INVOICE_CANCELLATION_DENIED: "failed",
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // Webhook da conta Asaas da NOOWE: só as faturas da assinatura. Reprocessar não muda fatura já paga.
@@ -11,12 +15,29 @@ export async function handleBillingWebhook(req: Request, deps: Pick<PaymentDeps,
   if (!token) return json({ error: "billing_unavailable" }, 503);
   if (!timingSafeEqual(req.headers.get("asaas-access-token") ?? "", token)) return json({ error: "unauthorized" }, 401);
   const event = await req.json().catch(() => null);
+  if (typeof event?.event === "string" && event.event.startsWith("INVOICE_")) return handleInvoiceEvent(event, deps);
   const reference: string = event?.payment?.externalReference ?? "";
   if (!reference.startsWith("inv:") || !UUID.test(reference.slice(4))) return json({ ok: true, ignored: "not_an_invoice" });
   if (!PAID.has(event?.event)) return json({ ok: true, ignored: "event_not_handled" });
   const paid = await deps.rpc("service_invoice_paid", { p_invoice_id: reference.slice(4) });
   if (paid.error) {
     console.error("billing-webhook error:", paid.error.message);
+    return json({ error: "internal_error" }, 500);
+  }
+  return json({ ok: true });
+}
+
+async function handleInvoiceEvent(event: any, deps: Pick<PaymentDeps, "rpc">): Promise<Response> {
+  const reference: string = event?.invoice?.externalReference ?? "";
+  if (!reference.startsWith("nfse:") || !UUID.test(reference.slice(5))) return json({ ok: true, ignored: "not_an_invoice" });
+  const status = NFSE_RESULT[event.event];
+  if (!status) return json({ ok: true, ignored: "event_not_handled" });
+  const saved = await deps.rpc("service_nfse_result", {
+    p_invoice_id: reference.slice(5), p_status: status, p_url: event.invoice?.pdfUrl ?? null,
+    p_error: status === "failed" ? `Asaas: ${event.event}` : null, p_provider_ref: event.invoice?.id ?? null,
+  });
+  if (saved.error) {
+    console.error("billing-webhook nfse error:", saved.error.message);
     return json({ error: "internal_error" }, 500);
   }
   return json({ ok: true });

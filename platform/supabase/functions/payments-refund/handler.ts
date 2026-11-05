@@ -1,18 +1,10 @@
 import { AsaasError } from "../_shared/payments/asaas.ts";
 import { mapAsaasPaymentStatus } from "../_shared/payments/events.ts";
-import { asaasValueToCents } from "../_shared/payments/money.ts";
-import type { AsaasPayment } from "../_shared/payments/types.ts";
+import { refundedAtProvider } from "../_shared/payments/refunds.ts";
 import { bearer, isServiceRole, json, type PaymentDeps } from "../_shared/payments/deps.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALREADY_REFUNDING = new Set(["REFUNDED", "REFUND_IN_PROGRESS", "REFUND_REQUESTED"]);
-
-// Quanto o provedor já registra como devolvido ou a caminho nesta cobrança, em centavos.
-function refundedAtProvider(charge: AsaasPayment, onlyDone: boolean): number {
-  return (charge.refunds ?? [])
-    .filter((r) => (onlyDone ? r.status === "DONE" : r.status !== "CANCELLED"))
-    .reduce((sum, r) => sum + asaasValueToCents(r.value), 0);
-}
 
 // Envia à Asaas um estorno aprovado. Só o banco chama (pg_net), com a service role. A resposta da Asaas diz que o pedido foi
 // aceito; quem confirma a devolução é o webhook. Se o webhook não vier, a mesma fila confere a cobrança depois.

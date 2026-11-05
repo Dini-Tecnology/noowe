@@ -9,12 +9,14 @@ import { closeAccountMessage } from '../screens/v2/shared/closeAccountMessage';
 import { waiterCanCloseBill } from '../screens/v2/shared/waiterCloseBill';
 import { ManagerSummaryCard } from '../screens/v2/shared/ManagerSummaryCard';
 import { MyCashInHandCard } from '../screens/v2/shared/MyCashInHandCard';
+import { TeamCashPanel } from '../screens/v2/shared/TeamCashPanel';
+import { CounterChargePanel } from '../screens/v2/shared/CounterChargePanel';
 import { TableSettlementLines } from '../screens/v2/shared/TableSettlementLines';
 import { PaymentActionsPanel } from '../screens/v2/shared/PaymentActionsPanel';
 
 const mockApi = {
   getCashSettings: jest.fn(), updateCashSettings: jest.fn(), getDayStatus: jest.fn(), closeOperationalDay: jest.fn(), reviewCashBreak: jest.fn(),
-  getTipRules: jest.fn(), updateTipRules: jest.fn(), setTaxRegime: jest.fn(), getMyTips: jest.fn(), getMyCashInHand: jest.fn(), getManagerSummary: jest.fn(), getSessionBill: jest.fn(), getRefundablePayments: jest.fn(),
+  getTipRules: jest.fn(), updateTipRules: jest.fn(), setTaxRegime: jest.fn(), getMyTips: jest.fn(), getMyCashInHand: jest.fn(), getTeamCashInHand: jest.fn(), settleStaffCash: jest.fn(), getCounterOrders: jest.fn(), recordPayment: jest.fn(), getManagerSummary: jest.fn(), getSessionBill: jest.fn(), getRefundablePayments: jest.fn(),
   requestRefund: jest.fn(), requestBillReopen: jest.fn(), getPaymentOptions: jest.fn(), setAcceptedVouchers: jest.fn(),
 };
 let mockRoles = ['owner'];
@@ -24,7 +26,7 @@ jest.mock('@react-navigation/native', () => ({ useFocusEffect: (fn: () => void) 
 jest.mock('../contexts/RestaurantRoleContext', () => ({ useRestaurantRole: () => ({ restaurantId: 'r1', serverRoles: mockRoles }) }));
 jest.mock('../screens/v2/config/ConfigSectionCard', () => ({ ConfigSectionCard: ({ children }: React.PropsWithChildren) => <>{children}</> }));
 jest.mock('../screens/v2/shared/staffRoles', () => ({ ROLE_LABELS: { waiter: 'Garçom', maitre: 'Maître' } }));
-jest.mock('@okinawa/shared/utils/user-error-message', () => ({ userErrorMessage: (_: unknown, fallback: string) => fallback }));
+jest.mock('@okinawa/shared/utils/user-error-message', () => ({ userErrorMessage: (err: { message?: string } | undefined, fallback: string) => err?.message ?? fallback }));
 jest.mock('@okinawa/shared/services/supabase-api', () => ({ get supabaseApiAdapter() { return mockApi; } }));
 const api = mockApi;
 const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
@@ -273,6 +275,72 @@ describe('Painel do Gerente (aditivo G)', () => {
     const view = render(<ManagerSummaryCard />);
     expect(await view.findByText('Sem plano escolhido')).toBeTruthy();
     expect(view.getByText('Nenhum pagamento no dia.')).toBeTruthy();
+  });
+});
+
+describe('Acerto do garçom (ADR-029)', () => {
+  const ana = { userId: 'w1', name: 'Ana', cents: null };
+
+  it('sem ninguém com dinheiro, o painel não aparece', async () => {
+    api.getTeamCashInHand.mockResolvedValue([]);
+    const view = render(<TeamCashPanel />);
+    await waitFor(() => expect(api.getTeamCashInHand).toHaveBeenCalled());
+    expect(view.queryByText('Dinheiro com a equipe')).toBeNull();
+  });
+
+  it('Gerente vê o nome sem valor, e o Dono vê o valor', async () => {
+    api.getTeamCashInHand.mockResolvedValue([ana]);
+    const blind = render(<TeamCashPanel />);
+    expect(await blind.findByText('Ana')).toBeTruthy();
+    expect(blind.queryByText(/R\$/)).toBeNull();
+    api.getTeamCashInHand.mockResolvedValue([{ ...ana, cents: 5000 }]);
+    const owner = render(<TeamCashPanel />);
+    expect(await owner.findByText(/50,00/)).toBeTruthy();
+  });
+
+  it('confirma o valor digitado em centavos', async () => {
+    api.getTeamCashInHand.mockResolvedValue([ana]);
+    api.settleStaffCash.mockResolvedValue({ settled: true, hasDifference: false });
+    const view = render(<TeamCashPanel />);
+    fireEvent.press(await view.findByLabelText('Acertar com Ana'));
+    fireEvent.changeText(view.getByLabelText('Valor entregue'), '50,00');
+    fireEvent.press(view.getByText('Confirmar acerto'));
+    await waitFor(() => expect(api.settleStaffCash).toHaveBeenCalledWith('r1', 'w1', 5000, null));
+  });
+
+  it('se o valor não conferir, pede o motivo e envia com ele', async () => {
+    api.getTeamCashInHand.mockResolvedValue([ana]);
+    api.settleStaffCash.mockRejectedValueOnce(new Error('O valor não confere: informe o motivo'));
+    api.settleStaffCash.mockResolvedValue({ settled: true, hasDifference: true });
+    const view = render(<TeamCashPanel />);
+    fireEvent.press(await view.findByLabelText('Acertar com Ana'));
+    fireEvent.changeText(view.getByLabelText('Valor entregue'), '40');
+    fireEvent.press(view.getByText('Confirmar acerto'));
+    fireEvent.changeText(await view.findByLabelText('Motivo da diferença'), 'faltou troco');
+    fireEvent.press(view.getByText('Confirmar acerto'));
+    await waitFor(() => expect(api.settleStaffCash).toHaveBeenLastCalledWith('r1', 'w1', 4000, 'faltou troco'));
+  });
+});
+
+describe('Cobrança de balcão do Barman (pendência 77)', () => {
+  const order = { orderId: 'o1', orderNumber: 'NW-1', callName: 'Ana', totalCents: 2500, createdAt: '', items: ['1x Caipirinha'] };
+
+  it('sem pedido no balcão, o painel não aparece', async () => {
+    api.getCounterOrders.mockResolvedValue([]);
+    const view = render(<CounterChargePanel />);
+    await waitFor(() => expect(api.getCounterOrders).toHaveBeenCalled());
+    expect(view.queryByText('Cobrar no balcão')).toBeNull();
+  });
+
+  it('cobra o pedido inteiro, no valor que veio do servidor, e recarrega', async () => {
+    api.getCounterOrders.mockResolvedValue([order]);
+    api.recordPayment.mockResolvedValue({});
+    const view = render(<CounterChargePanel />);
+    fireEvent.press(await view.findByLabelText('Cobrar Ana'));
+    const buttons = alert.mock.calls[alert.mock.calls.length - 1][2] as { text: string; onPress?: () => void }[];
+    buttons.find((b) => b.text === 'Dinheiro')!.onPress!();
+    await waitFor(() => expect(api.recordPayment).toHaveBeenCalledWith('o1', 'cash', 25));
+    await waitFor(() => expect(api.getCounterOrders).toHaveBeenCalledTimes(2));
   });
 });
 

@@ -8,7 +8,7 @@ const ACCT = "11111111-1111-4111-8111-111111111111";
 const PAY = "22222222-2222-4222-8222-222222222222";
 const TOKEN = "segredo-da-subconta";
 
-async function setup(over: { chargeStatus?: string; chargeThrows?: boolean; local?: any; chargeCard?: any; saveCardError?: boolean } = {}) {
+async function setup(over: { chargeStatus?: string; chargeThrows?: boolean; local?: any; chargeCard?: any; saveCardError?: boolean; chargeRefunds?: any[] } = {}) {
   const calls: { fn: string; args: any }[] = [];
   const deps: PaymentDeps = {
     rpc: async (fn, args) => {
@@ -27,7 +27,7 @@ async function setup(over: { chargeStatus?: string; chargeThrows?: boolean; loca
     provider: {
       getCharge: async () => {
         if (over.chargeThrows) throw new Error("rede");
-        return { id: "pay_asaas", status: over.chargeStatus ?? "RECEIVED", value: 12.34, creditCard: over.chargeCard };
+        return { id: "pay_asaas", status: over.chargeStatus ?? "RECEIVED", value: 12.34, creditCard: over.chargeCard, refunds: over.chargeRefunds };
       },
     } as any,
     env: () => undefined,
@@ -188,4 +188,32 @@ test("situação da conta: falha na reconsulta responde 200 e não aplica; token
   const denied = await setup();
   assert.equal((await handleWebhook(req("ACCOUNT_STATUS_GENERAL_APPROVAL_APPROVED", { token: "errado" }), denied.deps)).status, 401);
   assert.ok(!denied.calls.some((c) => c.fn === "service_payment_account_apply_status"));
+});
+
+test("estorno parcial feito no painel: reconsulta, registra o que foi concluído e só então aplica o evento", async () => {
+  const { deps, calls } = await setup({ chargeRefunds: [{ status: "DONE", value: 2 }, { status: "PENDING", value: 3 }, { status: "CANCELLED", value: 4 }] });
+  const res = await handleWebhook(req("PAYMENT_PARTIALLY_REFUNDED"), deps);
+  assert.equal(res.status, 200);
+  const names = calls.map((c) => c.fn);
+  assert.ok(names.indexOf("service_refund_external") < names.indexOf("service_payment_apply_event"));
+  assert.equal(calls.find((c) => c.fn === "service_refund_external")!.args.p_provider_refunded_cents, 200);
+});
+
+test("estorno em andamento feito no painel: conta também o que está a caminho", async () => {
+  const { deps, calls } = await setup({ chargeRefunds: [{ status: "DONE", value: 2 }, { status: "PENDING", value: 3 }, { status: "CANCELLED", value: 4 }] });
+  await handleWebhook(req("PAYMENT_REFUND_IN_PROGRESS"), deps);
+  assert.equal(calls.find((c) => c.fn === "service_refund_external")!.args.p_provider_refunded_cents, 500);
+});
+
+test("sem conseguir reconsultar o estorno, não aplica o evento e responde 200", async () => {
+  const { deps, calls, applied } = await setup({ chargeThrows: true });
+  assert.equal((await handleWebhook(req("PAYMENT_PARTIALLY_REFUNDED"), deps)).status, 200);
+  assert.equal(applied().length, 0);
+  assert.ok(calls.some((c) => c.fn === "service_payment_record_orphan_event"));
+});
+
+test("os outros eventos não consultam estorno", async () => {
+  const { deps, calls } = await setup();
+  await handleWebhook(req("PAYMENT_RECEIVED"), deps);
+  assert.ok(!calls.some((c) => c.fn === "service_refund_external"));
 });

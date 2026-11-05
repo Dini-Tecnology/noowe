@@ -1,6 +1,7 @@
 import { syncAccountStatus } from "../_shared/payments/account-status.ts";
 import { isAccountStatusEvent, isChargebackEvent, mapAsaasEvent, mapAsaasPaymentStatus } from "../_shared/payments/events.ts";
 import { asaasValueToCents } from "../_shared/payments/money.ts";
+import { refundedAtProvider } from "../_shared/payments/refunds.ts";
 import { sha256Hex, timingSafeEqual } from "../_shared/payments/crypto.ts";
 import { json, type PaymentDeps } from "../_shared/payments/deps.ts";
 
@@ -81,6 +82,22 @@ export async function handleWebhook(req: Request, deps: PaymentDeps): Promise<Re
 
   const mapped = mapAsaasEvent(type);
   if (!mapped) return orphan("event_not_handled");
+
+  // Estorno feito no painel do Asaas não tem pedido no app: a reconsulta diz quanto foi, e a diferença entra antes de aplicar o evento.
+  if (type === "PAYMENT_PARTIALLY_REFUNDED" || type === "PAYMENT_REFUND_IN_PROGRESS") {
+    const apiKey: string | undefined = account.apiKey;
+    if (!apiKey) return orphan("no_api_key");
+    try {
+      const actual = await deps.provider.getCharge(apiKey, payment.id);
+      const external = await deps.rpc("service_refund_external", {
+        p_payment_id: paymentId, p_provider_refunded_cents: refundedAtProvider(actual, type === "PAYMENT_PARTIALLY_REFUNDED"),
+      });
+      if (external.error) console.error("payments-webhook-asaas external refund error:", external.error.message);
+    } catch (err) {
+      console.error("payments-webhook-asaas refund recheck failed:", err);
+      return orphan("recheck_failed");
+    }
+  }
 
   // Defesa em profundidade: o corpo do webhook não basta. O status real vem do Asaas.
   let amountCents: number | null = null;

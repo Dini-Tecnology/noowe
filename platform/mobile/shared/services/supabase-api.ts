@@ -62,6 +62,9 @@ export type RefundablePayment = {
   tableSessionId: string | null; orderId: string | null; tableNumber: string | null; pendingApproval: boolean;
 };
 
+/** Valor em `cents` só chega para o Dono: para o Gerente o acerto é cego. */
+export type TeamCashInHand = { userId: string; name: string; cents: number | null };
+export type CounterOrder = { orderId: string; orderNumber: string | null; callName: string | null; totalCents: number; createdAt: string; items: string[] };
 export type ManagerSummary = {
   plan: { name: string | null; status: string | null };
   /** Líquido por forma de pagamento no dia aberto. Dinheiro vem nulo com o caixa aberto (fechamento cego). */
@@ -719,6 +722,9 @@ export interface SupabaseApiAdapter {
   getMyTips(restaurantId: string): Promise<MyTip[]>;
   getManagerSummary(restaurantId: string): Promise<ManagerSummary>;
   getMyCashInHand(restaurantId: string): Promise<{ open: boolean; cents: number; since?: string }>;
+  getTeamCashInHand(restaurantId: string): Promise<TeamCashInHand[]>;
+  settleStaffCash(restaurantId: string, staffId: string, deliveredCents: number, reason?: string | null): Promise<{ settled: boolean; hasDifference: boolean }>;
+  getCounterOrders(restaurantId: string): Promise<CounterOrder[]>;
   getRefundablePayments(restaurantId: string): Promise<RefundablePayment[]>;
   requestRefund(paymentId: string, reason: string, amountCents?: number | null): Promise<any>;
   requestBillReopen(tableSessionId: string, reason: string): Promise<any>;
@@ -2594,6 +2600,17 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
 
   async getMyCashInHand(restaurantId: string) {
     return rpcData<{ open: boolean; cents: number; since?: string }>('restaurant_my_cash_in_hand', { p_restaurant_id: restaurantId });
+  },
+  async getTeamCashInHand(restaurantId: string) {
+    return rpcData<TeamCashInHand[]>('restaurant_cash_team_in_hand', { p_restaurant_id: restaurantId });
+  },
+  async settleStaffCash(restaurantId: string, staffId: string, deliveredCents: number, reason?: string | null) {
+    return rpcData<{ settled: boolean; hasDifference: boolean }>('restaurant_settle_staff_cash', {
+      p_restaurant_id: restaurantId, p_staff_id: staffId, p_delivered_cents: deliveredCents, p_reason: reason ?? null,
+    });
+  },
+  async getCounterOrders(restaurantId: string) {
+    return rpcData<CounterOrder[]>('restaurant_list_counter_orders', { p_restaurant_id: restaurantId });
   },
   async getManagerSummary(restaurantId: string) {
     return rpcData<ManagerSummary>('restaurant_manager_summary', { p_restaurant_id: restaurantId });

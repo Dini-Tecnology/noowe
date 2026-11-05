@@ -76,6 +76,10 @@ verify_jwt = false
 [functions.billing-charge]
 verify_jwt = true
 
+[functions.billing-nfse]
+# Só o banco chama (pg_net), com a service role.
+verify_jwt = true
+
 [functions.billing-webhook]
 # O Asaas chama, sem JWT: quem autentica é o token do cabeçalho.
 verify_jwt = false
