@@ -37,6 +37,8 @@ export default function MenuScreen({ route, navigation }: any) {
   const visit = useVisitSession();
   const cart = useCart();
   const restaurantId = route?.params?.restaurantId ?? visit.session?.restaurantId;
+  // Modo expositivo da descoberta: só itens, descrições e preços, sem nada de pedido.
+  const browse = route?.params?.browse === true;
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [detailItem, setDetailItem] = useState<CustomerMenuItem | null>(null);
   const journeyModel = useJourneyModel(restaurantId);
@@ -45,6 +47,7 @@ export default function MenuScreen({ route, navigation }: any) {
   const tableService = capabilities?.tableSession === true;
   const perPersonComanda = capabilities?.consumptionUnit === 'per_person';
   const tableWithGuests = capabilities?.consumptionUnit === 'table_with_guests';
+  const canOrder = !browse && features.ordering;
   // Group ordering only applies at a table of this restaurant — a session open
   // somewhere else must not put another table's diners on this menu.
   const tableSessionId =
@@ -65,7 +68,7 @@ export default function MenuScreen({ route, navigation }: any) {
   const customizations = useQuery({
     queryKey: ['menu-customizations', restaurantId],
     queryFn: () => customerBackend.getMenuCustomizations(restaurantId!),
-    enabled: !!restaurantId && features.ordering,
+    enabled: !!restaurantId && canOrder,
   });
   const customizationOf = useCallback(
     (itemId: string | undefined): ItemCustomizationConfig | null =>
@@ -101,7 +104,7 @@ export default function MenuScreen({ route, navigation }: any) {
     () => menu.data?.categories.find((c) => c.name.trim().toLowerCase() === 'combos')?.id ?? null,
     [menu.data?.categories],
   );
-  const showComboBuilder = capabilities?.comboBuilder === true && !!combosCategoryId && selectedCategory === combosCategoryId;
+  const showComboBuilder = !browse && capabilities?.comboBuilder === true && !!combosCategoryId && selectedCategory === combosCategoryId;
   const comboDiscountLabel = policies?.comboDiscountBps ? ` com ${policies.comboDiscountBps / 100}% off` : '';
 
   // Mesa = comanda; sem mesa (pedido antecipado) = pedido.
@@ -109,7 +112,7 @@ export default function MenuScreen({ route, navigation }: any) {
 
   const add = useCallback(
     (item: CustomerMenuItem, quantity = 1, selection: CustomizationSelection = EMPTY_SELECTION) => {
-      if (!features.ordering) return;
+      if (!canOrder) return;
       const config = customizationOf(item.id);
       cart.setRestaurant(restaurantId, restaurant.data?.name ?? 'Restaurante');
       cart.addItem({
@@ -124,7 +127,7 @@ export default function MenuScreen({ route, navigation }: any) {
       });
       Toast.show({ type: 'success', text1: addedLabel, text2: `${quantity}x ${item.name}`, visibilityTime: 1800 });
     },
-    [addedLabel, cart, customizationOf, features.ordering, restaurant.data, restaurantId],
+    [addedLabel, canOrder, cart, customizationOf, restaurant.data, restaurantId],
   );
 
   // Item com escolhas não entra direto pelo "Adicionar" da lista: abre o detalhe.
@@ -149,7 +152,7 @@ export default function MenuScreen({ route, navigation }: any) {
       notes: string;
       selection: CustomizationSelection;
     }) => {
-      if (!features.ordering) return;
+      if (!canOrder) return;
       const config = customizationOf(item.id);
       cart.setRestaurant(restaurantId, restaurant.data?.name ?? 'Restaurante');
       cart.addItem({
@@ -167,7 +170,7 @@ export default function MenuScreen({ route, navigation }: any) {
       });
       Toast.show({ type: 'success', text1: 'Adicionado à comanda', text2: `${quantity}x ${item.name}`, visibilityTime: 1800 });
     },
-    [cart, customizationOf, features.ordering, restaurant.data, restaurantId],
+    [canOrder, cart, customizationOf, restaurant.data, restaurantId],
   );
 
   const callWaiter = useCallback(() => navigation.navigate('CallWaiter'), [navigation]);
@@ -267,7 +270,7 @@ export default function MenuScreen({ route, navigation }: any) {
           <Text style={styles.headerTitle} numberOfLines={1}>
             {tableService ? 'Cardápio' : (restaurant.data?.name ?? 'Cardápio')}
           </Text>
-          {features.ordering ? (
+          {canOrder ? (
             <TouchableOpacity style={styles.headerBtn} onPress={openCart} accessibilityRole="button" accessibilityLabel="Ver comanda">
               <Ionicons name={tableWithGuests ? 'pricetag-outline' : 'receipt-outline'} size={22} color={colors.foreground} />
               {cart.itemCount > 0 && (
@@ -279,7 +282,7 @@ export default function MenuScreen({ route, navigation }: any) {
           ) : <View style={{ width: 40, height: 40 }} />}
         </View>
 
-        {(features.callWaiter || (capabilities?.familyMode && casualConfig.familyMode && tableSessionId)) && (
+        {!browse && (features.callWaiter || (capabilities?.familyMode && casualConfig.familyMode && tableSessionId)) && (
           <View style={styles.quickActions}>
             {features.callWaiter && (
               <TouchableOpacity
@@ -326,14 +329,14 @@ export default function MenuScreen({ route, navigation }: any) {
           </ScrollView>
         )}
 
-        {tableService && (
+        {!browse && tableService && (
           <View style={styles.hintBanner}>
             <Ionicons name="flash-outline" size={16} color={colors.primary} />
             <Text style={styles.hintText}>Toque em um prato para ver detalhes e adicionar à comanda</Text>
           </View>
         )}
 
-        {capabilities?.pickupCode && (
+        {!browse && capabilities?.pickupCode && (
           <View style={styles.hintBanner}>
             <Ionicons name="flash-outline" size={16} color={colors.primary} />
             <Text style={styles.hintText}>Monte seu pedido e retire no balcão express</Text>
@@ -385,14 +388,14 @@ export default function MenuScreen({ route, navigation }: any) {
                       )}
                       <Text style={styles.menuPrice}>{money(item.price)}</Text>
                     </View>
-                    {tableService ? (
+                    {tableService || browse ? (
                       prepTime ? (
                         <View style={styles.prepTimeRow}>
                           <Ionicons name="time-outline" size={13} color={colors.foregroundMuted} />
                           <Text style={styles.prepTimeText}>{prepTime}</Text>
                         </View>
                       ) : null
-                    ) : features.ordering ? (
+                    ) : canOrder ? (
                       <TouchableOpacity style={styles.addBtn} onPress={() => quickAdd(item)} accessibilityRole="button" accessibilityLabel={`Adicionar ${item.name}`}>
                         <Ionicons name="add" size={16} color={colors.primaryForeground} />
                         <Text style={styles.addBtnText}>Adicionar</Text>
@@ -403,7 +406,8 @@ export default function MenuScreen({ route, navigation }: any) {
               </>
             );
             // Sem mesa e sem pedido pelo app (ex.: só vitrine), o item é só leitura.
-            if (!tableService && !features.ordering) {
+            // No modo expositivo o toque abre o detalhe, também sem ação de pedido.
+            if (!browse && !tableService && !features.ordering) {
               return <View key={item.id} style={styles.menuItem}>{content}</View>;
             }
             return (
@@ -438,7 +442,7 @@ export default function MenuScreen({ route, navigation }: any) {
         </View>
       </ScrollView>
 
-      {perPersonComanda ? (
+      {perPersonComanda && !browse ? (
         <CasualDiningItemDetail
           key={detailItem?.id ?? 'none'}
           item={detailItem}
@@ -453,7 +457,7 @@ export default function MenuScreen({ route, navigation }: any) {
         <MenuItemDetailModal
           key={detailItem?.id ?? 'none'}
           item={detailItem}
-          orderingEnabled={features.ordering}
+          orderingEnabled={canOrder}
           customization={customizationOf(detailItem?.id)}
           upsellItems={upsellItemsOf(detailItem)}
           onUpsell={(next) => (hasChoices(customizationOf(next.id)) ? setDetailItem(next) : add(next))}
@@ -571,25 +575,27 @@ function MenuItemDetailModal({
             )}
             <View style={styles.footerRow}>
               <Text style={styles.price}>{money(unitPrice)}</Text>
-              <View style={styles.stepper}>
-                <TouchableOpacity
-                  style={styles.stepperBtn}
-                  onPress={() => setQuantity((q) => Math.max(1, q - 1))}
-                  accessibilityRole="button"
-                  accessibilityLabel="Diminuir quantidade"
-                >
-                  <Ionicons name="remove" size={16} color={colors.foreground} />
-                </TouchableOpacity>
-                <Text style={styles.stepperValue}>{quantity}</Text>
-                <TouchableOpacity
-                  style={[styles.stepperBtn, styles.stepperBtnFilled]}
-                  onPress={() => setQuantity((q) => q + 1)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Aumentar quantidade"
-                >
-                  <Ionicons name="add" size={16} color={colors.primaryForeground} />
-                </TouchableOpacity>
-              </View>
+              {orderingEnabled ? (
+                <View style={styles.stepper}>
+                  <TouchableOpacity
+                    style={styles.stepperBtn}
+                    onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+                    accessibilityRole="button"
+                    accessibilityLabel="Diminuir quantidade"
+                  >
+                    <Ionicons name="remove" size={16} color={colors.foreground} />
+                  </TouchableOpacity>
+                  <Text style={styles.stepperValue}>{quantity}</Text>
+                  <TouchableOpacity
+                    style={[styles.stepperBtn, styles.stepperBtnFilled]}
+                    onPress={() => setQuantity((q) => q + 1)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Aumentar quantidade"
+                  >
+                    <Ionicons name="add" size={16} color={colors.primaryForeground} />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </View>
             {orderingEnabled ? (
               <TouchableOpacity

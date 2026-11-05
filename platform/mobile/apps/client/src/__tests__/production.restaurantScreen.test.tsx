@@ -735,6 +735,15 @@ describe('RestaurantScreen — a comanda é a casa do cliente (ADR-021)', () => 
     );
   });
 
+  it('sem comanda aqui, o Cardápio abre no modo expositivo', async () => {
+    mockGetLiveStatus.mockResolvedValue(live());
+
+    const { findByText, navigation } = renderScreen();
+
+    fireEvent.press(await findByText('Cardápio'));
+    expect(navigation.navigate).toHaveBeenCalledWith('Menu', { restaurantId: 'r1', browse: true });
+  });
+
   it('com comanda aqui, o Cardápio abre dentro da comanda: o voltar cai nela', async () => {
     mockGetLiveStatus.mockResolvedValue(live());
     mockGetActiveVisit.mockResolvedValue(visitHere);

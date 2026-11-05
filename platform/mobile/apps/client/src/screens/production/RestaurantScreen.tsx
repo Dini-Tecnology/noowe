@@ -173,7 +173,8 @@ export default function RestaurantScreen({ route, navigation }: any) {
   const openMenu = useCallback(() => {
     // Com comanda aqui o cardápio é filho dela: o "voltar" cai na comanda, não nesta página.
     if (session?.restaurantId === restaurantId && session?.tableSessionId) openInComanda(navigation, 'Menu', { restaurantId });
-    else navigation.navigate('Menu', { restaurantId });
+    // Sem comanda aqui é descoberta: o cardápio só expõe itens, descrições e preços.
+    else navigation.navigate('Menu', { restaurantId, browse: true });
   }, [navigation, restaurantId, session?.restaurantId, session?.tableSessionId]);
   const activeSessionHere = session?.restaurantId === restaurantId && !!session?.tableSessionId;
   const activeElsewhere = !!session?.tableSessionId && session.restaurantId !== restaurantId;
