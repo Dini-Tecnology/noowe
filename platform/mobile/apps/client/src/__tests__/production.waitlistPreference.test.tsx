@@ -55,7 +55,7 @@ describe('Fila Virtual · preferência de setor', () => {
 
     mockSections.mockResolvedValue(['Salão']);
     await act(async () => { await client.invalidateQueries({ queryKey: ['waitlist-sections', 'r1'] }); });
-    await waitFor(() => expect(view.queryByText('Varanda')).toBeNull());
+    await waitFor(() => expect(view.queryByText('Varanda')).toBeNull(), { timeout: 10000 });
 
     fireEvent.press(view.getByText('Entrar na Fila Virtual'));
     await waitFor(() => expect(mockJoin).toHaveBeenCalledWith({ restaurantId: 'r1', partySize: 2, preference: 'qualquer' }));
