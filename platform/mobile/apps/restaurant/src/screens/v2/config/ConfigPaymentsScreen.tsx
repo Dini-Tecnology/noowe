@@ -178,7 +178,7 @@ export default function ConfigPaymentsScreen() {
           </TouchableOpacity>
           <Text style={[styles.sectionEyebrow, { color: colors.foregroundSecondary }]}>MÉTODOS ACEITOS</Text>
           {!canEditMethods ? (
-            <Text style={[styles.accountRowText, { color: colors.foregroundSecondary, fontSize: 13 }]}>
+            <Text style={[styles.accountRowText, { color: colors.foregroundSecondary, fontSize: 13, marginBottom: 8 }]}>
               Só o Dono altera os métodos aceitos.
             </Text>
           ) : null}

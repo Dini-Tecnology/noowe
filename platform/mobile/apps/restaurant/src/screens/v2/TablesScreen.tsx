@@ -5,6 +5,7 @@ import { CheckCircle, DoorOpen, Pencil, Plus, QrCode, Receipt, Trash2, UserPlus,
 import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
+import { closeAccountMessage } from './shared/closeAccountMessage';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2FormSheet } from './shared/V2FormSheet';
@@ -57,6 +58,7 @@ export default function TablesScreen() {
   const [deleteTable, setDeleteTable] = useState<V2Table | null>(null);
   const [seatingTable, setSeatingTable] = useState<{ table: V2Table; mode: SeatingMode } | null>(null);
   const [closeAccountTable, setCloseAccountTable] = useState<V2Table | null>(null);
+  const [closeBalanceCents, setCloseBalanceCents] = useState<number | null>(null);
   const [chargeTable, setChargeTable] = useState<V2Table | null>(null);
   // Cobrar: Garçom (na visão dele), Maître, Gerente e Dono. A regra de verdade é do servidor.
   const canCharge = serverRoles.some((value) => value === 'owner' || value === 'manager' || value === 'maitre');
@@ -158,6 +160,15 @@ export default function TablesScreen() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const askCloseAccount = (table: V2Table) => {
+    setCloseBalanceCents(null);
+    setCloseAccountTable(table);
+    if (!table.sessionId) return;
+    supabaseApiAdapter.getSessionBill(table.sessionId)
+      .then((bill) => setCloseBalanceCents(bill.balanceCents))
+      .catch(() => setCloseBalanceCents(null));
   };
 
   const confirmCloseAccount = async () => {
@@ -492,7 +503,7 @@ export default function TablesScreen() {
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Encerrar a comanda da mesa ${selectedTable.label}`}
-                        onPress={() => setCloseAccountTable(selectedTable)}
+                        onPress={() => askCloseAccount(selectedTable)}
                         style={({ pressed }) => [styles.primaryOperationButton, { backgroundColor: '#0284C7' }, pressed && styles.primaryPressed]}
                       >
                         <Receipt size={17} color="#FFF" />
@@ -647,7 +658,7 @@ export default function TablesScreen() {
       <V2ConfirmDialog
         visible={closeAccountTable !== null}
         title="Encerrar a comanda?"
-        message={`A conta da mesa ${closeAccountTable?.label ?? ''} está em ${formatCurrency(closeAccountTable?.totalSpent ?? 0)}. O cliente é avisado e a mesa fica aguardando liberação. Informe o motivo.`}
+        message={closeAccountMessage(closeAccountTable?.label ?? '', closeBalanceCents)}
         confirmLabel="Encerrar comanda"
         reasonLabel="Motivo (ex.: pagou na maquininha)"
         reason={closeReason}

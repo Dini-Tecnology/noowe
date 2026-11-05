@@ -35,7 +35,7 @@ export function ManagerSummaryCard() {
       </Text>
 
       <Text style={[styles.title, { color: colors.foreground }]}>Caixa do dia (líquido)</Text>
-      {cash.length === 0 ? <Text style={muted}>Nenhum pagamento no dia.</Text> : null}
+      {cash.length === 0 ? <Text style={muted}>Nenhum pagamento no dia.</Text> : <Text style={[styles.hint, muted]}>Já inclui a taxa de serviço e a gorjeta, que aparecem abaixo.</Text>}
       {cash.map((line) => (
         <View key={`${line.method}-${line.external}`} style={styles.row}>
           <Text style={muted}>{statementLabel(line.method, line.external)}</Text>
@@ -66,5 +66,6 @@ export function ManagerSummaryCard() {
 const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 16, gap: 8 },
   title: { fontSize: 15, fontWeight: '800' },
+  hint: { fontSize: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
 });

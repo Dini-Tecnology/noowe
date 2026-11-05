@@ -311,6 +311,7 @@ export default function OwnerHubScreen() {
 
         <MyRolesTasksPanel />
         <MyTipsPanel />
+        <MyCashInHandCard />
         <WaiterAppShareCard />
         <CreditIndexCard />
         <CouponsEntry onOpen={openScreen} />
@@ -2804,7 +2805,6 @@ function WaiterChargeBody({
           Quem pagou pelo app aparece automaticamente. Cobre apenas quem precisa.
         </Text>
       </View>
-      <MyCashInHandCard />
       <PaymentActionsPanel />
 
       {loading && bills.length === 0 ? (
@@ -2816,19 +2816,21 @@ function WaiterChargeBody({
           const paid = tableBills.filter((b) => b.isPaid).length;
           const total = tableBills.length;
           const unpaid = total - paid;
+          // Comanda aberta se paga pelo saldo da sessão: a contagem por pedido diria "0 pago" com parte da conta já paga.
+          const sessionOpen = Boolean(tableBills[0]?.tableSessionId) && unpaid > 0;
           return (
             <View key={tableNumber} style={[styles.waiterChargeGroup, { borderColor: colors.border, backgroundColor: colors.card }]}>
               <View style={styles.waiterChargeGroupHeader}>
                 <View style={[styles.waiterKitchenNumber, { backgroundColor: `${colors.primary}18` }]}>
-                  <Text style={[styles.waiterKitchenNumberText, { color: colors.primary }]}>{tableNumber}</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.4} style={[styles.waiterKitchenNumberText, { color: colors.primary }]}>{tableNumber}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.staffName, { color: colors.foreground, fontSize: 14 }]}>{formatTableLabel(tableNumber)}</Text>
                   <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>
-                    {paid} pago · {unpaid} a cobrar
+                    {sessionOpen ? 'Comanda aberta' : `${paid} pago · ${unpaid} a cobrar`}
                   </Text>
                 </View>
-                <StatusChip label={`${paid}/${total}`} tone={unpaid === 0 ? 'success' : 'warning'} />
+                {sessionOpen ? null : <StatusChip label={`${paid}/${total}`} tone={unpaid === 0 ? 'success' : 'warning'} />}
               </View>
               {tableBills[0]?.tableSessionId ? (
                 <TableSettlementLines tableSessionId={tableBills[0].tableSessionId} refreshKey={paid} />

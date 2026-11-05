@@ -62,7 +62,8 @@ export function TableComandaDialog({
   const [diners, setDiners] = useState<ComandaDiner[]>([]);
   const [items, setItems] = useState<ComandaItem[]>([]);
   const [subtotal, setSubtotal] = useState(0);
-  const [paidCents, setPaidCents] = useState(0);
+  // Nulo: o servidor não entrega o total pago a este perfil.
+  const [paidCents, setPaidCents] = useState<number | null>(null);
 
   useEffect(() => {
     if (!visible || !tableId) return;
@@ -75,7 +76,7 @@ export function TableComandaDialog({
         setDiners(Array.isArray(data?.diners) ? data.diners : []);
         setItems(Array.isArray(data?.items) ? data.items : []);
         setSubtotal(Number(data?.subtotal ?? 0));
-        setPaidCents(Number(data?.paidCents ?? 0));
+        setPaidCents(data?.paidCents == null ? null : Number(data.paidCents));
       })
       .catch((err) => {
         if (!cancelled) setError(userErrorMessage(err, 'Erro ao carregar comanda'));
@@ -90,7 +91,7 @@ export function TableComandaDialog({
         setDiners(Array.isArray(data?.diners) ? data.diners : []);
         setItems(Array.isArray(data?.items) ? data.items : []);
         setSubtotal(Number(data?.subtotal ?? 0));
-        setPaidCents(Number(data?.paidCents ?? 0));
+        setPaidCents(data?.paidCents == null ? null : Number(data.paidCents));
       }).catch(() => undefined);
     }, 15000);
     return () => { cancelled = true; clearInterval(timer); };
@@ -119,7 +120,7 @@ export function TableComandaDialog({
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: colors.foreground }]}>Comanda · {tableLabel}</Text>
               <Text style={[styles.subtitle, { color: colors.foregroundSecondary }]}>
-                {diners.length} pessoa{diners.length === 1 ? '' : 's'} · {formatCurrency(subtotal)} · pago {formatCurrency(paidCents / 100)}
+                {diners.length} pessoa{diners.length === 1 ? '' : 's'} · {formatCurrency(subtotal)}{paidCents === null ? '' : ` · pago ${formatCurrency(paidCents / 100)}`}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} accessibilityLabel="Fechar" hitSlop={8}>

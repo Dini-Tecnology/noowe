@@ -5,6 +5,7 @@ import { centsFromText, textFromCents } from '../screens/v2/config/cashSettings'
 import { CashSettingsCard, TipRulesCard } from '../screens/v2/config/CashAndTipsCards';
 import { DayClosePanel } from '../screens/v2/shared/DayClosePanel';
 import { MyTipsPanel } from '../screens/v2/shared/MyTipsPanel';
+import { closeAccountMessage } from '../screens/v2/shared/closeAccountMessage';
 import { ManagerSummaryCard } from '../screens/v2/shared/ManagerSummaryCard';
 import { MyCashInHandCard } from '../screens/v2/shared/MyCashInHandCard';
 import { TableSettlementLines } from '../screens/v2/shared/TableSettlementLines';
@@ -271,5 +272,15 @@ describe('Painel do Gerente (aditivo G)', () => {
     const view = render(<ManagerSummaryCard />);
     expect(await view.findByText('Sem plano escolhido')).toBeTruthy();
     expect(view.getByText('Nenhum pagamento no dia.')).toBeTruthy();
+  });
+});
+
+describe('Aviso de encerrar comanda', () => {
+  it('fala do saldo que o servidor informou e nunca inventa um valor', () => {
+    expect(closeAccountMessage('S12', 5500)).toContain('ainda tem R$\u00a055,00 em aberto');
+    expect(closeAccountMessage('S12', 0)).toContain('sem saldo em aberto');
+    const unknown = closeAccountMessage('S12', null);
+    expect(unknown).toContain('comanda aberta');
+    expect(unknown).not.toContain('R$');
   });
 });
