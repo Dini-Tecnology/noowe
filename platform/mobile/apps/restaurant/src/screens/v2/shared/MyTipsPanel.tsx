@@ -13,7 +13,9 @@ const formatDay = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 /** "Minha gorjeta": cada pessoa vê só o próprio extrato. O app calcula e informa; o repasse é da folha do restaurante. */
 export function MyTipsPanel() {
   const colors = useColors();
-  const { restaurantId } = useRestaurantRole();
+  const { restaurantId, serverRoles } = useRestaurantRole();
+  // Dono e Gerente puros não recebem gorjeta; quem trabalha na casa vê o painel mesmo antes da primeira (aditivo, item G).
+  const earnsTips = serverRoles.some((role) => role !== 'owner' && role !== 'manager');
   const [tips, setTips] = useState<MyTip[]>([]);
 
   useFocusEffect(useCallback(() => {
@@ -21,11 +23,12 @@ export function MyTipsPanel() {
     supabaseApiAdapter.getMyTips(restaurantId).then(setTips).catch(() => setTips([]));
   }, [restaurantId]));
 
-  if (tips.length === 0) return null;
+  if (tips.length === 0 && !earnsTips) return null;
 
   return (
     <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <Text style={[styles.title, { color: colors.foreground }]}>Minha gorjeta</Text>
+      {tips.length === 0 ? <Text style={{ color: colors.foregroundSecondary }}>Nenhuma gorjeta apurada ainda.</Text> : null}
       {tips.slice(0, 7).map((tip) => (
         <View key={`${tip.businessDate}-${tip.role}`} style={styles.row}>
           <Text style={{ color: colors.foregroundSecondary }}>

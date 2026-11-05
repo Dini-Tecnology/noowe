@@ -87,6 +87,7 @@ type RawTable = {
     guest_count?: number | string | null;
     started_at?: string | null;
     total_spent?: number | string | null;
+    spent_hidden?: boolean | null;
     headcount?: number | string | null;
     origin?: string | null;
     origin_name?: string | null;
@@ -123,6 +124,8 @@ export type V2Table = {
   guests: number;
   guestName: string | null;
   totalSpent: number;
+  /** O servidor não entrega o consumo desta mesa a este perfil (aditivo, item G). */
+  spentHidden: boolean;
   sessionId: string | null;
   reservationId: string | null;
   reservationName: string | null;
@@ -290,6 +293,7 @@ export function mapTable(raw: RawTable): V2Table {
     guests: sessionGuests || reservationGuests,
     guestName: sessionGuestName || reservationName,
     totalSpent: toNumber(raw.active_session?.total_spent, 0),
+    spentHidden: Boolean(raw.active_session?.spent_hidden),
     sessionId: raw.active_session?.id || null,
     reservationId: raw.active_reservation?.id || null,
     reservationName,

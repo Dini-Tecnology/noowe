@@ -102,7 +102,7 @@ begin
   -- Antes de liberar, não abate.
   i := private.invoice_create(r, 'renewal', now(), now() + interval '1 month', 19900, 'Plano');
   assert i.total_cents = 19900, 'ainda não liberado';
-  update private.noowe_credit_lots set available_from = current_date - 1, amount_cents = 20000, remaining_cents = 20000 where id = lot;
+  update private.noowe_credit_lots set available_from = (now() at time zone 'America/Sao_Paulo')::date - 1, amount_cents = 20000, remaining_cents = 20000 where id = lot;
   i := private.invoice_create(r, 'renewal', now(), now() + interval '1 month', 19900, 'Plano');
   assert i.total_cents = 19900 - 5970, 'abate até 30%: ' || i.total_cents;
   assert (select amount_cents from public.subscription_invoice_lines where invoice_id = i.id and kind = 'credit') = -5970, 'linha na fatura';
@@ -113,7 +113,7 @@ begin
   i := private.invoice_create(r, 'upgrade', now(), now() + interval '1 month', 1000, 'Diferença');
   assert i.total_cents = 1000, 'nem a diferença de plano';
   -- Expirar.
-  update private.noowe_credit_lots set expires_at = current_date where id = lot;
+  update private.noowe_credit_lots set expires_at = (now() at time zone 'America/Sao_Paulo')::date where id = lot;
   perform private.credit_tick();
   assert (select remaining_cents from private.noowe_credit_lots where id = lot) = 0, 'expira';
   assert exists (select 1 from private.noowe_credit_ledger where lot_id = lot and kind = 'expired'), 'no razão';
@@ -124,7 +124,7 @@ select pass('M5, critério 4: libera depois, abate até 30%, só a mensalidade, 
 do $$
 declare r uuid := pg_temp.ctx('r'); lot uuid := pg_temp.ctx('lot');
 begin
-  update private.noowe_credit_lots set remaining_cents = 1000, expires_at = current_date + 90 where id = lot;
+  update private.noowe_credit_lots set remaining_cents = 1000, expires_at = (now() at time zone 'America/Sao_Paulo')::date + 90 where id = lot;
   perform private.subscription_on_canceled(r);
   assert (select remaining_cents from private.noowe_credit_lots where id = lot) = 0, 'some ao cancelar';
   assert exists (select 1 from private.noowe_credit_ledger where lot_id = lot and kind = 'lost'), 'registrado';
@@ -138,7 +138,7 @@ select pass('M5, critérios 5 e 8: some ao cancelar, e o razão é imutável');
 do $$
 declare r uuid := pg_temp.ctx('r'); j jsonb; v_at timestamptz := now() - interval '1 minute';
 begin
-  update private.noowe_credit_lots set remaining_cents = 500, available_from = current_date - 1, expires_at = current_date + 10 where id = pg_temp.ctx('lot');
+  update private.noowe_credit_lots set remaining_cents = 500, available_from = (now() at time zone 'America/Sao_Paulo')::date - 1, expires_at = (now() at time zone 'America/Sao_Paulo')::date + 10 where id = pg_temp.ctx('lot');
   perform pg_temp.pay('asaas', 'pix', 900000, v_at);
   perform pg_temp.pay('manual', 'cash', 900000, v_at);
   perform pg_temp.act(pg_temp.ctx('dono'));
@@ -203,7 +203,7 @@ begin
   assert i.total_cents = 9950, 'percentual';
   assert (select amount_cents from public.subscription_invoice_lines where invoice_id = i.id and kind = 'promo') = -9950, 'linha do código';
   -- Crédito entra depois do código, com o limite de 30% sobre o que sobrou.
-  update private.noowe_credit_lots set remaining_cents = 20000, available_from = current_date - 1, expires_at = current_date + 90 where id = pg_temp.ctx('lot');
+  update private.noowe_credit_lots set remaining_cents = 20000, available_from = (now() at time zone 'America/Sao_Paulo')::date - 1, expires_at = (now() at time zone 'America/Sao_Paulo')::date + 90 where id = pg_temp.ctx('lot');
   update private.noowe_promo_redemptions set status = 'active', months_billed = 0 where restaurant_id = r and code = 'METADE';
   i := private.invoice_create(r, 'renewal', now(), now() + interval '1 month', 19900, 'Plano');
   assert i.total_cents = 9950 - 2985, 'depois do código, até 30%: ' || i.total_cents;

@@ -164,10 +164,17 @@ describe('Minha gorjeta (critério 7)', () => {
     expect(view.getByText(/na folha/)).toBeTruthy();
   });
 
-  it('sem nada apurado, não aparece', async () => {
+  it('Dono sem nada apurado não vê o painel; quem trabalha na casa vê, vazio', async () => {
+    mockRoles = ['owner'];
     const view = render(<MyTipsPanel />);
     await waitFor(() => expect(api.getMyTips).toHaveBeenCalled());
     expect(view.queryByText('Minha gorjeta')).toBeNull();
+    for (const role of ['barman', 'chef', 'cook', 'waiter', 'maitre']) {
+      mockRoles = [role];
+      const staff = render(<MyTipsPanel />);
+      expect(await staff.findByText('Minha gorjeta')).toBeTruthy();
+      expect(staff.getByText('Nenhuma gorjeta apurada ainda.')).toBeTruthy();
+    }
   });
 });
 

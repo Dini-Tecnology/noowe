@@ -15,6 +15,7 @@ import type { PaymentMethods } from '../shared/v2Types';
 import { ChargePolicyCard } from './ChargePolicyCard';
 import { CashSettingsCard, TipRulesCard } from './CashAndTipsCards';
 import type { IconComponent } from './configTypes';
+import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 export const DEFAULT_PAYMENT_METHODS: PaymentMethods = {
@@ -55,6 +56,9 @@ const METHOD_GRID: {
 export default function ConfigPaymentsScreen() {
   const colors = useColors();
   const navigation = useNavigation<any>();
+  const { serverRoles } = useRestaurantRole();
+  // Métodos aceitos são decisão do Dono; o servidor recusa o resto (aditivo, item G).
+  const canEditMethods = serverRoles.includes('owner');
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [methods, setMethods] = useState<PaymentMethods>(DEFAULT_PAYMENT_METHODS);
   const [loading, setLoading] = useState(true);
@@ -173,6 +177,11 @@ export default function ConfigPaymentsScreen() {
             <ChevronRight size={18} color={colors.foregroundSecondary} />
           </TouchableOpacity>
           <Text style={[styles.sectionEyebrow, { color: colors.foregroundSecondary }]}>MÉTODOS ACEITOS</Text>
+          {!canEditMethods ? (
+            <Text style={[styles.accountRowText, { color: colors.foregroundSecondary, fontSize: 13 }]}>
+              Só o Dono altera os métodos aceitos.
+            </Text>
+          ) : null}
           <View style={[styles.methodGrid, { borderColor: colors.border, backgroundColor: colors.card }]}>
             {METHOD_GRID.map((method) => {
               const active = methods[method.key];
@@ -182,6 +191,7 @@ export default function ConfigPaymentsScreen() {
                   key={method.key}
                   activeOpacity={0.85}
                   onPress={() => toggle(method.key)}
+                  disabled={!canEditMethods}
                   style={[
                     styles.methodCell,
                     {

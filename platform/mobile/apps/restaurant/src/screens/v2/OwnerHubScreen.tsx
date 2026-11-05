@@ -1810,6 +1810,7 @@ type MyTable = {
   guestName: string | null;
   guestCount: number;
   totalSpent: number;
+  spentHidden: boolean;
   pendingOrders: number;
 };
 
@@ -1839,6 +1840,7 @@ function WaiterCommandCenter({
       guestName: table.guestName,
       guestCount: table.guests,
       totalSpent: table.totalSpent,
+      spentHidden: table.spentHidden,
       pendingOrders: kdsOrders.filter(
         (order) => order.table === tableLabel && order.status !== 'ready',
       ).length,
@@ -2068,9 +2070,11 @@ function WaiterTablesBody({
                 </Text>
               </View>
               <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                <Text style={[styles.waiterTableTotal, { color: colors.foreground }]}>
-                  {formatCurrency(table.totalSpent)}
-                </Text>
+                {table.spentHidden ? null : (
+                  <Text style={[styles.waiterTableTotal, { color: colors.foreground }]}>
+                    {formatCurrency(table.totalSpent)}
+                  </Text>
+                )}
                 <View style={{ flexDirection: 'row', gap: 4 }}>
                   {hasReadyPlate ? <StatusChip label="PRATO" tone="danger" /> : null}
                   {openCallCount > 0 ? <StatusChip label={`${openCallCount} CHAMADO`} tone="warning" /> : null}

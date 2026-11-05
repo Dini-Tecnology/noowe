@@ -399,10 +399,12 @@ export default function TablesScreen() {
                       <Text style={styles.waiterSummarySeats}>{selectedTable.seats}</Text>
                       <Text style={[styles.waiterSummaryLabel, { color: colors.foregroundSecondary }]}>Lugares</Text>
                     </View>
-                    <View style={[styles.waiterSummaryCard, { borderColor: colors.border }]}>
-                      <Text style={styles.waiterSummaryTotal}>{formatCurrency(selectedTable.totalSpent)}</Text>
-                      <Text style={[styles.waiterSummaryLabel, { color: colors.foregroundSecondary }]}>Conta</Text>
-                    </View>
+                    {selectedTable.spentHidden ? null : (
+                      <View style={[styles.waiterSummaryCard, { borderColor: colors.border }]}>
+                        <Text style={styles.waiterSummaryTotal}>{formatCurrency(selectedTable.totalSpent)}</Text>
+                        <Text style={[styles.waiterSummaryLabel, { color: colors.foregroundSecondary }]}>Conta</Text>
+                      </View>
+                    )}
                   </View>
                   {selectedTable.status === 'occupied' || selectedTable.status === 'payment' || selectedTable.totalSpent > 0 ? (
                     <Pressable
@@ -431,12 +433,14 @@ export default function TablesScreen() {
                         {selectedTable.guests || (selectedTable.status === 'available' ? 0 : selectedTable.reservationGuests)}
                       </Text>
                     </View>
-                    <View style={[styles.summaryItem, { borderColor: colors.border }]}>
-                      <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Conta</Text>
-                      <Text style={[styles.summaryValue, { color: colors.foreground }]}>
-                        {selectedTable.sessionId ? formatCurrency(selectedTable.totalSpent) : '—'}
-                      </Text>
-                    </View>
+                    {selectedTable.spentHidden ? null : (
+                      <View style={[styles.summaryItem, { borderColor: colors.border }]}>
+                        <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Conta</Text>
+                        <Text style={[styles.summaryValue, { color: colors.foreground }]}>
+                          {selectedTable.sessionId ? formatCurrency(selectedTable.totalSpent) : '—'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
                   {selectedTable.status === 'available' && !selectedTable.mergedIntoId ? (
@@ -759,7 +763,7 @@ const TableCell = React.memo(function TableCell({
         </View>
         <Text style={[styles.capacityText, { color: colors.foregroundSecondary }]}>
           {table.sessionId
-            ? `${table.guests} ${table.guests === 1 ? 'pessoa' : 'pessoas'} · ${formatCurrency(table.totalSpent)}`
+            ? `${table.guests} ${table.guests === 1 ? 'pessoa' : 'pessoas'}${table.spentHidden ? '' : ` · ${formatCurrency(table.totalSpent)}`}`
             : table.reservationGuests > 0
               ? `${table.reservationGuests} ${table.reservationGuests === 1 ? 'pessoa' : 'pessoas'}`
               : table.mergedIntoId ? `unida à ${table.mergedIntoLabel}` : table.mergedChildren.length > 0 ? `${table.effectiveSeats} lugares · +${table.mergedChildren.map((child) => child.label).join(',')}` : `${table.seats} lugares`}
