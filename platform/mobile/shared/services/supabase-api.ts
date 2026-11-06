@@ -16,10 +16,10 @@ export type CouponRow = {
 
 export type BillingCycle = 'monthly' | 'annual';
 export type PlanSummary = {
-  needsChoice: boolean; trialDays?: number; planCode?: string; planName?: string; isContract?: boolean; cycle?: BillingCycle; status?: string; priceCents?: number | null;
+  needsChoice: boolean; trialDays?: number; canceledAt?: string | null; dataAccessUntil?: string | null; planCode?: string; planName?: string; isContract?: boolean; cycle?: BillingCycle; status?: string; priceCents?: number | null;
   trialEndsAt?: string | null; periodEnd?: string; nextPlanCode?: string | null; nextCycle?: BillingCycle | null; cancelAt?: string | null;
   usage?: { orders: number; allowance: number | null; projectedOrders: number; projectedOverageCents: number; overageCents: number };
-  promo?: { code: string; endsAt: string | null; startsWithFirstInvoice: boolean; priceAfterCents: number } | null;
+  promo?: { code: string; endsAt: string | null; lifetime?: boolean; startsWithFirstInvoice: boolean; priceAfterCents: number } | null;
   category?: string | null; billingHidden?: boolean; ordersSuspended?: boolean; locked?: string[];
 };
 export type PlanOption = {
@@ -146,6 +146,30 @@ export interface FiscalIssue {
   error_message: string | null;
   total_cents: number;
   created_at: string;
+  table_sessions: { tables: { table_number: string | null } | null } | null;
+  orders: { order_number: string | null } | null;
+}
+
+/** Turno da escala, como cada pessoa vê (resposta 45). */
+export interface StaffShift {
+  id: string; staff_id: string; staff_name: string | null; date: string; start_time: string; end_time: string;
+  role: string | null; area: string | null; station_id: string | null; station_name: string | null; status: string;
+}
+
+/** Linha de venda do dia para o sistema fiscal do restaurante, no plano sem NFC-e (resposta 81). */
+export interface FiscalSaleLine {
+  documentId: string; at: string; table: string | null; orderNumber: string | null; description: string; quantity: number;
+  grossCents: number; discountCents: number; feeCents: number; payments: { method: string; weightCents: number }[] | null;
+}
+
+/** Nota que continua valendo depois de um estorno parcial ou fora do prazo: o contador do restaurante trata (resposta 63). */
+export interface FiscalRefundReview {
+  id: string;
+  total_cents: number;
+  refund_review_at: string;
+  refund_review_cents: number;
+  refund_review_reason: string | null;
+  number: string | null;
   table_sessions: { tables: { table_number: string | null } | null } | null;
   orders: { order_number: string | null } | null;
 }
@@ -510,6 +534,9 @@ export interface SupabaseApiAdapter {
   saveFiscalConfig(restaurantId: string, config: Record<string, unknown>, focusToken: string): Promise<FiscalConfigView>;
   /** Notas que esperam a gerência: bloqueadas, rejeitadas ou com tentativas esgotadas. */
   getFiscalIssues(restaurantId: string): Promise<FiscalIssue[]>;
+  getFiscalRefundReviews(restaurantId: string): Promise<FiscalRefundReview[]>;
+  exportFiscalSales(restaurantId: string, day: string): Promise<FiscalSaleLine[]>;
+  tipNeedsConfirm(amountCents: number, tipCents: number): Promise<boolean>;
   /** Motivo obrigatório e audit_log no servidor. */
   retryFiscalDocument(documentId: string, reason: string): Promise<any>;
   fireCourse(orderId: string, course: string): Promise<any>;
@@ -600,6 +627,8 @@ export interface SupabaseApiAdapter {
   deleteBill(billId: string): Promise<any>;
   getCustomers(restaurantId?: string, limit?: number): Promise<any>;
   getShifts(restaurantId?: string, from?: string, to?: string): Promise<any>;
+  getMyShifts(restaurantId: string): Promise<StaffShift[]>;
+  getDayTeamShifts(restaurantId: string, area: 'floor' | 'kitchen'): Promise<StaffShift[]>;
   createShift(restaurantId: string, staffId: string, date: string, startTime: string, endTime: string, role?: string, notes?: string, area?: string, stationId?: string): Promise<any>;
   getShiftOptions(restaurantId: string): Promise<{ areas: string[]; stations: { id: string; name: string }[] }>;
   updateShift(shiftId: string, patch: Record<string, unknown>): Promise<any>;
@@ -1026,6 +1055,31 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data ?? []) as FiscalIssue[];
+  },
+
+  async getFiscalRefundReviews(restaurantId: string) {
+    const { data, error } = await (getSupabaseClient() as any)
+      .from('fiscal_documents')
+      .select('id, total_cents, refund_review_at, refund_review_cents, refund_review_reason, number, table_sessions(tables:tables!table_sessions_table_id_fkey(table_number)), orders(order_number)')
+      .eq('restaurant_id', restaurantId)
+      .not('refund_review_at', 'is', null)
+      .order('refund_review_at', { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return (data ?? []) as FiscalRefundReview[];
+  },
+
+  /** Gorjeta acima do limite do parâmetro pede confirmação (resposta 55). O servidor decide. */
+  async tipNeedsConfirm(amountCents: number, tipCents: number) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('customer_tip_quote', { p_amount_cents: amountCents, p_tip_bps: 0, p_tip_cents: tipCents });
+    if (error) throw error;
+    return (data as { confirmTip?: boolean } | null)?.confirmTip === true;
+  },
+
+  async exportFiscalSales(restaurantId: string, day: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_export_fiscal_sales', { p_restaurant_id: restaurantId, p_day: day });
+    if (error) throw error;
+    return (data ?? []) as FiscalSaleLine[];
   },
 
   async retryFiscalDocument(documentId: string, reason: string) {
@@ -1771,6 +1825,18 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     });
     if (error) throw error;
     return data;
+  },
+
+  async getMyShifts(restaurantId: string) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_get_my_shifts', { p_restaurant_id: restaurantId });
+    if (error) throw error;
+    return (data ?? []) as StaffShift[];
+  },
+
+  async getDayTeamShifts(restaurantId: string, area: 'floor' | 'kitchen') {
+    const { data, error } = await (getSupabaseClient() as any).rpc('restaurant_get_day_team_shifts', { p_restaurant_id: restaurantId, p_area: area });
+    if (error) throw error;
+    return (data ?? []) as StaffShift[];
   },
 
   async getShifts(restaurantId?: string, from?: string, to?: string) {

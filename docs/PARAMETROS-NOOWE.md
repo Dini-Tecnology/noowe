@@ -57,7 +57,13 @@ Meio sem taxa definida não tem cobrança: o sistema trata como indisponível, n
 
 ## Mínimo por cobrança
 
-`noowe_billing_settings.min_online_charge_cents`: hoje 500, o mínimo do Asaas. Abaixo disso, o app avisa, e a pessoa combina com a equipe.
+`noowe_billing_settings.min_online_charge_cents`: hoje 500, o mínimo do Asaas para cartão. `min_pix_charge_cents`: hoje 500, o mínimo do Asaas
+para Pix. Abaixo do mínimo de um meio, ele some da tela de pagamento; abaixo dos dois, o cliente paga no salão (pendência 79).
+
+## Gorjeta
+
+`noowe_billing_settings.tip_confirm_above_bps`: hoje 3000. Gorjeta acima de 30% do consumo pede confirmação ("Confirma gorjeta de R$ X?"),
+no app do cliente e na cobrança da equipe. O teto continua 100% do valor (pendência 55).
 
 ## Taxa de conveniência
 
@@ -68,8 +74,8 @@ Tabela `noowe_convenience_fees`. Campos: `flow`, `restaurant_id`, `fee_cents`, `
 | `pickup` (retirada sem fila) | 0 (R$ 0), desligada (`enabled = false`) |
 | `scheduled` (pedido agendado) | 0 (R$ 0), desligada (`enabled = false`) |
 
-**Desligada até o contador confirmar** o formato da nota e a passagem pela conta do restaurante (pendência 38). O fluxo fica
-pronto: para ligar, troque `fee_cents` (o provisório era 99) e `enabled`. Fluxo fora da tabela não cobra. O padrão e o valor por restaurante seguem a mesma regra da taxa NOOWE Pay.
+**Desligada até a nota tipo 3 estar configurada** (pendência 38: uma NFS-e por pedido para o cliente final). Para ligar, troque
+`fee_cents` para 99 e `enabled`. Fluxo fora da tabela não cobra. O padrão e o valor por restaurante seguem a mesma regra da taxa NOOWE Pay.
 
 ## Planos
 
@@ -99,6 +105,7 @@ linhas, porque o que entra depende do contrato.
 | `noowe_credit_tiers` | `min_index_bps`, `credit_bps` | Prata 4000 → 500; Ouro 6000 → 1000; Platina 8000 → 2000 |
 | `noowe_credit_plan_minimums` | `plan_code`, `min_volume_cents` | Essencial 800000; Profissional 1500000; Business 3000000 |
 | `noowe_credit_settings` | `invoice_cap_bps` | 3000 (30% da fatura) |
+| | `invoice_floor_bps` | 7000: os créditos nunca levam a fatura abaixo de 70% do preço de tabela |
 | | `release_after_invoices` | 2 faturas |
 | | `expiry_months_monthly`, `expiry_months_annual` | 6 e 12 meses |
 | | `tap_counts_for_index` | `false` |
@@ -115,7 +122,23 @@ Tabela `noowe_billing_settings`.
 | `trial_days` (teste sem cartão para quem não usa código) | 30 |
 | `staff_invite_days` (validade do convite de equipe) | 7 |
 
-Também em `noowe_billing_settings`: `invoice_due_days`, prazo de vencimento da fatura, contado de novo se a cobrança só sair depois. Em `noowe_credit_settings`: `expiry_notice_days`, aviso antes de o crédito expirar.
+Também em `noowe_billing_settings`:
+
+| Campo | Valor atual |
+|---|---|
+| `invoice_lead_days` (a fatura do próximo período sai antes, e vence no aniversário da assinatura) | 7 |
+| `invoice_due_days` (prazo quando a fatura só sai depois do aniversário) | 3 |
+| `canceled_data_days` (plano encerrado: dados e exportação disponíveis para o Dono) | 90 |
+| `refund_tariff_returned_bps` (parte da tarifa que o Asaas devolve no estorno; o crédito "Ajuste de estorno" é o resto) | 0 |
+| `refund_balance_retry_minutes` (Pix sem saldo: intervalo entre as tentativas do estorno) | 60 |
+| `card_refund_notice_business_days` (aviso ao cliente sobre o estorno no cartão) | 10 |
+| `nfce_cancel_window_minutes` (estorno total dentro deste prazo cancela a NFC-e) | 30 |
+
+**Plano encerrado (pendência 80):** sai da busca, pedidos e pagamentos pelo app ficam suspensos e as comandas abertas fecham com as
+ferramentas do último plano. Reativar devolve tudo.
+
+**Depois que a fatura do próximo período sai:** upgrade passa a valer já, e a diferença do próximo período vem em fatura própria. Plano
+menor vale a partir do período seguinte. Cancelar anula a fatura e a cobrança no Asaas. Em `noowe_credit_settings`: `expiry_notice_days`, aviso antes de o crédito expirar.
 
 ## Plano sugerido por tipo de serviço
 
@@ -139,12 +162,39 @@ values ('<id do restaurante>', 'enterprise', 1200000, 20000, 'Contrato de 03/11'
 
 ## Dados da empresa NOOWE
 
-Tabela `noowe_company`, uma linha só. Hoje só o CNPJ (`64159447000190`) está preenchido. Razão social, endereço, inscrição
-municipal e regime tributário esperam o Pedro (pendência 34), e nenhuma nota é emitida sem eles.
+Tabela `noowe_company`, uma linha só, preenchida em 05/11 (pendência 34): DINI & CIA. TECNOLOGIA LTDA, CNPJ `64159447000190`, CCM 0.112.566-4,
+Simples Nacional. `nfse_notes` é o texto das informações complementares de toda nota. `nfse_max_attempts` limita as tentativas (padrão 5).
 
-Para a NFS-e da fatura, a mesma linha guarda também o que vem do contador: `municipal_service_id` ou `municipal_service_code`, `municipal_service_name`,
-`service_description`, `iss_bps`, `pis_bps`, `cofins_bps`, `csll_bps`, `inss_bps`, `ir_bps` e `retain_iss`. Sem eles nenhuma nota sai. Quando entrarem, a
-varredura `nfse-sweep` emite as notas das faturas pagas que esperavam. `nfse_max_attempts` limita as tentativas (padrão 5).
+## Tipos de nota da NOOWE
+
+Tabela `noowe_nfse_types`, uma linha por tipo (pendência 91):
+
+| `kind` | Nota |
+|---|---|
+| `subscription` | Uma por fatura paga, para o CNPJ do restaurante |
+| `noowe_pay` | Uma por semana (segunda a domingo) e por restaurante, com a soma dos splits da NOOWE. Sai na segunda depois do meio-dia |
+| `convenience` | Uma por pedido com taxa de conveniência, para o cliente final |
+
+Campos a preencher pelo contador: `municipal_service_id` ou `municipal_service_code`, `municipal_service_name`, `service_description` e `iss_bps`.
+As retenções (`pis_bps`, `cofins_bps`, `csll_bps`, `inss_bps`, `ir_bps`, `retain_iss`) estão zeradas. Sem código e alíquota, a nota daquele tipo espera, e a
+varredura `nfse-sweep` emite quando entrarem:
+
+```sql
+begin;
+select set_config('noowe.param_author', 'Seu nome', true);
+update private.noowe_nfse_types set municipal_service_code = '01.03', municipal_service_name = 'Licenciamento de software',
+  service_description = 'Assinatura NOOWE', iss_bps = 200 where kind = 'subscription';
+commit;
+```
+
+O tomador da nota da conveniência é quem pagou, com o CPF que ele informou para gerar a cobrança online (o Asaas exige esse CPF).
+O CPF fica em `private.customer_tax_documents`, fora do alcance da API; quem já tinha cadastro no Asaas tem o CPF lido de lá no
+próximo pagamento. Uma nota sem CPF registrado espera, com o motivo, em `private.noowe_report_fee_notes`, e é completada assim que
+o CPF aparece.
+
+"CPF na nota" (cupom fiscal do restaurante, pela Focus NFe) é opcional e por pagamento, em `private.payment_receipt_documents`.
+Sem ele, a NFC-e sai como consumidor não identificado. Com a conta dividida e mais de uma pessoa pedindo, vale o primeiro
+pagamento da nota (regra provisória, em `private.fiscal_consumer_document`).
 
 ## Fornecedor de Tap to Pay
 
@@ -175,17 +225,23 @@ values ('FUNDADORES', 'free_months', 6, '2027-06-30', 20, true);
 Outros campos: `valid_from`, `plan_codes` (vazio vale para todos), `allow_monthly`, `allow_annual`, `is_active`, `skips_trial` (dispensa o teste) e
 `grants_category` (marca o restaurante, como "Parceiro Fundador", e a marca fica depois que o benefício acaba).
 
-Código com fases, como o de fundador (6 meses grátis e 50% no restante do primeiro ano), usa `noowe_promo_code_phases`:
+Código com fases usa `noowe_promo_code_phases`. Fase com `duration_months` vazio é vitalícia e só faz sentido como a última.
+O código **FUNDADOR** já existe, desligado (resposta 26): 12 meses grátis e depois 50% vitalício. Para ligar, defina validade e limite de usos:
 
 ```sql
-insert into private.noowe_promo_codes(code, kind, duration_months, skips_trial, grants_category)
-values ('FUNDADOR', 'free_months', 12, true, 'Parceiro Fundador');
-insert into private.noowe_promo_code_phases(code, phase_order, kind, duration_months, percent_off_bps) values
-  ('FUNDADOR', 1, 'free_months', 6, null),
-  ('FUNDADOR', 2, 'percent_off', 6, 5000);
+update private.noowe_promo_codes set is_active = true, valid_until = '2027-06-30', max_uses = 50 where code = 'FUNDADOR';
 ```
 
-O piso de fatura depois dos créditos fica em `noowe_credit_settings.min_invoice_cents`.
+O desconto vale enquanto o restaurante está em dia: fatura com atraso sai sem desconto, e o benefício continua. Com código ativo no mês, o restaurante
+não gera Créditos NOOWE Pay; eles voltam no mês seguinte ao fim do código.
+
+**Benefício de fundador ativo: sim/não.** Tabela `noowe_founder_benefit`. Para desligar (contrapartidas descumpridas), a próxima fatura já sai sem o desconto:
+
+```sql
+insert into private.noowe_founder_benefit(restaurant_id, active, note) values ('<id do restaurante>', false, 'Contrapartidas de out e nov');
+```
+
+O piso absoluto da fatura depois dos créditos fica em `noowe_credit_settings.min_invoice_cents`; o piso sobre a tabela, em `invoice_floor_bps`.
 
 ## Consultas internas
 
@@ -208,6 +264,12 @@ Receita de conveniência, por restaurante e mês:
 
 ```sql
 select * from private.noowe_report_convenience order by month desc;
+```
+
+Notas avulsas (taxa NOOWE Pay semanal e conveniência), por situação:
+
+```sql
+select * from private.noowe_report_fee_notes;
 ```
 
 Créditos gerados, usados, expirados e a liberar:

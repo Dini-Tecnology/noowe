@@ -769,7 +769,10 @@ describe('RestaurantScreen — a comanda é a casa do cliente (ADR-021)', () => 
     mockGetMyBalance.mockResolvedValue({ owedCents: 4500, hasConsumption: true, isHost: true });
     const { findByText, navigation } = renderScreen();
     fireEvent.press(await findByText('Mesa Salão 1 · Pagar minha parte'));
-    expect(alertSpy).not.toHaveBeenCalled();
+    // Resposta 49: o titular paga a parte dele ou passa a titularidade; nunca sai deixando a comanda.
+    const [title, , buttons] = alertSpy.mock.calls[alertSpy.mock.calls.length - 1] as [string, string, { text: string; onPress?: () => void }[]];
+    expect(title).toBe('Você é o titular desta mesa');
+    buttons.find((b) => b.text === 'Pagar minha parte')!.onPress!();
     expect(navigation.dispatch).toHaveBeenCalledWith(
       CommonActions.reset({ index: 2, routes: [main, { name: 'Cart' }, { name: 'FecharConta', params: { tableSessionId: 's1' } }] }),
     );

@@ -29,13 +29,18 @@ export async function handleBillingWebhook(req: Request, deps: Pick<PaymentDeps,
 
 async function handleInvoiceEvent(event: any, deps: Pick<PaymentDeps, "rpc">): Promise<Response> {
   const reference: string = event?.invoice?.externalReference ?? "";
-  if (!reference.startsWith("nfse:") || !UUID.test(reference.slice(5))) return json({ ok: true, ignored: "not_an_invoice" });
+  // nfse:<fatura> é a nota da assinatura; note:<id> é a nota avulsa (taxa NOOWE Pay da semana ou conveniência).
+  const [prefix, id] = [reference.slice(0, 5), reference.slice(5)];
+  if ((prefix !== "nfse:" && prefix !== "note:") || !UUID.test(id)) return json({ ok: true, ignored: "not_an_invoice" });
   const status = NFSE_RESULT[event.event];
   if (!status) return json({ ok: true, ignored: "event_not_handled" });
-  const saved = await deps.rpc("service_nfse_result", {
-    p_invoice_id: reference.slice(5), p_status: status, p_url: event.invoice?.pdfUrl ?? null,
+  const common = {
+    p_status: status, p_url: event.invoice?.pdfUrl ?? null,
     p_error: status === "failed" ? `Asaas: ${event.event}` : null, p_provider_ref: event.invoice?.id ?? null,
-  });
+  };
+  const saved = prefix === "nfse:"
+    ? await deps.rpc("service_nfse_result", { p_invoice_id: id, ...common })
+    : await deps.rpc("service_fee_note_result", { p_note_id: id, ...common });
   if (saved.error) {
     console.error("billing-webhook nfse error:", saved.error.message);
     return json({ error: "internal_error" }, 500);

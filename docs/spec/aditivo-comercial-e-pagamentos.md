@@ -412,3 +412,156 @@ Estamos negociando com o fornecedor (SumUp), ainda sem contrato fechado. A ideia
 - A tela NÃO pode marcar a conta como paga sem cobrança real (corrigir isso).
 - Até a ativação, o garçom registra o pagamento como "Maquininha da casa", escolhendo a forma (crédito, débito, Pix, vale ou dinheiro). Isso abate o saldo e entra no caixa como pagamento externo, sem taxa NOOWE Pay e fora do índice dos créditos.
 - Quando fecharmos, ligamos o fornecedor na tabela, o Tap aparece para o garçom e volta para a lista do plano Profissional, sem nova versão.
+
+---
+
+# Respostas às pendências 33–92
+
+**Origem:** resposta de Pedro, recebida em 05/11/2026. Texto íntegro abaixo. Onde contradiz o texto acima ou as respostas
+anteriores, vale esta resposta. Em especial, o código de fundador do item 26 mudou.
+
+## OK, como está hoje
+
+33, 35, 37, 39, 40, 41, 42, 43, 44, 46, 47, 48, 51, 52, 53, 54, 56, 57, 59, 61, 67, 68, 69, 70, 72, 74, 75, 77, 78, 82, 84, 85, 87, 88, 89, 90.
+
+## Correção do item 26 (código de fundador)
+
+A regra do código de fundador mudou:
+- 12 meses grátis e, depois, 50% de desconto vitalício sobre a mensalidade de tabela.
+- Vale por unidade (CNPJ), enquanto o restaurante estiver ativo e em dia.
+- Não acumula com os Créditos NOOWE Pay (ver item 65).
+- Se o fundador descumprir as contrapartidas por 2 meses, perde os 50%. Nós marcamos isso na tabela de parâmetros (campo "benefício de fundador ativo: sim/não"), e a próxima fatura já sai sem o desconto.
+
+O resto do item 26 continua igual: cadastro normal para todos, e o código coloca o restaurante na categoria "Parceiro Fundador". Todas essas regras ficam na tabela de parâmetros.
+
+## Dados fiscais e estorno
+
+### 34. Dados da empresa NOOWE
+Preencher na tabela de parâmetros:
+- Razão social: DINI & CIA. TECNOLOGIA LTDA
+- CNPJ: 64.159.447/0001-90
+- Inscrição municipal (CCM): 0.112.566-4
+- Endereço: Av. José Ribeiro Junqueira, 220, Jardim Colonial, São Paulo/SP, CEP 04821-020
+- Regime tributário: Simples Nacional
+
+Lembrete: trocar o CNPJ do restaurante de teste "Natural Noowe", que hoje usa este mesmo número.
+
+### 91. Dados fiscais da nota da NOOWE
+Regras já definidas pelo contador:
+- Opção de tributação: Simples Nacional.
+- Retenções (IR, PIS, COFINS, CSLL e ISS): todas zeradas.
+- Informações complementares, em toda nota: "Empresa optante pelo Simples Nacional. Não gera direito a crédito fiscal de IPI, PIS e COFINS."
+- A NOOWE declara só a própria receita. A nota nunca leva o valor da conta do cliente.
+
+São 3 tipos de nota, cada um com código de serviço próprio na tabela de parâmetros:
+1. Assinatura: uma nota por fatura paga (mensal ou anual), para o CNPJ do restaurante, no valor da fatura.
+2. Taxa NOOWE Pay: uma nota SEMANAL por restaurante, para o CNPJ dele, no valor da soma dos splits da NOOWE na semana (só a margem da NOOWE, NÃO os 3,49%; a tarifa do Asaas é cobrada direto do restaurante e não entra na nota da NOOWE).
+3. Taxa de conveniência: uma NFS-e por pedido para o cliente final, com CPF quando informado.
+
+Os códigos e as alíquotas de cada tipo estão sendo fechados com o contador e entram na tabela, sem nova versão. Emissão preferencialmente pelo Asaas (já integrado); se ele não emitir nota avulsa ou em lote para os tipos 2 e 3, usar o Focus NFe. A configuração fiscal da conta NOOWE no Asaas (série do RPS e acesso à prefeitura) fica com a gente.
+
+### 38. Nota da taxa de conveniência
+Definida acima (tipo 3). A separação pelo split atende ao contador: o valor vai direto para a carteira NOOWE e nunca fica no saldo do restaurante. Mantenha a taxa em R$ 0, desligada, até a emissão da nota estar configurada. Depois, ligamos o valor de R$ 0,99 na tabela.
+
+### 62. Nota de comanda reaberta
+Confirmado: os itens acrescentados geram uma NOVA NFC-e só com esses itens. A nota já emitida continua valendo.
+
+### 63. Estorno parcial e nota
+A NFC-e é documento do restaurante, então:
+- Estorno total dentro do prazo de cancelamento da SEFAZ (parâmetro, em geral 30 minutos), quando a nota foi emitida pela NOOWE: cancelar a NFC-e automaticamente.
+- Estorno parcial, ou total fora do prazo: a nota não é cancelada. O estorno fica registrado, Gerente e Dono são avisados, e ele entra no relatório fiscal do restaurante para o contador dele tratar.
+
+### 64. Tarifa no estorno total no mesmo dia
+A documentação da API do Asaas confirma: as taxas da cobrança NÃO são devolvidas no estorno. Então:
+- Estorno total no mesmo dia operacional: estornar com splitRefunds devolvendo o split da NOOWE (sai da carteira NOOWE) e lançar na próxima fatura do restaurante um crédito "Ajuste de estorno" no valor da tarifa do Asaas daquela cobrança. Assim o restaurante recupera toda a taxa NOOWE Pay.
+- Estorno parcial ou depois do dia operacional: sem splitRefunds e sem crédito (a taxa não é devolvida).
+- Se um dia negociarmos a devolução da tarifa, o crédito passa a ser só a parte que o Asaas não devolver (regra na tabela de parâmetros).
+
+Detalhes técnicos do estorno:
+- Considerar devolvido só o estorno com status DONE, e o split só com done = true. Percorrer o array refunds inteiro (pode haver mais de um estorno).
+- Cartão: avisar o cliente que o estorno pode levar até 10 dias úteis para aparecer na fatura.
+- Pix: se o restaurante não tiver saldo, o Asaas recusa (erro 400). Nesse caso, o estorno fica como "Aguardando saldo", Gerente e Dono são avisados, e o sistema tenta de novo automaticamente.
+
+### 65. Piso da fatura com créditos e códigos
+- Com código promocional ativo (inclusive o de fundador), o restaurante NÃO gera Créditos NOOWE Pay. Código e créditos nunca se somam. Quando o código termina (ou o benefício de fundador é desativado), os créditos voltam a ser gerados a partir do mês seguinte.
+- O desconto do código vale integral (é um desconto definido por nós).
+- Os Créditos NOOWE Pay nunca levam a fatura abaixo de 70% do preço de tabela do plano. É o mesmo limite de 30% por fatura, agora também como piso, em parâmetro.
+- "Ajuste de taxa NOOWE Pay" (item 22) e "Ajuste de estorno" (item 64) são reembolsos, não descontos: ficam fora do piso, podem zerar a fatura e o que sobrar passa para a próxima.
+- A fatura mostra cada linha separada: preço de tabela, desconto do código, créditos usados, ajustes e total.
+
+## Ajustes e complementos
+
+### 36. "Dinheiro" como forma da maquininha
+Dinheiro não é maquininha. Na tela de registrar pagamento, separar em duas opções: "Dinheiro" e "Maquininha da casa" (crédito, débito, Pix ou vale). O comportamento continua o mesmo: dinheiro entra no caixa; o resto entra como pagamento externo.
+
+### 45. Quem vê a escala
+Cada pessoa vê a própria escala. O Maître vê a escala do salão do dia (para a distribuição das mesas) e o Chef vê a da cozinha. Editar continua só com Dono e Gerente.
+
+### 49. O próprio titular sai?
+Ok, e acrescentar: o titular pode passar a titularidade para outro participante presente, que precisa aceitar. Depois disso, o titular antigo pode sair normalmente, pagando a parte dele.
+
+### 50. Restaurantes que já usam taxa
+Ok, ficam com a taxa de serviço. Mas a taxa passa a ser opcional para o cliente também nesses restaurantes (vem marcada e pode ser retirada), como na regra geral.
+
+### 55. Teto da gorjeta
+Ok em 100%. Acrescentar uma confirmação quando a gorjeta passar de 30% do consumo ("Confirma gorjeta de R$ X?"), para evitar erro de digitação.
+
+### 58. Dinheiro sem caixa aberto
+Ok, aceita e abate o saldo. Acrescentar: quando o caixa for aberto, esses lançamentos do dia entram automaticamente nele (marcados como "lançado antes da abertura"), para a conferência do fechamento.
+
+### 60. Ninguém na escala
+Ok, e acrescentar: até o fechamento do dia, o Gerente pode incluir na escala do dia quem trabalhou, e o rateio é recalculado.
+
+### 66. Vencimento da fatura
+Gerar a fatura 7 dias antes do vencimento, com vencimento na data de aniversário da assinatura. 3 dias é pouco para pagar por boleto.
+
+### 71. Faturamento das contas com cupom
+Considerar o consumo efetivamente pago (já com o desconto), sem taxa e sem gorjeta. O total de desconto concedido aparece separado no painel do cupom.
+
+### 73. Cupom com horário que passa da meia-noite
+Aceitar. Bares e happy hours usam janelas como 22h às 2h. A janela vale até a hora final do dia seguinte e conta como o dia em que começou.
+
+### 76. Maître cobra sem ver valores detalhados
+Ok, e acrescentar: ele vê quem já pagou (marcação "pago" por pessoa), sem valor nem forma de pagamento. Ele precisa disso para saber de quem cobrar.
+
+### 79. Cupom de 100%
+Se o cupom zerar a conta, ela encerra sem cobrança ("Pago com cupom"). Se sobrar um saldo abaixo do mínimo do cartão (R$ 5), o cartão some para esse saldo e o cliente paga por Pix ou presencialmente. O desconto do cupom nunca deixa de ser dado.
+
+### 80. Restaurante com plano cancelado
+Não existe plano gratuito. Ao fim do período pago:
+- o restaurante sai da busca;
+- pedidos e pagamentos pelo app ficam suspensos;
+- comandas abertas podem ser fechadas normalmente;
+- o Dono mantém acesso aos dados e à exportação por 90 dias.
+
+Reativar o plano devolve tudo como estava.
+
+### 81. Plano sem NFC-e
+Não depende do contador: a NFC-e é obrigação do restaurante, e no plano sem NFC-e ele emite pelo sistema fiscal próprio (como já faz hoje). O app não bloqueia nada:
+- mostra "Nota fiscal emitida pelo sistema do restaurante";
+- o cliente que pedir nota vê "Solicite a nota ao restaurante";
+- o Dono pode exportar as vendas do dia para o sistema fiscal dele.
+
+### 83. Turno do caixa do Gerente
+Ok para esta versão (um caixa por dia operacional). Vários turnos de caixa no mesmo dia (almoço e jantar com gerentes diferentes) ficam para uma próxima etapa.
+
+### 86. "Conta" no mapa de mesas
+Mostrar o consumo e quanto falta pagar ("Consumo R$ 320 · Falta R$ 110"). Para o Maître, aparece o status "Pagamento parcial", sem valores.
+
+### 92. Cupom na Receita Bruta
+Ok. Só identificar no painel que o valor já está com os descontos ("Receita, já com descontos"), para não confundir com a Receita Bruta do Financeiro.
+
+### Pix abaixo de R$ 5 e CPF nas notas (05/11/2026)
+- Pix abaixo de R$ 5: o Asaas recusa. Fica no parâmetro próprio (`min_pix_charge_cents`), e muda no futuro se o Asaas mudar.
+- Quem emite cada nota: o Asaas emite só a NFS-e da NOOWE para o restaurante (intermediação de pagamento), que sempre sai, porque o
+  restaurante configura o CNPJ dele. A Focus NFe emite o cupom fiscal do restaurante para o cliente; a NOOWE só intermedeia.
+- Cupom fiscal sem CPF é normal (consumidor não identificado). Na tela de pagamento, um campo opcional "CPF na nota" para quem quiser.
+- A taxa de conveniência é receita da NOOWE cobrada do cliente, então não entra no cupom do restaurante: é a nota tipo 3 (item 37).
+  O tomador é o CPF que o cliente já informa para gerar a cobrança online.
+
+## Ainda dependem da NOOWE
+
+Não travam o build, porque tudo vem da tabela de parâmetros:
+- 91: códigos de serviço e alíquotas de cada um dos 3 tipos de nota (com o contador).
+- Configuração fiscal da conta NOOWE no Asaas (série do RPS e acesso à prefeitura).
+- Universal links: acesso ao repositório do site e à hospedagem.

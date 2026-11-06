@@ -52,6 +52,15 @@ beforeEach(() => {
 describe('Escolha seu plano (M4, critérios 10, 11 e 12)', () => {
   beforeEach(() => api.getPlanSummary.mockResolvedValue({ needsChoice: true, trialDays: 30 }));
 
+  it('plano encerrado: mostra o que ficou suspenso e até quando os dados ficam (resposta 80)', async () => {
+    api.getPlanSummary.mockResolvedValue({ needsChoice: true, status: 'canceled', trialDays: 30, dataAccessUntil: '2027-02-03T12:00:00Z' });
+    const view = render(<PlanScreen />);
+    expect(await view.findByText('Plano encerrado')).toBeTruthy();
+    expect(view.getByText(/pedidos e pagamentos pelo app estão suspensos/)).toBeTruthy();
+    expect(view.getByText(/disponíveis até 03\/02\/2027/)).toBeTruthy();
+    expect(view.queryByText(/dias de teste, sem cartão/)).toBeNull();
+  });
+
   it('mostra sugestão e teste sem cartão, e começa o teste', async () => {
     const view = render(<PlanScreen />);
     expect((await view.findAllByText('Escolha seu plano')).length).toBeGreaterThan(0);
@@ -113,6 +122,16 @@ describe('Meu plano (M4 e M5)', () => {
     alert.mock.calls[0][2]!.find((b) => b.text === 'Trocar')!.onPress!();
     await waitFor(() => expect(api.changePlan).toHaveBeenCalledWith('r1', 'profissional', 'monthly'));
     expect(planChangeKind(plans as any, 'profissional', 'essencial')).toBe('downgrade');
+  });
+
+  it('código de fundador aparece como vitalício, e o ajuste de estorno em linha própria (respostas 26 e 65)', async () => {
+    api.getPlanSummary.mockResolvedValue({ ...active, promo: { code: 'FUNDADOR', endsAt: null, lifetime: true, startsWithFirstInvoice: false, priceAfterCents: 19900 } });
+    api.listInvoices.mockResolvedValue([{ id: 'i2', kind: 'renewal', status: 'open', totalCents: 9450, dueAt: '', paidAt: null, periodStart: '2026-12-04', periodEnd: '', checkoutUrl: null, nfseStatus: 'waiting_company_data', nfseUrl: null,
+      lines: [{ kind: 'plan', description: 'Plano Essencial', amountCents: 19900 }, { kind: 'promo', description: 'Desconto do código FUNDADOR', amountCents: -9950 }, { kind: 'refund_adjustment', description: 'Ajuste de estorno', amountCents: -500 }] }]);
+    const view = render(<PlanScreen />);
+    expect(await view.findByText(/desconto vitalício enquanto o restaurante estiver em dia/)).toBeTruthy();
+    expect(view.getByText('Desconto do código FUNDADOR')).toBeTruthy();
+    expect(view.getByText('Ajuste de estorno')).toBeTruthy();
   });
 
   it('fatura com linhas e link de pagamento', async () => {

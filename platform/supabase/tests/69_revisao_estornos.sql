@@ -153,7 +153,7 @@ declare sid uuid := pg_temp.new_paid('nf'); a uuid := pg_temp.ctx('nf:tx:a'); b 
   o public.orders := pg_temp.new_order(5000); t uuid; d2 uuid := gen_random_uuid();
 begin
   delete from public.fiscal_documents where table_session_id = sid;
-  insert into public.fiscal_documents(id, restaurant_id, table_session_id, external_ref, total_cents, status) values (d, r, sid, 'r-' || sid, 6000, 'authorized');
+  insert into public.fiscal_documents(id, restaurant_id, table_session_id, external_ref, total_cents, status, authorized_at) values (d, r, sid, 'r-' || sid, 6000, 'authorized', now());
   -- Recusado: a nota segue.
   x := private.enqueue_refund(a, 'cliente desistiu');
   assert (select cancel_status from public.fiscal_documents where id = d) is null, 'não cancela ao pedir';

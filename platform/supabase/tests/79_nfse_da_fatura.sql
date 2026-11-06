@@ -6,13 +6,16 @@ create function pg_temp.fill() returns void language plpgsql as $$
 begin
   perform set_config('noowe.param_author', 'teste', true);
   update private.noowe_company set legal_name = 'Noowe Ltda', address = 'Rua A, 1', municipal_registration = '123', tax_regime = 'simples',
-    municipal_service_code = '01.03', municipal_service_name = 'Licenciamento de software', service_description = 'Assinatura NOOWE', iss_bps = 200;
+    nfse_notes = 'Empresa optante pelo Simples Nacional.';
+  update private.noowe_nfse_types set municipal_service_code = '01.03', municipal_service_name = 'Licenciamento de software',
+    service_description = 'Assinatura NOOWE', iss_bps = 200 where kind = 'subscription';
 end $$;
 do $$
 declare r uuid := 'c1000000-0000-4000-8000-000000000002'; i uuid; c private.noowe_company;
 begin
   perform set_config('noowe.param_author', 'teste', true);
-  update private.noowe_company set legal_name = null, address = null, municipal_registration = null, tax_regime = null, municipal_service_code = null, municipal_service_id = null, municipal_service_name = null, service_description = null, iss_bps = null;
+  update private.noowe_company set legal_name = null, address = null, municipal_registration = null, tax_regime = null, nfse_notes = null;
+  update private.noowe_nfse_types set municipal_service_code = null, municipal_service_id = null, municipal_service_name = null, service_description = null, iss_bps = null;
   insert into public.subscription_invoices(restaurant_id, kind, period_start, period_end, subtotal_cents, total_cents, status, due_at, provider_ref, nfse_status)
     values (r, 'renewal', now(), now() + interval '30 days', 19900, 19900, 'open', now() + interval '3 days', 'pay_1', 'waiting_company_data') returning id into i;
   insert into _c values ('i', i);
@@ -41,7 +44,8 @@ do $$
 declare j jsonb;
 begin
   j := public.service_nfse_claim((select v from _c where k = 'i'));
-  assert (j->>'claimed')::boolean and j->>'paymentRef' = 'pay_1' and (j->>'totalCents')::bigint = 19900 and (j->'taxes'->>'issBps')::int = 200, 'dados: ' || j::text;
+  assert (j->>'claimed')::boolean and j->>'paymentRef' = 'pay_1' and (j->>'totalCents')::bigint = 19900 and (j->'taxes'->>'issBps')::int = 200
+    and j->>'observations' = 'Empresa optante pelo Simples Nacional.' and j->>'municipalServiceCode' = '01.03', 'dados: ' || j::text;
   assert not (public.service_nfse_claim((select v from _c where k = 'i'))->>'claimed')::boolean, 'duas ao mesmo tempo não';
 end $$;
 select pass('o pedido leva cobrança, valor e tributos dos parâmetros, e duas chamadas não pegam a mesma fatura');

@@ -13,6 +13,20 @@ export async function handleBillingCharge(req: Request, deps: PaymentDeps): Prom
   const rootKey = deps.env("ASAAS_ROOT_API_KEY");
   if (!rootKey) return json({ error: "billing_unavailable" }, 503);
 
+  // Fatura anulada (assinatura cancelada depois de a fatura do próximo período sair): a cobrança no Asaas deixa de valer.
+  if (body.action === "cancel") {
+    const ref = await deps.rpc("service_invoice_cancel_ref", { p_invoice_id: body.invoiceId });
+    if (ref.error) return json({ error: "internal_error" }, 500);
+    if (!ref.data) return json({ ok: true, skipped: true });
+    try {
+      await deps.provider.cancelCharge(rootKey, ref.data);
+      return json({ ok: true, canceled: true });
+    } catch (err) {
+      console.error("billing-charge cancel error:", err instanceof AsaasError ? { status: err.status, body: err.body } : err);
+      return json({ error: "provider_unavailable" }, 502);
+    }
+  }
+
   const claim = await deps.rpc("service_invoice_claim", { p_invoice_id: body.invoiceId });
   if (claim.error) return json({ error: "internal_error" }, 500);
   const job = claim.data;

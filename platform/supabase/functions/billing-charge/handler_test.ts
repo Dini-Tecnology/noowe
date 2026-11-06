@@ -6,23 +6,26 @@ const INV = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const job = { claimed: true, invoiceId: INV, restaurantId: "r1", name: "Casa", cnpj: "12345678000123", email: "a@b.c", customerId: null, totalCents: 19900, dueDate: "2026-11-10" };
 const req = (body: unknown = { invoiceId: INV }, token = "svc") => new Request("http://x", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
 
-function setup(over: { job?: any; existing?: any; root?: string | null; throws?: boolean } = {}) {
+function setup(over: { job?: any; existing?: any; root?: string | null; throws?: boolean; voidRef?: string | null } = {}) {
   const calls: { fn: string; args: any }[] = [];
   const created: any[] = [];
+  const canceled: string[] = [];
   const deps: any = {
     rpc: async (fn: string, args: any) => {
       calls.push({ fn, args });
       if (fn === "service_invoice_claim") return { data: over.job ?? job, error: null };
+      if (fn === "service_invoice_cancel_ref") return { data: over.voidRef ?? null, error: null };
       return { data: null, error: null };
     },
     env: (name: string) => name === "ASAAS_ROOT_API_KEY" ? (over.root === null ? undefined : "root") : name === "SUPABASE_SERVICE_ROLE_KEY" ? "svc" : name === "BILLING_WEBHOOK_TOKEN" ? "tok" : undefined,
     provider: {
       createCustomer: async () => ({ id: "cus_1" }),
+      cancelCharge: async (_k: string, id: string) => { canceled.push(id); },
       findChargeByExternalRef: async () => over.existing ?? null,
       createCharge: async (_k: string, input: any) => { if (over.throws) throw new Error("x"); created.push(input); return { id: "pay_1", status: "PENDING", value: 199, invoiceUrl: "https://asaas/i/1" }; },
     },
   };
-  return { deps, calls, created };
+  return { deps, calls, created, canceled };
 }
 
 Deno.test("cobra na conta da NOOWE, com o valor da fatura, e guarda a referência", async () => {
@@ -69,4 +72,13 @@ Deno.test("webhook: só fatura paga marca como paga", async () => {
   await handleBillingWebhook(hook({ event: "PAYMENT_OVERDUE", payment: { externalReference: `inv:${INV}` } }), b.deps);
   await handleBillingWebhook(hook({ event: "PAYMENT_RECEIVED", payment: { externalReference: "outra-coisa" } }), b.deps);
   assertEquals(b.calls.length, 0);
+});
+
+Deno.test("fatura anulada: cancela a cobrança no Asaas; sem anulação, não mexe", async () => {
+  const voided = setup({ voidRef: "pay_9" });
+  assertEquals((await handleBillingCharge(req({ invoiceId: INV, action: "cancel" }), voided.deps)).status, 200);
+  assertEquals(voided.canceled, ["pay_9"]);
+  const kept = setup();
+  await handleBillingCharge(req({ invoiceId: INV, action: "cancel" }), kept.deps);
+  assertEquals([kept.canceled.length, kept.created.length], [0, 0]);
 });

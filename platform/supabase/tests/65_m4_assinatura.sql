@@ -156,13 +156,13 @@ begin
   perform private.subscription_tick();
   assert (select status from public.subscription_invoices where id = i.id) = 'overdue', 'vencida';
   assert (select status from public.restaurant_subscriptions where restaurant_id = r) = 'past_due', 'em atraso';
-  assert not (select billing_hidden from public.restaurants where id = r), 'dentro da tolerância segue na busca';
+  assert not (select coalesce((select billing_hidden from private.restaurant_billing_flags where restaurant_id = r), false)), 'dentro da tolerância segue na busca';
   update public.subscription_invoices set due_at = now() - interval '8 days' where id = i.id;
   perform private.subscription_tick();
-  assert (select billing_hidden from public.restaurants where id = r) and not (select orders_suspended from public.restaurants where id = r), 'sai da busca';
+  assert (select coalesce((select billing_hidden from private.restaurant_billing_flags where restaurant_id = r), false)) and not (select coalesce((select orders_suspended from private.restaurant_billing_flags where restaurant_id = r), false)), 'sai da busca';
   update public.subscription_invoices set due_at = now() - interval '31 days' where id = i.id;
   perform private.subscription_tick();
-  assert (select orders_suspended from public.restaurants where id = r), 'suspende pedido novo';
+  assert (select coalesce((select orders_suspended from private.restaurant_billing_flags where restaurant_id = r), false)), 'suspende pedido novo';
   -- Comanda aberta segue.
   insert into public.orders(restaurant_id, customer_id, table_session_id) values (r, c, sid) returning id into o;
   assert o is not null, 'comanda aberta continua pedindo';
@@ -176,7 +176,7 @@ begin
   assert jsonb_array_length(public.restaurant_list_invoices(r)) > 0, 'faturas também';
   -- Pagou: tudo volta.
   perform public.service_invoice_paid(i.id);
-  assert not (select billing_hidden or orders_suspended from public.restaurants where id = r), 'paga, volta';
+  assert not (select coalesce((select billing_hidden or orders_suspended from private.restaurant_billing_flags where restaurant_id = r), false)), 'paga, volta';
   assert (select status from public.restaurant_subscriptions where restaurant_id = r) = 'active', 'em dia';
   assert (select nfse_status from public.subscription_invoices where id = i.id) = 'waiting_company_data', 'nota espera os dados da empresa';
 end $$;
@@ -208,6 +208,9 @@ select pass('M2, critério 12: a compensação entra na fatura, sem limite nem v
 do $$
 declare r uuid := pg_temp.ctx('r');
 begin
+  -- Faturas das cenas anteriores não contam: aqui não há próximo período pago.
+  delete from public.subscription_invoices where restaurant_id = r and kind = 'renewal';
+  update public.restaurant_subscriptions set renewal_invoiced_for = null where restaurant_id = r;
   perform pg_temp.act(pg_temp.ctx('dono'));
   assert pg_temp.state_of(format($q$select public.restaurant_cancel_subscription(%L, ' ')$q$, r)) = '22023', 'exige motivo';
   perform public.restaurant_cancel_subscription(r, 'Fechando a casa');
@@ -222,7 +225,7 @@ select pass('cancelamento: com motivo, segue até o fim do período, sem reembol
 
 select ok((select relrowsecurity from pg_class where oid = 'public.restaurant_subscriptions'::regclass) and (select relrowsecurity from pg_class where oid = 'public.subscription_invoices'::regclass) and (select relrowsecurity from pg_class where oid = 'public.subscription_invoice_lines'::regclass), 'RLS ligado');
 select ok(not has_function_privilege('authenticated', 'public.service_invoice_paid(uuid)', 'EXECUTE') and not has_function_privilege('authenticated', 'public.service_invoice_claim(uuid)', 'EXECUTE'), 'as portas do worker não abrem para o app');
-select ok(not has_function_privilege('authenticated', 'private.invoice_create(uuid,text,timestamptz,timestamptz,bigint,text,bigint,text)', 'EXECUTE'), 'criar fatura também não');
+select ok(not has_function_privilege('authenticated', 'private.invoice_create(uuid,text,timestamptz,timestamptz,bigint,text,bigint,text,timestamptz)', 'EXECUTE'), 'criar fatura também não');
 do $$ begin grant select on _ctx to authenticated; end $$;
 select _test.as_user(pg_temp.ctx('gerente'));
 select is((select count(*)::int from public.subscription_invoices), 0, 'gerente não lê faturas');

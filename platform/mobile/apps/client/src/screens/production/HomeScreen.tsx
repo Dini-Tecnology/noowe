@@ -2,6 +2,7 @@
 /* Hallmark · macrostructure: Photographic · tone: warm utilitarian · anchor hue: orange */
 import { enterComanda, goToComanda } from '../../navigation/comanda';
 import { useLeaveTable } from '../../hooks/useLeaveTable';
+import { useHostTransferPrompt } from '../../hooks/useHostTransferPrompt';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -149,6 +150,7 @@ export default function HomeScreen({ navigation }: any) {
   }, []);
 
   const { run: leaveTable, mustPay: mustPayBeforeLeaving } = useLeaveTable(navigation);
+  useHostTransferPrompt(session?.tableSessionId);
 
   const isCasualDining = selectedServiceType === 'casual_dining';
   const isFineDiningTab = selectedServiceType === 'fine_dining';

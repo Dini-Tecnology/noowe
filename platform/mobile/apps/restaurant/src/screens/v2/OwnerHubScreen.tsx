@@ -62,6 +62,8 @@ import { refreshMountedRemoteData } from './shared/remoteRefreshRegistry';
 import { MyRolesTasksPanel } from './shared/MyRolesTasksPanel';
 import { MyTipsPanel } from './shared/MyTipsPanel';
 import { MyCashInHandCard } from './shared/MyCashInHandCard';
+import { HouseMethodPicker } from './shared/HouseMethodPicker';
+import { ShiftsTodayCard } from './shared/ShiftsTodayCard';
 import { CounterChargePanel } from './shared/CounterChargePanel';
 import { TeamCashPanel } from './shared/TeamCashPanel';
 import { ManagerSummaryCard } from './shared/ManagerSummaryCard';
@@ -98,6 +100,7 @@ import {
   useStaff,
   useStock,
   useTableBills,
+  useRealtimeRefresh,
 } from './shared/useRestaurantOperations';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import type {
@@ -120,6 +123,7 @@ import {
 } from '../../contexts/RestaurantRoleContext';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { itemStatusLabel, orderStatusLabel as orderStateLabel } from '@okinawa/shared/utils/status-label';
+import { REVENUE_LABEL } from './shared/revenueLabel';
 
 const OWNER_ROLES = [
   { id: 'owner', label: 'Dono', title: 'Dashboard Executivo', hint: 'Visão completa do restaurante' },
@@ -314,6 +318,7 @@ export default function OwnerHubScreen() {
         <MyRolesTasksPanel />
         <MyTipsPanel />
         <MyCashInHandCard />
+        <ShiftsTodayCard />
         <WaiterAppShareCard />
         <CreditIndexCard />
         <CouponsEntry onOpen={openScreen} />
@@ -521,7 +526,7 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
   return (
     <View style={styles.section}>
       <View style={styles.metricGrid}>
-        <Metric value={snapshotLoading ? '...' : formatCurrency(snapshot?.revenue_today ?? 0)} label="Receita Hoje" tone="success" />
+        <Metric value={snapshotLoading ? '...' : formatCurrency(snapshot?.revenue_today ?? 0)} label={REVENUE_LABEL} tone="success" />
         <Metric value={snapshotLoading ? '...' : String(snapshot?.active_orders ?? 0)} label="Pedidos Ativos" tone="danger" />
         <Metric
           value={snapshotLoading ? '...' : serviceFeatures.tableManagement ? `${occupancy}%` : String(snapshot?.kds_queue ?? 0)}
@@ -810,6 +815,8 @@ function BarmanQueueView({
   React.useEffect(() => {
     void loadBar();
   }, [loadBar]);
+  // Pedido novo chega ao bar sem precisar sair da tela.
+  useRealtimeRefresh('kds_signals', useRestaurantRole().restaurantId ?? null, loadBar);
 
   const advanceBarItem = async (item: BarQueueItem) => {
     await advanceKdsOrder([{ id: item.id, status: item.status }], loadBar);
@@ -1233,7 +1240,7 @@ function ManagerDashboardTab({
           tone="warning"
         />
         <Metric value={staffLoading ? '—' : String(activeStaffCount)} label="Equipe ativa" tone="info" />
-        <Metric value={snapshotLoading ? '—' : formatCurrency(snapshot?.revenue_today ?? 0)} label="Receita" tone="success" />
+        <Metric value={snapshotLoading ? '—' : formatCurrency(snapshot?.revenue_today ?? 0)} label={REVENUE_LABEL} tone="success" />
       </View>
 
       {delayedOrders.length > 0 && (
@@ -1538,7 +1545,7 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
     if (!session?.sessionId) return;
     const amount = parseAmount();
     if (amount === null) return;
-    Alert.alert('Fechar caixa', `Confirmar fechamento com saldo contado de R$ ${amount.toFixed(2)}?`, [
+    Alert.alert('Fechar caixa', `Confirmar fechamento com saldo contado de ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)}?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Fechar',
@@ -1569,7 +1576,8 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
         {session?.isOpen && (
           <View style={styles.cashMetricRow}>
             <CashMetric label="Abertura" value={formatCurrency(session.openingBalance)} />
-            <CashMetric label="Entradas" value={formatCurrency(session.cashSales + session.cardSales + session.pixSales)} success />
+            {/* Fechamento cego: o Gerente não recebe as vendas, e "Entradas R$ 0" seria um número falso. */}
+            {session.expectedBalance != null ? <CashMetric label="Entradas" value={formatCurrency(session.cashSales + session.cardSales + session.pixSales)} success /> : null}
             {session.expectedBalance != null ? <CashMetric label="Saldo" value={formatCurrency(session.expectedBalance)} /> : null}
           </View>
         )}
@@ -1713,7 +1721,7 @@ function ManagerReportView({ colors }: { colors: ReturnType<typeof useColors> })
   return (
     <View style={styles.section}>
       <View style={styles.metricGrid}>
-        <Metric value={loading ? '—' : formatCurrency(snapshot?.revenue_today ?? 0)} label="Receita dia" tone="success" />
+        <Metric value={loading ? '—' : formatCurrency(snapshot?.revenue_today ?? 0)} label={REVENUE_LABEL} tone="success" />
         <Metric value={loading ? '—' : String(snapshot?.orders_today ?? 0)} label="Pedidos" tone="danger" />
       </View>
       <View style={[styles.listPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -1828,6 +1836,8 @@ type MyTable = {
   guestCount: number;
   totalSpent: number;
   spentHidden: boolean;
+  remainingCents: number | null;
+  partialPayment: boolean;
   pendingOrders: number;
 };
 
@@ -1858,6 +1868,8 @@ function WaiterCommandCenter({
       guestCount: table.guests,
       totalSpent: table.totalSpent,
       spentHidden: table.spentHidden,
+      remainingCents: table.remainingCents,
+      partialPayment: table.partialPayment,
       pendingOrders: kdsOrders.filter(
         (order) => order.table === tableLabel && order.status !== 'ready',
       ).length,
@@ -2092,6 +2104,9 @@ function WaiterTablesBody({
                     {formatCurrency(table.totalSpent)}
                   </Text>
                 )}
+                {!table.spentHidden && table.remainingCents != null && table.remainingCents < Math.round(table.totalSpent * 100) ? (
+                  <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>Falta {formatCurrency(table.remainingCents / 100)}</Text>
+                ) : null}
                 <View style={{ flexDirection: 'row', gap: 4 }}>
                   {hasReadyPlate ? <StatusChip label="PRATO" tone="danger" /> : null}
                   {openCallCount > 0 ? <StatusChip label={`${openCallCount} CHAMADO`} tone="warning" /> : null}
@@ -2759,12 +2774,6 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
   other: 'Outro',
 };
 
-const CHARGE_METHODS: { id: string; label: string }[] = [
-  { id: 'cash', label: 'Dinheiro' },
-  { id: 'pix', label: 'Pix' },
-  { id: 'credit_card', label: 'Crédito' },
-  { id: 'debit_card', label: 'Débito' },
-];
 
 function WaiterChargeBody({
   bills,
@@ -2892,18 +2901,11 @@ function WaiterChargeBody({
             <Text style={[styles.staffRole, { color: colors.foregroundSecondary, marginBottom: 16 }]}>
               {charging ? formatCurrency(charging.totalAmount) : ''} · escolha a forma de pagamento
             </Text>
-            <View style={styles.waiterMethodGrid}>
-              {CHARGE_METHODS.map((method) => (
-                <TouchableOpacity
-                  key={method.id}
-                  disabled={submitting}
-                  onPress={() => void doCharge(method.id)}
-                  style={[styles.waiterMethodBtn, { borderColor: colors.border, opacity: submitting ? 0.6 : 1 }]}
-                >
-                  <Text style={[styles.waiterMethodBtnText, { color: colors.foreground }]}>{method.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <HouseMethodPicker
+              disabled={submitting}
+              buttonStyle={styles.waiterMethodBtn}
+              onPick={(method) => void doCharge(method)}
+            />
             <TouchableOpacity
               disabled={submitting}
               onPress={() => setCharging(null)}

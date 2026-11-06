@@ -112,15 +112,26 @@ export default function PlanScreen() {
           {summary.cancelAt ? <Text style={{ color: colors.error ?? colors.primary, fontWeight: '700' }}>Cancelada: segue até {formatDate(summary.cancelAt)}.</Text> : null}
           {summary.promo ? (
             <Text style={muted}>
-              Código {summary.promo.code}{summary.promo.endsAt ? ` até ${formatDate(summary.promo.endsAt)}` : ''}. Depois, {formatCents(summary.promo.priceAfterCents)}.
+              {summary.promo.lifetime
+                ? `Código ${summary.promo.code}: desconto vitalício enquanto o restaurante estiver em dia.`
+                : `Código ${summary.promo.code}${summary.promo.endsAt ? ` até ${formatDate(summary.promo.endsAt)}` : ''}. Depois, ${formatCents(summary.promo.priceAfterCents)}.`}
             </Text>
           ) : null}
         </View>
       ) : (
-        <View style={panel}>
-          <Text style={title}>Comece pelo plano certo para a sua casa</Text>
-          <Text style={muted}>São {summary.trialDays ?? 30} dias de teste, sem cartão. Você troca quando quiser.</Text>
-        </View>
+        summary.status === 'canceled' ? (
+          <View style={panel}>
+            <Text style={title}>Plano encerrado</Text>
+            <Text style={muted}>O restaurante saiu da busca, e pedidos e pagamentos pelo app estão suspensos. As comandas abertas fecham normalmente.</Text>
+            {summary.dataAccessUntil ? <Text style={muted}>Seus dados e a exportação ficam disponíveis até {formatDate(summary.dataAccessUntil)}.</Text> : null}
+            <Text style={muted}>Escolha um plano para voltar: tudo fica como estava.</Text>
+          </View>
+        ) : (
+          <View style={panel}>
+            <Text style={title}>Comece pelo plano certo para a sua casa</Text>
+            <Text style={muted}>São {summary.trialDays ?? 30} dias de teste, sem cartão. Você troca quando quiser.</Text>
+          </View>
+        )
       )}
 
       {summary.usage ? (

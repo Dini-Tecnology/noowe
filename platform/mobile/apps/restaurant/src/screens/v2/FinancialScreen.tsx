@@ -15,6 +15,7 @@ import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 
 interface DashboardData {
   gross_revenue?: number;
+  coupon_discounts?: number;
   previous_gross_revenue?: number;
   orders_count?: number;
   average_ticket?: number;
@@ -218,6 +219,22 @@ export default function FinancialScreen() {
                   trend={`${dashboard?.orders_count ?? 0} pedidos`}
                 />
               </View>
+
+              {Number(dashboard?.coupon_discounts ?? 0) > 0 ? (
+                <View style={styles.grid}>
+                  <MetricCard
+                    icon={<DollarSign size={17} color={colors.primary} />}
+                    label="Cupons"
+                    value={`− ${fmt(dashboard?.coupon_discounts)}`}
+                    trend="já fora do que foi pago"
+                  />
+                  <MetricCard
+                    icon={<DollarSign size={17} color={colors.primary} />}
+                    label="Receita sem cupons"
+                    value={fmt(Number(dashboard?.gross_revenue ?? 0) - Number(dashboard?.coupon_discounts ?? 0))}
+                  />
+                </View>
+              ) : null}
 
               <SectionCard title="Composição da Receita">
                 {composition.length === 0 ? (

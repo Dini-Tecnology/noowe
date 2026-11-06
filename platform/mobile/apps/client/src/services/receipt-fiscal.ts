@@ -1,6 +1,6 @@
 /** Situação da NFC-e, sempre vinda do servidor. `delayed` nunca expõe o erro interno. */
 export type ReceiptFiscal = {
-  status: 'none' | 'awaiting_close' | 'issuing' | 'authorized' | 'delayed';
+  status: 'none' | 'awaiting_close' | 'issuing' | 'authorized' | 'delayed' | 'external';
   number: string | null;
   series: string | null;
   accessKey: string | null;
@@ -10,7 +10,7 @@ export type ReceiptFiscal = {
   contingency: boolean;
 };
 
-const STATUSES: ReceiptFiscal['status'][] = ['none', 'awaiting_close', 'issuing', 'authorized', 'delayed'];
+const STATUSES: ReceiptFiscal['status'][] = ['none', 'awaiting_close', 'issuing', 'authorized', 'delayed', 'external'];
 const text = (value: unknown) => (typeof value === 'string' && value ? value : null);
 
 export function parseReceiptFiscal(raw: unknown): ReceiptFiscal {

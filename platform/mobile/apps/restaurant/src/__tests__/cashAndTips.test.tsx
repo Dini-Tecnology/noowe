@@ -13,11 +13,15 @@ import { TeamCashPanel } from '../screens/v2/shared/TeamCashPanel';
 import { CounterChargePanel } from '../screens/v2/shared/CounterChargePanel';
 import { TableSettlementLines } from '../screens/v2/shared/TableSettlementLines';
 import { PaymentActionsPanel } from '../screens/v2/shared/PaymentActionsPanel';
+import { ShiftsTodayCard } from '../screens/v2/shared/ShiftsTodayCard';
+import { REVENUE_LABEL } from '../screens/v2/shared/revenueLabel';
+import { tableBillLabel, tableBillLines } from '../screens/v2/shared/tableBill';
 
 const mockApi = {
   getCashSettings: jest.fn(), updateCashSettings: jest.fn(), getDayStatus: jest.fn(), closeOperationalDay: jest.fn(), reviewCashBreak: jest.fn(),
   getTipRules: jest.fn(), updateTipRules: jest.fn(), setTaxRegime: jest.fn(), getMyTips: jest.fn(), getMyCashInHand: jest.fn(), getTeamCashInHand: jest.fn(), settleStaffCash: jest.fn(), getCounterOrders: jest.fn(), recordPayment: jest.fn(), getManagerSummary: jest.fn(), getSessionBill: jest.fn(), getRefundablePayments: jest.fn(),
   requestRefund: jest.fn(), requestBillReopen: jest.fn(), getPaymentOptions: jest.fn(), setAcceptedVouchers: jest.fn(),
+  getMyShifts: jest.fn(), getDayTeamShifts: jest.fn(),
 };
 let mockRoles = ['owner'];
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => 'Icon' }));
@@ -342,6 +346,35 @@ describe('Cobrança de balcão do Barman (pendência 77)', () => {
     await waitFor(() => expect(api.recordPayment).toHaveBeenCalledWith('o1', 'cash', 25));
     await waitFor(() => expect(api.getCounterOrders).toHaveBeenCalledTimes(2));
   });
+
+  it('balcão: dinheiro ou maquininha da casa, e a maquininha pergunta a forma (resposta 36)', async () => {
+    api.getCounterOrders.mockResolvedValue([order]);
+    api.recordPayment.mockResolvedValue({});
+    const view = render(<CounterChargePanel />);
+    fireEvent.press(await view.findByLabelText('Cobrar Ana'));
+    const first = alert.mock.calls[alert.mock.calls.length - 1][2] as { text: string; onPress?: () => void }[];
+    expect(first.map((b) => b.text)).toEqual(['Dinheiro', 'Maquininha da casa', 'Cancelar']);
+    first.find((b) => b.text === 'Maquininha da casa')!.onPress!();
+    const second = alert.mock.calls[alert.mock.calls.length - 1][2] as { text: string; onPress?: () => void }[];
+    expect(second.map((b) => b.text)).toEqual(['Crédito', 'Débito', 'Pix', 'Vale', 'Cancelar']);
+    second.find((b) => b.text === 'Pix')!.onPress!();
+    await waitFor(() => expect(api.recordPayment).toHaveBeenCalledWith('o1', 'pix', 25));
+  });
+
+  it('depois de cobrar, Dinheiro em mãos atualiza sem trocar de tela', async () => {
+    mockRoles = ['barman'];
+    api.getMyCashInHand.mockResolvedValue({ open: true, cents: 0 });
+    api.getCounterOrders.mockResolvedValue([order]);
+    api.recordPayment.mockResolvedValue({});
+    const card = render(<MyCashInHandCard />);
+    expect(await card.findByText(/0,00/)).toBeTruthy();
+    const view = render(<CounterChargePanel />);
+    fireEvent.press(await view.findByLabelText('Cobrar Ana'));
+    api.getMyCashInHand.mockResolvedValue({ open: true, cents: 2500 });
+    const buttons = alert.mock.calls[alert.mock.calls.length - 1][2] as { text: string; onPress?: () => void }[];
+    buttons.find((b) => b.text === 'Dinheiro')!.onPress!();
+    expect(await card.findByText(/25,00/)).toBeTruthy();
+  });
 });
 
 describe('Fechar conta do Garçom', () => {
@@ -364,5 +397,55 @@ describe('Aviso de encerrar comanda', () => {
     const unknown = closeAccountMessage('S12', null);
     expect(unknown).toContain('comanda aberta');
     expect(unknown).not.toContain('R$');
+  });
+});
+
+describe('Escala (resposta 45)', () => {
+  const now = new Date().toISOString();
+  const shift = (id: string, name: string, role: string) => ({ id, staff_id: id, staff_name: name, date: now, start_time: '10:00:00', end_time: '18:00:00', role, area: null, station_id: null, station_name: null, status: 'scheduled' });
+
+  it('cada pessoa vê a própria escala; o Garçom não pede a do salão', async () => {
+    mockRoles = ['waiter'];
+    api.getMyShifts.mockResolvedValue([shift('w', 'Rita', 'waiter')]);
+    const view = render(<ShiftsTodayCard />);
+    expect(await view.findByText('Minha escala')).toBeTruthy();
+    expect(view.getByText(/Hoje · 10:00–18:00 · Garçom/)).toBeTruthy();
+    expect(api.getDayTeamShifts).not.toHaveBeenCalled();
+  });
+
+  it('o Maître vê a escala do salão no dia, e o Chef a da cozinha', async () => {
+    mockRoles = ['maitre'];
+    api.getMyShifts.mockResolvedValue([]);
+    api.getDayTeamShifts.mockResolvedValue([shift('a', 'Ana', 'waiter'), shift('b', 'Beto', 'waiter')]);
+    const maitre = render(<ShiftsTodayCard />);
+    expect(await maitre.findByText('Escala do salão hoje')).toBeTruthy();
+    expect(maitre.getByText(/Beto · 10:00–18:00/)).toBeTruthy();
+    expect(api.getDayTeamShifts).toHaveBeenCalledWith('r1', 'floor');
+    mockRoles = ['chef'];
+    render(<ShiftsTodayCard />);
+    await waitFor(() => expect(api.getDayTeamShifts).toHaveBeenCalledWith('r1', 'kitchen'));
+  });
+
+  it('Dono e Gerente editam na tela Escala: o cartão não aparece', () => {
+    mockRoles = ['manager'];
+    const view = render(<ShiftsTodayCard />);
+    expect(api.getMyShifts).not.toHaveBeenCalled();
+    expect(view.toJSON()).toBeNull();
+  });
+});
+
+describe('Painel e mapa (respostas 86 e 92)', () => {
+  it('a receita do painel diz que já está com os descontos', () => {
+    expect(REVENUE_LABEL).toBe('Receita, já com descontos');
+  });
+
+  it('mapa: consumo e quanto falta; o Maître vê só "Pagamento parcial"', () => {
+    expect(tableBillLabel({ totalSpent: 320, remainingCents: 11000, spentHidden: false })?.replace(/\u00a0/g, ' ')).toBe('Consumo R$ 320,00 · Falta R$ 110,00');
+    expect(tableBillLabel({ totalSpent: 0, remainingCents: null, spentHidden: true, partialPayment: true })).toBe('Pagamento parcial');
+    expect(tableBillLabel({ totalSpent: 0, remainingCents: null, spentHidden: true, partialPayment: false })).toBeNull();
+    // No cartão do mapa, uma informação por linha, para não encolher nem cortar o "Falta".
+    expect(tableBillLines({ totalSpent: 320, remainingCents: 11000, spentHidden: false }).map((l) => l.replace(/\u00a0/g, ' '))).toEqual(['Consumo R$ 320,00', 'Falta R$ 110,00']);
+    expect(tableBillLines({ totalSpent: 0, remainingCents: null, spentHidden: true, partialPayment: true })).toEqual(['Pagamento parcial']);
+    expect(tableBillLines({ totalSpent: 0, remainingCents: null, spentHidden: true, partialPayment: false })).toEqual([]);
   });
 });

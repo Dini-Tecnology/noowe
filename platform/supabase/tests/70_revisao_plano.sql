@@ -60,14 +60,14 @@ begin
   update public.subscription_invoices set due_at = now() - interval '40 days', attempts = 6, claimed_at = now() - interval '2 days' where id = i.id;
   perform private.subscription_tick();
   assert (select status from public.subscription_invoices where id = i.id) = 'open', 'sem cobrança não vence';
-  assert not (select orders_suspended from public.restaurants where id = r), 'nem suspende';
+  assert not (select coalesce((select orders_suspended from private.restaurant_billing_flags where restaurant_id = r), false)), 'nem suspende';
   perform public.service_invoice_attach(i.id, null, null, null, 'Restaurante sem CNPJ para gerar a fatura');
   assert exists (select 1 from public.notifications n where n.metadata->>'kind' = 'plan_invoice_blocked'), 'o Dono é avisado';
   -- Com cobrança, o atraso corre.
   update public.subscription_invoices set provider_ref = 'pay_1' where id = i.id;
   perform private.subscription_tick();
   assert (select status from public.subscription_invoices where id = i.id) = 'overdue', 'com cobrança, vence';
-  assert (select orders_suspended from public.restaurants where id = r), 'e suspende';
+  assert (select coalesce((select orders_suspended from private.restaurant_billing_flags where restaurant_id = r), false)), 'e suspende';
   update public.subscription_invoices set status = 'paid' where id = i.id;
   perform private.subscription_apply_overdue(r);
 end $$;
@@ -136,9 +136,21 @@ begin
   perform private.subscription_tick();
   assert (select status from public.restaurant_subscriptions where restaurant_id = r) = 'canceled', 'cancelou';
   assert exists (select 1 from public.subscription_invoices where restaurant_id = r and kind = 'overage'), 'excedente do último mês';
-  assert not private.plan_allows(r, 'loyalty') and not private.plan_allows(r, 'reservations'), 'sem recursos do plano';
+  -- Resposta 80: sai da busca, pedidos e pagamentos pelo app suspensos, comanda aberta fecha com as ferramentas do último plano.
+  assert (select billing_hidden and orders_suspended and app_payments_suspended from private.restaurant_billing_flags where restaurant_id = r), 'travas na hora';
+  assert not (select public.listed(x) from public.restaurants x where x.id = r), 'fora da busca';
+  assert private.plan_allows(r, 'waiter_app') = coalesce((select enabled from private.noowe_plan_features where plan_code = 'essencial' and feature_key = 'waiter_app'), true), 'a equipe segue com o último plano';
+  assert pg_temp.state_of(format($q$insert into public.gateway_transactions(restaurant_id, provider, payment_method, amount_cents, status, idempotency_key, purpose, created_at, updated_at)
+    values (%L, 'asaas', 'pix', 1000, 'pending', 'c80-' || gen_random_uuid(), 'order', now(), now())$q$, r)) = 'P0015', 'pagamento pelo app suspenso';
+  assert pg_temp.state_of(format($q$insert into public.gateway_transactions(restaurant_id, provider, payment_method, amount_cents, status, idempotency_key, purpose, created_at, updated_at)
+    values (%L, 'manual', 'cash', 1000, 'completed', 'c80-' || gen_random_uuid(), 'order', now(), now())$q$, r)) = 'ok', 'pagamento no salão segue';
+  perform pg_temp.act(pg_temp.ctx('dono'));
+  assert (public.restaurant_get_plan_summary(r)->>'dataAccessUntil')::timestamptz > now() + interval '89 days', 'dados por 90 dias';
+  -- Reativar devolve tudo.
+  perform public.restaurant_choose_plan(r, 'essencial');
+  assert not (select billing_hidden or orders_suspended or app_payments_suspended from private.restaurant_billing_flags where restaurant_id = r), 'reativou';
 end $$;
-select pass('cancelado fica sem os recursos do plano, e o último mês tem o excedente');
+select pass('plano encerrado: sai da busca, suspende pedido e pagamento pelo app, dados por 90 dias; reativar devolve tudo');
 
 -- Quem não escolheu: 30 dias do primeiro acesso, e depois os prazos de atraso, sem travar a comanda aberta.
 do $$
@@ -146,7 +158,8 @@ declare r uuid := pg_temp.ctx('r'); v_trial int;
 begin
   delete from public.subscription_invoices where restaurant_id = r;
   delete from public.restaurant_subscriptions where restaurant_id = r;
-  update public.restaurants set billing_hidden = false, orders_suspended = false, plan_prompted_at = null where id = r;
+  delete from private.restaurant_billing_flags where restaurant_id = r;
+  update public.restaurants set plan_prompted_at = null where id = r;
   assert private.plan_allows(r, 'loyalty'), 'antes de escolher, segue com tudo';
   perform pg_temp.act(pg_temp.ctx('waiter'));
   assert pg_temp.state_of(format($q$select public.restaurant_note_plan_prompt(%L)$q$, r)) = '42501', 'só o Dono';
@@ -154,15 +167,15 @@ begin
   perform public.restaurant_note_plan_prompt(r);
   assert (select plan_prompted_at from public.restaurants where id = r) is not null, 'marca o acesso';
   perform private.subscription_tick();
-  assert not (select billing_hidden from public.restaurants where id = r), 'dentro do prazo';
+  assert not (select coalesce((select billing_hidden from private.restaurant_billing_flags where restaurant_id = r), false)), 'dentro do prazo';
   select trial_days into v_trial from private.noowe_billing_settings;
   update public.restaurants set plan_prompted_at = now() - make_interval(days => v_trial + 200) where id = r;
   perform private.subscription_tick();
-  assert (select billing_hidden and orders_suspended from public.restaurants where id = r), 'passou de tudo';
+  assert (select coalesce((select billing_hidden and orders_suspended from private.restaurant_billing_flags where restaurant_id = r), false)), 'passou de tudo';
   -- Escolheu: volta ao normal.
   perform public.restaurant_choose_plan(r, 'essencial', 'monthly');
   perform private.subscription_tick();
-  assert not (select billing_hidden or orders_suspended from public.restaurants where id = r), 'escolheu, normalizou';
+  assert not (select coalesce((select billing_hidden or orders_suspended from private.restaurant_billing_flags where restaurant_id = r), false)), 'escolheu, normalizou';
 end $$;
 select pass('quem não escolhe plano: 30 dias do primeiro acesso, e depois os prazos de atraso');
 
@@ -185,8 +198,12 @@ begin
   assert pg_temp.state_of(format($q$select public.restaurant_get_session_bill(%L)$q$, sid)) <> 'P0014', 'o Dono segue cobrando';
   -- NFC-e
   insert into public.fiscal_documents(id, restaurant_id, table_session_id, external_ref, total_cents, status) values (d, r, sid, 'p-' || sid, 1000, 'pending');
+  -- Resposta 81: sem NFC-e no plano, a nota é do sistema do restaurante. Nada fica bloqueado.
+  assert (select status from public.fiscal_documents where id = d) = 'external', 'nasce como nota do restaurante';
+  update public.fiscal_documents set status = 'pending', next_attempt_at = now() where id = d;
   j := public.service_fiscal_claim(d);
-  assert (select error_code from public.fiscal_documents where id = d) = 'plan_without_nfce', 'nota fora do plano: ' || j;
+  assert not (j->>'claimed')::boolean and (select status from public.fiscal_documents where id = d) = 'external', 'fora do plano não emite nem bloqueia: ' || j::text;
+  assert private.fiscal_customer_json((select x from public.fiscal_documents x where x.id = d), true)->>'status' = 'external', 'o cliente vê que é com o restaurante';
   -- Fidelidade
   select id into lp from public.loyalty_programs where restaurant_id = r limit 1;
   if lp is not null then

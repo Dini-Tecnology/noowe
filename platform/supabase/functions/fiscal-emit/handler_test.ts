@@ -134,3 +134,12 @@ Deno.test("token do restaurante não aparece na resposta", async () => {
   const text = await (await handleFiscalEmit(request(), deps)).text();
   assertEquals(text.includes("tok"), false);
 });
+
+Deno.test("o CPF na nota do banco chega à emissão; sem ele, vai nulo", async () => {
+  const withCpf = setup({ claim: { ...JOB, consumerDocument: "52998224725" } });
+  await handleFiscalEmit(request(), withCpf.deps);
+  assertEquals(withCpf.emits[0].consumerDocument, "52998224725");
+  const without = setup();
+  await handleFiscalEmit(request(), without.deps);
+  assertEquals(without.emits[0].consumerDocument, null);
+});

@@ -611,7 +611,7 @@ export interface CustomerBackend {
   /** Como este restaurante cobra pedidos agora; quem decide é o servidor. */
   getOrderPaymentMode(restaurantId: string): Promise<OrderPaymentMode>;
   /** Cria a cobrança do pedido (ADR-020). `confirmed` só existe depois do webhook; a tela nunca confirma nada. */
-  startPayment(input: { orderId: string; restaurantId: string; paymentMethod: string; idempotencyKey?: string; payerCpfCnpj?: string; tipBps?: number; tipCents?: number }): Promise<{
+  startPayment(input: { orderId: string; restaurantId: string; paymentMethod: string; idempotencyKey?: string; payerCpfCnpj?: string; tipBps?: number; tipCents?: number; receiptDocument?: string | null }): Promise<{
     transactionId: string; orderId: string; paymentStatus: CustomerPaymentStatus; idempotentReplay: boolean; simulated: boolean;
     fulfillmentStatus: CustomerFulfillmentStatus | null;
     /** Pix pendente: copia-e-cola e prazo (ADR-013). */
@@ -1201,7 +1201,7 @@ export const customerBackend: CustomerBackend = {
     let query = getSupabaseClient().from('restaurants').select('*')
       .eq('is_active', true)
       // Assinatura em atraso depois da tolerância: sai da busca. Comanda aberta continua.
-      .eq('billing_hidden', false)
+      .eq('listed', true)
       .overlaps('service_models', ['fine_dining', 'casual_dining', 'quick_service'])
       .order('id', { ascending: true }).limit(limit + 1);
     if (input.search?.trim()) query = query.ilike('name', `%${input.search.trim()}%`);
@@ -1491,6 +1491,7 @@ export const customerBackend: CustomerBackend = {
         purpose: 'order', targetId: input.orderId, method: input.paymentMethod, idempotencyKey,
         ...(input.tipBps ? { tipBps: input.tipBps } : {}), ...(input.tipCents ? { tipCents: input.tipCents } : {}),
         ...(input.payerCpfCnpj ? { payerCpfCnpj: input.payerCpfCnpj } : {}),
+        ...(input.receiptDocument !== undefined ? { receiptDocument: input.receiptDocument } : {}),
       }));
       return {
         transactionId: String(charge.paymentId ?? ''),

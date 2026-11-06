@@ -5,7 +5,7 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import FiscalSetupScreen from '../screens/fiscal/FiscalSetupScreen';
-import FiscalDocumentsScreen from '../screens/fiscal/FiscalDocumentsScreen';
+import FiscalDocumentsScreen, { fiscalSalesCsv } from '../screens/fiscal/FiscalDocumentsScreen';
 import { calculateFiscalProgress } from '../screens/v2/config/configTypes';
 
 jest.mock('lucide-react-native', () => new Proxy({}, { get: (_target, name) => String(name) }));
@@ -18,7 +18,7 @@ jest.mock('../screens/v2/config/ConfigSectionCard', () => {
   return { ConfigSectionCard: ({ title, children }: any) => <View><Text>{title}</Text>{children}</View> };
 });
 jest.mock('../contexts/RestaurantRoleContext', () => ({
-  useRestaurantRole: () => ({ restaurantId: 'r1', serverRole: 'manager' }),
+  useRestaurantRole: () => ({ restaurantId: 'r1', serverRole: mockRole, serverRoles: [mockRole] }),
 }));
 
 const mockNavigate = jest.fn();
@@ -28,12 +28,19 @@ jest.mock('@react-navigation/native', () => ({ useNavigation: () => mockNavigati
 const mockGetConfig = jest.fn();
 const mockSaveConfig = jest.fn();
 const mockGetIssues = jest.fn();
+let mockRole = 'manager';
+const mockGetReviews = jest.fn().mockResolvedValue([]);
+const mockPlan = jest.fn().mockResolvedValue({ locked: [] });
+const mockExport = jest.fn();
 const mockRetry = jest.fn();
 jest.mock('@okinawa/shared/services/supabase-api', () => ({
   supabaseApiAdapter: {
     getFiscalConfig: (...args: unknown[]) => mockGetConfig(...args),
     saveFiscalConfig: (...args: unknown[]) => mockSaveConfig(...args),
     getFiscalIssues: (...args: unknown[]) => mockGetIssues(...args),
+    getFiscalRefundReviews: (...args: unknown[]) => mockGetReviews(...args),
+    getPlanSummary: (...args: unknown[]) => mockPlan(...args),
+    exportFiscalSales: (...args: unknown[]) => mockExport(...args),
     retryFiscalDocument: (...args: unknown[]) => mockRetry(...args),
   },
 }));
@@ -168,6 +175,32 @@ describe('notas com problema', () => {
     screen.getByText('Falhou');
     screen.getByText('O emissor não informou o motivo.');
     screen.getByText(/R\$ 1\.234,56/);
+  });
+
+  test('estornos que não cancelam a nota aparecem para o contador (resposta 63)', async () => {
+    mockGetIssues.mockResolvedValue([]);
+    mockGetReviews.mockResolvedValueOnce([{ id: 'v1', total_cents: 6000, refund_review_at: '2026-11-05T21:00:00Z', refund_review_cents: 2000,
+      refund_review_reason: 'Estorno parcial', number: '123', table_sessions: { tables: { table_number: '7' } }, orders: null }]);
+    const screen = render(<FiscalDocumentsScreen />);
+    await waitFor(() => screen.getByText('Estornos para o contador'));
+    screen.getByText('Mesa 7 · Nota 123');
+    screen.getByText(/R\$ 20,00 estornado/);
+    screen.getByText('Estorno parcial');
+  });
+
+  test('plano sem NFC-e: avisa que a nota é do sistema do restaurante e o Dono exporta as vendas do dia (resposta 81)', async () => {
+    mockGetIssues.mockResolvedValue([]);
+    mockPlan.mockResolvedValueOnce({ locked: ['nfce'] });
+    mockRole = 'owner';
+    mockExport.mockResolvedValueOnce([{ documentId: 'd', at: '2026-11-05T20:00:00Z', table: '3', orderNumber: null, description: 'Prato, grande', quantity: 1,
+      grossCents: 4500, discountCents: 0, feeCents: 450, payments: [{ method: 'pix', weightCents: 4950 }] }]);
+    const screen = render(<FiscalDocumentsScreen />);
+    await waitFor(() => screen.getByText('Nota fiscal emitida pelo sistema do restaurante'));
+    fireEvent.press(screen.getByText('Exportar vendas do dia'));
+    await waitFor(() => expect(mockExport).toHaveBeenCalledWith('r1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)));
+    await waitFor(() => screen.getByText('1 item exportado.'));
+    expect(fiscalSalesCsv(await mockExport.mock.results[0].value).split('\n')[1]).toContain('"Prato, grande",1,45.00,0.00,4.50,pix');
+    mockRole = 'manager';
   });
 
   test('lista vazia diz que não há problema', async () => {

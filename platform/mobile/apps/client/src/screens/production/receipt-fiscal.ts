@@ -14,6 +14,8 @@ export function fiscalNotice(fiscal: ReceiptFiscal): { title: string; detail: st
       return { title: 'Nota fiscal em emissão', detail: 'Ela aparece aqui assim que for autorizada.' };
     case 'awaiting_close':
       return { title: 'Nota fiscal no fechamento da conta', detail: 'Ela é emitida quando toda a conta for paga.' };
+    case 'external':
+      return { title: 'Nota fiscal com o restaurante', detail: 'Solicite a nota ao restaurante. Ele emite pelo sistema fiscal próprio.' };
     case 'delayed':
       return { title: 'Nota fiscal pendente', detail: 'A emissão atrasou. Este comprovante ainda não tem valor fiscal.' };
     default:

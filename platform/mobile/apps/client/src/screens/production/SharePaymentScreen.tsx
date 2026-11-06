@@ -15,6 +15,7 @@ import { useBillShares } from '../../hooks/useBillShares';
 import customerBackend from '../../services/customer-backend';
 import { billShares, type SharePayment } from '../../services/bill-shares';
 import { centsFromDigits, moneyCents, percentFromBps, StateView } from './shared';
+import { INVALID_RECEIPT_DOCUMENT, RECEIPT_DOCUMENT_OFF, ReceiptDocumentField, receiptDocumentForPayment } from '../../components/payment/ReceiptDocumentField';
 
 const METHODS = [
   { id: 'pix', label: 'PIX', icon: 'qr-code-outline' },
@@ -38,6 +39,7 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   const [payment, setPayment] = useState<SharePayment | null>(null);
   const [needsDocument, setNeedsDocument] = useState(false);
   const [document, setDocument] = useState('');
+  const [receiptDoc, setReceiptDoc] = useState(RECEIPT_DOCUMENT_OFF);
   // Cartão (F6): usar um cartão salvo, ou digitar um novo na página do Asaas e, se quiser, salvá-lo.
   const [savedCardId, setSavedCardId] = useState<string | null>(null);
   const [saveCard, setSaveCard] = useState(false);
@@ -103,6 +105,10 @@ export default function SharePaymentScreen({ route, navigation }: any) {
     enabled: !!myOpen && !!summary.data && (!choosesTip || !!tips.data),
   });
   const canPay = !!quote.data && quote.data.tipCents === chosenTipCents;
+  // Abaixo do mínimo de um meio, ele some (resposta 79): quem decide é o servidor.
+  const methods = METHODS.filter((option) => (option.id === 'pix' ? quote.data?.pixAvailable : quote.data?.cardAvailable) !== false);
+  const payInApp = methods.some((option) => option.id === method);
+  if (quote.data && !payInApp && methods.length > 0) setMethod(methods[0].id);
 
   const [couponCode, setCouponCode] = useState('');
   // Cupom digitado e não aplicado não pode sumir em silêncio: pagar espera o "Aplicar".
@@ -123,11 +129,14 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   const pay = useMutation({
     mutationFn: async () => {
       if (!myOpen || !canPay) throw new Error('Parcela indisponível.');
+      const receiptDocument = receiptDocumentForPayment(receiptDoc);
+      if (receiptDocument === undefined) throw new Error(INVALID_RECEIPT_DOCUMENT);
       const slot = `${myOpen.id}:${method}:${chosenTipCents}:${activeSavedCard?.id ?? (saveCard ? 'save' : 'new')}`;
       if (!keys.current.has(slot)) keys.current.set(slot, Crypto.randomUUID());
       return billShares.pay({
         shareId: myOpen.id, method, tipCents: chosenTipCents, idempotencyKey: keys.current.get(slot)!,
         payerCpfCnpj: document.replace(/\D/g, '') || undefined,
+        receiptDocument,
         ...(activeSavedCard ? { paymentMethodId: activeSavedCard.id } : method === 'credit_card' && saveCard ? { saveCard: true } : {}),
       });
     },
@@ -149,6 +158,15 @@ export default function SharePaymentScreen({ route, navigation }: any) {
       Alert.alert('Pagamento não iniciado', error.message);
     },
   });
+
+  // Gorjeta alta pede confirmação, contra erro de digitação (resposta 55).
+  const confirmAndPay = useCallback(() => {
+    if (!quote.data?.confirmTip) { pay.mutate(); return; }
+    Alert.alert('Confirma a gorjeta?', `Confirma gorjeta de ${moneyCents(quote.data.tipCents)}?`, [
+      { text: 'Corrigir', style: 'cancel' },
+      { text: 'Confirmar', onPress: () => pay.mutate() },
+    ]);
+  }, [pay, quote.data]);
 
   const abandon = useMutation({
     mutationFn: () => billShares.abandon(myOpen!.id),
@@ -329,7 +347,10 @@ export default function SharePaymentScreen({ route, navigation }: any) {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Forma de pagamento</Text>
-              {METHODS.map((option) => (
+              {methods.length === 0 ? (
+                <Text style={styles.hint} testID="pay-at-table">O valor está abaixo do mínimo para pagar pelo app. Chame o garçom e pague no salão.</Text>
+              ) : null}
+              {methods.map((option) => (
                 <TouchableOpacity
                   key={option.id}
                   style={[styles.method, method === option.id && styles.chipActive]}
@@ -396,6 +417,7 @@ export default function SharePaymentScreen({ route, navigation }: any) {
                   />
                 </>
               )}
+              <ReceiptDocumentField value={receiptDoc} onChange={setReceiptDoc} fallback={document} />
             </View>
 
             <View style={styles.card}>
@@ -459,9 +481,9 @@ export default function SharePaymentScreen({ route, navigation }: any) {
             </View>
 
             <TouchableOpacity
-              style={[styles.cta, (!canPay || pay.isPending || couponPending) && styles.ctaDisabled]}
-              onPress={() => pay.mutate()}
-              disabled={!canPay || pay.isPending || couponPending}
+              style={[styles.cta, (!canPay || !payInApp || pay.isPending || couponPending) && styles.ctaDisabled]}
+              onPress={confirmAndPay}
+              disabled={!canPay || !payInApp || pay.isPending || couponPending}
               accessibilityRole="button"
             >
               <Text style={styles.ctaText}>{pay.isPending ? 'Gerando cobrança…' : method === 'pix' ? 'Gerar PIX' : 'Pagar com cartão'}</Text>

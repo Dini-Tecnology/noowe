@@ -75,6 +75,7 @@ async function emitOnce(deps: FiscalDeps, credentials: FiscalCredentials, job: a
     }
     const sent = await deps.provider.emit(credentials, {
       ref: job.ref, cnpj: job.cnpj, items: job.items, payments: job.payments, issuedAt: deps.now?.() ?? new Date(),
+      consumerDocument: job.consumerDocument ?? null,
     });
     if (sent.outcome === "already_processed") {
       const found = await deps.provider.consult(credentials, job.ref);

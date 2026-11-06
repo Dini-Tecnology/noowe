@@ -6,14 +6,10 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter, type CounterOrder } from '@okinawa/shared/services/supabase-api';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
+import { refreshMountedRemoteData } from './remoteRefreshRegistry';
+import { CASH_LABEL, HOUSE_TERMINAL_FORMS, HOUSE_TERMINAL_LABEL } from './HouseMethodPicker';
 
 const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
-const METHODS = [
-  { key: 'cash', label: 'Dinheiro' },
-  { key: 'credit_card', label: 'Maquininha – crédito' },
-  { key: 'debit_card', label: 'Maquininha – débito' },
-  { key: 'pix', label: 'Maquininha – Pix' },
-];
 
 /** Cobrança de balcão: pedido sem mesa, cobrado inteiro (pendência 77). Sem pedido no balcão, o painel não aparece. */
 export function CounterChargePanel() {
@@ -32,6 +28,7 @@ export function CounterChargePanel() {
     setBusyId(order.orderId);
     try {
       await supabaseApiAdapter.recordPayment(order.orderId, method, order.totalCents / 100);
+      void refreshMountedRemoteData();
     } catch (err) {
       Alert.alert('Não foi possível cobrar', userErrorMessage(err, 'Tente novamente.'));
     } finally {
@@ -40,9 +37,19 @@ export function CounterChargePanel() {
     }
   };
 
+  // Dinheiro não é maquininha (resposta 36): primeiro a forma, depois o que passou na maquininha da casa.
+  const askTerminal = (order: CounterOrder) => {
+    Alert.alert(HOUSE_TERMINAL_LABEL, 'Qual forma passou na maquininha?', [
+      ...HOUSE_TERMINAL_FORMS.map((form) => ({ text: form.label, onPress: () => void charge(order, form.id) })),
+      { text: 'Vale', onPress: () => void charge(order, 'voucher') },
+      { text: 'Cancelar', style: 'cancel' as const },
+    ]);
+  };
+
   const ask = (order: CounterOrder) => {
     Alert.alert(`Cobrar ${formatCents(order.totalCents)}`, 'Como o cliente pagou?', [
-      ...METHODS.map((method) => ({ text: method.label, onPress: () => void charge(order, method.key) })),
+      { text: CASH_LABEL, onPress: () => void charge(order, 'cash') },
+      { text: HOUSE_TERMINAL_LABEL, onPress: () => askTerminal(order) },
       { text: 'Cancelar', style: 'cancel' as const },
     ]);
   };

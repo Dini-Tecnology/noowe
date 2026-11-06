@@ -178,7 +178,7 @@ do $$
 declare s uuid := pg_temp.new_paid('fis'); d uuid := gen_random_uuid(); ta uuid := pg_temp.ctx('fis:tx:a'); tb uuid := pg_temp.ctx('fis:tx:b'); j jsonb; r uuid := 'c1000000-0000-4000-8000-000000000002';
 begin
   delete from public.fiscal_documents where table_session_id = s;
-  insert into public.fiscal_documents(id, restaurant_id, table_session_id, external_ref, total_cents, status) values (d, r, s, 's-' || s, 6000, 'authorized');
+  insert into public.fiscal_documents(id, restaurant_id, table_session_id, external_ref, total_cents, status, authorized_at) values (d, r, s, 's-' || s, 6000, 'authorized', now());
   perform pg_temp.act(pg_temp.ctx('owner'));
   perform public.restaurant_request_refund(ta, 'Só uma parte');
   assert (select cancel_status from public.fiscal_documents where id = d) is null, 'pedir não mexe na nota';

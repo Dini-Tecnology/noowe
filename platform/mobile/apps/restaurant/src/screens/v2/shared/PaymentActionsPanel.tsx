@@ -6,6 +6,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter, type RefundablePayment } from '@okinawa/shared/services/supabase-api';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
+import { useRegisterRemoteRefresh } from './remoteRefreshRegistry';
 
 const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 const METHOD_LABEL: Record<string, string> = { cash: 'Dinheiro', pix: 'Pix', credit_card: 'Crédito', debit_card: 'Débito', voucher: 'Vale', tap_card: 'Aproximação' };
@@ -33,6 +34,8 @@ export function PaymentActionsPanel() {
   }, [restaurantId]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+  // Cobrar na mesma tela cria um pagamento novo: a lista acompanha sem trocar de tela.
+  useRegisterRemoteRefresh(load);
 
   const open = (next: Action) => {
     setAction(next);

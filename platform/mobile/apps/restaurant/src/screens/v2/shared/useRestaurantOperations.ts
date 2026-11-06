@@ -88,6 +88,8 @@ type RawTable = {
     started_at?: string | null;
     total_spent?: number | string | null;
     spent_hidden?: boolean | null;
+    remaining_cents?: number | string | null;
+    partial_payment?: boolean | null;
     headcount?: number | string | null;
     origin?: string | null;
     origin_name?: string | null;
@@ -126,6 +128,10 @@ export type V2Table = {
   totalSpent: number;
   /** O servidor não entrega o consumo desta mesa a este perfil (aditivo, item G). */
   spentHidden: boolean;
+  /** Quanto falta pagar, em centavos; nulo para quem não vê a conta (resposta 86). */
+  remainingCents: number | null;
+  /** Parte da conta já foi paga: o Maître vê o estado, sem valores. */
+  partialPayment: boolean;
   sessionId: string | null;
   reservationId: string | null;
   reservationName: string | null;
@@ -294,6 +300,8 @@ export function mapTable(raw: RawTable): V2Table {
     guestName: sessionGuestName || reservationName,
     totalSpent: toNumber(raw.active_session?.total_spent, 0),
     spentHidden: Boolean(raw.active_session?.spent_hidden),
+    remainingCents: raw.active_session?.remaining_cents == null ? null : toNumber(raw.active_session.remaining_cents, 0),
+    partialPayment: Boolean(raw.active_session?.partial_payment),
     sessionId: raw.active_session?.id || null,
     reservationId: raw.active_reservation?.id || null,
     reservationName,
@@ -323,7 +331,8 @@ export function mapTable(raw: RawTable): V2Table {
   };
 }
 
-function useRealtimeRefresh(table: string, restaurantId: string | null, refresh: () => void) {
+// Pedidos avisam por kds_signals, que todo perfil lê: orders tem valores, e a cozinha não enxerga essa tabela.
+export function useRealtimeRefresh(table: string, restaurantId: string | null, refresh: () => void) {
   useRegisterRemoteRefresh(refresh);
   const refreshRef = useRef(refresh);
   useEffect(() => { refreshRef.current = refresh; }, [refresh]);
@@ -373,7 +382,7 @@ export function useRestaurantOrders(options?: { includeDelivered?: boolean }): A
   }, [statuses]);
 
   useEffect(() => { void refresh(); }, [refresh]);
-  useRealtimeRefresh('orders', restaurantId, refresh);
+  useRealtimeRefresh('kds_signals', restaurantId, refresh);
 
   return { data, loading, error, refresh };
 }
@@ -399,7 +408,7 @@ export function useKdsOrders(): AsyncState<KdsOrder[]> {
   useEffect(() => { void refresh(); }, [refresh]);
   // order_items don't carry restaurant_id directly; subscribe to orders channel
   // and re-fetch when any order changes (covers item status updates too)
-  useRealtimeRefresh('orders', restaurantId, refresh);
+  useRealtimeRefresh('kds_signals', restaurantId, refresh);
 
   return { data, loading, error, refresh };
 }
@@ -429,7 +438,7 @@ export function useRestaurantTables(): AsyncState<V2Table[]> {
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('tables', restaurantId, refresh);
   useRealtimeRefresh('table_sessions', restaurantId, refresh);
-  useRealtimeRefresh('orders', restaurantId, refresh);
+  useRealtimeRefresh('kds_signals', restaurantId, refresh);
 
   return { data, loading, error, refresh };
 }
@@ -582,7 +591,7 @@ export function useTableBills(): AsyncState<TableBill[]> {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
-  useRealtimeRefresh('orders', restaurantId, refresh);
+  useRealtimeRefresh('kds_signals', restaurantId, refresh);
 
   return { data, loading, error, refresh };
 }

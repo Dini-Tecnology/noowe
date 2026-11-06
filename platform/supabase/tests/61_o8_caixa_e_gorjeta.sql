@@ -194,7 +194,8 @@ begin
   perform pg_temp.act(pg_temp.ctx('maitre'));
   b := public.restaurant_get_session_bill(sid);
   assert (b->>'consumptionCents')::bigint = 4000 and (b->>'balanceCents')::bigint = 3000, 'consumo e saldo';
-  assert jsonb_array_length(b->'payers') = 1 and b->'payers'->0->>'method' = 'pix', 'quem pagou';
+  -- Resposta 76: o Maître vê a marcação "pago" por pessoa, sem valor nem forma de pagamento.
+  assert jsonb_array_length(b->'payers') = 1 and (b->'payers'->0->>'paid')::boolean and b->'payers'->0->>'method' is null and b->'payers'->0->>'baseCents' is null, 'quem pagou, sem valor nem forma';
   assert pg_temp.state_of(format($q$select public.restaurant_get_cash_register(%L)$q$, r)) = '42501', 'não vê caixa';
   assert pg_temp.state_of(format($q$select public.restaurant_get_day_status(%L)$q$, r)) = '42501', 'nem o dia';
   perform pg_temp.act(pg_temp.ctx('gerente'));

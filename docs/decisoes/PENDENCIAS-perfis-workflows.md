@@ -3,7 +3,7 @@
 Enviar a @Pedro. Cada linha tem um default **provisório** já isolado em função nomeada; trocar depois é mudança pontual.
 Os itens em **negrito** bloqueiam a fatia indicada: não implementar antes da resposta.
 
-**Atualizado em 03/11/2026** com as respostas registradas em [`aditivo-comercial-e-pagamentos`](../spec/aditivo-comercial-e-pagamentos.md), inclusive a segunda rodada (10, 11 e 17–32).
+**Atualizado em 05/11/2026** com as respostas registradas em [`aditivo-comercial-e-pagamentos`](../spec/aditivo-comercial-e-pagamentos.md): segunda rodada (10, 11 e 17–32) e terceira rodada (33–92, mais a correção do 26).
 Os itens 2–7 e 12–15 não tiveram objeção: seguem com o default.
 
 | # | Ponto | Conflito | Default provisório | ADR | Bloqueia |
@@ -50,6 +50,8 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 32 | Dono e aprovação | **Mudou o default.** O Dono nunca precisa de aprovação: aplica direto, com registro. A regra de não aprovar o próprio pedido vale para os demais | O2 (ajuste) |
 
 ## Perguntas abertas pelas respostas
+
+Todas respondidas em 05/11/2026: ver a seção seguinte. A coluna "Default provisório" fica como histórico.
 
 | # | Ponto | Por que importa | Default provisório | Bloqueia |
 |---|---|---|---|---|
@@ -112,3 +114,40 @@ Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção 
 | 89 | **Diferença no acerto** | Não definido quem responde pela falta | Exige motivo, fica registrada e sai do esperado da gaveta, para não virar quebra de novo no fechamento. Acima do limite de quebra, avisa o Dono. Não desconta de ninguém: o app só registra | O8 |
 | 90 | **Estorno feito no painel do Asaas** | O aditivo só trata o estorno pelo app, com aprovação | Vale o que o Asaas informar: o valor entra no app, sem aprovação, com rastro, e Gerente e Dono são avisados. Parcial não devolve a taxa | M2 |
 | 91 | **Dados fiscais da nota da NOOWE** | A resposta 28 lista empresa, mas a nota também pede código e nome do serviço, descrição, alíquotas e retenção de ISS | Ficam nos parâmetros, vazios, a preencher pelo contador. A nota espera por eles e depois sai para as faturas pagas | M4 |
+| 92 | **Cupom na Receita Bruta** | Venda de R$ 120 com R$ 18 de cupom aparecia como R$ 120 | Receita Bruta segue sendo o vendido. O Financeiro mostra os cupons à parte e a receita sem eles, e o painel já soma sem o cupom | Item G |
+
+## Respostas da terceira rodada (05/11/2026)
+
+Texto íntegro no [aditivo](../spec/aditivo-comercial-e-pagamentos.md), seção "Respostas às pendências 33–92".
+
+**Ok como está:** 33, 35, 37, 39, 40, 41, 42, 43, 44, 46, 47, 48, 51, 52, 53, 54, 56, 57, 59, 61, 67, 68, 69, 70, 72, 74, 75, 77, 78, 82, 84, 85, 87, 88, 89, 90.
+
+| # | Decisão | Vai para |
+|---|---|---|
+| 26 | **Mudou.** Fundador: 12 meses grátis e depois 50% vitalício sobre a tabela, por unidade, enquanto ativo e em dia. Não acumula com créditos. Benefício desligável por restaurante nos parâmetros; a próxima fatura já sai sem o desconto | M4, M6 |
+| 34 | Dados da empresa preenchidos (DINI & CIA. TECNOLOGIA LTDA, Simples Nacional). Trocar o CNPJ do restaurante de teste Natural Noowe | M4 |
+| 36 | Duas opções: "Dinheiro" e "Maquininha da casa" (crédito, débito, Pix ou vale). Mesmo comportamento | O8 |
+| 38 | Nota de conveniência: NFS-e por pedido ao cliente final (tipo 3). Taxa segue em R$ 0 e desligada | M3 |
+| 45 | Cada pessoa vê a própria escala; Maître vê a do salão no dia, Chef a da cozinha. Editar: Dono e Gerente | O3 |
+| 49 | Titular pode passar a titularidade a outro participante presente, que aceita. Depois sai pagando a parte dele | G5 |
+| 50 | Quem tem taxa fica com taxa, mas ela é opcional para o cliente (vem marcada e pode ser retirada) | G5 |
+| 55 | Teto 100%, com confirmação acima de 30% do consumo (parâmetro) | G5 |
+| 58 | Ao abrir o caixa, o dinheiro do dia lançado antes entra nele, marcado "lançado antes da abertura" | O8 |
+| 60 | Até o fechamento do dia, o Gerente inclui na escala quem trabalhou, e o rateio é recalculado | O8 |
+| 62 | Comanda reaberta: os itens acrescentados geram nova NFC-e só com eles | Fiscal |
+| 63 | Estorno total no prazo da SEFAZ (parâmetro) com nota da NOOWE: cancela a NFC-e. Parcial ou fora do prazo: não cancela, avisa e entra no relatório fiscal | Fiscal |
+| 64 | Total no mesmo dia: splitRefunds devolve o split da NOOWE e a tarifa do Asaas vira "Ajuste de estorno" na fatura. Senão, nada. Só vale estorno DONE e split com done; Pix sem saldo fica "Aguardando saldo" e tenta de novo | M2 |
+| 65 | Código ativo não gera créditos. Créditos nunca levam a fatura abaixo de 70% da tabela. Ajustes ficam fora do piso. Linhas separadas na fatura | M4, M6 |
+| 66 | Fatura gerada 7 dias antes do vencimento, que cai no aniversário da assinatura | M4 |
+| 71 | Faturamento do cupom: consumo pago já com desconto, sem taxa nem gorjeta; desconto total à parte | P3 |
+| 73 | Janela que passa da meia-noite é aceita e conta como o dia em que começou | P3 |
+| 76 | Maître vê a marcação "pago" por pessoa, sem valor nem forma | Item G |
+| 79 | Cupom que zera a conta encerra "Pago com cupom". Saldo abaixo do mínimo: some o cartão, paga por Pix ou no salão. O desconto sempre é dado | P3 |
+| 80 | Sem plano gratuito. Fim do período: sai da busca, suspende pedido e pagamento pelo app, fecha comanda aberta, Dono acessa e exporta por 90 dias | M4 |
+| 81 | Sem NFC-e no plano: nada bloqueia. "Nota fiscal emitida pelo sistema do restaurante", cliente vê "Solicite a nota ao restaurante", Dono exporta as vendas do dia | M4 |
+| 83 | Um caixa por dia nesta versão; turnos de caixa ficam para depois | — |
+| 86 | Mapa: "Consumo R$ 320 · Falta R$ 110". Maître vê "Pagamento parcial", sem valores | Item G |
+| 91 | Simples Nacional, retenções zeradas, texto fixo nas informações complementares. Três tipos de nota com código próprio: assinatura, taxa NOOWE Pay semanal e conveniência por pedido | M4, M3 |
+| 92 | Painel: "Receita, já com descontos" | Item G |
+
+**Ainda com a NOOWE, sem travar o build:** códigos de serviço e alíquotas dos 3 tipos de nota, configuração fiscal da conta no Asaas e acesso ao site para os universal links.

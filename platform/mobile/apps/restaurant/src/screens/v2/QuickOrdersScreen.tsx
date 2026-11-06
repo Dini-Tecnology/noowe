@@ -73,7 +73,7 @@ export default function QuickOrdersScreen() {
     if (!restaurantId) return undefined;
     const client = getSupabaseClient() as any;
     const channel = client.channel(`quick-orders:${restaurantId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` }, () => { void load(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'kds_signals', filter: `restaurant_id=eq.${restaurantId}` }, () => { void load(); })
       .subscribe();
     return () => { void channel.unsubscribe?.(); };
   }, [restaurantId, load]);

@@ -16,6 +16,7 @@ jest.mock('lucide-react-native', () => new Proxy({}, { get: () => 'Icon' }));
 jest.mock('@okinawa/shared/contexts/ThemeContext', () => ({ useColors: () => new Proxy({}, { get: () => '#333333' }) }));
 jest.mock('../contexts/RestaurantRoleContext', () => ({ useRestaurantRole: () => ({ serverRoles: mockRoles() }) }));
 const mockRoles = jest.fn(() => ['owner']);
+const mockTipConfirm = jest.fn().mockResolvedValue(false);
 jest.mock('../screens/v2/config/ConfigSectionCard', () => ({ ConfigSectionCard: ({ children }: React.PropsWithChildren) => <>{children}</> }));
 jest.mock('@okinawa/shared/utils/user-error-message', () => ({ userErrorMessage: (_: unknown, fallback: string) => fallback }));
 jest.mock('@okinawa/shared/services/supabase-api', () => ({ supabaseApiAdapter: {
@@ -25,6 +26,7 @@ jest.mock('@okinawa/shared/services/supabase-api', () => ({ supabaseApiAdapter: 
   updateChargePolicy: (...a: unknown[]) => mockUpdate(...a),
   setConvenienceAbsorbed: (...a: unknown[]) => mockAbsorb(...a),
   startTapCharge: (...a: unknown[]) => mockTap(...a),
+  tipNeedsConfirm: (...a: unknown[]) => mockTipConfirm(...a),
 } }));
 const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 
@@ -45,12 +47,40 @@ describe('cobrança presencial (G5)', () => {
     await waitFor(() => expect(mockRecord).toHaveBeenCalledWith('s1', expect.objectContaining({ method: 'cash', baseCents: null, waiveFee: false, idempotencyKey: 'key-1' })));
   });
 
+  it('dinheiro não é maquininha: duas opções, e a maquininha pergunta a forma (resposta 36)', async () => {
+    const view = scene();
+    await waitFor(() => expect(view.getByText(/66,00/)).toBeTruthy());
+    expect(view.getByText('Dinheiro')).toBeTruthy();
+    expect(view.queryByText('Crédito')).toBeNull();
+    fireEvent.press(view.getByText('Maquininha da casa'));
+    expect(view.queryByText('Dinheiro')).toBeNull();
+    ['Crédito', 'Débito', 'Pix'].forEach((label) => expect(view.getByText(label)).toBeTruthy());
+    fireEvent.press(view.getByText('Débito'));
+    await waitFor(() => expect(mockRecord).toHaveBeenCalledWith('s1', expect.objectContaining({ method: 'debit_card' })));
+  });
+
+  it('gorjeta alta pede confirmação antes de cobrar (resposta 55)', async () => {
+    mockBill.mockResolvedValue({ ...bill, feeOrTipMode: 'tip', feeBps: 0, feeCents: 0, totalWithFeeCents: 6000, totalWithoutFeeCents: 6000 });
+    mockTipConfirm.mockResolvedValueOnce(true);
+    const view = scene();
+    await waitFor(() => expect(view.getAllByText(/60,00/).length).toBeGreaterThan(0));
+    fireEvent.changeText(view.getByLabelText('Gorjeta'), '2500');
+    fireEvent.press(view.getByText('Dinheiro'));
+    await waitFor(() => expect(mockTipConfirm).toHaveBeenCalledWith(6000, 2500));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('Confirma a gorjeta?', expect.stringContaining('25,00'), expect.anything()));
+    expect(mockRecord).not.toHaveBeenCalled();
+    const buttons = alert.mock.calls[alert.mock.calls.length - 1][2] as any[];
+    buttons.find((b) => b.text === 'Confirmar').onPress();
+    await waitFor(() => expect(mockRecord).toHaveBeenCalledWith('s1', expect.objectContaining({ method: 'cash', tipCents: 2500 })));
+  });
+
   it('o garçom desmarca a taxa, com motivo', async () => {
     const view = scene();
     await waitFor(() => expect(view.getByText(/66,00/)).toBeTruthy());
     fireEvent(view.getByTestId('charge-fee-switch'), 'valueChange', false);
     expect(view.getByText('Retirada')).toBeTruthy();
     fireEvent.changeText(view.getByLabelText('Motivo da retirada da taxa'), 'Demora no prato');
+    fireEvent.press(view.getByText('Maquininha da casa'));
     fireEvent.press(view.getByText('Pix'));
     await waitFor(() => expect(mockRecord).toHaveBeenCalledWith('s1', expect.objectContaining({ method: 'pix', waiveFee: true, reason: 'Demora no prato' })));
   });
@@ -68,6 +98,7 @@ describe('cobrança presencial (G5)', () => {
     mockRecord.mockRejectedValueOnce(new Error('rede'));
     const view = scene();
     await waitFor(() => expect(view.getByText(/66,00/)).toBeTruthy());
+    fireEvent.press(view.getByText('Maquininha da casa'));
     fireEvent.press(view.getByText('Crédito'));
     await waitFor(() => expect(alert).toHaveBeenCalledWith('Falha ao cobrar', expect.any(String)));
     fireEvent.press(view.getByText('Crédito'));
@@ -92,6 +123,8 @@ describe('cobrança presencial (G5)', () => {
   it('vale: só os aceitos pelo restaurante, e vai a forma escolhida (V1)', async () => {
     mockBill.mockResolvedValue({ ...bill, acceptedVouchers: ['refeicao'], payers: [] });
     const view = scene();
+    await waitFor(() => expect(view.getAllByText(/60,00/).length).toBeGreaterThan(0));
+    fireEvent.press(view.getByText('Maquininha da casa'));
     fireEvent.press(await view.findByText('Vale-refeição'));
     expect(view.queryByText('Vale-alimentação')).toBeNull();
     await waitFor(() => expect(mockRecord).toHaveBeenCalledWith('s1', expect.objectContaining({ method: 'voucher', voucherKind: 'refeicao' })));
@@ -112,9 +145,12 @@ describe('cobrança presencial (G5)', () => {
   it('vale com gorjeta: a gorjeta vai antes, no cartão, com chave própria; o vale só paga o consumo (V1)', async () => {
     mockBill.mockResolvedValue({ ...bill, feeOrTipMode: 'tip', feeBps: 0, feeCents: 0, totalWithFeeCents: 6000, totalWithoutFeeCents: 6000, acceptedVouchers: ['refeicao'] });
     const view = scene();
+    await waitFor(() => expect(view.getAllByText(/60,00/).length).toBeGreaterThan(0));
+    fireEvent.press(view.getByText('Maquininha da casa'));
     await waitFor(() => expect(view.getByText('Vale-refeição')).toBeTruthy());
     fireEvent.changeText(view.getByLabelText('Gorjeta'), '500');
     fireEvent.press(view.getByText('Vale-refeição'));
+    await waitFor(() => expect(alert).toHaveBeenCalled());
     const buttons = alert.mock.calls[alert.mock.calls.length - 1][2] as any[];
     expect(mockRecord).not.toHaveBeenCalled();
     buttons.find((b) => b.text === 'Crédito').onPress();

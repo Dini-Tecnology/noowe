@@ -478,17 +478,19 @@ begin
 end $$;
 select pass('desconto por item vale para a parte da pessoa; o mesmo item não desconta duas vezes');
 
--- O desconto não zera a parcela: fica no mínimo de cobrança, e o automático não derruba a divisão da mesa.
+-- Resposta 79: o desconto é sempre dado. Cupom que zera a parcela a deixa "Pago com cupom", sem cobrança, e o automático não derruba a divisão.
 do $$
-declare s jsonb := pg_temp.scene(2, '{2000}'); c uuid := pg_temp.coupon('TUDO', '{"discountBps":10000,"isAuto":true}'); v_min bigint;
+declare s jsonb := pg_temp.scene(2, '{2000}'); c uuid := pg_temp.coupon('TUDO', '{"discountBps":10000,"isAuto":true}');
 begin
-  select min_online_charge_cents into v_min from private.noowe_billing_settings;
   perform pg_temp.commit_equal(s);
-  assert (select count(*) from public.bill_shares where table_session_id = (s->>'sid')::uuid and status = 'open') = 2, 'a divisão não caiu';
-  assert (select min(base_cents - coupon_discount_cents) from public.bill_shares where table_session_id = (s->>'sid')::uuid and status = 'open' and coupon_discount_cents > 0) = v_min, 'não fica abaixo do mínimo';
+  assert (select count(*) from public.bill_shares where table_session_id = (s->>'sid')::uuid and status in ('open', 'paid')) = 2, 'a divisão não caiu';
+  assert not exists (select 1 from public.bill_shares where table_session_id = (s->>'sid')::uuid and status = 'open'), 'nenhuma parcela para pagar';
+  assert (select bool_and(amount_cents = 0 and coupon_discount_cents = base_cents and status = 'paid') from public.bill_shares where table_session_id = (s->>'sid')::uuid and status = 'paid'), 'desconto integral, pago com cupom';
+  assert exists (select 1 from public.audit_logs a where a.action = 'bill.paid_with_coupon' and a.entity_id = (s->>'sid')::uuid), 'com rastro';
+  assert (select count(*) from public.promotion_redemptions where table_session_id = (s->>'sid')::uuid and status = 'applied') = 2, 'o uso do cupom vale';
   update public.promotions set status = 'inactive' where id = c;
 end $$;
-select pass('desconto não leva a cobrança abaixo do mínimo, e o automático não derruba a divisão');
+select pass('cupom que zera a parcela: desconto integral, "Pago com cupom", sem cobrança, e a divisão não cai');
 
 -- Comanda encerrada devolve a reserva; pedido de comanda não recebe cupom.
 do $$

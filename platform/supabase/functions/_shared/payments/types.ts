@@ -10,9 +10,13 @@ export interface AsaasPayment {
   id: string; status: string; value: number; netValue?: number; invoiceUrl?: string; externalReference?: string | null;
   // Em pagamentos com cartão o Asaas devolve o token, a bandeira e o final (creditCardNumber = 4 dígitos).
   creditCard?: { creditCardToken?: string | null; creditCardBrand?: string | null; creditCardNumber?: string | null } | null;
-  // Estornos pedidos nesta cobrança. Status: PENDING, DONE, CANCELLED e os de autorização.
-  refunds?: { status: string; value: number }[] | null;
+  // Estornos pedidos nesta cobrança. Status: PENDING, DONE, CANCELLED e os de autorização. Cada um diz quais splits voltaram.
+  refunds?: { status: string; value: number; refundedSplits?: AsaasRefundedSplit[] | null; splitRefunds?: AsaasRefundedSplit[] | null }[] | null;
+  // Divisão da cobrança entre carteiras: a da NOOWE recebe a taxa.
+  split?: { id?: string; walletId: string; totalValue?: number | null; fixedValue?: number | null; status?: string | null }[] | null;
 }
+export interface AsaasRefundedSplit { id?: string; splitId?: string; walletId?: string; value: number; done?: boolean }
+export interface AsaasSplitRefund { id: string; value: number }
 export interface AsaasPix { payload: string; expirationDate?: string | null }
 export type AsaasCompanyType = "MEI" | "LIMITED" | "INDIVIDUAL" | "ASSOCIATION";
 export interface AsaasAccountInput {
@@ -21,8 +25,9 @@ export interface AsaasAccountInput {
   webhook: { url: string; email: string; authToken: string; events: string[] };
 }
 // NFS-e agendada no módulo de notas do Asaas, vinculada à cobrança. Tributos em percentual, como a API pede.
+// Nota vinculada a uma cobrança (payment) ou avulsa, para um cliente (customer).
 export interface AsaasInvoiceInput {
-  payment: string; valueCents: number; effectiveDate: string; serviceDescription: string; observations: string;
+  payment?: string | null; customer?: string | null; valueCents: number; effectiveDate: string; serviceDescription: string; observations: string;
   municipalServiceId?: string | null; municipalServiceCode?: string | null; municipalServiceName: string;
   externalReference: string;
   taxes: { retainIss: boolean; iss: number; pis: number; cofins: number; csll: number; inss: number; ir: number };
@@ -34,6 +39,7 @@ export interface AsaasAccountDocument { id: string; status: string; onboardingUr
 // Contrato mínimo usado pelas Edge Functions; permite trocar de provedor (ex.: Tap) depois.
 export interface PaymentProvider {
   createCustomer(apiKey: string, input: AsaasCustomerInput): Promise<{ id: string }>;
+  getCustomer(apiKey: string, id: string): Promise<{ id: string; cpfCnpj?: string | null }>;
   createCharge(apiKey: string, input: AsaasChargeInput): Promise<AsaasPayment>;
   findChargeByExternalRef(apiKey: string, externalReference: string): Promise<AsaasPayment | null>;
   getCharge(apiKey: string, id: string): Promise<AsaasPayment>;
@@ -42,11 +48,12 @@ export interface PaymentProvider {
   // Cartão salvo (F6): o token vem da nossa tabela privada, nunca do app. Paga só depois do split definido.
   payWithToken(apiKey: string, id: string, creditCardToken: string, remoteIp: string | null): Promise<AsaasPayment>;
   cancelCharge(apiKey: string, id: string): Promise<void>;
-  refund(apiKey: string, id: string, valueCents: number, description?: string): Promise<void>;
+  refund(apiKey: string, id: string, valueCents: number, description?: string, splitRefunds?: AsaasSplitRefund[]): Promise<void>;
   createAccount(rootApiKey: string, input: AsaasAccountInput): Promise<AsaasAccount>;
   findAccountByDocument(rootApiKey: string, cpfCnpj: string): Promise<{ id: string } | null>;
   getAccountStatus(apiKey: string): Promise<AsaasAccountStatus>;
   listAccountDocuments(apiKey: string): Promise<AsaasAccountDocument[]>;
   findInvoiceByExternalRef(apiKey: string, externalReference: string): Promise<{ id: string } | null>;
+  findCustomerByDocument(apiKey: string, cpfCnpj: string): Promise<{ id: string } | null>;
   scheduleInvoice(apiKey: string, input: AsaasInvoiceInput): Promise<{ id: string }>;
 }

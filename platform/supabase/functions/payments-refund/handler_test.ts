@@ -7,7 +7,7 @@ import type { PaymentDeps } from "../_shared/payments/deps.ts";
 const REFUND = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const job = { claimed: true, refundId: REFUND, action: "send", attempt: 1, total: true, paymentId: "p1", paymentAccountId: "a1", providerRef: "pay_1", amountCents: 1500, reason: "Prato errado" };
 
-function setup(over: { job?: any; refund?: () => Promise<void>; status?: string; apiKey?: string | null; refunds?: { status: string; value: number }[] } = {}) {
+function setup(over: { job?: any; refund?: () => Promise<void>; status?: string; apiKey?: string | null; refunds?: any[]; split?: any[] } = {}) {
   const calls: { fn: string; args: any }[] = [];
   const refunds: any[] = [];
   const deps = {
@@ -19,9 +19,9 @@ function setup(over: { job?: any; refund?: () => Promise<void>; status?: string;
     },
     provider: {
       refund: async (...a: unknown[]) => { refunds.push(a); if (over.refund) await over.refund(); },
-      getCharge: async () => ({ id: "pay_1", status: over.status ?? "RECEIVED", value: 15, refunds: over.refunds ?? null }),
+      getCharge: async () => ({ id: "pay_1", status: over.status ?? "RECEIVED", value: 15, refunds: over.refunds ?? null, split: over.split ?? null }),
     },
-    env: () => "service-key",
+    env: (name: string) => name === "NOOWE_ASAAS_WALLET_ID" ? "w_noowe" : "service-key",
     getUser: async () => null,
   } as unknown as PaymentDeps;
   return { deps, calls, refunds };
@@ -38,7 +38,7 @@ test("só a service role chama", async () => {
 test("envia em centavos e marca como enviado, sem dizer que foi devolvido", async () => {
   const { deps, calls, refunds } = setup();
   assert.equal((await handleRefund(req(), deps)).status, 200);
-  assert.deepEqual(refunds[0], ["key", "pay_1", 1500, "Prato errado"]);
+  assert.deepEqual(refunds[0], ["key", "pay_1", 1500, "Prato errado", undefined]);
   assert.equal(outcome(calls).p_outcome, "sent");
   assert.equal(calls.some((c) => c.fn === "service_payment_apply_event"), false);
 });
@@ -137,3 +137,51 @@ test("sem fornecedor de aproximação, espera em vez de falhar", async () => {
   assert.equal(outcome(calls).p_outcome, "transient");
 });
 
+
+test("estorno total no mesmo dia devolve o split da NOOWE, sem passar do que existe na cobrança", async () => {
+  const { deps, refunds } = setup({ job: { ...job, returnSplitCents: 80 }, split: [{ id: "spl_1", walletId: "w_noowe", totalValue: 0.6 }, { id: "spl_2", walletId: "outra", totalValue: 9 }] });
+  await handleRefund(req(), deps);
+  assert.deepEqual(refunds[0][4], [{ id: "spl_1", value: 60 }]);
+});
+
+test("parcial ou depois do dia: sem splitRefunds", async () => {
+  const { deps, refunds } = setup({ job: { ...job, total: false, returnSplitCents: 0 }, split: [{ id: "spl_1", walletId: "w_noowe", totalValue: 0.6 }] });
+  await handleRefund(req(), deps);
+  assert.equal(refunds[0][4], undefined);
+});
+
+test("Pix sem saldo fica aguardando saldo, e não como recusa definitiva", async () => {
+  const { deps, calls } = setup({ job: { ...job, paymentMethod: "pix" }, refund: async () => { throw new AsaasError(400, { errors: [{ description: "Saldo insuficiente para realizar o estorno" }] }, "x"); } });
+  await handleRefund(req(), deps);
+  assert.equal(outcome(calls).p_outcome, "no_balance");
+});
+
+test("outro 400 com a palavra saldo, ou cartão sem saldo, é recusa definitiva", async () => {
+  const other = setup({ job: { ...job, paymentMethod: "pix" }, refund: async () => { throw new AsaasError(400, { errors: [{ description: "Valor maior que o saldo da cobrança" }] }, "x"); } });
+  await handleRefund(req(), other.deps);
+  assert.equal(outcome(other.calls).p_outcome, "failed");
+  const card = setup({ job: { ...job, paymentMethod: "credit_card" }, refund: async () => { throw new AsaasError(400, { errors: [{ description: "Saldo insuficiente" }] }, "x"); } });
+  await handleRefund(req(), card.deps);
+  assert.equal(outcome(card.calls).p_outcome, "failed");
+});
+
+test("estorno total depois do dia também registra quanto do split saiu da NOOWE", async () => {
+  const { deps, calls } = setup({ job: { ...job, action: "verify", returnSplitCents: 0 }, status: "REFUNDED", split: [{ id: "spl_1", walletId: "w_noowe", totalValue: 0.8 }], refunds: [{ status: "DONE", value: 15 }] });
+  await handleRefund(req(), deps);
+  assert.equal(calls.find((c) => c.fn === "service_refund_split_returned")!.args.p_cents, 0);
+});
+
+test("ao confirmar o estorno total, registra só o split devolvido com done = true, em todos os estornos", async () => {
+  const { deps, calls } = setup({
+    job: { ...job, action: "verify", returnSplitCents: 80 }, status: "REFUNDED",
+    split: [{ id: "spl_1", walletId: "w_noowe", totalValue: 0.8 }],
+    refunds: [
+      { status: "DONE", value: 10, refundedSplits: [{ splitId: "spl_1", value: 0.5, done: true }] },
+      { status: "DONE", value: 5, refundedSplits: [{ splitId: "spl_1", value: 0.3, done: false }] },
+      { status: "PENDING", value: 1, refundedSplits: [{ splitId: "spl_1", value: 0.2, done: true }] },
+    ],
+  });
+  await handleRefund(req(), deps);
+  assert.equal(calls.find((c) => c.fn === "service_refund_split_returned")!.args.p_cents, 50);
+  assert.ok(calls.findIndex((c) => c.fn === "service_refund_split_returned") < calls.findIndex((c) => c.fn === "service_payment_apply_event"));
+});

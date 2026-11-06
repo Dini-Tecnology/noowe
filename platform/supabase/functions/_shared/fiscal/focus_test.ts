@@ -124,3 +124,16 @@ Deno.test("vale declara o tipo certo, e aproximação tem código", () => {
   }) as { formas_pagamento: Record<string, unknown>[] };
   assertEquals(body.formas_pagamento.map((p) => p.forma_pagamento), ["11", "10", "03"]);
 });
+
+Deno.test("CPF na nota: com CPF ou CNPJ vai o destinatário; sem ele, consumidor não identificado", () => {
+  const withCpf = buildFocusNfce({ ...input, consumerDocument: "529.982.247-25" }) as Record<string, unknown>;
+  assertEquals(withCpf.cpf_destinatario, "52998224725");
+  assertEquals("cnpj_destinatario" in withCpf, false);
+  const withCnpj = buildFocusNfce({ ...input, consumerDocument: "11222333000181" }) as Record<string, unknown>;
+  assertEquals(withCnpj.cnpj_destinatario, "11222333000181");
+  for (const none of [null, undefined, "", "123"]) {
+    const body = buildFocusNfce({ ...input, consumerDocument: none }) as Record<string, unknown>;
+    assertEquals("cpf_destinatario" in body || "cnpj_destinatario" in body, false);
+    assertEquals(body.indicador_inscricao_estadual_destinatario, "9");
+  }
+});
