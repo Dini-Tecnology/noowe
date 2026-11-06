@@ -66,7 +66,8 @@ export type BillShare = {
 
 export type ItemClaim = { orderItemId: string; participantId: string };
 export type TipOption = { percent: number; cents: number; totalCents: number };
-export type TipQuote = { tipCents: number; totalCents: number };
+/** Do servidor: gorjeta alta pede confirmação (resposta 55) e os meios que cabem no valor (resposta 79). */
+export type TipQuote = { tipCents: number; totalCents: number; confirmTip?: boolean; cardAvailable?: boolean; pixAvailable?: boolean };
 
 export type SharePayment = {
   paymentId: string | null;
@@ -167,6 +168,12 @@ export async function invokePaymentsCreate(body: Record<string, unknown>): Promi
 }
 
 export const billShares = {
+  /** O CPF que a pessoa já informou para pagar online, para sugerir em "CPF na nota". Só o da própria pessoa. */
+  async myTaxDocument(): Promise<string | null> {
+    const data = await rpc('customer_get_tax_document', {});
+    return typeof data === 'string' && data ? data : null;
+  },
+
   async preview(tableSessionId: string, mode: SplitMode, params: SplitParams = {}): Promise<SplitPlan> {
     return mapPlan(await rpc('customer_bill_split_preview', { p_table_session_id: tableSessionId, p_mode: mode, p_params: params }));
   },
@@ -224,7 +231,8 @@ export const billShares = {
   /** A conta da gorjeta é do servidor: a tela só mostra. */
   async tipQuote(amountCents: number, tip: { tipBps?: number; tipCents?: number }): Promise<TipQuote> {
     const data = obj(await rpc('customer_tip_quote', { p_amount_cents: amountCents, p_tip_bps: tip.tipBps ?? 0, p_tip_cents: tip.tipCents ?? 0 }));
-    return { tipCents: num(data.tipCents), totalCents: num(data.totalCents) };
+    return { tipCents: num(data.tipCents), totalCents: num(data.totalCents), confirmTip: data.confirmTip === true,
+      cardAvailable: data.cardAvailable !== false, pixAvailable: data.pixAvailable !== false };
   },
 
   /** Total do checkout, com gorjeta e conveniência. O valor cobrado sai do pedido, no servidor. */
@@ -232,7 +240,8 @@ export const billShares = {
     const data = obj(await rpc('customer_checkout_quote', {
       p_restaurant_id: restaurantId, p_amount_cents: amountCents, p_scheduled: input.scheduled, p_tip_bps: input.tipBps, p_tip_cents: input.tipCents,
     }));
-    return { tipCents: num(data.tipCents), totalCents: num(data.totalCents), convenienceCents: num(data.convenienceCents) };
+    return { tipCents: num(data.tipCents), totalCents: num(data.totalCents), convenienceCents: num(data.convenienceCents), confirmTip: data.confirmTip === true,
+      cardAvailable: data.cardAvailable !== false, pixAvailable: data.pixAvailable !== false };
   },
 
   /** O servidor valida e diz por que não vale: a mensagem do erro é para a pessoa. */
@@ -242,8 +251,10 @@ export const billShares = {
   async removeCoupon(shareId: string): Promise<void> {
     await rpc('customer_remove_coupon', { p_share_id: shareId });
   },
-  async applyCouponToOrder(orderId: string, code: string): Promise<void> {
-    await rpc('customer_apply_coupon_to_order', { p_order_id: orderId, p_code: code });
+  /** Devolve se o cupom zerou o pedido: aí ele já está pago, sem cobrança (resposta 79). */
+  async applyCouponToOrder(orderId: string, code: string): Promise<{ paidWithCoupon: boolean }> {
+    const data = obj(await rpc('customer_apply_coupon_to_order', { p_order_id: orderId, p_code: code }));
+    return { paidWithCoupon: data.paymentStatus === 'confirmed' };
   },
   async removeCouponFromOrder(orderId: string): Promise<void> {
     await rpc('customer_remove_coupon_from_order', { p_order_id: orderId });
@@ -274,6 +285,8 @@ export const billShares = {
   async pay(input: {
     /** `null` mantém a gorjeta que já está na parcela (valor fixo com gorjeta). */
     shareId: string; method: 'pix' | 'credit_card'; tipCents: number | null; idempotencyKey: string; payerCpfCnpj?: string;
+    /** "CPF na nota": o documento, ou null quando desmarcado. Ausente não mexe. */
+    receiptDocument?: string | null;
     /** Só com cartão: salvar o cartão digitado no Asaas (consentimento) ou usar um cartão já salvo. */
     saveCard?: boolean; paymentMethodId?: string;
   }): Promise<SharePayment> {
@@ -284,6 +297,7 @@ export const billShares = {
     }
     const data = await invokePaymentsCreate({ purpose: 'bill_share', targetId: input.shareId, method: input.method, tipCents: input.tipCents,
       idempotencyKey: input.idempotencyKey, payerCpfCnpj: input.payerCpfCnpj,
+      ...(input.receiptDocument !== undefined ? { receiptDocument: input.receiptDocument } : {}),
       ...(input.saveCard ? { saveCard: true } : {}), ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId } : {}) });
     const raw = obj(data);
     const pix = obj(raw.pix);
@@ -321,6 +335,7 @@ export const billShares = {
 
 export const PAYMENT_ERRORS: Record<string, string> = {
   payer_document_required: 'Informe seu CPF para gerar a cobrança.',
+  invalid_receipt_document: 'O CPF da nota é inválido. Confira ou desmarque "CPF na nota".',
   payments_unavailable: 'Este restaurante ainda não aceita pagamento online.',
   payment_not_allowed: 'Este pagamento não pode ser feito agora. Atualize a tela.',
   not_found: 'Cobrança não encontrada.',

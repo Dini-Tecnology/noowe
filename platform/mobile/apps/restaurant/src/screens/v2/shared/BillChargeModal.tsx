@@ -5,14 +5,9 @@ import * as Crypto from 'expo-crypto';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter, type SessionBill } from '@okinawa/shared/services/supabase-api';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { refreshMountedRemoteData } from './remoteRefreshRegistry';
+import { HouseMethodPicker } from './HouseMethodPicker';
 
-const METHODS = [
-  { id: 'cash', label: 'Dinheiro' },
-  { id: 'credit_card', label: 'Crédito' },
-  { id: 'debit_card', label: 'Débito' },
-  { id: 'pix', label: 'Pix' },
-] as const;
-const VOUCHER_LABEL: Record<string, string> = { refeicao: 'Vale-refeição', alimentacao: 'Vale-alimentação' };
 
 const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 
@@ -74,6 +69,17 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
   const total = !ready ? null : hasFee && keepFee ? bill.totalWithFeeCents : bill.totalWithoutFeeCents;
   const couponRefused = !!bill?.couponRefusal;
 
+  // Gorjeta alta pede confirmação, contra erro de digitação (resposta 55). O limite vem do servidor.
+  const confirmTip = async (run: () => void) => {
+    if (tipCents <= 0 || !bill) { run(); return; }
+    const ask = await supabaseApiAdapter.tipNeedsConfirm(bill.chargeBaseCents || total || 0, tipCents).catch(() => false);
+    if (!ask) { run(); return; }
+    Alert.alert('Confirma a gorjeta?', `Confirma gorjeta de ${formatCents(tipCents)}?`, [
+      { text: 'Corrigir', style: 'cancel' },
+      { text: 'Confirmar', onPress: run },
+    ]);
+  };
+
   // Aproximação: inicia e espera o fornecedor confirmar. Fechar a tela não confirma nada, e recusado não abate.
   const chargeByTap = async () => {
     if (!tableSessionId || !ready) return;
@@ -120,6 +126,7 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
         tipCents: method === 'voucher' ? 0 : tipCents,
       });
       await onCharged();
+      void refreshMountedRemoteData();
       onClose();
     } catch (err) {
       Alert.alert('Falha ao cobrar', userErrorMessage(err, 'Tente novamente.'));
@@ -228,29 +235,11 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
             <Text style={[styles.totalValue, { color: colors.primary }]}>{total != null ? formatCents(total) : '—'}</Text>
           </View>
 
-          <View style={styles.methods}>
-            {METHODS.map((method) => (
-              <Pressable
-                key={method.id}
-                accessibilityRole="button"
-                disabled={submitting || !ready || bill.balanceCents === 0}
-                onPress={() => void charge(method.id)}
-                style={[styles.method, { borderColor: colors.border, opacity: submitting || !ready ? 0.6 : 1 }]}
-              >
-                <Text style={{ color: colors.foreground, fontWeight: '700' }}>{method.label}</Text>
-              </Pressable>
-            ))}
-            {(bill?.acceptedVouchers ?? []).map((kind) => (
-              <Pressable
-                key={kind}
-                accessibilityRole="button"
-                disabled={submitting || !ready || bill?.balanceCents === 0}
-                onPress={() => void charge('voucher', kind)}
-                style={[styles.method, { borderColor: colors.border, opacity: submitting || !ready ? 0.6 : 1 }]}
-              >
-                <Text style={{ color: colors.foreground, fontWeight: '700' }}>{VOUCHER_LABEL[kind] ?? kind}</Text>
-              </Pressable>
-            ))}
+          <HouseMethodPicker
+            disabled={submitting || !ready || bill?.balanceCents === 0}
+            vouchers={bill?.acceptedVouchers ?? []}
+            onPick={(method, voucherKind) => void confirmTip(() => void charge(method, voucherKind))}
+          >
             {bill?.tapActive ? (
               <Pressable
                 accessibilityRole="button"
@@ -261,7 +250,7 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
                 <Text style={{ color: colors.primary, fontWeight: '700' }}>Aproximação</Text>
               </Pressable>
             ) : null}
-          </View>
+          </HouseMethodPicker>
           <Pressable accessibilityRole="button" disabled={submitting} onPress={onClose} style={styles.cancel}>
             <Text style={{ color: colors.foregroundSecondary, fontWeight: '700' }}>Cancelar</Text>
           </Pressable>

@@ -1,5 +1,6 @@
 import { AsaasError } from "../_shared/payments/asaas.ts";
 import { bearer, json, mapRpcError, saoPauloDate, type PaymentDeps } from "../_shared/payments/deps.ts";
+import { onlyDigits, validTaxDocument } from "../_shared/payments/document.ts";
 import { asaasValueToCents } from "../_shared/payments/money.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -27,6 +28,10 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
   const remoteIp = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("cf-connecting-ip") || "";
   if (paymentMethodId !== null && !remoteIp) return json({ error: "invalid_request" }, 400);
   const document = typeof body?.payerCpfCnpj === "string" ? body.payerCpfCnpj.replace(/\D/g, "") : "";
+  // "CPF na nota" (opcional): vai só na NFC-e do restaurante. Ausente não mexe; null desmarca.
+  const receiptGiven = body !== null && typeof body === "object" && "receiptDocument" in body;
+  const receiptDocument = receiptGiven && body.receiptDocument !== null ? onlyDigits(body.receiptDocument) : null;
+  if (receiptDocument !== null && !validTaxDocument(receiptDocument)) return json({ error: "invalid_receipt_document" }, 400);
 
   // A gorjeta da parcela é em centavos e o servidor valida o teto; o valor da parcela nunca vem do app.
   const tip = body?.tipCents == null ? null : Number(body.tipCents);
@@ -49,6 +54,14 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
   }
   const r = reserved.data;
   if (r.alreadyPaid) return json({ status: "confirmed", orderId: r.orderId, alreadyPaid: true });
+  // Antes da cobrança: quando o aviso do provedor confirmar, a nota já sabe o CPF.
+  if (receiptGiven) {
+    const saved = await deps.rpc("service_payment_set_receipt_document", { p_payment_id: r.paymentId, p_user_id: user.id, p_document: receiptDocument });
+    if (saved.error) {
+      console.error("payments-create receipt document error:", saved.error);
+      return json({ error: saved.error.code === "22023" ? "invalid_receipt_document" : "internal_error" }, saved.error.code === "22023" ? 400 : 500);
+    }
+  }
   const view = (extra: Record<string, unknown> = {}) => json({
     paymentId: r.paymentId, status: r.status, method: r.method, amountCents: r.amountCents,
     expiresAt: r.expiresAt, checkoutUrl: r.checkoutUrl ?? null,
@@ -88,6 +101,7 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
         p_account_id: r.paymentAccountId, p_user_id: user.id, p_provider_customer_id: customerId,
       });
     }
+    await rememberPayerDocument(deps, apiKey, user.id, customerId, DOCUMENT.test(document) ? document : null, customerRow.data?.hasTaxDocument);
 
     // Cartão salvo: o token só existe no servidor e só vale para o mesmo usuário e a mesma subconta.
     let creditCardToken: string | null = null;
@@ -147,5 +161,19 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
     await deps.rpc("service_payment_mark_failed", { p_payment_id: r.paymentId, p_error: (err as Error).message });
     // A cobrança segue `creating`: repetir com a mesma chave retoma de onde parou.
     return json({ error: "provider_unavailable", retryable: true, paymentId: r.paymentId }, 502);
+  }
+}
+
+// O CPF da cobrança é o tomador da nota da taxa de conveniência da NOOWE. Quem já tinha cadastro no Asaas antes de guardarmos
+// o CPF tem o documento lido de lá uma vez. Nunca atrapalha o pagamento.
+async function rememberPayerDocument(deps: PaymentDeps, apiKey: string, userId: string, customerId: string, typed: string | null, stored: unknown) {
+  try {
+    let found = typed;
+    if (!found && stored === false) found = onlyDigits((await deps.provider.getCustomer(apiKey, customerId)).cpfCnpj) || null;
+    if (!found) return;
+    const saved = await deps.rpc("service_customer_save_tax_document", { p_user_id: userId, p_document: found, p_source: typed ? "payment" : "provider" });
+    if (saved.error) console.error("payments-create tax document error:", saved.error);
+  } catch (err) {
+    console.error("payments-create tax document error:", err instanceof AsaasError ? { status: err.status } : err);
   }
 }

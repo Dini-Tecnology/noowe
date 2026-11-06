@@ -5,6 +5,7 @@ import { Text } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
+import { useRegisterRemoteRefresh } from './remoteRefreshRegistry';
 
 const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 
@@ -15,10 +16,13 @@ export function MyCashInHandCard() {
   const [cash, setCash] = useState<{ open: boolean; cents: number } | null>(null);
   const handles = serverRoles.some((role) => role === 'waiter' || role === 'maitre' || role === 'barman');
 
-  useFocusEffect(useCallback(() => {
+  const load = useCallback(() => {
     if (!restaurantId || !handles) return;
     supabaseApiAdapter.getMyCashInHand(restaurantId).then(setCash).catch(() => setCash(null));
-  }, [restaurantId, handles]));
+  }, [restaurantId, handles]);
+  useFocusEffect(load);
+  // Cobrar em dinheiro muda este valor sem trocar de tela.
+  useRegisterRemoteRefresh(load);
 
   if (!handles || !cash?.open) return null;
 

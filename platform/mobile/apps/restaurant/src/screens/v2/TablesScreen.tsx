@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { closeAccountMessage } from './shared/closeAccountMessage';
+import { tableBillLines } from './shared/tableBill';
 import { waiterCanCloseBill } from './shared/waiterCloseBill';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
@@ -414,7 +415,9 @@ export default function TablesScreen() {
                     {selectedTable.spentHidden ? null : (
                       <View style={[styles.waiterSummaryCard, { borderColor: colors.border }]}>
                         <Text style={styles.waiterSummaryTotal}>{formatCurrency(selectedTable.totalSpent)}</Text>
-                        <Text style={[styles.waiterSummaryLabel, { color: colors.foregroundSecondary }]}>Conta</Text>
+                        <Text style={[styles.waiterSummaryLabel, { color: colors.foregroundSecondary }]}>
+                          {selectedTable.remainingCents != null ? `Consumo · Falta ${formatCurrency(selectedTable.remainingCents / 100)}` : 'Conta'}
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -445,12 +448,19 @@ export default function TablesScreen() {
                         {selectedTable.guests || (selectedTable.status === 'available' ? 0 : selectedTable.reservationGuests)}
                       </Text>
                     </View>
-                    {selectedTable.spentHidden ? null : (
+                    {selectedTable.spentHidden ? (
+                      selectedTable.partialPayment ? (
+                        <View style={[styles.summaryItem, { borderColor: colors.border }]}>
+                          <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Conta</Text>
+                          <Text style={[styles.summaryValue, { color: colors.foreground }]}>Pagamento parcial</Text>
+                        </View>
+                      ) : null
+                    ) : (
                       <View style={[styles.summaryItem, { borderColor: colors.border }]}>
                         <Text style={[styles.summaryLabel, { color: colors.foregroundSecondary }]}>Conta</Text>
-                        <Text style={[styles.summaryValue, { color: colors.foreground }]}>
-                          {selectedTable.sessionId ? formatCurrency(selectedTable.totalSpent) : '—'}
-                        </Text>
+                        {selectedTable.sessionId && tableBillLines(selectedTable).length ? tableBillLines(selectedTable).map((line) => (
+                          <Text key={line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[styles.summaryValue, { color: colors.foreground }]}>{line}</Text>
+                        )) : <Text style={[styles.summaryValue, { color: colors.foreground }]}>—</Text>}
                       </View>
                     )}
                   </View>
@@ -775,12 +785,19 @@ const TableCell = React.memo(function TableCell({
         </View>
         <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.capacityText, { color: colors.foregroundSecondary }]}>
           {table.sessionId
-            ? `${table.guests} ${table.guests === 1 ? 'pessoa' : 'pessoas'}${table.spentHidden ? '' : ` · ${formatCurrency(table.totalSpent)}`}`
+            ? `${table.guests} ${table.guests === 1 ? 'pessoa' : 'pessoas'}`
             : table.reservationGuests > 0
               ? `${table.reservationGuests} ${table.reservationGuests === 1 ? 'pessoa' : 'pessoas'}`
               : table.mergedIntoId ? `unida à ${table.mergedIntoLabel}` : table.mergedChildren.length > 0 ? `${table.effectiveSeats} lugares · +${table.mergedChildren.map((child) => child.label).join(',')}` : `${table.seats} lugares`}
         </Text>
-        <Text numberOfLines={1} style={[styles.tableGuest, { color: colors.foreground }]}>{table.guestName || ' '}</Text>
+        {/* Uma informação por linha: juntas, encolhiam até ficar ilegíveis e cortavam o "Falta". */}
+        {table.sessionId ? tableBillLines(table).map((line) => (
+          <Text key={line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} testID={`table-bill-${table.id}`}
+            style={[styles.billLine, { color: colors.foregroundSecondary }]}>{line}</Text>
+        )) : null}
+        {table.guestName || !table.sessionId ? (
+          <Text numberOfLines={1} style={[styles.tableGuest, { color: colors.foreground }]}>{table.guestName || ' '}</Text>
+        ) : null}
         {table.originLabel ? (
           <Text numberOfLines={1} testID={`table-origin-${table.id}`} style={[styles.originChip, { color: colors.foregroundSecondary }]}>{table.originLabel}</Text>
         ) : null}
@@ -818,6 +835,7 @@ const styles = StyleSheet.create({
   tableStatusChip: { maxWidth: '68%', minHeight: 20, borderRadius: 999, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center' },
   tableStatusText: { fontSize: 8, fontWeight: '800' },
   capacityText: { fontSize: 10, fontWeight: '500', marginTop: 14 },
+  billLine: { fontSize: 10, fontWeight: '600', marginTop: 2 },
   tableGuest: { fontSize: 11, fontWeight: '700', marginTop: 3 },
   detail: { marginTop: 14, padding: 16, borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
   detailAccent: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 4 },

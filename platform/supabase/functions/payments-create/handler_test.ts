@@ -10,7 +10,7 @@ const KEY = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const PAY = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const ACCT = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
-function setup(over: { reserved?: any; reserveError?: any; customerId?: string | null; existing?: any; createThrows?: boolean; cardToken?: string | null; optionsError?: any } = {}) {
+function setup(over: { reserved?: any; reserveError?: any; customerId?: string | null; existing?: any; createThrows?: boolean; cardToken?: string | null; optionsError?: any; hasTaxDocument?: boolean; getCustomer?: any } = {}) {
   const calls: { fn: string; args: any }[] = [];
   const provider: string[] = [];
   const deps: PaymentDeps = {
@@ -25,12 +25,17 @@ function setup(over: { reserved?: any; reserveError?: any; customerId?: string |
       if (fn === "service_payment_set_card_options") return { data: null, error: over.optionsError ?? null };
       if (fn === "service_payment_card_token") return { data: over.cardToken ?? null, error: null };
       if (fn === "service_payment_account_secrets") return { data: { apiKey: "ak" }, error: null };
-      if (fn === "service_payment_customer") return { data: { providerCustomerId: over.customerId ?? null, name: "Ana", email: "a@x.com", phone: null }, error: null };
+      if (fn === "service_payment_customer") return { data: { providerCustomerId: over.customerId ?? null, name: "Ana", email: "a@x.com", phone: null, hasTaxDocument: over.hasTaxDocument }, error: null };
       return { data: null, error: null };
     },
     getUser: async (t) => (t === "tok" ? { id: USER } : null),
     provider: {
       createCustomer: async (_k: string, i: any) => { provider.push("createCustomer:" + i.cpfCnpj); return { id: "cus_1" }; },
+      getCustomer: async (_k: string, id: string) => {
+        provider.push("getCustomer:" + id);
+        if (over.getCustomer instanceof Error) throw over.getCustomer;
+        return over.getCustomer ?? { id, cpfCnpj: "52998224725" };
+      },
       findChargeByExternalRef: async () => { provider.push("find"); return over.existing ?? null; },
       createCharge: async (_k: string, i: any) => {
         provider.push("createCharge");
@@ -248,4 +253,47 @@ test("abaixo do mínimo: resposta própria, sem chamar o provedor", async () => 
   assert.equal(res.status, 422);
   assert.equal((await res.json()).error, "below_minimum");
   assert.equal(provider.length, 0);
+});
+
+test("CPF na nota: inválido é recusado antes de reservar; válido é gravado antes da cobrança; null desmarca", async () => {
+  const bad = setup();
+  const res = await handleCreate(req({ ...valid, receiptDocument: "123.456.789-00" }), bad.deps);
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).error, "invalid_receipt_document");
+  assert.ok(!bad.calls.some((c) => c.fn === "service_payment_reserve_order"));
+
+  const good = setup();
+  assert.equal((await handleCreate(req({ ...valid, receiptDocument: "529.982.247-25" }), good.deps)).status, 200);
+  const set = good.calls.findIndex((c) => c.fn === "service_payment_set_receipt_document");
+  assert.deepEqual(good.calls[set].args, { p_payment_id: PAY, p_user_id: USER, p_document: "52998224725" });
+  assert.ok(set < good.calls.findIndex((c) => c.fn === "service_payment_attach_provider"));
+
+  const off = setup();
+  await handleCreate(req({ ...valid, receiptDocument: null }), off.deps);
+  assert.equal(off.calls.find((c) => c.fn === "service_payment_set_receipt_document")?.args.p_document, null);
+
+  const old = setup();
+  await handleCreate(req(valid), old.deps);
+  assert.ok(!old.calls.some((c) => c.fn === "service_payment_set_receipt_document"), "app antigo não mexe");
+});
+
+test("CPF da cobrança fica guardado para a nota da conveniência; quem já tinha cadastro tem o CPF lido do Asaas uma vez", async () => {
+  const first = setup();
+  await handleCreate(req(valid), first.deps);
+  assert.deepEqual(first.calls.find((c) => c.fn === "service_customer_save_tax_document")?.args,
+    { p_user_id: USER, p_document: "12345678909", p_source: "payment" });
+
+  const returning = setup({ customerId: "cus_old", hasTaxDocument: false });
+  assert.equal((await handleCreate(req({ ...valid, payerCpfCnpj: undefined }), returning.deps)).status, 200);
+  assert.ok(returning.provider.includes("getCustomer:cus_old"));
+  assert.deepEqual(returning.calls.find((c) => c.fn === "service_customer_save_tax_document")?.args,
+    { p_user_id: USER, p_document: "52998224725", p_source: "provider" });
+
+  const known = setup({ customerId: "cus_old", hasTaxDocument: true });
+  await handleCreate(req({ ...valid, payerCpfCnpj: undefined }), known.deps);
+  assert.ok(!known.provider.some((p) => p.startsWith("getCustomer")));
+  assert.ok(!known.calls.some((c) => c.fn === "service_customer_save_tax_document"));
+
+  const down = setup({ customerId: "cus_old", hasTaxDocument: false, getCustomer: new Error("asaas fora") });
+  assert.equal((await handleCreate(req({ ...valid, payerCpfCnpj: undefined }), down.deps)).status, 200, "nunca atrapalha o pagamento");
 });

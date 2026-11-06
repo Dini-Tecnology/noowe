@@ -65,6 +65,14 @@ function focusPayment(payment: FiscalPayment): Record<string, unknown> {
   };
 }
 
+// CPF (11 dígitos) ou CNPJ (14) do consumidor, só quando ele pediu. Qualquer outra coisa sai sem destinatário.
+function focusConsumer(document: string | null | undefined): Record<string, unknown> {
+  const digits = (document ?? "").replace(/\D/g, "");
+  if (digits.length === 11) return { cpf_destinatario: digits };
+  if (digits.length === 14) return { cnpj_destinatario: digits };
+  return {};
+}
+
 export function buildFocusNfce(input: EmitInput): Record<string, unknown> {
   return {
     cnpj_emitente: input.cnpj,
@@ -74,6 +82,7 @@ export function buildFocusNfce(input: EmitInput): Record<string, unknown> {
     modalidade_frete: "9",
     local_destino: "1",
     indicador_inscricao_estadual_destinatario: "9",
+    ...focusConsumer(input.consumerDocument),
     items: input.items.map(focusItem),
     formas_pagamento: input.payments.map(focusPayment),
   };

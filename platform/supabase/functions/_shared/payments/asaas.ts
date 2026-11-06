@@ -3,6 +3,7 @@ import type {
   AsaasAccount, AsaasAccountDocument, AsaasAccountInput, AsaasAccountStatus,
   AsaasChargeInput, AsaasCustomerInput, AsaasPayment, AsaasPix, PaymentProvider,
   AsaasInvoiceInput,
+  AsaasSplitRefund,
 } from "./types.ts";
 
 // O POST /accounts levou 5,6 s no sandbox, contra 10 s do timeout padrão.
@@ -82,6 +83,10 @@ export class AsaasClient implements PaymentProvider {
     });
   }
 
+  getCustomer(apiKey: string, id: string) {
+    return this.request<{ id: string; cpfCnpj?: string | null }>(apiKey, "GET", `/customers/${encodeURIComponent(id)}`);
+  }
+
   createCharge(apiKey: string, input: AsaasChargeInput) {
     return this.request<AsaasPayment>(apiKey, "POST", "/payments", {
       customer: input.customer,
@@ -123,10 +128,18 @@ export class AsaasClient implements PaymentProvider {
     await this.request<unknown>(apiKey, "DELETE", `/payments/${encodeURIComponent(id)}`);
   }
 
-  async refund(apiKey: string, id: string, valueCents: number, description?: string) {
+  // splitRefunds devolve o split da carteira indicada (valor em centavos aqui, em reais no Asaas). Sem ele, o split fica com quem recebeu.
+  async refund(apiKey: string, id: string, valueCents: number, description?: string, splitRefunds?: AsaasSplitRefund[]) {
     await this.request<unknown>(apiKey, "POST", `/payments/${encodeURIComponent(id)}/refund`, {
       value: centsToAsaasValue(valueCents), description,
+      splitRefunds: splitRefunds?.length ? splitRefunds.map((s) => ({ id: s.id, value: centsToAsaasValue(s.value) })) : undefined,
     });
+  }
+
+  async findCustomerByDocument(apiKey: string, cpfCnpj: string) {
+    const res = await this.request<{ data: { id: string }[] }>(
+      apiKey, "GET", `/customers?cpfCnpj=${encodeURIComponent(cpfCnpj)}&limit=1`);
+    return res.data?.[0] ?? null;
   }
 
   async findInvoiceByExternalRef(apiKey: string, externalReference: string) {
@@ -137,7 +150,7 @@ export class AsaasClient implements PaymentProvider {
 
   scheduleInvoice(apiKey: string, input: AsaasInvoiceInput) {
     return this.request<{ id: string }>(apiKey, "POST", "/invoices", {
-      payment: input.payment, value: centsToAsaasValue(input.valueCents), deductions: 0, effectiveDate: input.effectiveDate,
+      payment: input.payment ?? undefined, customer: input.customer ?? undefined, value: centsToAsaasValue(input.valueCents), deductions: 0, effectiveDate: input.effectiveDate,
       serviceDescription: input.serviceDescription, observations: input.observations,
       municipalServiceId: input.municipalServiceId ?? undefined, municipalServiceCode: input.municipalServiceCode ?? undefined,
       municipalServiceName: input.municipalServiceName, externalReference: input.externalReference, taxes: input.taxes,

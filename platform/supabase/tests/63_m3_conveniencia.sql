@@ -1,6 +1,6 @@
 -- M3: taxa de conveniência. Pronta e desligada; aqui ela é ligada só dentro da transação do teste.
 begin;
-select plan(8);
+select plan(9);
 create function pg_temp.act(p_uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true) $$;
 create function pg_temp.state_of(p_sql text) returns text language plpgsql as $$
@@ -156,5 +156,17 @@ select pass('estorno: a conveniência volta ao cliente, sem virar dívida do res
 select ok(not has_function_privilege('authenticated', 'private.order_convenience_set(public.orders)', 'EXECUTE'), 'copiar o valor não abre para o app');
 select ok(not has_table_privilege('authenticated', 'private.noowe_convenience_fees', 'SELECT'), 'nem o parâmetro');
 
+-- Validação das notas de 06/11: a gorjeta é calculada sobre o consumo, sem a conveniência.
+do $$
+declare o uuid := pg_temp.new_order(3000); c uuid; j jsonb;
+begin
+  c := pg_temp.ctx('customer:' || o);
+  j := public.service_payment_reserve_order(c, o, 'pix', gen_random_uuid(), 1000, 0);
+  assert (select tip_cents from public.gateway_transactions where id = (j->>'paymentId')::uuid) = 300, 'gorjeta de 10% sobre R$ 30, sem a taxa: ' ||
+    (select tip_cents from public.gateway_transactions where id = (j->>'paymentId')::uuid);
+  assert (j->>'amountCents')::bigint = 3000 + 300 + 99, 'total: consumo, gorjeta e a taxa por fora: ' || (j->>'amountCents');
+  assert (select total_cents from public.orders where id = o) = 3000, 'a base do cupom (total do pedido) não inclui a taxa';
+end $$;
+select pass('a conveniência fica fora da base da gorjeta e do total do pedido, que é a base do cupom');
 select * from finish();
 rollback;

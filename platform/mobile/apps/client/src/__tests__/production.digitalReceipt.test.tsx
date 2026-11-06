@@ -90,6 +90,9 @@ test('avisos cobrem cada situação sem expor erro interno', () => {
   expect(fiscalNotice({ ...pending, status: 'awaiting_close' }).title).toBe('Nota fiscal no fechamento da conta');
   expect(fiscalNotice({ ...pending, status: 'delayed' }).detail).toBe('A emissão atrasou. Este comprovante ainda não tem valor fiscal.');
   expect(fiscalNotice({ ...pending, status: 'none' }).detail).toBe('Sem valor fiscal');
+  // Resposta 81: plano sem NFC-e, a nota é do restaurante.
+  expect(fiscalNotice({ ...pending, status: 'external' }).detail).toMatch(/^Solicite a nota ao restaurante/);
+  expect(fiscalIsSettling({ ...pending, status: 'external' })).toBe(false);
   expect(fiscalNotice({ ...authorized, contingency: true }).detail).toContain('contingência');
 });
 

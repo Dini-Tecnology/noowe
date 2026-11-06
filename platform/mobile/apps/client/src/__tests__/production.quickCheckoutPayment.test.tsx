@@ -116,6 +116,7 @@ test('restaurante sem pagamento online avisa antes e não cria pedido', async ()
   mockMode.mockResolvedValue('unavailable');
   const { view, client } = renderScreen();
   await waitFor(() => expect(view.getByText('Este restaurante ainda não aceita pagamento online.')).toBeTruthy());
+  expect(view.queryByTestId('receipt-document-switch')).toBeNull();
   fireEvent.press(view.getByLabelText('Li e aceito a política de retirada'));
   fireEvent.press(view.getByLabelText('Confirmar pagamento'));
   expect(mockPlace).not.toHaveBeenCalled();
@@ -200,5 +201,22 @@ test('cupom recusado na prévia diz o motivo, e não vai ao pedido', async () =>
   await acceptAndPay(view);
   await waitFor(() => expect(mockStart).toHaveBeenCalled());
   expect(mockOrderCoupon).not.toHaveBeenCalled();
+  client.clear();
+});
+
+test('CPF na nota: inválido avisa antes de criar o pedido; válido vai na cobrança', async () => {
+  mockStart.mockResolvedValue({ ...charge, pixCode: 'pix-3' });
+  const alert = require('react-native').Alert.alert as jest.Mock;
+  const { view, client } = renderScreen();
+  await waitFor(() => expect(view.getByTestId('receipt-document-switch')).toBeTruthy());
+  fireEvent(view.getByTestId('receipt-document-switch'), 'valueChange', true);
+  fireEvent.changeText(await view.findByTestId('receipt-document-input'), '111.111.111-11');
+  await acceptAndPay(view);
+  await waitFor(() => expect(alert).toHaveBeenCalledWith('CPF na nota', expect.stringContaining('Confira o CPF')));
+  expect(mockStart).not.toHaveBeenCalled();
+  expect(mockPlace).not.toHaveBeenCalled();
+  fireEvent.changeText(view.getByTestId('receipt-document-input'), '52998224725');
+  fireEvent.press(view.getByLabelText('Confirmar pagamento'));
+  await waitFor(() => expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({ receiptDocument: '52998224725' })));
   client.clear();
 });

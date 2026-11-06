@@ -36,6 +36,7 @@ const mockQuote = jest.fn();
 const mockWaive = jest.fn();
 const mockCoupon = jest.fn();
 const mockLatestReceipt = jest.fn().mockResolvedValue(null);
+const mockMyTaxDocument = jest.fn().mockResolvedValue(null);
 jest.mock('../services/bill-shares', () => ({
   SPLIT_ERRORS: { P0012: 'A conta mudou. Confira os valores atualizados.' },
   billShares: {
@@ -49,6 +50,7 @@ jest.mock('../services/bill-shares', () => ({
     applyCoupon: (...a: unknown[]) => mockCoupon(...a), removeCoupon: jest.fn(),
     tipOptions: (...a: unknown[]) => mockTips(...a), pay: (...a: unknown[]) => mockPay(...a), abandon: jest.fn(),
     subscribe: () => ({ unsubscribe: jest.fn() }),
+    myTaxDocument: (...a: unknown[]) => mockMyTaxDocument(...a),
   },
 }));
 jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => undefined);
@@ -377,4 +379,68 @@ test('recibo: enquanto o recibo não existe, Concluir continua disponível', asy
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   expect(await screen.findByText('Concluir')).toBeTruthy();
   expect(screen.queryByText('Ver recibo')).toBeNull();
+});
+
+test('gorjeta alta pede confirmação antes de cobrar (resposta 55)', async () => {
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue(tips);
+  mockQuote.mockImplementation(async (amountCents: number, tip: { tipCents: number }) => ({ tipCents: tip.tipCents, totalCents: amountCents + tip.tipCents, confirmTip: true, cardAvailable: true, pixAvailable: true }));
+  mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 5344, expiresAt: null, checkoutUrl: null, pix: { payload: '000201-pix', expiresAt: null }, alreadyPaid: false });
+  const alertSpy = require('react-native').Alert.alert as jest.Mock;
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1', restaurantName: 'Casa' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  await waitFor(() => expect(screen.getByText('Gerar PIX')).toBeTruthy());
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Confirma a gorjeta?', expect.stringMatching(/^Confirma gorjeta de R\$/), expect.anything()));
+  expect(mockPay).not.toHaveBeenCalled();
+  (alertSpy.mock.calls[alertSpy.mock.calls.length - 1][2] as any[]).find((b) => b.text === 'Confirmar').onPress();
+  await waitFor(() => expect(mockPay).toHaveBeenCalled());
+});
+
+test('abaixo do mínimo do cartão, o cartão some; sem nenhum meio, paga no salão (resposta 79)', async () => {
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue(tips);
+  mockQuote.mockImplementation(async (amountCents: number, tip: { tipCents: number }) => ({ tipCents: tip.tipCents, totalCents: amountCents + tip.tipCents, confirmTip: false, cardAvailable: false, pixAvailable: true }));
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1', restaurantName: 'Casa' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  await waitFor(() => expect(screen.queryByText('Cartão de crédito')).toBeNull());
+  expect(screen.getByText('PIX')).toBeTruthy();
+  mockQuote.mockImplementation(async (amountCents: number, tip: { tipCents: number }) => ({ tipCents: tip.tipCents, totalCents: amountCents + tip.tipCents, confirmTip: false, cardAvailable: false, pixAvailable: false }));
+  const none = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1', restaurantName: 'Casa' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  expect(await none.findByTestId('pay-at-table')).toBeTruthy();
+});
+
+test('CPF na nota: opcional, sugere o CPF já informado e vai na cobrança; desmarcado vai nulo', async () => {
+  mockList.mockResolvedValue([{ ...myShare, mode: 'fixed_amount', tipCents: 0 }]);
+  mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 4858, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix', expiresAt: null }, alreadyPaid: false });
+  mockMyTaxDocument.mockResolvedValue('52998224725');
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  expect(screen.getByText(/consumidor não identificado/)).toBeTruthy();
+  expect(screen.queryByTestId('receipt-document-input')).toBeNull();
+  fireEvent(screen.getByTestId('receipt-document-switch'), 'valueChange', true);
+  await waitFor(() => expect(screen.getByTestId('receipt-document-input').props.value).toBe('529.982.247-25'));
+  fireEvent(screen.getByTestId('receipt-document-switch'), 'valueChange', false);
+  expect(screen.queryByTestId('receipt-document-input')).toBeNull();
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ receiptDocument: null })));
+});
+
+test('CPF na nota inválido não gera cobrança', async () => {
+  mockList.mockResolvedValue([{ ...myShare, mode: 'fixed_amount', tipCents: 0 }]);
+  mockMyTaxDocument.mockResolvedValue(null);
+  const alert = require('react-native').Alert.alert as jest.Mock;
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  fireEvent(screen.getByTestId('receipt-document-switch'), 'valueChange', true);
+  fireEvent.changeText(await screen.findByTestId('receipt-document-input'), '123.456.789-00');
+  expect(screen.getByText('CPF ou CNPJ inválido.')).toBeTruthy();
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(alert).toHaveBeenCalledWith('Pagamento não iniciado', expect.stringContaining('CPF da nota')));
+  expect(mockPay).not.toHaveBeenCalled();
+
+  fireEvent.changeText(screen.getByTestId('receipt-document-input'), '123.456.789-09');
+  mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 4858, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix', expiresAt: null }, alreadyPaid: false });
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ receiptDocument: '12345678909' })));
 });

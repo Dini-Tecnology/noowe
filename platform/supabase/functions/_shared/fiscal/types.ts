@@ -10,6 +10,8 @@ export interface FiscalPayment { method: string; cents: number }
 
 export interface EmitInput {
   ref: string; cnpj: string; items: FiscalItem[]; payments: FiscalPayment[]; issuedAt: Date;
+  // "CPF na nota" que o cliente pediu. Sem ele, a nota sai como consumidor não identificado.
+  consumerDocument?: string | null;
 }
 export interface FiscalCredentials { token: string; environment: FiscalEnvironment }
 

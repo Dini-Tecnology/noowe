@@ -1,7 +1,7 @@
 import { syncAccountStatus } from "../_shared/payments/account-status.ts";
 import { isAccountStatusEvent, isChargebackEvent, mapAsaasEvent, mapAsaasPaymentStatus } from "../_shared/payments/events.ts";
 import { asaasValueToCents } from "../_shared/payments/money.ts";
-import { refundedAtProvider } from "../_shared/payments/refunds.ts";
+import { refundedAtProvider, splitReturnedAtProvider } from "../_shared/payments/refunds.ts";
 import { sha256Hex, timingSafeEqual } from "../_shared/payments/crypto.ts";
 import { json, type PaymentDeps } from "../_shared/payments/deps.ts";
 
@@ -95,6 +95,23 @@ export async function handleWebhook(req: Request, deps: PaymentDeps): Promise<Re
       if (external.error) console.error("payments-webhook-asaas external refund error:", external.error.message);
     } catch (err) {
       console.error("payments-webhook-asaas refund recheck failed:", err);
+      return orphan("recheck_failed");
+    }
+  }
+
+  // Estorno total: antes de fechar, quanto do split da NOOWE o Asaas confirmou como devolvido (resposta 64). Sem a reconsulta,
+  // o ajuste da fatura sairia errado: a fila do estorno confere de novo depois.
+  if (type === "PAYMENT_REFUNDED") {
+    const apiKey: string | undefined = account.apiKey;
+    if (!apiKey) return orphan("no_api_key");
+    try {
+      const actual = await deps.provider.getCharge(apiKey, payment.id);
+      const saved = await deps.rpc("service_refund_split_returned", {
+        p_payment_id: paymentId, p_cents: splitReturnedAtProvider(actual, deps.env("NOOWE_ASAAS_WALLET_ID")),
+      });
+      if (saved.error) console.error("payments-webhook-asaas split returned error:", saved.error.message);
+    } catch (err) {
+      console.error("payments-webhook-asaas refund split recheck failed:", err);
       return orphan("recheck_failed");
     }
   }

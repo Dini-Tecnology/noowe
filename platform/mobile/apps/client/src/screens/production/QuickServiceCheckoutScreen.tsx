@@ -21,6 +21,7 @@ import { QUICK_ORDER_ERROR_COPY, duplicateOrderId, quickOrderErrorKind } from '.
 import { billShares } from '../../services/bill-shares';
 import { centsFromDigits, money, moneyCents, percentFromBps, translateOrderError } from './shared';
 import { formatDistance, isFarFromRestaurant, pickupPolicyText } from './quick-service-ui';
+import { INVALID_RECEIPT_DOCUMENT, RECEIPT_DOCUMENT_OFF, ReceiptDocumentField, receiptDocumentForPayment } from '../../components/payment/ReceiptDocumentField';
 
 const HEADER_GRADIENT = ['#FF5724', '#F97316', '#F59E0B'] as const;
 
@@ -57,6 +58,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   const [pix, setPix] = useState<PendingCharge | null>(null);
   const [needsDocument, setNeedsDocument] = useState(false);
   const [document, setDocument] = useState('');
+  const [receiptDoc, setReceiptDoc] = useState(RECEIPT_DOCUMENT_OFF);
   // Gorjeta opcional, sem nada marcado: é a pessoa que escolhe (ADR-032).
   const [couponInput, setCouponInput] = useState('');
   // O que vale é o código confirmado no "Aplicar": digitar não consulta nem cobra.
@@ -117,6 +119,9 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
     mutationFn: async () => {
       const orderItems: PlaceOrderItem[] = cartOrderItems(cart.items);
       if (!orderItems.length) throw new Error('A comanda está vazia.');
+      // Antes de criar o pedido: CPF da nota inválido não vira pedido sem pagamento.
+      const receiptDocument = receiptDocumentForPayment(receiptDoc);
+      if (receiptDocument === undefined) throw Object.assign(new Error(INVALID_RECEIPT_DOCUMENT), { code: 'invalid_receipt_document' });
       const order = await customerBackend.placeOrder({
         restaurantId: cart.restaurantId!,
         serviceModel: 'quick_service',
@@ -129,12 +134,18 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
       });
       // Mudar a gorjeta muda o valor: a cobrança antiga não serve mais.
       // O servidor valida e diz por que não vale. O total cobrado já sai com o desconto.
+      let paidWithCoupon = false;
       if (couponCode && !coupon.data?.refusal) {
-        await billShares.applyCouponToOrder(order.id, couponCode);
+        paidWithCoupon = (await billShares.applyCouponToOrder(order.id, couponCode))?.paidWithCoupon === true;
         lastAppliedCoupon.current = couponCode;
       } else if (lastAppliedCoupon.current) {
         await billShares.removeCouponFromOrder(order.id);
         lastAppliedCoupon.current = '';
+      }
+      // Cupom que zera o pedido (inclusive o automático): já está pago, sem cobrança.
+      if (paidWithCoupon || quote.data?.totalCents === 0) {
+        const fresh = paidWithCoupon ? null : await customerBackend.getOrder(order.id);
+        if (paidWithCoupon || fresh?.paymentStatus === 'confirmed') return { order, payment: { paymentStatus: 'confirmed' } as any };
       }
       if (!chargeKeys.current.has(selectedMethod)) chargeKeys.current.set(selectedMethod, Crypto.randomUUID());
       const payment = await customerBackend.startPayment({
@@ -145,6 +156,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
         tipBps,
         tipCents,
         payerCpfCnpj: document.replace(/\D/g, '') || undefined,
+        receiptDocument,
       });
       return { order, payment };
     },
@@ -161,6 +173,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
     },
     onError: (error: unknown) => {
       if ((error as { code?: string }).code === 'payer_document_required') { setNeedsDocument(true); return; }
+      if ((error as { code?: string }).code === 'invalid_receipt_document') { Alert.alert('CPF na nota', INVALID_RECEIPT_DOCUMENT); return; }
       const kind = quickOrderErrorKind(error);
       const existingOrderId = duplicateOrderId(error);
       if (kind === 'duplicate' && existingOrderId) {
@@ -182,6 +195,15 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
       Alert.alert('Pagamento não confirmado', translateOrderError(error));
     },
   });
+
+  // Gorjeta alta pede confirmação, contra erro de digitação (resposta 55).
+  const confirmAndPlace = useCallback(() => {
+    if (!quote.data?.confirmTip) { place.mutate(); return; }
+    Alert.alert('Confirma a gorjeta?', `Confirma gorjeta de ${moneyCents(quote.data.tipCents)}?`, [
+      { text: 'Corrigir', style: 'cancel' },
+      { text: 'Confirmar', onPress: () => place.mutate() },
+    ]);
+  }, [place, quote.data]);
 
   const finish = useCallback((orderId: string) => {
     cart.clearCart();
@@ -218,6 +240,13 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
   });
 
   const selectMethod = useCallback((method: PaymentMethodType) => setSelectedMethod(method), []);
+  // Abaixo do mínimo de um meio, ele some (resposta 79). Pedido zerado pelo cupom não precisa de meio.
+  const availableMethods = PAYMENT_METHODS.filter((method) => (method.type === 'pix' ? quote.data?.pixAvailable : quote.data?.cardAvailable) !== false);
+  const zeroTotal = quote.data?.totalCents === 0;
+  if (quote.data && !zeroTotal && availableMethods.length > 0 && !availableMethods.some((method) => method.type === selectedMethod)) {
+    setSelectedMethod(availableMethods[0].type);
+  }
+  const noMethod = !!quote.data && !zeroTotal && availableMethods.length === 0;
   // Outro cupom é outro valor: a cobrança antiga não serve mais.
   const applyCoupon = useCallback(() => {
     setCouponCode(couponInput.trim());
@@ -307,7 +336,10 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
             <View style={{ gap: 12 }}>
               <Text style={styles.sectionTitle}>Forma de pagamento</Text>
               <View style={styles.methodGrid}>
-                {PAYMENT_METHODS.map((method) => {
+                {quote.data && quote.data.totalCents > 0 && !availableMethods.length ? (
+                  <Text style={styles.methodLabel} testID="pay-at-counter">O valor está abaixo do mínimo para pagar pelo app. Pague no balcão.</Text>
+                ) : null}
+                {availableMethods.map((method) => {
                   const selected = selectedMethod === method.type;
                   return (
                     <TouchableOpacity
@@ -339,6 +371,13 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
                   onChangeText={setDocument}
                   accessibilityLabel="CPF do pagador"
                 />
+              </View>
+            )}
+
+            {/* Só quando há cobrança online: sem ela, o pagamento é no balcão e o CPF é pedido lá. */}
+            {!zeroTotal && !paymentUnavailable && !noMethod && (
+              <View style={styles.policyCard}>
+                <ReceiptDocumentField value={receiptDoc} onChange={setReceiptDoc} fallback={document} />
               </View>
             )}
 
@@ -500,9 +539,9 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
               />
             ) : (
             <TouchableOpacity
-              style={[styles.cta, (place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable || couponPending) && styles.ctaDisabled]}
-              onPress={() => place.mutate()}
-              disabled={place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable || couponPending}
+              style={[styles.cta, (place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable || couponPending || noMethod) && styles.ctaDisabled]}
+              onPress={confirmAndPlace}
+              disabled={place.isPending || !cart.items.length || !policyAccepted || paymentUnavailable || couponPending || noMethod}
               activeOpacity={0.9}
               accessibilityRole="button"
               accessibilityLabel="Confirmar pagamento"
@@ -510,7 +549,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
               <LinearGradient colors={HEADER_GRADIENT as unknown as [string, string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.ctaGradient}>
                 <Ionicons name="card" size={18} color="#FFFFFF" />
                 <Text style={styles.ctaText}>
-                  {place.isPending ? 'Gerando cobrança...' : selectedMethod === 'pix' ? 'Gerar Pix' : 'Pagar com cartão'}
+                  {place.isPending ? 'Gerando cobrança...' : zeroTotal ? 'Confirmar pedido' : selectedMethod === 'pix' ? 'Gerar Pix' : 'Pagar com cartão'}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>

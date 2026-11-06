@@ -217,3 +217,14 @@ test("os outros eventos não consultam estorno", async () => {
   await handleWebhook(req("PAYMENT_RECEIVED"), deps);
   assert.ok(!calls.some((c) => c.fn === "service_refund_external"));
 });
+
+test("estorno total: registra o split devolvido antes de aplicar; sem reconsulta, não aplica", async () => {
+  const ok = await setup({ chargeStatus: "REFUNDED", chargeRefunds: [{ status: "DONE", value: 12.34, refundedSplits: [{ value: 0.4, done: true }] }] });
+  await handleWebhook(req("PAYMENT_REFUNDED"), ok.deps);
+  const split = ok.calls.findIndex((c) => c.fn === "service_refund_split_returned");
+  assert.equal(ok.calls[split].args.p_cents, 40);
+  assert.ok(split < ok.calls.findIndex((c) => c.fn === "service_payment_apply_event"));
+  const down = await setup({ chargeThrows: true });
+  await handleWebhook(req("PAYMENT_REFUNDED"), down.deps);
+  assert.equal(down.applied().length, 0);
+});
