@@ -47,6 +47,27 @@
 - Só volta no POST. `GET /v3/accounts` e `GET /v3/accounts/{id}` trazem `apiKey: null`.
 - `/v3/accounts/{id}/accessTokens` responde 400 sem whitelist de IPs configurada. A documentação diz que a gestão de chaves só existe em janela temporária e com whitelist, então **não contamos com rotação nem com recuperação**. Se a chave se perder, o caso vira atendimento.
 
+### Fluxo completo no sandbox em 05/11/2026
+
+Primeira passada de ponta a ponta no projeto Noowe, com as Edge Functions publicadas e o restaurante
+"Bistrô Noowe — Teste Real" (Quick Service).
+
+- **Cadastro:** o handler real de `payments-account` criou a subconta e a vinculou (chave no Vault). Rodou fora do
+  projeto porque `ASAAS_ROOT_API_KEY` e `NOOWE_WEBHOOK_ALERT_EMAIL` **não estão nos segredos das Edge Functions**: pelo
+  app, o cadastro hoje responde `payments_not_configured`. A consulta de status aprovou a conta na hora e ela virou `active`.
+- **Defeito encontrado:** `service_payment_account_secrets` ainda lia `platform_fee_bps`, que a M2 removeu, e falhava em
+  toda chamada (cobrança, webhook, sincronização e status). Corrigido em `20261105230000`; o teste 47 passou a chamar a função.
+- **Pix:** a primeira cobrança foi recusada com "não possui uma chave Pix cadastrada". Minutos depois a subconta tinha uma
+  chave aleatória ativa, criada pelo próprio sandbox, e repetir o pedido retomou a mesma cobrança. Em produção, conferir se
+  a chave Pix existe antes de liberar a conta; até lá, a primeira cobrança Pix logo após a aprovação pode falhar.
+- **Pix de R$ 42,90:** cobrança pela `payments-create` publicada, reenvio com a mesma chave devolveu a mesma cobrança,
+  confirmação pelo `POST /v3/sandbox/payment/{id}/confirm`, webhook `PAYMENT_RECEIVED` autenticado em ~5 s, pedido em
+  `preparing`. Tarifa R$ 0,99 contra taxa de R$ 0,42: sem split e R$ 0,57 no razão de compensação (ADR-031).
+- **Cartão de R$ 58,00:** página hospedada gerada, split de R$ 0,38 para a carteira da NOOWE (taxa R$ 2,02 − tarifa
+  R$ 1,64), webhook `PAYMENT_CONFIRMED` em ~5 s, pedido em `preparing`. O cartão não foi digitado: a confirmação também
+  foi pela rota de sandbox.
+- **Não coberto:** a tela do app no simulador, digitar cartão na página do Asaas, estorno real e a divisão de conta (G3).
+
 ### Cadastro da conta de recebimento (`payments-account`)
 
 - A conta só vira `active` por `service_payment_account_apply_status`, com `general` reconsultado no Asaas. O corpo do webhook nunca decide.
