@@ -1,6 +1,6 @@
 # ADR-030 — Focus NFe como emissor de NFC-e
 
-**Status:** PROVISÓRIO — provedor escolhido pelo responsável do produto em 02/11/2026; regras fiscais abaixo aguardam a contabilidade e a homologação.
+**Status:** PROVISÓRIO. **Provedor substituído pelo ADR-033 (Notaas) em 26/11/2026**: o que este ADR diz da API da Focus não vale mais. O provedor tinha sido escolhido em 02/11/2026; regras fiscais abaixo aguardam a contabilidade e a homologação.
 **Origem:** fatia N4 (critério 4), tarefa T-N4-03, spec §7.4
 **Impacta:** N4, G3, Q1, T-N4-04 (cancelamento fiscal)
 **Regras isoladas em função nomeada:** `private.fiscal_fee_in_document`, `private.fiscal_retry_policy`, `private.fiscal_issue_notice_cooldown`, `private.fiscal_enqueue_block_after`, `PAYMENT_CODE` e `focusPayment` em `_shared/fiscal/focus.ts`.

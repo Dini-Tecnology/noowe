@@ -19,11 +19,14 @@ export type FiscalResult =
   | {
     outcome: "authorized"; accessKey: string; number: string | null; series: string | null; protocol: string | null;
     qrCodeUrl: string | null; danfeUrl: string | null; xmlUrl: string | null; consultUrl: string | null; contingency: boolean;
+    providerRef?: string;
   }
+  // O emissor aceitou e ainda processa: a varredura consulta de novo pelo ID dele.
+  | { outcome: "pending"; providerRef: string }
   // Decisão final da SEFAZ ou erro de cadastro: repetir igual não resolve, precisa de gente.
-  | { outcome: "rejected"; errorCode: string; errorMessage: string }
+  | { outcome: "rejected"; errorCode: string; errorMessage: string; providerRef?: string }
   // Rede, 5xx, 429 ou nota ainda em processamento: tenta de novo.
-  | { outcome: "transient"; errorCode: string; errorMessage: string }
+  | { outcome: "transient"; errorCode: string; errorMessage: string; providerRef?: string }
   // A referência já existe no provedor: só a consulta diz com qual resultado.
   | { outcome: "already_processed" }
   | { outcome: "not_found" };
@@ -34,9 +37,10 @@ export type FiscalCancelResult =
   | { outcome: "rejected"; errorMessage: string }
   | { outcome: "transient"; errorMessage: string };
 
-// Contrato mínimo usado pela Edge Function; outro emissor entra por aqui (ADR-030).
+// Contrato mínimo usado pela Edge Function; outro emissor entra por aqui (ADR-030, ADR-033).
 export interface FiscalProvider {
   emit(credentials: FiscalCredentials, input: EmitInput): Promise<FiscalResult>;
-  consult(credentials: FiscalCredentials, ref: string): Promise<FiscalResult>;
-  cancel(credentials: FiscalCredentials, ref: string, justification: string): Promise<FiscalCancelResult>;
+  // providerRef é o ID da nota no emissor (fiscal_documents.provider_ref), não a nossa referência.
+  consult(credentials: FiscalCredentials, providerRef: string): Promise<FiscalResult>;
+  cancel(credentials: FiscalCredentials, providerRef: string, justification: string): Promise<FiscalCancelResult>;
 }

@@ -72,7 +72,7 @@ describe('cadastro fiscal', () => {
     expect(screen.queryByLabelText(/CSC/)).toBeNull();
     expect(screen.getByLabelText('NCM padrão').props.value).toBe('');
     expect(screen.getByLabelText('CFOP padrão').props.value).toBe('');
-    expect(screen.getByLabelText('Token da Focus NFe').props.secureTextEntry).toBe(true);
+    expect(screen.getByLabelText('Chave de API da Notaas').props.secureTextEntry).toBe(true);
     screen.getByText('Ambiente: homologação');
   });
 
@@ -82,7 +82,7 @@ describe('cadastro fiscal', () => {
     await waitFor(() => screen.getByText('Salvar cadastro'));
     fillForm(screen);
     fireEvent.press(screen.getByText('Salvar cadastro'));
-    await waitFor(() => screen.getByText('Informe o token da Focus NFe.'));
+    await waitFor(() => screen.getByText('Informe a chave de API da Notaas.'));
     expect(mockSaveConfig).not.toHaveBeenCalled();
   });
 
@@ -92,7 +92,7 @@ describe('cadastro fiscal', () => {
     await waitFor(() => screen.getByText('Salvar cadastro'));
     fillForm(screen);
     fireEvent.changeText(screen.getByLabelText('NCM padrão'), '00000000');
-    fireEvent.changeText(screen.getByLabelText('Token da Focus NFe'), 'tok-1');
+    fireEvent.changeText(screen.getByLabelText('Chave de API da Notaas'), 'tok-1');
     fireEvent.press(screen.getByText('Salvar cadastro'));
     await waitFor(() => screen.getByText('Informe o NCM padrão com 8 dígitos.'));
     expect(mockSaveConfig).not.toHaveBeenCalled();
@@ -105,7 +105,7 @@ describe('cadastro fiscal', () => {
     await waitFor(() => screen.getByText('Salvar cadastro'));
     fillForm(screen);
     fireEvent.press(screen.getByText('Lucro Real'));
-    fireEvent.changeText(screen.getByLabelText('Token da Focus NFe'), 'tok-1');
+    fireEvent.changeText(screen.getByLabelText('Chave de API da Notaas'), 'tok-1');
     fireEvent.press(screen.getByText('Salvar cadastro'));
     await waitFor(() => screen.getByTestId('fiscal-setup-saved'));
 
@@ -118,7 +118,7 @@ describe('cadastro fiscal', () => {
     expect(config.stateCode).toBe('SP');
     expect(config.taxDefaults.icms_situacao_tributaria).toBe('102');
     expect(JSON.stringify(config)).not.toContain('tok-1');
-    expect(screen.getByLabelText('Token da Focus NFe').props.value).toBe('');
+    expect(screen.getByLabelText('Chave de API da Notaas').props.value).toBe('');
     expect(screen.getByTestId('fiscal-token-status').props.children).toMatch(/Já existe um token/);
   });
 
@@ -128,7 +128,7 @@ describe('cadastro fiscal', () => {
     const screen = render(<FiscalSetupScreen />);
     await waitFor(() => screen.getByText('Salvar cadastro'));
     expect(screen.getByLabelText('NCM padrão').props.value).toBe('21069090');
-    expect(screen.getByLabelText('Token da Focus NFe').props.value).toBe('');
+    expect(screen.getByLabelText('Chave de API da Notaas').props.value).toBe('');
     fireEvent.changeText(screen.getByLabelText('NCM padrão'), '19059090');
     fireEvent.press(screen.getByText('Salvar cadastro'));
     await waitFor(() => screen.getByText(/não voltam sozinhas/));

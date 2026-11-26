@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { FocusNfeClient } from "../_shared/fiscal/focus.ts";
+import { NotaasClient } from "../_shared/fiscal/notaas.ts";
 import { handleFiscalEmit } from "./handler.ts";
 
 serve(async (req) => {
@@ -14,7 +14,7 @@ serve(async (req) => {
         const { data, error } = await admin.rpc(fn, args);
         return { data, error: error ? { code: error.code, message: error.message } : null };
       },
-      provider: new FocusNfeClient(),
+      provider: new NotaasClient(),
       env: (name) => Deno.env.get(name),
     });
   } catch (err) {
