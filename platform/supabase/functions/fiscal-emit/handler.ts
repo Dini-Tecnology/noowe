@@ -11,8 +11,8 @@ export interface FiscalDeps {
 }
 
 // Emite uma NFC-e da fila. Só o banco chama (pg_net, no encerramento e na varredura), com a
-// service role. A resposta é síncrona; quando o resultado anterior é incerto, a referência
-// estável permite consultar antes de reenviar, e nunca sai segunda nota para o mesmo fechamento.
+// service role. A emissão é assíncrona na Notaas: o ID dela fica gravado e as rodadas seguintes
+// consultam por ele; a chave de idempotência impede segunda nota para o mesmo fechamento.
 export async function handleFiscalEmit(req: Request, deps: FiscalDeps): Promise<Response> {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
   if (!isServiceRole(bearer(req), deps.env("SUPABASE_SERVICE_ROLE_KEY") ?? "")) return json({ error: "unauthorized" }, 401);
@@ -35,7 +35,7 @@ export async function handleFiscalEmit(req: Request, deps: FiscalDeps): Promise<
     p_document_id: job.documentId, p_outcome: result.outcome, p_result: resultFields(result),
   });
   if (recorded.error) {
-    // A nota pode já existir na Focus. A varredura retoma pela mesma referência e consulta primeiro.
+    // A nota pode já existir na Notaas. A varredura reenvia o mesmo corpo, e a chave de idempotência devolve a mesma nota.
     console.error("fiscal-emit record error:", recorded.error.message);
     return json({ error: "internal_error" }, 500);
   }
@@ -51,7 +51,10 @@ async function cancelNote(deps: FiscalDeps, documentId: string): Promise<Respons
   }
   const job = claim.data;
   if (!job?.claimed) return json({ ok: true, skipped: job?.blocked ?? "not_due" });
-  const result = await deps.provider.cancel({ token: job.token, environment: job.environment }, job.ref, job.justification);
+  // Nota sem ID do emissor nunca foi aceita por ele: não há o que cancelar lá, e uma pessoa precisa olhar.
+  const result = job.providerRef
+    ? await deps.provider.cancel({ token: job.token, environment: job.environment }, job.providerRef, job.justification)
+    : { outcome: "rejected" as const, errorMessage: "Nota sem identificador do emissor" };
   const saved = await deps.rpc("service_fiscal_cancel_record", {
     p_document_id: job.documentId,
     p_outcome: result.outcome === "cancelled" ? "cancelled" : result.outcome === "transient" ? "transient" : "failed",
@@ -64,26 +67,31 @@ async function cancelNote(deps: FiscalDeps, documentId: string): Promise<Respons
   return json({ ok: true, cancelStatus: saved.data?.cancelStatus });
 }
 
-type Final = Exclude<FiscalResult, { outcome: "already_processed" } | { outcome: "not_found" }>;
+type Final = Exclude<FiscalResult, { outcome: "already_processed" } | { outcome: "not_found" } | { outcome: "pending" }>;
+
+// Nota aceita e ainda em processamento volta para a fila com o ID do emissor, para a próxima rodada consultar.
+function settle(result: Exclude<FiscalResult, { outcome: "already_processed" } | { outcome: "not_found" }>): Final {
+  if (result.outcome !== "pending") return result;
+  return { outcome: "transient", errorCode: "provider_processing", errorMessage: "Nota em processamento no emissor", providerRef: result.providerRef };
+}
 
 async function emitOnce(deps: FiscalDeps, credentials: FiscalCredentials, job: any): Promise<Final> {
   try {
-    // Só a primeira tentativa é certamente inédita: um timeout pode ter autorizado a nota.
-    if (job.attempt > 1) {
-      const previous = await deps.provider.consult(credentials, job.ref);
-      if (previous.outcome === "authorized") return previous;
+    // Com ID do emissor, a nota já foi aceita: só a consulta diz o resultado, e reenviar nunca é a saída.
+    if (job.providerRef) {
+      const previous = await deps.provider.consult(credentials, job.providerRef);
+      if (previous.outcome !== "not_found" && previous.outcome !== "already_processed") return settle(previous);
     }
     const sent = await deps.provider.emit(credentials, {
       ref: job.ref, cnpj: job.cnpj, items: job.items, payments: job.payments, issuedAt: deps.now?.() ?? new Date(),
       consumerDocument: job.consumerDocument ?? null,
     });
+    // shortcut: a Notaas não busca por referência nossa; 409 sem ID acaba em `failed` para a gerência (ADR-033).
     if (sent.outcome === "already_processed") {
-      const found = await deps.provider.consult(credentials, job.ref);
-      if (found.outcome === "authorized" || found.outcome === "rejected" || found.outcome === "transient") return found;
-      return { outcome: "transient", errorCode: "consult_inconclusive", errorMessage: "Referência já usada e consulta sem nota" };
+      return { outcome: "transient", errorCode: "consult_inconclusive", errorMessage: "Chave de idempotência já usada com outro conteúdo" };
     }
     if (sent.outcome === "not_found") return { outcome: "rejected", errorCode: "not_found", errorMessage: "Rota de emissão não encontrada" };
-    return sent;
+    return settle(sent);
   } catch (err) {
     // RangeError é dado nosso que não vira nota (forma de pagamento sem código): repetir não resolve.
     if (err instanceof RangeError) return { outcome: "rejected", errorCode: "invalid_document", errorMessage: err.message };

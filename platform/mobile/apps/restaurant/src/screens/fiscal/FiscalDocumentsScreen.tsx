@@ -14,8 +14,8 @@ import { V2ConfirmDialog } from '../v2/shared/V2ConfirmDialog';
 import { formatTableLabel } from '../v2/shared/tableLabel';
 
 const STATUS_COPY: Record<FiscalIssue['status'], { label: string; hint: string }> = {
-  blocked: { label: 'Bloqueada', hint: 'Não chegou a ir para a Focus. Corrija o cadastro e reenvie.' },
-  rejected: { label: 'Rejeitada', hint: 'A SEFAZ ou a Focus recusou. Corrija o dado indicado e reenvie.' },
+  blocked: { label: 'Bloqueada', hint: 'Não chegou a ir para a Notaas. Corrija o cadastro e reenvie.' },
+  rejected: { label: 'Rejeitada', hint: 'A SEFAZ ou a Notaas recusou. Corrija o dado indicado e reenvie.' },
   failed: { label: 'Falhou', hint: 'O emissor não respondeu nas tentativas automáticas. Reenvie quando ele voltar.' },
 };
 

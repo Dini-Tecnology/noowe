@@ -60,7 +60,7 @@ export default function FiscalSetupScreen() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [serviceFeeInDocument, setServiceFeeInDocument] = useState(false);
   // O token só existe aqui enquanto é digitado: o servidor nunca o devolve.
-  const [focusToken, setFocusToken] = useState('');
+  const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,8 +102,8 @@ export default function FiscalSetupScreen() {
       setError(Object.values(result.errors)[0]);
       return;
     }
-    if (!focusToken.trim() && !config?.hasToken) {
-      setError('Informe o token da Focus NFe.');
+    if (!apiKey.trim() && !config?.hasToken) {
+      setError('Informe a chave de API da Notaas.');
       return;
     }
     setSaving(true);
@@ -116,16 +116,16 @@ export default function FiscalSetupScreen() {
           ncm: form.ncm, cfop: form.cfop, icms_origem: form.icmsOrigem, icms_situacao_tributaria: form.icmsSituacao,
           pis_situacao_tributaria: form.pisSituacao, cofins_situacao_tributaria: form.cofinsSituacao,
         },
-      }, focusToken);
+      }, apiKey);
       setConfig(next);
-      setFocusToken('');
+      setApiKey('');
       setSaved(true);
     } catch (err) {
       setError(userErrorMessage(err, 'Não foi possível salvar o cadastro fiscal. Tente de novo.'));
     } finally {
       setSaving(false);
     }
-  }, [config?.hasToken, focusToken, form, restaurantId, saving, serviceFeeInDocument]);
+  }, [config?.hasToken, apiKey, form, restaurantId, saving, serviceFeeInDocument]);
 
   const renderField = (field: { key: FormKey; label: string; numeric?: boolean; maxLength?: number; uppercase?: boolean }) => (
     <View key={field.key} style={styles.field}>
@@ -145,7 +145,7 @@ export default function FiscalSetupScreen() {
   const isHomologation = (config?.environment ?? 'homologation') === 'homologation';
 
   return (
-    <V2Shell title="Fiscal" subtitle="NFC-e pela Focus NFe" showBack onRefresh={load}>
+    <V2Shell title="Fiscal" subtitle="NFC-e pela Notaas" showBack onRefresh={load}>
       {loading ? (
         <ActivityIndicator testID="fiscal-setup-loading" color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
@@ -171,7 +171,7 @@ export default function FiscalSetupScreen() {
                   : 'As notas emitidas têm valor fiscal.'}
               </Text>
               <Text style={{ color: colors.foregroundSecondary }}>
-                Certificado A1 e CSC são cadastrados no painel da Focus NFe, não aqui.
+                Certificado A1 e CSC são cadastrados no projeto da Notaas, não aqui.
               </Text>
             </View>
           </ConfigSectionCard>
@@ -216,7 +216,7 @@ export default function FiscalSetupScreen() {
             </View>
           </ConfigSectionCard>
 
-          <ConfigSectionCard title="Token da Focus NFe" Icon={KeyRound}>
+          <ConfigSectionCard title="Chave de API da Notaas" Icon={KeyRound}>
             <View style={styles.body}>
               <Text testID="fiscal-token-status" style={{ color: colors.foregroundSecondary }}>
                 {config?.hasToken
@@ -224,13 +224,13 @@ export default function FiscalSetupScreen() {
                   : 'O token fica guardado no cofre da NOOWE e não aparece de novo neste app.'}
               </Text>
               <TextInput
-                accessibilityLabel="Token da Focus NFe"
-                value={focusToken}
-                onChangeText={setFocusToken}
+                accessibilityLabel="Chave de API da Notaas"
+                value={apiKey}
+                onChangeText={setApiKey}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholder={config?.hasToken ? 'Deixe em branco para manter' : 'Token de homologação'}
+                placeholder={config?.hasToken ? 'Deixe em branco para manter' : 'Chave do projeto em homologação'}
                 placeholderTextColor={colors.foregroundMuted}
                 style={[styles.input, { borderColor: colors.border, color: colors.foreground }]}
               />

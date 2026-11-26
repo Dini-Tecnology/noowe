@@ -47,26 +47,27 @@ ASAAS_ENVIRONMENT=sandbox
 
 ---
 
-### 2. FOCUS NFe (Emissao Fiscal — NFC-e) — ver ADR-030
+### 2. NOTAAS (Emissao Fiscal — NFC-e) — ver ADR-033
 
 | Item | O que fazer | URL | Status |
 |------|------------|-----|--------|
-| Criar conta homologacao | Contatar comercial Focus NFe | https://focusnfe.com.br/contato | [ ] |
-| Cadastrar a empresa | Painel Focus → Empresa: certificado A1 e CSC ficam na Focus | Necessario certificado digital | [ ] |
-| Obter token da empresa | Um token por ambiente (homologacao e producao) | Apos aprovacao | [ ] |
-| Provisionar no NOOWE | Config > Fiscal no app, ou `service_fiscal_configure`: grava a configuracao e guarda o token no Vault | Ver `ACOES_HUMANAS_PUBLICACAO.md` 1.9 | [ ] |
-| Testar emissao | Fechar uma conta em homologacao e ver a nota `authorized` em `fiscal_documents` | Validar numero e chave no recibo | [ ] |
+| Conta na Notaas | Criar a organizacao; plano conforme o numero de CNPJs | https://docs.notaas.com.br/docs | [ ] |
+| Projeto por restaurante | Um projeto por CNPJ, em homologacao (`ambiente` 2) | Painel ou Org API | [ ] |
+| Certificado e CSC | Subir o A1 do restaurante e cadastrar `cscId`/`cscToken` no projeto | O CSC e gerado na SEFAZ do estado | [ ] |
+| Chave de API | Criar a chave `ntaas_` do projeto | Painel do projeto | [ ] |
+| Provisionar no NOOWE | Config > Fiscal no app, ou `service_fiscal_configure`: grava a configuracao e guarda a chave no Vault | Ver `ACOES_HUMANAS_PUBLICACAO.md` 1.9 | [ ] |
+| Testar emissao | Fechar uma conta em homologacao e ver a nota `authorized` em `fiscal_documents`, com numero, chave e QR Code | Validar os pontos do ADR-033 | [ ] |
 
-**Nao ha variavel de ambiente nem webhook:** o token e por restaurante, no Vault, e a NFC-e e sincrona.
+**Nao ha variavel de ambiente nem webhook:** a chave e por restaurante, no Vault. A emissao e assincrona e a varredura consulta pelo ID da nota (`provider_ref`).
 
-**Pre-requisito critico:** Certificado Digital A1 (formato .pfx/.p12)
+**Pre-requisito critico:** Certificado Digital A1 (formato .pfx/.p12) de cada restaurante
 - Emitido por AC credenciada (Certisign, Serasa, etc.)
 - Valido (nao expirado)
-- Pode ser o certificado da propria empresa para testes
+- NFC-e exige o certificado proprio do emitente
 
-**Codigo:** `platform/supabase/functions/_shared/fiscal/focus.ts`, `platform/supabase/functions/fiscal-emit/`
+**Codigo:** `platform/supabase/functions/_shared/fiscal/notaas.ts`, `platform/supabase/functions/fiscal-emit/`
 
-**Documentacao Focus NFe:** https://doc.focusnfe.com.br/reference/nfce
+**Documentacao Notaas:** https://docs.notaas.com.br/docs/nfe/endpoints
 
 ---
 
@@ -253,7 +254,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 ```
 Semana 10 (AGORA):
   [ ] Iniciar cadastro Asaas sandbox
-  [ ] Iniciar contato Focus NFe
+  [ ] Criar a conta na Notaas
   [ ] Criar conta Twilio trial
   [ ] Criar projeto Firebase
   [ ] Solicitar Apple Tap to Pay entitlement (2-4 sem lead time)
@@ -266,7 +267,7 @@ Semana 11:
 
 Semana 12 (Inicio Sprint 7):
   [ ] Asaas API key disponivel → implementar adapter real
-  [ ] Focus NFe token disponivel → validar o adapter em homologacao
+  [ ] Chave de homologacao da Notaas disponivel → validar o adapter (pontos do ADR-033)
   [ ] Twilio/SNS credenciais → implementar phone auth
   [ ] Testar fluxo completo: pagamento → NFC-e → notificacao
 
@@ -296,7 +297,7 @@ Semana 16 (Fim Sprint 8):
 | Provider | Sprint | Tipo | Lead Time | Custo Sandbox | Prioridade |
 |----------|--------|------|-----------|---------------|------------|
 | **Asaas** | 7 | Pagamentos | 1 dia | Gratis | 🔴 Critico |
-| **Focus NFe** | 7 | Fiscal | 3-5 dias | Gratis (homologacao) | 🔴 Critico |
+| **Notaas** | 7 | Fiscal | 1-2 dias | Free: 5 CNPJs em homologacao | 🔴 Critico |
 | **Twilio** | 7 | SMS/OTP | 1 dia | $1/mes trial | 🔴 Critico |
 | **Stripe Terminal** | 8 | Tap to Pay | 1-2 dias + Apple 2-4 sem | Gratis (test mode) | 🟡 Alto |
 | **Firebase** | 8 | Push | 1 dia | Gratis (Spark plan) | 🟡 Alto |
@@ -326,7 +327,7 @@ A arquitetura (DTOs, interfaces, webhook handlers, error handling, retry logic) 
 | Provider | Suporte | Email | Telefone |
 |----------|---------|-------|----------|
 | Asaas | Chat no dashboard | suporte@asaas.com | (47) 3028-5888 |
-| Focus NFe | Chat/Email | suporte@focusnfe.com.br | (48) 3024-6001 |
+| Notaas | Documentacao | https://docs.notaas.com.br/docs | — |
 | Twilio | Console + Docs | - | - |
 | Stripe | Dashboard chat | - | - |
 | iFood | Portal do Parceiro | integracao@ifood.com.br | - |

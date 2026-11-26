@@ -12,10 +12,11 @@ const JOB = {
   items: [{ grossCents: 100 }], payments: [{ method: "pix", cents: 100 }], totalCents: 100,
 };
 
-function setup(options: { claim?: unknown; emit?: FiscalResult | Error; consult?: FiscalResult; recordError?: boolean } = {}) {
+function setup(options: { claim?: unknown; emit?: FiscalResult | Error; consult?: FiscalResult; recordError?: boolean; cancelClaim?: unknown } = {}) {
   const records: Record<string, unknown>[] = [];
   const emits: EmitInput[] = [];
   const consults: string[] = [];
+  const cancels: string[] = [];
   const provider: FiscalProvider = {
     emit: (_c, input) => {
       emits.push(input);
@@ -23,18 +24,20 @@ function setup(options: { claim?: unknown; emit?: FiscalResult | Error; consult?
       return Promise.resolve(options.emit ?? AUTHORIZED);
     },
     consult: (_c, ref) => { consults.push(ref); return Promise.resolve(options.consult ?? { outcome: "not_found" }); },
+    cancel: (_c, ref) => { cancels.push(ref); return Promise.resolve({ outcome: "cancelled" }); },
   };
   const deps: FiscalDeps = {
     provider,
     env: (name) => name === "SUPABASE_SERVICE_ROLE_KEY" ? "service" : undefined,
     rpc: (fn, args) => {
       if (fn === "service_fiscal_claim") return Promise.resolve({ data: options.claim ?? JOB, error: null });
+      if (fn === "service_fiscal_cancel_claim") return Promise.resolve({ data: options.cancelClaim, error: null });
       records.push(args);
       if (options.recordError) return Promise.resolve({ data: null, error: { message: "db down" } });
       return Promise.resolve({ data: { status: args.p_outcome === "authorized" ? "authorized" : "pending" }, error: null });
     },
   };
-  return { deps, records, emits, consults };
+  return { deps, records, emits, consults, cancels };
 }
 
 function request(token = "service", body: unknown = { documentId: DOC }) {
@@ -78,30 +81,60 @@ Deno.test("nota autorizada grava número e chave", async () => {
   assertEquals((records[0].p_result as Record<string, unknown>).number, "12");
 });
 
-Deno.test("primeira tentativa não consulta antes de enviar", async () => {
-  const { deps, consults, emits } = setup();
+Deno.test("sem ID do emissor não consulta antes de enviar", async () => {
+  const { deps, consults, emits } = setup({ claim: { ...JOB, attempt: 3 } });
   await handleFiscalEmit(request(), deps);
   assertEquals(consults.length, 0);
   assertEquals(emits[0].ref, `s-${DOC}`);
 });
 
-Deno.test("retentativa adota a nota que o timeout anterior autorizou, sem reenviar", async () => {
-  const { deps, emits, records } = setup({ claim: { ...JOB, attempt: 2 }, consult: AUTHORIZED });
+Deno.test("com ID do emissor, adota a nota autorizada sem reenviar", async () => {
+  const { deps, emits, records, consults } = setup({ claim: { ...JOB, attempt: 2, providerRef: "inv-1" }, consult: AUTHORIZED });
   await handleFiscalEmit(request(), deps);
+  assertEquals(consults, ["inv-1"]);
   assertEquals(emits.length, 0);
   assertEquals(records[0].p_outcome, "authorized");
 });
 
-Deno.test("referência já usada busca o resultado na consulta", async () => {
-  const { deps, records } = setup({ emit: { outcome: "already_processed" }, consult: AUTHORIZED });
+Deno.test("com ID do emissor e nota ainda em processamento, não reenvia e mantém o ID", async () => {
+  const { deps, emits, records } = setup({ claim: { ...JOB, attempt: 2, providerRef: "inv-1" }, consult: { outcome: "pending", providerRef: "inv-1" } });
   await handleFiscalEmit(request(), deps);
-  assertEquals(records[0].p_outcome, "authorized");
+  assertEquals(emits.length, 0);
+  assertEquals(records[0].p_outcome, "transient");
+  assertEquals((records[0].p_result as Record<string, unknown>).providerRef, "inv-1");
 });
 
-Deno.test("referência já usada sem nota na consulta volta para a fila", async () => {
+Deno.test("ID do emissor que sumiu lá: emite de novo", async () => {
+  const { deps, emits } = setup({ claim: { ...JOB, attempt: 2, providerRef: "inv-1" } });
+  await handleFiscalEmit(request(), deps);
+  assertEquals(emits.length, 1);
+});
+
+Deno.test("aceita e em processamento volta para a fila gravando o ID", async () => {
+  const { deps, records } = setup({ emit: { outcome: "pending", providerRef: "inv-2" } });
+  await handleFiscalEmit(request(), deps);
+  assertEquals(records[0].p_outcome, "transient");
+  assertEquals((records[0].p_result as Record<string, unknown>).providerRef, "inv-2");
+});
+
+Deno.test("chave de idempotência já usada com outro corpo volta para a fila, sem nota nova", async () => {
   const { deps, records } = setup({ emit: { outcome: "already_processed" } });
   await handleFiscalEmit(request(), deps);
   assertEquals(records[0].p_outcome, "transient");
+  assertEquals((records[0].p_result as Record<string, unknown>).errorCode, "consult_inconclusive");
+});
+
+Deno.test("cancelamento usa o ID do emissor; sem ele, vai para uma pessoa", async () => {
+  const body = { documentId: DOC, action: "cancel" };
+  const claim = { claimed: true, documentId: DOC, ref: `s-${DOC}`, environment: "homologation", token: "tok", justification: "Estorno ao cliente" };
+  const withId = setup({ cancelClaim: { ...claim, providerRef: "inv-1" } });
+  await handleFiscalEmit(request("service", body), withId.deps);
+  assertEquals(withId.cancels, ["inv-1"]);
+  assertEquals(withId.records[0].p_outcome, "cancelled");
+  const without = setup({ cancelClaim: claim });
+  await handleFiscalEmit(request("service", body), without.deps);
+  assertEquals(without.cancels.length, 0);
+  assertEquals(without.records[0].p_outcome, "failed");
 });
 
 Deno.test("falha do emissor fica recuperável", async () => {
