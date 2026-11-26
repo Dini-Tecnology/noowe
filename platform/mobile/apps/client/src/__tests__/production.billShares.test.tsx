@@ -254,7 +254,7 @@ test('pagamento: total e gorjeta vêm do servidor; PIX é criado em centavos com
   await waitFor(() => expect(screen.getAllByText(/R\$\s53,44/).length).toBeGreaterThan(0));
   fireEvent.press(screen.getByText('Gerar PIX'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ shareId: 'sh1', method: 'pix', tipCents: 486, idempotencyKey: 'key-1' })));
-  expect(await screen.findByText('Aguardando confirmação')).toBeTruthy();
+  expect(await screen.findByText('Pague com Pix')).toBeTruthy();
   expect(screen.getByText('000201-pix')).toBeTruthy();
 });
 
@@ -281,6 +281,32 @@ test('pagamento: CPF exigido na primeira cobrança é pedido e reenviado', async
   fireEvent.changeText(await screen.findByLabelText('CPF do pagador'), '12345678909');
   fireEvent.press(screen.getByText('Gerar PIX'));
   await waitFor(() => expect(mockPay).toHaveBeenLastCalledWith(expect.objectContaining({ payerCpfCnpj: '12345678909' })));
+});
+
+test('CPF exigido: o campo aparece destacado, com o aviso, e recebe o foco (PAG-06)', async () => {
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue(tips);
+  mockPay.mockRejectedValueOnce(Object.assign(new Error('cpf'), { code: 'payer_document_required' }));
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await waitFor(() => expect(screen.getAllByText(/R\$\s53,44/).length).toBeGreaterThan(0));
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  const field = await screen.findByLabelText('CPF do pagador');
+  expect(field.props.autoFocus).toBe(true);
+  expect(screen.getByText(/Informe o CPF do pagador/)).toBeTruthy();
+});
+
+test('Pix expirado: troca o QR por "Gerar novo Pix", que gera outra cobrança com outra chave (PAG-04)', async () => {
+  mockList.mockResolvedValue([myShare]);
+  mockTips.mockResolvedValue(tips);
+  mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 5344, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix-velho', expiresAt: '2000-01-01T00:00:00Z' }, alreadyPaid: false });
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await waitFor(() => expect(screen.getAllByText(/R\$\s53,44/).length).toBeGreaterThan(0));
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  expect(await screen.findByText('Pix expirado')).toBeTruthy();
+  expect(screen.queryByText('pix-velho')).toBeNull();
+  fireEvent.press(screen.getByLabelText('Gerar novo Pix'));
+  fireEvent.press(await screen.findByText('Gerar PIX'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledTimes(2));
 });
 
 // ---- F6: cartão salvo (checkout hospedado do Asaas) ----------------------------------------
@@ -419,7 +445,10 @@ test('CPF na nota: opcional, sugere o CPF já informado e vai na cobrança; desm
   expect(screen.getByText(/consumidor não identificado/)).toBeTruthy();
   expect(screen.queryByTestId('receipt-document-input')).toBeNull();
   fireEvent(screen.getByTestId('receipt-document-switch'), 'valueChange', true);
-  await waitFor(() => expect(screen.getByTestId('receipt-document-input').props.value).toBe('529.982.247-25'));
+  // RV-09: o CPF salvo é oferecido, não preenchido sozinho.
+  expect(screen.getByTestId('receipt-document-input').props.value).toBe('');
+  fireEvent.press(await screen.findByText('Usar meu CPF salvo (•••.982.247-••)'));
+  expect(screen.getByTestId('receipt-document-input').props.value).toBe('529.982.247-25');
   fireEvent(screen.getByTestId('receipt-document-switch'), 'valueChange', false);
   expect(screen.queryByTestId('receipt-document-input')).toBeNull();
   fireEvent.press(screen.getByText('Gerar PIX'));
@@ -443,4 +472,21 @@ test('CPF na nota inválido não gera cobrança', async () => {
   mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 4858, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix', expiresAt: null }, alreadyPaid: false });
   fireEvent.press(screen.getByText('Gerar PIX'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ receiptDocument: '12345678909' })));
+  expect(mockPay.mock.calls[0][0].saveTaxDocument).toBeUndefined();
+});
+
+test('Salvar meu CPF (RV-09): desmarcado por padrão; marcado, o consentimento vai na cobrança', async () => {
+  mockList.mockResolvedValue([{ ...myShare, mode: 'fixed_amount', tipCents: 0 }]);
+  mockMyTaxDocument.mockResolvedValue(null);
+  mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 4858, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix', expiresAt: null }, alreadyPaid: false });
+  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
+  await screen.findByText('Total a pagar');
+  fireEvent(screen.getByTestId('receipt-document-switch'), 'valueChange', true);
+  fireEvent.changeText(await screen.findByTestId('receipt-document-input'), '123.456.789-09');
+  const box = screen.getByLabelText('Salvar meu CPF para as próximas compras');
+  expect(box.props.accessibilityState.checked).toBe(false);
+  fireEvent.press(box);
+  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({
+    receiptDocument: '12345678909', saveTaxDocument: true, taxDocumentConsentText: 'Salvar meu CPF para as próximas compras' })));
 });

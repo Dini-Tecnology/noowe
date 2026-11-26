@@ -484,8 +484,8 @@ class ApiService {
     return supabaseApiAdapter.updateOrderItemStatus(itemId, 'ready');
   }
 
-  async cancelBarItem(_orderId: string, itemId: string, _reason?: string) {
-    return supabaseApiAdapter.updateOrderItemStatus(itemId, 'cancelled');
+  async cancelBarItem(_orderId: string, itemId: string, reason: string) {
+    return supabaseApiAdapter.updateOrderItemStatus(itemId, 'cancelled', reason);
   }
 
   async getDashboardSnapshot(restaurantId?: string) {
@@ -1664,9 +1664,9 @@ class ApiService {
   // KDS / STAFF ENDPOINTS
   // ======================
 
-  async getKitchenOrders(params?: { status?: string; restaurant_id?: string; station?: string }) {
+  async getKitchenOrders(params?: { status?: string; restaurant_id?: string; station?: string; stationKind?: 'kitchen' | 'bar' }) {
     const stationId = params?.station && /^[0-9a-f-]{36}$/i.test(params.station) ? params.station : undefined;
-    return supabaseApiAdapter.getKdsQueue(params?.restaurant_id, stationId);
+    return supabaseApiAdapter.getKdsQueue(params?.restaurant_id, stationId, params?.stationKind);
   }
 
   async getBarOrders(params?: { status?: string; restaurant_id?: string }) {

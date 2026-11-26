@@ -6,6 +6,7 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter, type DayStatus } from '@okinawa/shared/services/supabase-api';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
+import { useRegisterRemoteRefresh } from './remoteRefreshRegistry';
 
 const formatCents = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 const formatDay = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
@@ -29,6 +30,8 @@ export function DayClosePanel() {
   }, [restaurantId]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+  // CX-02: fechar o caixa na mesma tela recarrega o estado do dia.
+  useRegisterRemoteRefresh(load);
 
   const close = async (dayId?: string) => {
     if (!restaurantId) return;

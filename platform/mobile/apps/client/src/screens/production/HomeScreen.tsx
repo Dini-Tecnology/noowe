@@ -304,11 +304,11 @@ export default function HomeScreen({ navigation }: any) {
       const hasOtherActiveTable = !!session?.tableSessionId && session.restaurantId !== restaurant.id;
       if (hasOtherActiveTable) {
         Alert.alert(
-          'Trocar de restaurante',
-          'Você está com uma mesa aberta em outro restaurante. Ao continuar, essa sessão de mesa será encerrada.',
+          'Mesa aberta em outro restaurante',
+          'Sua mesa continua aberta. Você pode ver este restaurante, mas seus pedidos seguem na comanda atual até ela ser encerrada.',
           [
             { text: 'Cancelar', style: 'cancel' },
-            { text: 'Trocar', style: 'destructive', onPress: () => { void proceed(); } },
+            { text: 'Ver restaurante', onPress: () => { void proceed(); } },
           ],
         );
         return;

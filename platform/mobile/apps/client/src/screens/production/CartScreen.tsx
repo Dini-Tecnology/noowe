@@ -9,6 +9,7 @@ import { type CartItem, useCart } from '@/shared/contexts/CartContext';
 import { cartOrderItems } from '../../utils/cart-order-items';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
+import { useOrderIdempotencyKey } from '../../hooks/useOrderIdempotencyKey';
 import customerBackend, { type ConsumptionMode } from '../../services/customer-backend';
 import { QuickOrderOptions } from '../../components/quick/QuickOrderOptions';
 import { cartComboDiscount, pickupSlotOptions } from './quick-service-ui';
@@ -107,6 +108,8 @@ export default function CartScreen({ navigation, route }: any) {
   // Someone accepting an invite shows up in "Na mesa" without a manual refresh.
   useTableInvitesRealtime(session?.tableSessionId, tableWithGuests && hasUsableSession && canInvite);
 
+  const orderKey = useOrderIdempotencyKey();
+  const menuRestaurantId = cart.restaurantId ?? session?.restaurantId;
   const place = useMutation({
     mutationFn: () =>
       customerBackend.placeOrder({
@@ -115,8 +118,10 @@ export default function CartScreen({ navigation, route }: any) {
         waitlistEntryId: canOrderWhileWaiting ? session?.waitlistEntryId : undefined,
         serviceModel: serviceModel ?? undefined,
         items: cartOrderItems(cart.items),
+        idempotencyKey: orderKey.current(),
       }),
     onSuccess: (order) => {
+      orderKey.rotate();
       cart.clearCart();
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['table-bill'] });
@@ -263,6 +268,16 @@ export default function CartScreen({ navigation, route }: any) {
             <View style={styles.emptyWrap}>
               <Ionicons name="cart-outline" size={40} color={colors.foregroundMuted} />
               <Text style={styles.emptyText}>O carrinho está vazio.</Text>
+              {menuRestaurantId ? (
+                <TouchableOpacity
+                  style={[styles.scanBtn, { paddingHorizontal: 24 }]}
+                  onPress={() => navigation.navigate('Menu', { restaurantId: menuRestaurantId })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver cardápio"
+                >
+                  <Text style={styles.scanBtnText}>Ver cardápio</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : (
             <>

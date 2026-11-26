@@ -32,6 +32,8 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
   const receiptGiven = body !== null && typeof body === "object" && "receiptDocument" in body;
   const receiptDocument = receiptGiven && body.receiptDocument !== null ? onlyDigits(body.receiptDocument) : null;
   if (receiptDocument !== null && !validTaxDocument(receiptDocument)) return json({ error: "invalid_receipt_document" }, 400);
+  // LGPD: o CPF só fica guardado com o "Salvar meu CPF" marcado; o texto aceito vai junto, como registro do consentimento.
+  const consentText = body?.saveTaxDocument === true && typeof body?.taxDocumentConsentText === "string" ? body.taxDocumentConsentText.slice(0, 500) : null;
 
   // A gorjeta da parcela é em centavos e o servidor valida o teto; o valor da parcela nunca vem do app.
   const tip = body?.tipCents == null ? null : Number(body.tipCents);
@@ -87,6 +89,7 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
     return json({ error: "payments_unavailable" }, 409);
   }
 
+  let chargeAttempted = false;
   try {
     const customerRow = await deps.rpc("service_payment_customer", { p_account_id: r.paymentAccountId, p_user_id: user.id });
     let customerId: string | undefined = customerRow.data?.providerCustomerId;
@@ -101,7 +104,9 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
         p_account_id: r.paymentAccountId, p_user_id: user.id, p_provider_customer_id: customerId,
       });
     }
-    await rememberPayerDocument(deps, apiKey, user.id, customerId, DOCUMENT.test(document) ? document : null, customerRow.data?.hasTaxDocument);
+    if (consentText) {
+      await rememberPayerDocument(deps, apiKey, user.id, customerId, receiptDocument ?? (DOCUMENT.test(document) ? document : null), customerRow.data?.hasTaxDocument, consentText);
+    }
 
     // Cartão salvo: o token só existe no servidor e só vale para o mesmo usuário e a mesma subconta.
     let creditCardToken: string | null = null;
@@ -115,6 +120,7 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
 
     // Se uma tentativa anterior caiu depois do Asaas responder, a cobrança já existe.
     let charge = await deps.provider.findChargeByExternalRef(apiKey, r.paymentId);
+    chargeAttempted = true;
     if (!charge) {
       const returnUrl = deps.env("PAYMENT_RETURN_URL");
       charge = await deps.provider.createCharge(apiKey, {
@@ -158,7 +164,14 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
     });
   } catch (err) {
     console.error("payments-create provider error:", err instanceof AsaasError ? { status: err.status, body: err.body } : err);
+    // Sem cobrança no Asaas, a parcela da conta volta a ficar aberta na hora (sem esperar a varredura).
+    if (!chargeAttempted && purpose === "bill_share") {
+      const aborted = await deps.rpc("service_payment_abort_unsent", { p_payment_id: r.paymentId, p_error: (err as Error).message });
+      if (aborted.data === true) return json({ error: "provider_unavailable", retryable: true }, 502);
+    }
     await deps.rpc("service_payment_mark_failed", { p_payment_id: r.paymentId, p_error: (err as Error).message });
+    // Subconta sem chave Pix: não é instabilidade, repetir não adianta (QA PAG-06).
+    if (method === "pix" && isMissingPixKey(err)) return json({ error: "pix_unavailable", retryable: false, paymentId: r.paymentId }, 422);
     // A cobrança segue `creating`: repetir com a mesma chave retoma de onde parou.
     return json({ error: "provider_unavailable", retryable: true, paymentId: r.paymentId }, 502);
   }
@@ -166,14 +179,19 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
 
 // O CPF da cobrança é o tomador da nota da taxa de conveniência da NOOWE. Quem já tinha cadastro no Asaas antes de guardarmos
 // o CPF tem o documento lido de lá uma vez. Nunca atrapalha o pagamento.
-async function rememberPayerDocument(deps: PaymentDeps, apiKey: string, userId: string, customerId: string, typed: string | null, stored: unknown) {
+async function rememberPayerDocument(deps: PaymentDeps, apiKey: string, userId: string, customerId: string, typed: string | null, stored: unknown, consentText: string) {
   try {
     let found = typed;
     if (!found && stored === false) found = onlyDigits((await deps.provider.getCustomer(apiKey, customerId)).cpfCnpj) || null;
     if (!found) return;
-    const saved = await deps.rpc("service_customer_save_tax_document", { p_user_id: userId, p_document: found, p_source: typed ? "payment" : "provider" });
+    const saved = await deps.rpc("service_customer_save_tax_document", { p_user_id: userId, p_document: found, p_source: typed ? "payment" : "provider", p_consent: true, p_consent_text: consentText });
     if (saved.error) console.error("payments-create tax document error:", saved.error);
   } catch (err) {
     console.error("payments-create tax document error:", err instanceof AsaasError ? { status: err.status } : err);
   }
+}
+
+// O Asaas recusa a cobrança/QR Pix com uma descrição citando a chave Pix ausente da conta.
+function isMissingPixKey(err: unknown): boolean {
+  return err instanceof AsaasError && err.status >= 400 && err.status < 500 && /chave\s+pix/i.test(JSON.stringify(err.body ?? ""));
 }

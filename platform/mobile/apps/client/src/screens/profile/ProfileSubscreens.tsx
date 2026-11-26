@@ -14,6 +14,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
+import { SavedTaxDocumentCard } from '../../components/payment/SavedTaxDocumentCard';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -362,6 +363,7 @@ export function ProfilePaymentMethodsScreen() {
       <View style={styles.screen}>
         <Header title="Métodos de Pagamento" rightLabel="Adicionar" />
         <ScrollView contentContainerStyle={styles.pagePadding} showsVerticalScrollIndicator={false}>
+          <SavedTaxDocumentCard />
           {methods.map((method) => (
             <View key={method.id} style={styles.listCard}>
               <IconBubble icon={method.icon} />

@@ -204,6 +204,7 @@ function withServiceGuard<P extends object>(
   };
 }
 
+const GuardedLoyalty = withRoleGuard(LoyaltyScreen, ['owner']);
 const GuardedFinancial = withRoleGuard(FinancialScreen, ['owner', 'manager']);
 const GuardedPromotions = withRoleGuard(PromotionsScreen, [...COUPON_ROLES]);
 const GuardedReports = withRoleGuard(ReportsScreen, ['owner', 'manager']);
@@ -517,7 +518,7 @@ function MainStack() {
       <Stack.Screen name="Reports" component={GuardedReports} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Reviews" component={ReviewsScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Promotions" component={GuardedPromotions} options={scaleFadeScreenOptions} />
-      <Stack.Screen name="Loyalty" component={LoyaltyScreen} options={scaleFadeScreenOptions} />
+      <Stack.Screen name="Loyalty" component={GuardedLoyalty} options={scaleFadeScreenOptions} />
       <Stack.Screen name="RoleDashboard" component={RoleDashboardScreen} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Waiter" component={JourneyWaiter} options={scaleFadeScreenOptions} />
       <Stack.Screen name="Maitre" component={JourneyMaitre} options={scaleFadeScreenOptions} />

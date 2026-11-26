@@ -611,7 +611,7 @@ export interface CustomerBackend {
   /** Como este restaurante cobra pedidos agora; quem decide é o servidor. */
   getOrderPaymentMode(restaurantId: string): Promise<OrderPaymentMode>;
   /** Cria a cobrança do pedido (ADR-020). `confirmed` só existe depois do webhook; a tela nunca confirma nada. */
-  startPayment(input: { orderId: string; restaurantId: string; paymentMethod: string; idempotencyKey?: string; payerCpfCnpj?: string; tipBps?: number; tipCents?: number; receiptDocument?: string | null }): Promise<{
+  startPayment(input: { orderId: string; restaurantId: string; paymentMethod: string; idempotencyKey?: string; payerCpfCnpj?: string; tipBps?: number; tipCents?: number; receiptDocument?: string | null; saveTaxDocument?: true; taxDocumentConsentText?: string }): Promise<{
     transactionId: string; orderId: string; paymentStatus: CustomerPaymentStatus; idempotentReplay: boolean; simulated: boolean;
     fulfillmentStatus: CustomerFulfillmentStatus | null;
     /** Pix pendente: copia-e-cola e prazo (ADR-013). */
@@ -1492,6 +1492,7 @@ export const customerBackend: CustomerBackend = {
         ...(input.tipBps ? { tipBps: input.tipBps } : {}), ...(input.tipCents ? { tipCents: input.tipCents } : {}),
         ...(input.payerCpfCnpj ? { payerCpfCnpj: input.payerCpfCnpj } : {}),
         ...(input.receiptDocument !== undefined ? { receiptDocument: input.receiptDocument } : {}),
+        ...(input.saveTaxDocument ? { saveTaxDocument: true, taxDocumentConsentText: input.taxDocumentConsentText } : {}),
       }));
       return {
         transactionId: String(charge.paymentId ?? ''),

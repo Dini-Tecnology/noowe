@@ -36,8 +36,10 @@ import {
   MapPin,
   Wine,
   Contact,
+  Award,
   CalendarClock,
   Plug,
+  Lock,
   Timer,
   ShieldAlert,
   Wheat,
@@ -72,6 +74,7 @@ import { CouponsEntry } from './shared/CouponsEntry';
 import { WaiterAppShareCard } from './shared/WaiterAppShareCard';
 import { CreditIndexCard } from './shared/CreditIndexCard';
 import { usePlanLocks } from './shared/usePlanLocks';
+import { planGate } from './config/planView';
 import { PlanGateBanner } from './shared/PlanGateBanner';
 import { DayClosePanel } from './shared/DayClosePanel';
 import { PaymentActionsPanel } from './shared/PaymentActionsPanel';
@@ -480,7 +483,7 @@ function formatApprovalCurrency(value: number): string {
 }
 
 function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void; colors: ReturnType<typeof useColors> }) {
-  const { serviceFeatures, capabilities } = useRestaurantRole();
+  const { serviceFeatures, capabilities, role } = useRestaurantRole();
   const { data: snapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useDashboardSnapshot();
   const { data: recentOrders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useRestaurantOrders();
   const { data: serviceCalls, loading: callsLoading, error: callsError, refresh: refreshCalls } = useServiceCalls();
@@ -489,13 +492,19 @@ function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void;
     { title: 'Cardápio', detail: 'Itens e preços', screen: 'Menu', icon: UtensilsCrossed },
     { title: 'Equipe', detail: 'Staff e turnos', screen: 'Staff', icon: Users },
     { title: 'Financeiro', detail: 'Receita e composição', screen: 'Financial', icon: CreditCardIcon },
-    ...(locks.includes('delivery_integrations') ? [] : [{ title: 'Integrações', detail: 'Delivery', screen: 'Integrations', icon: Plug }]),
   ];
+  // PL-05: fora do plano, o Dono vê com cadeado e o caminho do upgrade; os papéis operacionais não veem.
+  const integrationsGate = planGate(locks, 'delivery_integrations', role);
+  if (integrationsGate === 'open') primaryActions.push({ title: 'Integrações', detail: 'Delivery', screen: 'Integrations', icon: Plug });
+  if (integrationsGate === 'locked') primaryActions.push({ title: 'Integrações', detail: 'Fora do plano · Fazer upgrade', screen: 'Plan', icon: Lock });
   const secondaryActions: { title: string; screen: string; icon: IconComponent }[] = [
     { title: 'Relatórios', screen: 'Reports', icon: BarChart },
     { title: 'Bar KDS', screen: 'BarKDS', icon: Wine },
     { title: 'Clientes', screen: 'Customers', icon: Contact },
+    { title: 'Fidelidade', screen: 'Loyalty', icon: Award },
     { title: 'Escalas', screen: 'Shifts', icon: CalendarClock },
+    // Sem Maître, o Dono abre mesa pela fila: a tela segue a capacidade, não o modelo de serviço.
+    ...(serviceFeatures.virtualQueue ? [{ title: 'Fila', screen: 'Waitlist', icon: Clock }] : []),
   ];
   const occupancy = snapshot?.tables.total
     ? Math.round((snapshot.tables.occupied / snapshot.tables.total) * 100)
@@ -742,7 +751,7 @@ function CookQueueView({
   colors: ReturnType<typeof useColors>;
   mode: 'station' | 'kds';
 }) {
-  const { data: orders, loading, refresh } = useKdsOrders();
+  const { data: orders, loading, refresh } = useKdsOrders('kitchen');
   const queueCount = orders.filter((o) => o.status === 'queue').length;
   const preparingCount = orders.filter((o) => o.status === 'preparing').length;
   const readyCount = orders.filter((o) => o.status === 'ready').length;
@@ -890,7 +899,7 @@ function BarmanStockView({ colors }: { colors: ReturnType<typeof useColors> }) {
 }
 
 function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
-  const { data: orders, loading, refresh } = useKdsOrders();
+  const { data: orders, loading, refresh } = useKdsOrders('kitchen');
   const queueCount = orders.filter((o) => o.status === 'queue').length;
   const preparingCount = orders.filter((o) => o.status === 'preparing').length;
   const readyCount = orders.filter((o) => o.status === 'ready').length;
@@ -1209,6 +1218,7 @@ function MaitreManagementView({ colors }: { colors: ReturnType<typeof useColors>
 
 function ManagerDashboardTab({
   setView,
+  onNavigate,
   colors,
 }: {
   setView: (view: ManagerRoleView) => void;
@@ -1255,6 +1265,25 @@ function ManagerDashboardTab({
           </Text>
         </TouchableOpacity>
       )}
+
+      {serviceFeatures.virtualQueue ? (
+        <TouchableOpacity
+          activeOpacity={0.84}
+          accessibilityRole="button"
+          accessibilityLabel="Abrir a fila virtual"
+          onPress={() => onNavigate('Waitlist')}
+          style={[styles.managerShortcut, { borderColor: colors.border, backgroundColor: colors.card }]}
+        >
+          <View style={[styles.moreShortcutIcon, { backgroundColor: colors.backgroundSecondary }]}>
+            <Clock size={17} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={[styles.managerShortcutTitle, { color: colors.foreground }]}>Fila</Text>
+            <Text style={[styles.managerShortcutSubtitle, { color: colors.foregroundSecondary }]}>Chamar e sentar quem está esperando</Text>
+          </View>
+          <Text style={{ color: colors.primary, fontSize: 18, fontWeight: '800' }}>›</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <TouchableOpacity
         activeOpacity={0.84}
@@ -1510,7 +1539,8 @@ function ManagerCashView({ colors }: { colors: ReturnType<typeof useColors> }) {
       await action();
       setAmount(0);
       setReason('');
-      await Promise.all([refreshSession(), refreshMovements()]);
+      // CX-02: inclui o fechamento do dia, que mostra se o caixa ainda está aberto.
+      await Promise.all([refreshSession(), refreshMovements(), refreshMountedRemoteData()]);
     } catch (err) {
       Alert.alert(`Falha em ${label}`, userErrorMessage(err, 'Tente novamente.'));
     } finally {

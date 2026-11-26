@@ -16,6 +16,7 @@ import { PaymentActionsPanel } from '../screens/v2/shared/PaymentActionsPanel';
 import { ShiftsTodayCard } from '../screens/v2/shared/ShiftsTodayCard';
 import { REVENUE_LABEL } from '../screens/v2/shared/revenueLabel';
 import { tableBillLabel, tableBillLines } from '../screens/v2/shared/tableBill';
+import { refreshMountedRemoteData } from '../screens/v2/shared/remoteRefreshRegistry';
 
 const mockApi = {
   getCashSettings: jest.fn(), updateCashSettings: jest.fn(), getDayStatus: jest.fn(), closeOperationalDay: jest.fn(), reviewCashBreak: jest.fn(),
@@ -131,6 +132,15 @@ describe('rateio (critério 6)', () => {
 });
 
 describe('fechamento do dia (critérios 3 e 5)', () => {
+  it('CX-02: depois de fechar o caixa na mesma tela, deixa de dizer que o caixa está aberto', async () => {
+    api.getDayStatus.mockResolvedValue({ ...day, cashOpen: true });
+    const view = render(<DayClosePanel />);
+    expect(await view.findByText('O caixa ainda está aberto.')).toBeTruthy();
+    api.getDayStatus.mockResolvedValue({ ...day, cashOpen: false });
+    await refreshMountedRemoteData();
+    await waitFor(() => expect(view.queryByText('O caixa ainda está aberto.')).toBeNull());
+  });
+
   it('bloqueia com comanda ou caixa abertos', async () => {
     api.getDayStatus.mockResolvedValue({ ...day, openSessions: 2, cashOpen: true });
     const view = render(<DayClosePanel />);

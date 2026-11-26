@@ -21,7 +21,7 @@ import { QUICK_ORDER_ERROR_COPY, duplicateOrderId, quickOrderErrorKind } from '.
 import { billShares } from '../../services/bill-shares';
 import { centsFromDigits, money, moneyCents, percentFromBps, translateOrderError } from './shared';
 import { formatDistance, isFarFromRestaurant, pickupPolicyText } from './quick-service-ui';
-import { INVALID_RECEIPT_DOCUMENT, RECEIPT_DOCUMENT_OFF, ReceiptDocumentField, receiptDocumentForPayment } from '../../components/payment/ReceiptDocumentField';
+import { INVALID_RECEIPT_DOCUMENT, RECEIPT_DOCUMENT_OFF, ReceiptDocumentField, receiptDocumentForPayment, taxDocumentConsentForPayment } from '../../components/payment/ReceiptDocumentField';
 
 const HEADER_GRADIENT = ['#FF5724', '#F97316', '#F59E0B'] as const;
 
@@ -157,6 +157,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
         tipCents,
         payerCpfCnpj: document.replace(/\D/g, '') || undefined,
         receiptDocument,
+        ...taxDocumentConsentForPayment(receiptDoc),
       });
       return { order, payment };
     },
