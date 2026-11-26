@@ -13,11 +13,24 @@ import { V2Shell } from '../v2/shared/V2Shell';
 import { V2ConfirmDialog } from '../v2/shared/V2ConfirmDialog';
 import { formatTableLabel } from '../v2/shared/tableLabel';
 
-const STATUS_COPY: Record<FiscalIssue['status'], { label: string; hint: string }> = {
+const STATUS_COPY: Record<Exclude<FiscalIssue['status'], 'authorized'>, { label: string; hint: string }> = {
   blocked: { label: 'Bloqueada', hint: 'Não chegou a ir para a Notaas. Corrija o cadastro e reenvie.' },
   rejected: { label: 'Rejeitada', hint: 'A SEFAZ ou a Notaas recusou. Corrija o dado indicado e reenvie.' },
   failed: { label: 'Falhou', hint: 'O emissor não respondeu nas tentativas automáticas. Reenvie quando ele voltar.' },
 };
+
+// Paradas que o cadastro não resolve têm texto próprio; nota com cancelamento recusado não é reenviada.
+const CODE_HINT: Record<string, string> = {
+  fiscal_config_missing: 'O restaurante não tem chave da Notaas ativa. Cadastre em Configuração fiscal e reenvie.',
+  dispatch_unavailable: 'O envio ao emissor está indisponível do lado da NOOWE. Não há o que corrigir no cadastro: reenvie mais tarde.',
+};
+const CANCEL_FAILED = { label: 'Cancelamento recusado', hint: 'A venda foi estornada, mas a nota não pôde ser cancelada. Fale com o contador.' };
+
+function issueCopy(issue: FiscalIssue) {
+  if (issue.cancel_status === 'failed') return { ...CANCEL_FAILED, retry: false, message: issue.cancel_error };
+  const base = STATUS_COPY[issue.status as keyof typeof STATUS_COPY] ?? STATUS_COPY.failed;
+  return { label: base.label, hint: CODE_HINT[issue.error_code ?? ''] ?? base.hint, retry: true, message: issue.error_message };
+}
 
 const csvCell = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
 const cents = (value: number) => (value / 100).toFixed(2);
@@ -75,6 +88,7 @@ export default function FiscalDocumentsScreen() {
 
   // Volta do cadastro e nota que a emissão devolveu aparecem sem precisar puxar a tela.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     void load();
     const unsubscribe = navigation.addListener?.('focus', () => void load());
     return typeof unsubscribe === 'function' ? unsubscribe : undefined;
@@ -148,7 +162,7 @@ export default function FiscalDocumentsScreen() {
             <Text style={[styles.empty, { color: colors.foregroundSecondary }]}>Nenhuma nota com problema.</Text>
           ) : null}
           {issues.map((issue) => {
-            const copy = STATUS_COPY[issue.status];
+            const copy = issueCopy(issue);
             return (
               <View key={issue.id} testID={`fiscal-issue-${issue.id}`} style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
                 <View style={styles.cardHeader}>
@@ -158,9 +172,9 @@ export default function FiscalDocumentsScreen() {
                 <Text style={{ color: colors.foregroundSecondary }}>
                   {formatCentsBRL(issue.total_cents)} · {new Date(issue.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
                 </Text>
-                <Text style={{ color: colors.foreground }}>{issue.error_message ?? 'O emissor não informou o motivo.'}</Text>
+                <Text style={{ color: colors.foreground }}>{copy.message ?? 'O emissor não informou o motivo.'}</Text>
                 <Text style={[styles.hint, { color: colors.foregroundSecondary }]}>{copy.hint}</Text>
-                <View style={styles.actions}>
+                {copy.retry ? <View style={styles.actions}>
                   <TouchableOpacity
                     accessibilityRole="button"
                     style={[styles.button, { borderColor: colors.border, borderWidth: 1 }]}
@@ -175,7 +189,7 @@ export default function FiscalDocumentsScreen() {
                   >
                     <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Reenviar</Text>
                   </TouchableOpacity>
-                </View>
+                </View> : null}
               </View>
             );
           })}

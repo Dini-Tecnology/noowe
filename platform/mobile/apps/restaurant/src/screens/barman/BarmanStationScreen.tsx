@@ -136,7 +136,7 @@ const RECIPE_CATEGORIES = [
  */
 function UrgentBadge({ colors }: { colors: any }) {
   const { t } = useI18n();
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -176,7 +176,7 @@ export default function BarmanStationScreen({ navigation }: { navigation: any })
   const [activeTab, setActiveTab] = useState<'orders' | 'recipes' | 'stock'>('orders');
 
   // Timer for urgency refresh
-  const [, setNow] = useState(Date.now());
+  const [, setNow] = useState(0);
 
   // Orders state
   const [orders, setOrders] = useState<DrinkOrder[]>([]);
@@ -551,26 +551,11 @@ export default function BarmanStationScreen({ navigation }: { navigation: any })
   // DATA LOADING
   // ============================================
 
-  useEffect(() => {
-    loadOrders();
-    const interval = setInterval(loadOrders, 30000);
-    return () => clearInterval(interval);
-  }, [orderFilter]);
-
   // Timer refresh for urgency
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (activeTab === 'recipes' && recipes.length === 0) {
-      loadRecipes();
-    }
-    if (activeTab === 'stock' && stockItems.length === 0) {
-      loadStock();
-    }
-  }, [activeTab]);
 
   const loadOrders = async () => {
     try {
@@ -609,6 +594,23 @@ export default function BarmanStationScreen({ navigation }: { navigation: any })
       setStockLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
+    loadOrders();
+    const interval = setInterval(loadOrders, 30000);
+    return () => clearInterval(interval);
+  }, [orderFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'recipes' && recipes.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
+      loadRecipes();
+    }
+    if (activeTab === 'stock' && stockItems.length === 0) {
+      loadStock();
+    }
+  }, [activeTab]);
 
   // ============================================
   // ORDER ACTIONS

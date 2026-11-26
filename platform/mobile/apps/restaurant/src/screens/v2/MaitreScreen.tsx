@@ -26,6 +26,7 @@ export default function MaitreScreen() {
     }
   }, [restaurantId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void loadReservations(); }, [loadReservations]);
 
   const availableTables = tables.filter((table) => table.status === 'available').length;

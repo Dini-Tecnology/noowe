@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // MOCKS
 // ============================================================
 
-vi.mock('@react-native-async-storage/async-storage', () => ({
+jest.mock('@react-native-async-storage/async-storage', () => ({
   default: {
     getItem: vi.fn(),
     setItem: vi.fn(),
@@ -31,7 +31,7 @@ const mockAuthService = {
   getCurrentUser: vi.fn(),
 };
 
-vi.mock('../../services/auth', () => ({
+jest.mock('../../services/auth', () => ({
   authService: mockAuthService,
 }));
 

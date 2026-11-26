@@ -88,7 +88,7 @@ const ROLE_ICONS: Record<UserRole, string> = {
 // ---------------------------------------------------------------------------
 
 function PulsingDot({ color }: { color: string }) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -232,6 +232,7 @@ export default function RoleDashboardScreen() {
 
   // Initial load + 15s auto-refresh
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     loadData();
     const interval = setInterval(() => {
       loadData();

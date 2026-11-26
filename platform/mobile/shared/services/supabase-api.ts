@@ -142,8 +142,12 @@ export interface FiscalConfigView {
 
 export interface FiscalIssue {
   id: string;
-  status: 'blocked' | 'rejected' | 'failed';
+  status: 'blocked' | 'rejected' | 'failed' | 'authorized';
+  error_code?: string | null;
   error_message: string | null;
+  /** 'failed': a venda foi estornada e a SEFAZ não cancelou a nota. */
+  cancel_status?: string | null;
+  cancel_error?: string | null;
   total_cents: number;
   created_at: string;
   table_sessions: { tables: { table_number: string | null } | null } | null;
@@ -1051,9 +1055,9 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     // table_sessions tem duas FKs para tables; sem nomear a da mesa atual o PostgREST recusa (PGRST201).
     const { data, error } = await (getSupabaseClient() as any)
       .from('fiscal_documents')
-      .select('id, status, error_message, total_cents, created_at, table_sessions(tables:tables!table_sessions_table_id_fkey(table_number)), orders(order_number)')
+      .select('id, status, error_code, error_message, cancel_status, cancel_error, total_cents, created_at, table_sessions(tables:tables!table_sessions_table_id_fkey(table_number)), orders(order_number)')
       .eq('restaurant_id', restaurantId)
-      .in('status', ['blocked', 'rejected', 'failed'])
+      .or('status.in.(blocked,rejected,failed),cancel_status.eq.failed')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data ?? []) as FiscalIssue[];

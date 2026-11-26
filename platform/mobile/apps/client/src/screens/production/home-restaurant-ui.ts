@@ -1,3 +1,4 @@
+import { isCounterJourney, isTableJourney } from '@okinawa/shared/config/service-types';
 import type { ServiceModel } from '@okinawa/shared/config/capabilities';
 
 export const QUICK_RESTAURANT_ACTIONS = [
@@ -25,10 +26,11 @@ export type RestaurantExperience = { key: 'table' | 'pickup'; label: string; mod
  * viram "Na mesa" e o Quick vira "Retirada". Só há o que escolher com duas ou mais.
  */
 export function restaurantExperiences(models: readonly ServiceModel[]): RestaurantExperience[] {
-  const dine = models.find((model) => model !== 'quick_service');
+  const dine = models.find(isTableJourney);
   const experiences: RestaurantExperience[] = [];
   if (dine) experiences.push({ key: 'table', label: 'Na mesa', model: dine });
-  if (models.includes('quick_service')) experiences.push({ key: 'pickup', label: 'Retirada', model: 'quick_service' });
+  const pickup = models.find(isCounterJourney);
+  if (pickup) experiences.push({ key: 'pickup', label: 'Retirada', model: pickup });
   return experiences;
 }
 

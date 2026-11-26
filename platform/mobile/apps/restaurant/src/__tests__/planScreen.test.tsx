@@ -134,6 +134,14 @@ describe('Meu plano (M4 e M5)', () => {
     expect(view.getByText('Ajuste de estorno')).toBeTruthy();
   });
 
+  it('NFS-e cancelada pela NOOWE aparece cancelada, sem link da nota (QA FX)', async () => {
+    api.listInvoices.mockResolvedValue([{ id: 'i3', kind: 'renewal', status: 'paid', totalCents: 19900, dueAt: '', paidAt: '2026-11-05', periodStart: '2026-11-04', periodEnd: '', checkoutUrl: null, nfseStatus: 'cancelled', nfseUrl: 'https://nota',
+      lines: [{ kind: 'plan', description: 'Plano Essencial', amountCents: 19900 }] }]);
+    const view = render(<PlanScreen />);
+    expect(await view.findByText(/nota da NOOWE cancelada/)).toBeTruthy();
+    expect(view.queryByText('Baixar nota')).toBeNull();
+  });
+
   it('fatura com linhas e link de pagamento', async () => {
     const view = render(<PlanScreen />);
     expect(await view.findByText(/Em atraso/)).toBeTruthy();

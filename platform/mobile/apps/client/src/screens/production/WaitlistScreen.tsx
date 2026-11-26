@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Image, ScrollView, Share, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { isTableJourney } from '@okinawa/shared/config/service-types';
 import { Text } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -211,7 +212,7 @@ export default function WaitlistScreen({ route, navigation }: any) {
   }, [update]);
 
   const openMenu = () => {
-    if (myEntry && (serviceModel === 'fine_dining' || serviceModel === 'casual_dining')) {
+    if (myEntry && isTableJourney(serviceModel)) {
       void visit.selectWaitlistJourney(restaurantId, myEntry.id, serviceModel);
     }
     rootNavigate(navigation, 'Menu', { restaurantId });

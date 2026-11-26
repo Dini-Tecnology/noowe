@@ -172,7 +172,7 @@ export default function IntegrationSettingsScreen() {
       );
       setModalVisible(true);
     },
-    [getConnectionForPlatform, restaurantId],
+    [getConnectionForPlatform, restaurantId, setFormData, setModalVisible],
   );
 
   const handleSave = useCallback(() => {

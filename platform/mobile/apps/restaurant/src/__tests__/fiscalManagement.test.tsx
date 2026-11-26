@@ -177,6 +177,20 @@ describe('notas com problema', () => {
     screen.getByText(/R\$ 1\.234,56/);
   });
 
+  test('estados novos: sem chave, disparo indisponível e cancelamento recusado (QA FX)', async () => {
+    mockGetIssues.mockResolvedValue([
+      { id: 'x1', status: 'blocked', error_code: 'fiscal_config_missing', error_message: 'Restaurante sem configuração fiscal ativa', total_cents: 100, created_at: '2026-11-02T18:00:00Z', table_sessions: null, orders: null },
+      { id: 'x2', status: 'blocked', error_code: 'dispatch_unavailable', error_message: 'Envio indisponível', total_cents: 100, created_at: '2026-11-02T18:00:00Z', table_sessions: null, orders: null },
+      { id: 'x3', status: 'authorized', cancel_status: 'failed', cancel_error: 'Prazo de cancelamento vencido', error_message: null, total_cents: 100, created_at: '2026-11-02T18:00:00Z', table_sessions: null, orders: null },
+    ]);
+    const screen = render(<FiscalDocumentsScreen />);
+    await waitFor(() => screen.getByText('Cancelamento recusado'));
+    screen.getByText(/não tem chave da Notaas ativa/);
+    screen.getByText(/indisponível do lado da NOOWE/);
+    screen.getByText('Prazo de cancelamento vencido');
+    expect(screen.getAllByText('Reenviar')).toHaveLength(2);
+  });
+
   test('estornos que não cancelam a nota aparecem para o contador (resposta 63)', async () => {
     mockGetIssues.mockResolvedValue([]);
     mockGetReviews.mockResolvedValueOnce([{ id: 'v1', total_cents: 6000, refund_review_at: '2026-11-05T21:00:00Z', refund_review_cents: 2000,

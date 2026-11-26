@@ -68,6 +68,7 @@ export function TableComandaDialog({
   useEffect(() => {
     if (!visible || !tableId) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- shows the spinner while the async request below runs
     setLoading(true);
     setError(null);
     supabaseApiAdapter.getTableComanda(tableId)

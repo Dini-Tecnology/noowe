@@ -41,6 +41,7 @@ export default function PlanScreen() {
     }
   }, [restaurantId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void load(); }, [load]);
 
   const act = async (work: () => Promise<unknown>, done?: string) => {
@@ -238,7 +239,7 @@ export default function PlanScreen() {
                   <Text style={{ color: colors.foreground, fontWeight: '700' }}>{formatDate(invoice.periodStart)}</Text>
                   <Text style={{ color: colors.foreground, fontWeight: '700' }}>{formatCents(invoice.totalCents)}</Text>
                 </View>
-                <Text style={muted}>{INVOICE_STATUS[invoice.status] ?? invoice.status}{invoice.nfseUrl ? '' : invoice.status === 'paid' ? ' · nota da NOOWE em breve' : ''}</Text>
+                <Text style={muted}>{INVOICE_STATUS[invoice.status] ?? invoice.status}{invoice.nfseStatus === 'cancelled' ? ' · nota da NOOWE cancelada' : invoice.nfseUrl ? '' : invoice.status === 'paid' ? ' · nota da NOOWE em breve' : ''}</Text>
                 {invoice.lines.map((line, index) => (
                   <View key={`${line.kind}-${index}`} style={styles.row}>
                     <Text style={[muted, { fontSize: 12 }]}>{line.description}</Text>
@@ -248,7 +249,7 @@ export default function PlanScreen() {
                 {invoice.checkoutUrl && invoice.status !== 'paid' ? (
                   <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(invoice.checkoutUrl!)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Pagar</Text></Pressable>
                 ) : null}
-                {invoice.nfseUrl ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(invoice.nfseUrl!)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Baixar nota</Text></Pressable> : null}
+                {invoice.nfseUrl && invoice.nfseStatus !== 'cancelled' ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(invoice.nfseUrl!)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Baixar nota</Text></Pressable> : null}
               </View>
             ))}
           </View>

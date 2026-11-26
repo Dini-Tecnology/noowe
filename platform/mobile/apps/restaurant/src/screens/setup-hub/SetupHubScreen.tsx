@@ -269,15 +269,6 @@ export default function SetupHubScreen() {
   }), [colors]);
 
   // Load setup progress when restaurant ID is available
-  useEffect(() => {
-    if (restaurantId) {
-      loadSetupProgress();
-    }
-  }, [restaurantId]);
-
-  useEffect(() => {
-    calculateProgress();
-  }, [steps]);
 
   const loadSetupProgress = async () => {
     try {
@@ -305,6 +296,18 @@ export default function SetupHubScreen() {
     const progressValue = completedRequired / requiredSteps.length;
     setProgress(progressValue);
   };
+
+  useEffect(() => {
+    if (restaurantId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
+      loadSetupProgress();
+    }
+  }, [restaurantId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
+    calculateProgress();
+  }, [steps]);
 
   const toggleStepComplete = async (stepId: string) => {
     const updatedSteps = steps.map((step) =>

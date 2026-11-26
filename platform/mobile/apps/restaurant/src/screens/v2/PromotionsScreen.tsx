@@ -40,6 +40,7 @@ export default function PromotionsScreen() {
     }
   }, [restaurantId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void load(); }, [load]);
 
   // O cardápio dá nome ao item grátis e ao escopo, na edição e na frase da lista.

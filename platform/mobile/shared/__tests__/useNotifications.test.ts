@@ -20,7 +20,7 @@ const mockMarkMultipleNotificationsRead = vi.fn();
 const mockDeleteNotification = vi.fn();
 const mockDeleteAllReadNotifications = vi.fn();
 
-vi.mock('../services/api', () => ({
+jest.mock('../services/api', () => ({
   default: {
     getNotifications: (...args: any[]) => mockGetNotifications(...args),
     getUnreadNotificationsCount: (...args: any[]) => mockGetUnreadNotificationsCount(...args),
@@ -33,7 +33,7 @@ vi.mock('../services/api', () => ({
 
 const mockInvalidate = vi.fn();
 
-vi.mock('../config/react-query', () => ({
+jest.mock('../config/react-query', () => ({
   queryKeys: {
     notifications: {
       list: (filters?: any) => ['notifications', 'list', filters],
@@ -49,7 +49,7 @@ vi.mock('../config/react-query', () => ({
 let lastQueryConfig: any = null;
 let lastMutationConfig: any = null;
 
-vi.mock('@tanstack/react-query', () => ({
+jest.mock('@tanstack/react-query', () => ({
   useQuery: (config: any) => {
     lastQueryConfig = config;
     return {

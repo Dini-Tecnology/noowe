@@ -255,13 +255,6 @@ export default function MaitreDashboardScreen() {
   }), [colors]);
 
   // Load dashboard data when restaurant ID is available
-  useEffect(() => {
-    if (restaurantId) {
-      loadDashboardData();
-      const interval = setInterval(loadDashboardData, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [restaurantId]);
 
   const loadDashboardData = async () => {
     try {
@@ -274,6 +267,15 @@ export default function MaitreDashboardScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (restaurantId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
+      loadDashboardData();
+      const interval = setInterval(loadDashboardData, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [restaurantId]);
 
   const onRefresh = async () => {
     setRefreshing(true);

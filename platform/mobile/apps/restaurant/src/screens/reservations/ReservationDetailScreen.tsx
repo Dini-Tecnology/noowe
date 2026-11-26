@@ -40,10 +40,6 @@ export default function ReservationDetailScreen() {
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadReservation();
-  }, [reservationId]);
-
   const loadReservation = async () => {
     try {
       setLoading(true);
@@ -57,6 +53,11 @@ export default function ReservationDetailScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
+    loadReservation();
+  }, [reservationId]);
 
   const handleStatusChange = async (newStatus: ReservationStatus) => {
     try {

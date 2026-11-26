@@ -210,3 +210,21 @@ export function getDefaultCustomerExperience(serviceType: ServiceType): Required
     journeyPostVisit: features.postVisit,
   };
 }
+
+/**
+ * Flags estáticas da jornada de um modelo. Único ponto onde o modelo vira capacidade: telas e
+ * serviços leem as flags daqui (CLAUDE.md, IV-10), nunca comparam o modelo. null = modelo desconhecido.
+ */
+export function journeyFeatures(model: unknown): ServiceTypeFeatures | null {
+  return isSupportedServiceType(model) ? SERVICE_TYPE_CONFIGS[model].features : null;
+}
+
+/** Jornada de mesa (comanda aberta, pagamento ao fim). */
+export function isTableJourney(model: unknown): model is Exclude<ServiceType, 'quick_service'> {
+  return journeyFeatures(model)?.tableManagement === true;
+}
+
+/** Jornada de balcão: sem comanda, o pedido termina na retirada. */
+export function isCounterJourney(model: unknown): model is 'quick_service' {
+  return journeyFeatures(model)?.tableManagement === false;
+}

@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { closeAccountMessage } from './shared/closeAccountMessage';
-import { tableBillLines } from './shared/tableBill';
+import { tableBillLines, tableCellA11yLabel } from './shared/tableBill';
 import { waiterCanCloseBill } from './shared/waiterCloseBill';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
@@ -762,7 +762,7 @@ const TableCell = React.memo(function TableCell({
       onPress={() => onSelect(table.id)}
       accessibilityRole="button"
       accessibilityState={{ selected: isSelected }}
-      accessibilityLabel={`${formatTableLabel(table.label)}, ${meta.label.toLowerCase()}, ${table.guestName || table.section}, ${table.effectiveSeats} lugares${table.mergedIntoLabel ? `, unida à mesa ${table.mergedIntoLabel}` : ''}`}
+      accessibilityLabel={tableCellA11yLabel(table, meta.label)}
       style={({ pressed }) => [{ width: size, height: Math.max(112, Math.min(size, 124)) }, pressed && styles.cellPressed]}
     >
       <Animated.View

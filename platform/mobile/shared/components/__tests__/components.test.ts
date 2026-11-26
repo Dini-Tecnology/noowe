@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ============================================================
 
 // Mock React Native components
-vi.mock('react-native', () => ({
+jest.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
   TextInput: 'TextInput',
@@ -42,15 +42,15 @@ vi.mock('react-native', () => ({
 }));
 
 // Mock expo modules
-vi.mock('expo-linear-gradient', () => ({
+jest.mock('expo-linear-gradient', () => ({
   LinearGradient: 'LinearGradient',
 }));
 
-vi.mock('expo-blur', () => ({
+jest.mock('expo-blur', () => ({
   BlurView: 'BlurView',
 }));
 
-vi.mock('expo-haptics', () => ({
+jest.mock('expo-haptics', () => ({
   impactAsync: vi.fn(),
   notificationAsync: vi.fn(),
   selectionAsync: vi.fn(),
@@ -138,7 +138,7 @@ const mockTheme = {
   },
 };
 
-vi.mock('../contexts/ThemeContext', () => ({
+jest.mock('../contexts/ThemeContext', () => ({
   useOkinawaTheme: () => ({
     theme: mockTheme,
     isDark: false,

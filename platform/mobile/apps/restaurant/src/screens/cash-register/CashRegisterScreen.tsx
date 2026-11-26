@@ -151,6 +151,7 @@ export default function CashRegisterScreen() {
   }, [loadSession, loadHistory]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     loadAll();
   }, [loadAll]);
 
@@ -250,7 +251,7 @@ export default function CashRegisterScreen() {
     } finally {
       setCloseLoading(false);
     }
-  }, [actualBalance, closingNotes, session, t, loadSession, loadHistory]);
+  }, [actualBalance, closingNotes, session, t, loadSession, loadHistory, setCloseModal, setClosingNotes]);
 
   // Computed values for close modal
   const expectedBalance = session?.expected_balance ?? session?.current_balance ?? 0;

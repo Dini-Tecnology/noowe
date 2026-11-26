@@ -72,27 +72,6 @@ function bindWebSocketDebugListeners() {
  * Separated from App to access context providers.
  */
 function AppContent() {
-  useEffect(() => {
-    Appearance.setColorScheme('light');
-    const appearanceSubscription = Appearance.addChangeListener(() => {
-      Appearance.setColorScheme('light');
-    });
-    const cleanupDeepLinking = initDeepLinking();
-
-    // Initialize WebSocket connection when app starts
-    initializeWebSocket();
-
-    // Handle app state changes (foreground/background)
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    // Cleanup on unmount
-    return () => {
-      appearanceSubscription.remove();
-      cleanupDeepLinking();
-      subscription.remove();
-      socketService.disconnect();
-    };
-  }, []);
 
   /**
    * Initialize WebSocket connection with authenticated user
@@ -141,6 +120,28 @@ function AppContent() {
       socketService.disconnect();
     }
   };
+
+  useEffect(() => {
+    Appearance.setColorScheme('light');
+    const appearanceSubscription = Appearance.addChangeListener(() => {
+      Appearance.setColorScheme('light');
+    });
+    const cleanupDeepLinking = initDeepLinking();
+
+    // Initialize WebSocket connection when app starts
+    initializeWebSocket();
+
+    // Handle app state changes (foreground/background)
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Cleanup on unmount
+    return () => {
+      appearanceSubscription.remove();
+      cleanupDeepLinking();
+      subscription.remove();
+      socketService.disconnect();
+    };
+  }, []);
 
   return (
     <>

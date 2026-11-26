@@ -193,11 +193,6 @@ export default function ServiceConfigScreen() {
   }), [colors]);
 
   // Load config when restaurant ID is available
-  useEffect(() => {
-    if (restaurantId) {
-      loadConfig();
-    }
-  }, [restaurantId]);
 
   const loadConfig = async () => {
     try {
@@ -212,6 +207,13 @@ export default function ServiceConfigScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (restaurantId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
+      loadConfig();
+    }
+  }, [restaurantId]);
 
   const saveConfig = async () => {
     try {

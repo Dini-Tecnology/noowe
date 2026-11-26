@@ -2,7 +2,7 @@ import * as Crypto from 'expo-crypto';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/shared/services/supabase';
 import type { Database } from '@/shared/types/database.generated';
-import type { CustomerExperienceConfig } from '@okinawa/shared/config/service-types';
+import { isCounterJourney, type CustomerExperienceConfig } from '@okinawa/shared/config/service-types';
 import { cardResultOf, invokePaymentsCreate, PAYMENT_ERRORS, type CardResult } from './bill-shares';
 import { parseReceiptFiscal, type ReceiptFiscal } from './receipt-fiscal';
 import { normalizeUsernameInput } from '../utils/username';
@@ -1001,7 +1001,7 @@ function mapVisitSession(value: unknown): VisitSession | null {
     tableId: String(row.tableId ?? ''),
     tableSessionId: String(row.tableSessionId),
     tableNumber: String(row.tableNumber ?? ''),
-    ...(row.serviceModel === 'fine_dining' || row.serviceModel === 'casual_dining' || row.serviceModel === 'quick_service'
+    ...(isServiceModel(row.serviceModel)
       ? { serviceModel: row.serviceModel as ServiceModel } : {}),
     ...(typeof row.restaurantName === 'string' ? { restaurantName: row.restaurantName } : {}),
     ...(row.billingStatus === 'billing' || row.billingStatus === 'open' ? { billingStatus: row.billingStatus } : {}),
@@ -1461,7 +1461,7 @@ export const customerBackend: CustomerBackend = {
           p_table_session_id: input.tableSessionId ?? null,
           p_waitlist_entry_id: input.waitlistEntryId ?? null,
           p_pickup_slot_start: input.pickupSlotStart ?? null,
-          ...(input.serviceModel === 'quick_service' ? {
+          ...(isCounterJourney(input.serviceModel) ? {
             p_call_name: input.callName ?? null,
             p_consumption_mode: input.consumptionMode ?? null,
             p_pickup_policy_accepted: input.pickupPolicyAccepted === true,
@@ -1575,7 +1575,7 @@ export const customerBackend: CustomerBackend = {
 
     // Quick (ADR-013): as expirações (Pix, aceite, retirada) são aplicadas ao ler. Se alguma mudou o
     // pedido, lê de novo para o cliente ver o estado real.
-    if (order.serviceModel === 'quick_service' && ['received', 'accepted', 'ready'].includes(order.fulfillmentStatus)) {
+    if (isCounterJourney(order.serviceModel) && ['received', 'accepted', 'ready'].includes(order.fulfillmentStatus)) {
       const changed = await customerBackend.refreshQuickService(order.restaurantId);
       if (changed > 0) {
         const reread = await getSupabaseClient().from('orders').select(

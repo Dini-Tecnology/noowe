@@ -11,6 +11,7 @@ type ChipProps = {
   disabled?: boolean;
   onPress?: () => void;
   variant?: 'chip' | 'circle';
+  accessibilityLabel?: string;
 };
 
 export function SelectChip({
@@ -19,6 +20,7 @@ export function SelectChip({
   disabled,
   onPress,
   variant = 'chip',
+  accessibilityLabel,
 }: ChipProps) {
   const colors = useColors();
   const styles = useMemo(
@@ -53,6 +55,7 @@ export function SelectChip({
       disabled={disabled || !onPress}
       activeOpacity={0.8}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ selected, disabled }}
     >
       <Text style={styles.chipText}>{label}</Text>

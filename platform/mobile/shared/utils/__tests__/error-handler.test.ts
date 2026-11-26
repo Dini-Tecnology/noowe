@@ -9,7 +9,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock Toast
-vi.mock('react-native-toast-message', () => ({
+jest.mock('react-native-toast-message', () => ({
+  __esModule: true,
   default: {
     show: vi.fn(),
   },

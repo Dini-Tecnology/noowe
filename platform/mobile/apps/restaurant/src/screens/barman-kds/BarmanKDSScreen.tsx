@@ -24,6 +24,7 @@ import ApiService from '@/shared/services/api';
 import { V2ConfirmDialog } from '../v2/shared/V2ConfirmDialog';
 import { useColors } from '@/shared/theme';
 import { t } from '@/shared/i18n';
+import { useNow } from '../v2/shared/useNow';
 
 interface DrinkItem {
   id: string;
@@ -253,12 +254,6 @@ export default function BarmanKDSScreen() {
     },
   }), [colors]);
 
-  useEffect(() => {
-    loadOrders();
-    const interval = setInterval(loadOrders, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, [filter]);
-
   const loadOrders = async () => {
     try {
       const data = await ApiService.getBarOrders({
@@ -272,6 +267,13 @@ export default function BarmanKDSScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
+    loadOrders();
+    const interval = setInterval(loadOrders, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [filter]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -333,8 +335,9 @@ export default function BarmanKDSScreen() {
     }
   };
 
+  const now = useNow();
   const getTimeElapsed = (createdAt: string) => {
-    const minutes = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+    const minutes = Math.floor((now - new Date(createdAt).getTime()) / 60000);
     return `${minutes} min`;
   };
 

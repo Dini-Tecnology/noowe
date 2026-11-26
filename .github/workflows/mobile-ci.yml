@@ -34,7 +34,6 @@ jobs:
 
   restaurant:
     name: Restaurant — independent gate
-    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:

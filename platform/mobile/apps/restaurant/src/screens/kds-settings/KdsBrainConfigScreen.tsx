@@ -87,7 +87,9 @@ export default function KdsBrainConfigScreen() {
   });
 
   // Sync fetched config into local state
-  useEffect(() => {
+  const [syncedConfig, setSyncedConfig] = useState(config);
+  if (config !== syncedConfig) {
+    setSyncedConfig(config);
     if (config) {
       setCourseGapMode(config.course_gap_mode ?? 'on_ready');
       setCourseGapMinutes(config.course_gap_minutes ?? 5);
@@ -96,7 +98,7 @@ export default function KdsBrainConfigScreen() {
       setSoundEnabled(config.sound_enabled ?? true);
       setSoundVolume(config.sound_volume ?? 0.7);
     }
-  }, [config]);
+  }
 
   // ── Save mutation ────────────────────────────────────────────────
 

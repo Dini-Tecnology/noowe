@@ -382,6 +382,7 @@ export function useRestaurantOrders(options?: { includeDelivered?: boolean }): A
     }
   }, [statuses]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('kds_signals', restaurantId, refresh);
 
@@ -407,6 +408,7 @@ export function useKdsOrders(stationKind?: 'kitchen' | 'bar'): AsyncState<KdsOrd
     }
   }, [stationKind]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
   // order_items don't carry restaurant_id directly; subscribe to orders channel
   // and re-fetch when any order changes (covers item status updates too)
@@ -437,6 +439,7 @@ export function useRestaurantTables(): AsyncState<V2Table[]> {
     }
   }, [restaurantId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('tables', restaurantId, refresh);
   useRealtimeRefresh('table_sessions', restaurantId, refresh);
@@ -493,6 +496,7 @@ export function useCustomerAssistanceHub(): AsyncState<CustomerAssistanceHub> {
     }
   }, [restaurantId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('customer_feedback', restaurantId, refresh);
   useRealtimeRefresh('restaurant_special_requests', restaurantId, refresh);
@@ -545,6 +549,7 @@ export function useWaitlist(): AsyncState<WaitlistEntry[]> {
     }
   }, [restaurantId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('waitlist_entries', restaurantId, refresh);
 
@@ -592,6 +597,7 @@ export function useTableBills(): AsyncState<TableBill[]> {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('kds_signals', restaurantId, refresh);
 
@@ -633,6 +639,7 @@ export function useDashboardSnapshot(): AsyncState<DashboardSnapshot | null> {
 
   useRegisterRemoteRefresh(refresh);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     void refresh();
   }, [refresh]);
 
@@ -710,6 +717,7 @@ export function useStaff(): AsyncState<StaffMember[]> {
   }, []);
 
   useRegisterRemoteRefresh(refresh);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -734,6 +742,7 @@ export function useApprovals(): AsyncState<RestaurantApproval[]> {
   }, [restaurantId]);
 
   useRegisterRemoteRefresh(refresh);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('approvals', restaurantId, refresh);
 
@@ -791,6 +800,7 @@ export function useCashRegister(): AsyncState<CashRegisterSession | null> {
   }, []);
 
   useRegisterRemoteRefresh(refresh);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -843,6 +853,7 @@ export function useCashMovements(): AsyncState<CashMovement[]> {
   }, []);
 
   useRegisterRemoteRefresh(refresh);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -918,6 +929,7 @@ export function useReservations(dateISO?: string): AsyncState<Reservation[]> {
     }
   }, [date, restaurantId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('reservations', restaurantId, refresh);
 
@@ -973,6 +985,7 @@ export function useStock(): AsyncState<StockItem[]> {
   }, []);
 
   useRegisterRemoteRefresh(refresh);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -996,6 +1009,7 @@ export function useMenuItems(): AsyncState<MenuItemSummary[]> {
   }, []);
 
   useRegisterRemoteRefresh(refresh);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
 
   return { data, loading, error, refresh };
@@ -1043,6 +1057,7 @@ export function useServiceCalls(): AsyncState<ServiceCall[]> {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void refresh(); }, [refresh]);
   useRealtimeRefresh('service_calls', restaurantId, refresh);
 

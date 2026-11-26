@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { isCounterJourney } from '@okinawa/shared/config/service-types';
 import { Text } from 'react-native-paper';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -28,7 +29,7 @@ const EMPTY_MESSAGES: Record<OrderFilter, string> = {
 // "Entregue" still belongs to the open table tab: the order is only concluded after payment.
 function filterOf(order: Pick<CustomerOrder, 'status' | 'serviceModel' | 'fulfillmentStatus' | 'paymentStatus'>): OrderFilter {
   // Quick Service não tem comanda aberta: o pedido termina na retirada (ou no "não retirado").
-  if (order.serviceModel === 'quick_service') return quickOrdersFilter(order);
+  if (isCounterJourney(order.serviceModel)) return quickOrdersFilter(order);
   if (order.status === 'completed' || (order.status === 'delivered' && order.paymentStatus === 'confirmed')) return 'completed';
   if (order.status === 'cancelled') return 'cancelled';
   return 'active';
@@ -103,7 +104,7 @@ export default function OrdersScreen({ navigation }: any) {
   }), [colors]);
 
   const renderOrder = ({ item }: { item: CustomerOrder }) => {
-    const quickStatus = item.serviceModel === 'quick_service' ? quickOrderStatusLabel(item) : null;
+    const quickStatus = isCounterJourney(item.serviceModel) ? quickOrderStatusLabel(item) : null;
     const statusLabel = quickStatus?.label ?? STATUS_LABELS[item.status] ?? item.status;
     const statusColor = quickStatus
       ? { ok: '#16A34A', warn: '#EA580C', off: '#64748B', bad: '#DC2626' }[quickStatus.tone]
@@ -146,7 +147,7 @@ export default function OrdersScreen({ navigation }: any) {
               <Text style={[styles.statusPillText, { color: statusColor }]}>{statusLabel}</Text>
             </View>
           )}
-          {item.serviceModel === 'quick_service' && canReorderQuickOrder(item) && (
+          {isCounterJourney(item.serviceModel) && canReorderQuickOrder(item) && (
             <TouchableOpacity
               onPress={() => { void reorder(item); }}
               accessibilityRole="button"

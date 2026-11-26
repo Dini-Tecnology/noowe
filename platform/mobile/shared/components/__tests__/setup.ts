@@ -9,7 +9,7 @@
 import { vi } from 'vitest';
 
 // Mock React Native
-vi.mock('react-native', () => ({
+jest.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
   TextInput: 'TextInput',
@@ -41,15 +41,15 @@ vi.mock('react-native', () => ({
 }));
 
 // Mock Expo modules
-vi.mock('expo-linear-gradient', () => ({
+jest.mock('expo-linear-gradient', () => ({
   LinearGradient: 'LinearGradient',
 }));
 
-vi.mock('expo-blur', () => ({
+jest.mock('expo-blur', () => ({
   BlurView: 'BlurView',
 }));
 
-vi.mock('expo-haptics', () => ({
+jest.mock('expo-haptics', () => ({
   impactAsync: vi.fn(),
   notificationAsync: vi.fn(),
   selectionAsync: vi.fn(),
@@ -65,13 +65,13 @@ vi.mock('expo-haptics', () => ({
   },
 }));
 
-vi.mock('expo-splash-screen', () => ({
+jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: vi.fn(),
   hideAsync: vi.fn(),
 }));
 
 // Mock navigation
-vi.mock('@react-navigation/native', () => ({
+jest.mock('@react-navigation/native', () => ({
   NavigationContainer: 'NavigationContainer',
   useNavigation: () => ({
     navigate: vi.fn(),
@@ -82,21 +82,21 @@ vi.mock('@react-navigation/native', () => ({
   }),
 }));
 
-vi.mock('@react-navigation/stack', () => ({
+jest.mock('@react-navigation/stack', () => ({
   createStackNavigator: () => ({
     Navigator: 'Navigator',
     Screen: 'Screen',
   }),
 }));
 
-vi.mock('@react-navigation/bottom-tabs', () => ({
+jest.mock('@react-navigation/bottom-tabs', () => ({
   createBottomTabNavigator: () => ({
     Navigator: 'Navigator',
     Screen: 'Screen',
   }),
 }));
 
-vi.mock('@react-navigation/drawer', () => ({
+jest.mock('@react-navigation/drawer', () => ({
   createDrawerNavigator: () => ({
     Navigator: 'Navigator',
     Screen: 'Screen',
@@ -104,7 +104,7 @@ vi.mock('@react-navigation/drawer', () => ({
 }));
 
 // Mock i18n
-vi.mock('react-i18next', () => ({
+jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
     i18n: {

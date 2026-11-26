@@ -151,11 +151,12 @@ export function ConfigHubContent({ compact = false }: ConfigHubContentProps) {
     } catch {
       // keep previous progress values
     }
-  }, [restaurantId, currentRestaurant?.name, currentRestaurant?.serviceType]);
+  }, [restaurantId, currentRestaurant]);
 
   useRegisterRemoteRefresh(loadProgress);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     void loadProgress();
     const unsubscribe = navigation.addListener?.('focus', () => {
       void loadProgress();

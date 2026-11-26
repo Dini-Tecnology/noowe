@@ -106,9 +106,27 @@ jest.mock('expo-camera', () => ({
 }));
 
 // Mock Toast Message
-jest.mock('react-native-toast-message', () => ({
-  show: jest.fn(),
-  hide: jest.fn(),
+jest.mock('react-native-toast-message', () => {
+  const toast = { show: jest.fn(), hide: jest.fn() };
+  // O código importa o default (`Toast.show`); expor os dois formatos.
+  return { __esModule: true, default: toast, ...toast };
+});
+
+// expo-linking também carrega expo-modules-core.
+jest.mock('expo-linking', () => ({
+  createURL: jest.fn((path) => `okinawa://${String(path).replace(/^\//, '')}`),
+  parse: jest.fn(() => ({ path: null, queryParams: {} })),
+  getInitialURL: jest.fn(async () => null),
+  addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+}));
+
+jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { extra: {} } } }));
+
+// expo-secure-store carrega expo-modules-core, que exige o runtime nativo.
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(async () => null),
+  setItemAsync: jest.fn(async () => undefined),
+  deleteItemAsync: jest.fn(async () => undefined),
 }));
 
 // Mock Sentry

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { isTableJourney } from '@okinawa/shared/config/service-types';
 import {
   Alert,
   FlatList,
@@ -58,7 +59,7 @@ export default function ReservationRestaurantScreen({ navigation }: any) {
     queryKey: ['reservation-restaurants', search],
     queryFn: async () => {
       const page = await customerBackend.listRestaurants({ search: search || undefined, limit: 50 });
-      return page.data.filter((restaurant) => ['fine_dining', 'casual_dining'].includes(restaurant.serviceType));
+      return page.data.filter((restaurant) => isTableJourney(restaurant.serviceType));
     },
   });
   const refreshControl = useQueryRefreshControl([query]);

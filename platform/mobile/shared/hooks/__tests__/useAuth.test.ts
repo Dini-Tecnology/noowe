@@ -12,7 +12,7 @@ const vi = {
 };
 
 // Mock AsyncStorage
-vi.mock('@react-native-async-storage/async-storage', () => ({
+jest.mock('@react-native-async-storage/async-storage', () => ({
   default: {
     getItem: vi.fn(),
     setItem: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 // Mock auth service
-vi.mock('../../services/auth', () => ({
+jest.mock('../../services/auth', () => ({
   authService: {
     login: vi.fn(),
     register: vi.fn(),

@@ -55,7 +55,7 @@ begin
   update public.restaurant_payment_accounts set status = 'active' where restaurant_id = r;
   perform public.service_fiscal_configure(r, jsonb_build_object(
     'cnpj', '12.345.678/0001-23', 'razaoSocial', 'Casa LTDA', 'stateCode', 'SP', 'regimeTributario', 'simples_nacional',
-    'taxDefaults', jsonb_build_object('ncm', '21069090', 'icms_origem', '0', 'icms_situacao_tributaria', '102',
+    'taxDefaults', jsonb_build_object('ncm', '21069090', 'cfop', '5102', 'icms_origem', '0', 'icms_situacao_tributaria', '102',
       'pis_situacao_tributaria', '49', 'cofins_situacao_tributaria', '49')), 'tok-homolog');
   update public.menu_items set ncm = '00000000' where restaurant_id = r;
   -- Este fluxo paga com gorjeta, que só existe em modo gorjeta. A nota com taxa está no fim do arquivo.
@@ -179,7 +179,7 @@ begin
 
   perform public.service_fiscal_configure(r, jsonb_build_object('cnpj', '12345678000123', 'razaoSocial', 'Casa LTDA',
     'stateCode', 'SP', 'regimeTributario', 'simples_nacional', 'serviceFeeInDocument', true,
-    'taxDefaults', jsonb_build_object('ncm', '21069090', 'icms_origem', '0', 'icms_situacao_tributaria', '102',
+    'taxDefaults', jsonb_build_object('ncm', '21069090', 'cfop', '5102', 'icms_origem', '0', 'icms_situacao_tributaria', '102',
       'pis_situacao_tributaria', '49', 'cofins_situacao_tributaria', '49')), 'tok-2');
   assert (pg_temp.doc_of(sid)).status = 'blocked', 'provisionar não libera nota antiga';
 

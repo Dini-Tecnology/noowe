@@ -112,10 +112,8 @@ export const createDeepLink = (
   params?: Record<string, string>
 ): string => {
   const prefix = Linking.createURL('/');
-  const queryString = params
-    ? '?' + new URLSearchParams(params).toString()
-    : '';
-  return `${prefix}${path}${queryString}`;
+  const query = params ? new URLSearchParams(params).toString() : '';
+  return `${prefix}${path}${query ? `?${query}` : ''}`;
 };
 
 /**

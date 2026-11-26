@@ -290,6 +290,7 @@ export default function MenuScreen({ route, navigation }: any) {
                 onPress={callWaiter}
                 activeOpacity={0.85}
                 accessibilityRole="button"
+                accessibilityLabel="Chamar garçom"
               >
                 <Ionicons name="hand-left-outline" size={18} color={colors.primary} />
                 <Text style={styles.quickBtnText}>Chamar Garçom</Text>
@@ -301,6 +302,7 @@ export default function MenuScreen({ route, navigation }: any) {
                 onPress={() => navigation.navigate('ModoFamilia', { restaurantId })}
                 activeOpacity={0.85}
                 accessibilityRole="button"
+                accessibilityLabel="Modo Família"
               >
                 <Ionicons name="happy-outline" size={18} color={colors.primary} />
                 <Text style={styles.quickBtnText}>Modo Família</Text>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
@@ -35,7 +35,11 @@ export function TablePickerSheet({
 }: Props) {
   const colors = useColors();
   const [picked, setPicked] = useState<string[]>([]);
-  useEffect(() => { if (!visible) setPicked([]); }, [visible]);
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (!visible) setPicked([]);
+  }
 
   const chosen = useMemo(() => candidates.filter((candidate) => picked.includes(candidate.id)), [candidates, picked]);
   const resulting = mode === 'single' ? (chosen[0]?.seats ?? 0) : groupCapacity({ effectiveSeats: baseSeats }, chosen);

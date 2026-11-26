@@ -1,6 +1,7 @@
 /* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V5 */
 /* Hallmark · macrostructure: Long Document · tone: luxury utilitarian · anchor hue: orange */
 import React, { useCallback, useMemo, useState } from 'react';
+import { isCounterJourney } from '@okinawa/shared/config/service-types';
 import { Alert, Dimensions, Image, Linking, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -103,7 +104,7 @@ export default function RestaurantScreen({ route, navigation }: any) {
     queryKey: ['orders', 'restaurant', restaurantId],
     queryFn: () => customerBackend.listOrders(20),
     enabled: orderAhead,
-    select: (page) => page.data.filter((order) => order.restaurantId === restaurantId && order.serviceModel === 'quick_service'),
+    select: (page) => page.data.filter((order) => order.restaurantId === restaurantId && isCounterJourney(order.serviceModel)),
     staleTime: 15 * 1000,
   });
   const refreshControl = useQueryRefreshControl([query, liveStatus, ...(orderAhead ? [quickStatus, myOrders] : [])]);
@@ -288,7 +289,7 @@ export default function RestaurantScreen({ route, navigation }: any) {
     return options.map((option) => ({
       key: option.key,
       label: option.label,
-      selected: option.model === current || (option.key === 'table' && current !== 'quick_service'),
+      selected: option.model === current || (option.key === 'table' && !isCounterJourney(current)),
       onPress: () => {
         navigation.setParams({ serviceModel: option.model });
         void selectRestaurant(restaurantId, option.model);

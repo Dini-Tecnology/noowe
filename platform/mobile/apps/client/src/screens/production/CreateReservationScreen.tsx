@@ -370,7 +370,7 @@ export default function CreateReservationScreen({ route, navigation }: any) {
             <View style={styles.timeGrid}>
               {availableTimes.map((time) => (
                 <View key={time} style={styles.timeChip}>
-                  <SelectChip label={time} selected={selectedTime === time} onPress={() => setPickedTime(time)} />
+                  <SelectChip label={time} accessibilityLabel={`Horário ${time}`} selected={selectedTime === time} onPress={() => setPickedTime(time)} />
                 </View>
               ))}
             </View>

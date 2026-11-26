@@ -96,6 +96,16 @@ Deno.test("webhook: erro marca falha; agendada e nota de outro sistema não muda
   assertEquals(other.calls.length, 0);
 });
 
+Deno.test("webhook: nota cancelada no Asaas vira cancelada, na fatura e na nota avulsa", async () => {
+  const sub = setup();
+  await handleBillingWebhook(hook({ event: "INVOICE_CANCELED", invoice: { id: "inv_1", externalReference: `nfse:${INV}` } }), sub.deps);
+  const args = sub.calls.find((c) => c.fn === "service_nfse_result")!.args;
+  assertEquals([args.p_status, args.p_error], ["cancelled", null]);
+  const fee = setup();
+  await handleBillingWebhook(hook({ event: "INVOICE_CANCELED", invoice: { id: "inv_9", externalReference: `note:${NOTE}` } }), fee.deps);
+  assertEquals(fee.calls.find((c) => c.fn === "service_fee_note_result")!.args.p_status, "cancelled");
+});
+
 Deno.test("nota avulsa: sem cobrança, para o cliente do tomador, reaproveitando o cliente achado pelo CNPJ", async () => {
   const { deps, calls, scheduled, customers } = setup({ customer: { id: "cus_old" } });
   assertEquals((await handleBillingNfse(req({ noteId: NOTE }), deps)).status, 200);

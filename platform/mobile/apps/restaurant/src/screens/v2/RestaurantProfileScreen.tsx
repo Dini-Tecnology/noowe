@@ -186,12 +186,15 @@ export default function RestaurantProfileScreen() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     void load();
   }, [load]);
 
-  useEffect(() => {
+  const [syncedInitialTab, setSyncedInitialTab] = useState(route.params?.initialTab);
+  if (route.params?.initialTab !== syncedInitialTab) {
+    setSyncedInitialTab(route.params?.initialTab);
     if (route.params?.initialTab) setActiveTab(route.params.initialTab);
-  }, [route.params?.initialTab]);
+  }
 
   const progress = useMemo(
     () =>

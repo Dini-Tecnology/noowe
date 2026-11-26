@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock expo-linking
-vi.mock('expo-linking', () => ({
+jest.mock('expo-linking', () => ({
   parse: vi.fn((url: string) => {
     const urlObj = new URL(url.replace('okinawa://', 'https://okinawa.app/'));
     return {
@@ -23,20 +23,20 @@ vi.mock('expo-linking', () => ({
 }));
 
 // Mock expo-sharing
-vi.mock('expo-sharing', () => ({
+jest.mock('expo-sharing', () => ({
   isAvailableAsync: vi.fn().mockResolvedValue(true),
   shareAsync: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock expo-router
-vi.mock('expo-router', () => ({
+jest.mock('expo-router', () => ({
   router: {
     push: vi.fn(),
   },
 }));
 
 // Mock logger
-vi.mock('../logger', () => ({
+jest.mock('../logger', () => ({
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock('../logger', () => ({
 }));
 
 // Mock Alert
-vi.mock('react-native', () => ({
+jest.mock('react-native', () => ({
   Alert: { alert: vi.fn() },
   Platform: { OS: 'ios' },
 }));
@@ -236,10 +236,9 @@ describe('Deep Linking', () => {
 
   describe('createDeepLink', () => {
     function createDeepLink(path: string, params?: Record<string, string>): string {
-      const queryString = params
-        ? '?' + new URLSearchParams(params).toString()
-        : '';
-      return `okinawa://${path}${queryString}`;
+      // Mesma regra de shared/utils/deep-linking.ts: sem parâmetros, sem '?'.
+      const query = params ? new URLSearchParams(params).toString() : '';
+      return `okinawa://${path}${query ? `?${query}` : ''}`;
     }
 
     it('should create restaurant link', () => {

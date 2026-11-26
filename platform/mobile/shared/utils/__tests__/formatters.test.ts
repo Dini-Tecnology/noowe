@@ -232,7 +232,7 @@ describe('formatNumber', () => {
 
   it('should handle negative numbers', () => {
     const result = formatNumber(-1234, 'pt-BR');
-    expect(result).toContain('1234');
+    expect(result).toBe('-1.234');
   });
 });
 

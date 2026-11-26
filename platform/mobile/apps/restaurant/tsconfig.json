@@ -11,8 +11,6 @@
   },
   "include": ["**/*.ts", "**/*.tsx", "../../shared/**/*"],
   "exclude": [
-    "node_modules",
-    "src/screens/config",
-    "src/screens/waiter"
+    "node_modules"
   ]
 }

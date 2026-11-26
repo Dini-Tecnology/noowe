@@ -119,6 +119,7 @@ export default function DriveThruScreen() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     loadOrders();
 
     socketService.connect();

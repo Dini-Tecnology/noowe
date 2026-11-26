@@ -83,6 +83,7 @@ import { getOptionalSupabaseSessionUser } from '@okinawa/shared/services/supabas
 import type { TableBill, ServiceCall } from './shared/useRestaurantOperations';
 import { BillChargeModal } from './shared/BillChargeModal';
 import { formatTableLabel } from './shared/tableLabel';
+import { waiterTableA11yLabel } from './shared/tableBill';
 import { cashRegisterStatus, isOpenCall, isTableInService } from './shared/liveStatus';
 import { advanceItems, mapBarQueueRow, type BarQueueItem, type KdsItemState } from './shared/kdsItems';
 import {
@@ -127,6 +128,7 @@ import {
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { itemStatusLabel, orderStatusLabel as orderStateLabel } from '@okinawa/shared/utils/status-label';
 import { REVENUE_LABEL } from './shared/revenueLabel';
+import { useNow } from './shared/useNow';
 
 const OWNER_ROLES = [
   { id: 'owner', label: 'Dono', title: 'Dashboard Executivo', hint: 'Visão completa do restaurante' },
@@ -206,6 +208,7 @@ export default function OwnerHubScreen() {
     }
   }, [restaurantId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void loadRestaurantProfile(); }, [loadRestaurantProfile]);
 
   const handleRefresh = React.useCallback(async () => {
@@ -822,6 +825,7 @@ function BarmanQueueView({
   }, []);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     void loadBar();
   }, [loadBar]);
   // Pedido novo chega ao bar sem precisar sair da tela.
@@ -1230,13 +1234,14 @@ export function ManagerDashboardTab({
   const { data: staff, loading: staffLoading, error: staffError, refresh: refreshStaff } = useStaff();
   const { data: orders, loading: ordersLoading } = useRestaurantOrders();
 
+  const now = useNow();
   const activeStaffCount = staff.filter((member) => member.isActive).length;
   // "Delayed" is a judgment call with no dedicated backend flag yet: an order
   // still in new/preparing status after 20 minutes is treated as running late.
   const delayedOrders = orders.filter((order) => {
     if (order.status === 'ready') return false;
     if (!order.createdAt) return false;
-    const ageMinutes = (Date.now() - new Date(order.createdAt).getTime()) / 60000;
+    const ageMinutes = (now - new Date(order.createdAt).getTime()) / 60000;
     return ageMinutes > 20;
   });
 
@@ -2039,6 +2044,8 @@ function WaiterLiveBody({
         events.map((event) => (
           <View
             key={event.key}
+            accessible
+            accessibilityLabel={[event.table, event.title, event.detail, event.time].filter(Boolean).join(', ')}
             style={[
               styles.managerOrderCard,
               { borderColor: V2_TONE[event.tone].bg, backgroundColor: colors.card },
@@ -2060,6 +2067,8 @@ function WaiterLiveBody({
               </View>
             </View>
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`${event.action}: ${[event.table, event.title].filter(Boolean).join(', ')}`}
               disabled={acting === event.key}
               onPress={() => void event.onPress()}
               style={[styles.wideAction, { backgroundColor: V2_TONE[event.tone].bg }]}
@@ -2112,6 +2121,8 @@ function WaiterTablesBody({
         return (
           <View
             key={table.id}
+            accessible
+            accessibilityLabel={waiterTableA11yLabel(table, isOccupied, openCallCount, hasReadyPlate)}
             style={[styles.waiterTableCard, { borderColor: `${accent}55`, backgroundColor: colors.card }]}
           >
             <View style={styles.waiterTableTop}>

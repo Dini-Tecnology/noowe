@@ -3,8 +3,8 @@ import { json, type PaymentDeps } from "../_shared/payments/deps.ts";
 
 const PAID = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]);
 // Só a autorização faz a nota valer: agendada ou sincronizada ainda pode ser recusada pela prefeitura.
-const NFSE_RESULT: Record<string, "issued" | "failed"> = {
-  INVOICE_AUTHORIZED: "issued", INVOICE_ERROR: "failed", INVOICE_CANCELED: "failed", INVOICE_CANCELLATION_DENIED: "failed",
+const NFSE_RESULT: Record<string, "issued" | "failed" | "cancelled"> = {
+  INVOICE_AUTHORIZED: "issued", INVOICE_ERROR: "failed", INVOICE_CANCELED: "cancelled", INVOICE_CANCELLATION_DENIED: "failed",
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

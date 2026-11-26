@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, View, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
+import { Modal, View, TouchableOpacity, StyleSheet, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 
@@ -36,7 +36,8 @@ export function V2ConfirmDialog({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={styles.overlay}>
+      {/* Sem isto o teclado do motivo cobre o botão de confirmar (QA Obs. F). */}
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>
           <Text style={[styles.message, { color: colors.foregroundSecondary }]}>{message}</Text>
@@ -73,7 +74,7 @@ export function V2ConfirmDialog({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

@@ -2222,7 +2222,7 @@ export type Database = {
           allergens: Json | null
           calories: number | null
           category_id: string | null
-          cfop: string
+          cfop: string | null
           course: string
           created_at: string
           customizations: Json | null

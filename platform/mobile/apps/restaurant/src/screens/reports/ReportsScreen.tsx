@@ -247,6 +247,7 @@ export default function ReportsScreen() {
   }, [dateRange, restaurantId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- shows the spinner while the async request below runs
     setLoading(true);
     loadData();
   }, [loadData]);

@@ -43,15 +43,22 @@ export function BillChargeModal({ tableSessionId, tableLabel, onClose, onCharged
     if (!tableSessionId) return;
     key.current = Crypto.randomUUID();
     tipKey.current = Crypto.randomUUID();
-    setTipDigits('');
-    setDigits('');
-    setKeepFee(true);
-    setReason('');
-    setCoupon('');
-    setCouponInput('');
-    setBill(null);
-    setBillFor(undefined);
   }, [tableSessionId]);
+  // Reset the form when another session opens (render-time adjust, not an effect).
+  const [formSession, setFormSession] = useState(tableSessionId);
+  if (tableSessionId !== formSession) {
+    setFormSession(tableSessionId);
+    if (tableSessionId) {
+      setTipDigits('');
+      setDigits('');
+      setKeepFee(true);
+      setReason('');
+      setCoupon('');
+      setCouponInput('');
+      setBill(null);
+      setBillFor(undefined);
+    }
+  }
 
   useEffect(() => {
     if (!tableSessionId) return undefined;

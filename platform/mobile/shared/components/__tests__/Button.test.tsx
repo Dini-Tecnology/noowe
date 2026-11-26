@@ -17,7 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ============================================================
 
 // Mock React Native
-vi.mock('react-native', () => ({
+jest.mock('react-native', () => ({
   View: ({ children, style, testID }: any) => ({ type: 'View', props: { children, style, testID } }),
   Text: ({ children, style }: any) => ({ type: 'Text', props: { children, style } }),
   TouchableOpacity: ({ children, onPress, disabled, testID }: any) => ({
@@ -47,7 +47,7 @@ vi.mock('react-native', () => ({
 }));
 
 // Mock expo-linear-gradient
-vi.mock('expo-linear-gradient', () => ({
+jest.mock('expo-linear-gradient', () => ({
   LinearGradient: ({ children, colors, style }: any) => ({
     type: 'LinearGradient',
     props: { children, colors, style },
@@ -62,7 +62,7 @@ const mockHaptics = {
   successNotification: vi.fn(),
 };
 
-vi.mock('../../utils/haptics', () => ({
+jest.mock('../../utils/haptics', () => ({
   default: mockHaptics,
 }));
 
@@ -97,7 +97,7 @@ const mockTheme = {
   },
 };
 
-vi.mock('../../contexts/ThemeContext', () => ({
+jest.mock('../../contexts/ThemeContext', () => ({
   useOkinawaTheme: () => ({ theme: mockTheme, isDark: false }),
 }));
 

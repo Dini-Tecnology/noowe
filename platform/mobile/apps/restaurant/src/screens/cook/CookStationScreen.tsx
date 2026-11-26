@@ -209,11 +209,9 @@ export default function CookStationScreen() {
   const [loading, setLoading] = useState(true);
 
   // Auto-select first dynamic station when stations load
-  useEffect(() => {
-    if (useDynamicStations && !selectedDynamicStationId) {
-      setSelectedDynamicStationId(dynamicStations[0].id);
-    }
-  }, [useDynamicStations, dynamicStations, selectedDynamicStationId]);
+  if (useDynamicStations && !selectedDynamicStationId) {
+    setSelectedDynamicStationId(dynamicStations[0].id);
+  }
 
   // ============================================
   // DYNAMIC STATION QUEUE QUERY
@@ -274,6 +272,7 @@ export default function CookStationScreen() {
   }, [selectedStation]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     loadActiveOrders();
 
     socketService.connect();
@@ -299,6 +298,7 @@ export default function CookStationScreen() {
 
   // Reload when station changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
     loadActiveOrders(selectedStation);
   }, [selectedStation]);
 

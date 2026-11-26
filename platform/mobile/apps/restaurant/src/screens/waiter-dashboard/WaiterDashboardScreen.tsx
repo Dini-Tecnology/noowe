@@ -15,6 +15,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ApiService from '@/shared/services/api';
 import { useColors } from '@/shared/theme';
 import { t } from '@okinawa/shared/i18n';
+import { useNow } from '../v2/shared/useNow';
 
 interface Table {
   id: string;
@@ -42,12 +43,6 @@ export default function WaiterDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadDashboardData();
-    const interval = setInterval(loadDashboardData, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
   const loadDashboardData = async () => {
     try {
       const [tablesData, statsData] = await Promise.all([
@@ -62,6 +57,13 @@ export default function WaiterDashboardScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
+    loadDashboardData();
+    const interval = setInterval(loadDashboardData, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -108,9 +110,10 @@ export default function WaiterDashboardScreen() {
     }
   };
 
+  const now = useNow();
   const getSeatedTime = (seatedAt?: string) => {
     if (!seatedAt) return '';
-    const minutes = Math.floor((Date.now() - new Date(seatedAt).getTime()) / 60000);
+    const minutes = Math.floor((now - new Date(seatedAt).getTime()) / 60000);
     return `${minutes} min`;
   };
 

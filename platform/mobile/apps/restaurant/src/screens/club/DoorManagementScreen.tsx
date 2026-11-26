@@ -303,6 +303,7 @@ export default function DoorManagementScreen({ route }: DoorManagementScreenProp
 
   useEffect(() => {
     if (restaurantId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
       fetchQueue();
     }
   }, [restaurantId, fetchQueue]);

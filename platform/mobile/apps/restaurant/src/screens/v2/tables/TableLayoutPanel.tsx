@@ -23,6 +23,21 @@ type Mode = 'swap' | 'join' | 'unmerge' | null;
  * Trocar a mesa de uma sessão, juntar mesas e separar a junção (ADR-018). Só aparece para quem o
  * servidor autoriza (`canRearrange`); o servidor repete todas as checagens e audita cada ação.
  */
+function LayoutButton({ label, icon, onPress, testID }: { label: string; icon: React.ReactNode; onPress: () => void; testID: string }) {
+  const colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      testID={testID}
+      onPress={onPress}
+      style={({ pressed }) => [styles.button, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }, pressed && { opacity: 0.8 }]}
+    >
+      {icon}
+      <Text style={[styles.buttonText, { color: colors.foreground }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export function TableLayoutPanel({ table, tables, onChanged, onError }: Props) {
   const colors = useColors();
   const [mode, setMode] = useState<Mode>(null);
@@ -58,17 +73,6 @@ export function TableLayoutPanel({ table, tables, onChanged, onError }: Props) {
     }
   };
 
-  const Button = ({ label, icon, onPress, testID }: { label: string; icon: React.ReactNode; onPress: () => void; testID: string }) => (
-    <Pressable
-      accessibilityRole="button"
-      testID={testID}
-      onPress={onPress}
-      style={({ pressed }) => [styles.button, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }, pressed && { opacity: 0.8 }]}
-    >
-      {icon}
-      <Text style={[styles.buttonText, { color: colors.foreground }]}>{label}</Text>
-    </Pressable>
-  );
 
   return (
     <View style={styles.wrap} testID="table-layout-panel">
@@ -84,10 +88,10 @@ export function TableLayoutPanel({ table, tables, onChanged, onError }: Props) {
         </Text>
       ) : null}
       <View style={styles.row}>
-        {canSwap ? <Button testID="layout-swap" label="Trocar mesa" icon={<ArrowRightLeft size={16} color={colors.foreground} />} onPress={() => setMode('swap')} /> : null}
-        {canJoin ? <Button testID="layout-join" label="Juntar mesas" icon={<Link2 size={16} color={colors.foreground} />} onPress={() => setMode('join')} /> : null}
-        {hasChildren ? <Button testID="layout-unmerge" label="Desfazer junção" icon={<Unlink2 size={16} color={colors.foreground} />} onPress={() => setMode('unmerge')} /> : null}
-        {isChild ? <Button testID="layout-split" label="Separar desta mesa" icon={<Unlink2 size={16} color={colors.foreground} />} onPress={() => setMode('unmerge')} /> : null}
+        {canSwap ? <LayoutButton testID="layout-swap" label="Trocar mesa" icon={<ArrowRightLeft size={16} color={colors.foreground} />} onPress={() => setMode('swap')} /> : null}
+        {canJoin ? <LayoutButton testID="layout-join" label="Juntar mesas" icon={<Link2 size={16} color={colors.foreground} />} onPress={() => setMode('join')} /> : null}
+        {hasChildren ? <LayoutButton testID="layout-unmerge" label="Desfazer junção" icon={<Unlink2 size={16} color={colors.foreground} />} onPress={() => setMode('unmerge')} /> : null}
+        {isChild ? <LayoutButton testID="layout-split" label="Separar desta mesa" icon={<Unlink2 size={16} color={colors.foreground} />} onPress={() => setMode('unmerge')} /> : null}
       </View>
 
       <TablePickerSheet

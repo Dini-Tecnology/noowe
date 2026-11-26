@@ -28,6 +28,7 @@ export default function ReviewsScreen() {
     }
   }, [restaurantId]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void load(); }, [load]);
 
   const items: V2ListItem[] = loading

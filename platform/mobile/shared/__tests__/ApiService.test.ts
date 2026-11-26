@@ -23,11 +23,11 @@ const mockSecureStorage = {
   clearAuth: vi.fn(),
 };
 
-vi.mock('../../services/secure-storage', () => ({
+jest.mock('../../services/secure-storage', () => ({
   secureStorage: mockSecureStorage,
 }));
 
-vi.mock('../../utils/logger', () => ({
+jest.mock('../../utils/logger', () => ({
   default: {
     api: vi.fn(),
     apiResponse: vi.fn(),

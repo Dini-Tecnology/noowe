@@ -118,24 +118,6 @@ export default function RestaurantReviewsScreen() {
   // FIX-12: WebSocket listener for real-time review notifications
   const { connected, on, off } = useWebSocket('/events');
 
-  useEffect(() => {
-    if (!connected || !restaurantId) return;
-
-    const handleReviewCreated = (data: any) => {
-      if (data?.restaurant_id === restaurantId || !data?.restaurant_id) {
-        setNewReviewBanner(true);
-        // Auto-reload reviews
-        loadData();
-      }
-    };
-
-    on('review:created', handleReviewCreated);
-
-    return () => {
-      off('review:created', handleReviewCreated);
-    };
-  }, [connected, restaurantId]);
-
   // -----------------------------------------------------------------------
   // Data fetching
   // -----------------------------------------------------------------------
@@ -200,6 +182,25 @@ export default function RestaurantReviewsScreen() {
   }, [restaurantId, filter, t]);
 
   useEffect(() => {
+    if (!connected || !restaurantId) return;
+
+    const handleReviewCreated = (data: any) => {
+      if (data?.restaurant_id === restaurantId || !data?.restaurant_id) {
+        setNewReviewBanner(true);
+        // Auto-reload reviews
+        loadData();
+      }
+    };
+
+    on('review:created', handleReviewCreated);
+
+    return () => {
+      off('review:created', handleReviewCreated);
+    };
+  }, [connected, restaurantId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- shows the spinner while the async request below runs
     setLoading(true);
     loadData();
   }, [loadData]);

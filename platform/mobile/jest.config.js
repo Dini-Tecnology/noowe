@@ -48,11 +48,9 @@ module.exports = {
       statements: 70,
     },
   },
-  testMatch: [
-    '**/__tests__/**/*.{ts,tsx}',
-    '**/*.test.{ts,tsx}',
-    '**/*.spec.{ts,tsx}',
-  ],
+  // Só o pacote shared/: cada app roda as próprias suites com o jest.config dele.
+  // Exigir `.test.` evita rodar helpers de teste (setup.ts, msw-handlers.ts) como suite.
+  testMatch: ['<rootDir>/shared/**/*.test.{ts,tsx}'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   testEnvironment: 'node',
   globals: {
@@ -60,6 +58,8 @@ module.exports = {
       tsconfig: {
         jsx: 'react',
       },
+      // Só transpila: o tipo é conferido por `tsc -p` de cada app (o tsconfig solto daqui não é o do projeto).
+      diagnostics: false,
     },
   },
 };

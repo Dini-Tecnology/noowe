@@ -22,6 +22,16 @@ export function SessionCartSync() {
   const { session } = useVisitSession();
   const cart = useCart();
   const notifiedForSession = useRef<string | null>(null);
+  const previousTableSession = useRef<string | null>(null);
+
+  // QA Obs. H: o rascunho pertence à comanda em que foi montado. Quando essa
+  // comanda termina ou é trocada por outra, ele não pode reaparecer na nova.
+  useEffect(() => {
+    const current = session?.tableSessionId ?? null;
+    const previous = previousTableSession.current;
+    previousTableSession.current = current;
+    if (previous && previous !== current && cart.items.length > 0) cart.clearCart();
+  }, [cart, session?.tableSessionId]);
 
   useEffect(() => {
     const sessionRestaurantId = session?.restaurantId ?? null;

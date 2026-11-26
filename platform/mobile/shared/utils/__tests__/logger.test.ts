@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock Sentry
-vi.mock('../../config/sentry', () => ({
+jest.mock('../../config/sentry', () => ({
   captureException: vi.fn(),
   captureMessage: vi.fn(),
   addBreadcrumb: vi.fn(),
@@ -68,7 +68,7 @@ describe('Logger Utility', () => {
         const sanitized: Record<string, any> = {};
         for (const key of Object.keys(data)) {
           const lowerKey = key.toLowerCase();
-          if (SENSITIVE_FIELDS.some(field => lowerKey.includes(field))) {
+          if (SENSITIVE_FIELDS.some(field => lowerKey.includes(field.toLowerCase()))) {
             sanitized[key] = '[REDACTED]';
           } else {
             sanitized[key] = sanitizeForLogging(data[key]);

@@ -58,7 +58,7 @@ export default function ReservationsScreen({ navigation }: any) {
         rootNavigate(navigation, 'QrScanner', { contextRestaurantId: reservation.restaurantId, contextRestaurantName: reservation.restaurantName });
         return;
       }
-      Alert.alert('Check-in feito', 'Sua mesa ainda não está pronta. Avisamos você assim que for liberada.');
+      Alert.alert('Check-in feito', 'Sua chegada foi registrada, mas a mesa ainda não está livre. Fale com a recepção: a equipe acomoda você assim que liberar.');
     },
     onError: (error: unknown) => Alert.alert('Não foi possível fazer o check-in', describeTableInviteError(error)),
   });
