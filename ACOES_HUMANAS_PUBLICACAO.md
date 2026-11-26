@@ -111,6 +111,8 @@
 | 58 | Configurar CORS_ORIGIN | No .env de producao: `CORS_ORIGIN=https://noowebr.com` |
 | 59 | Executar seed inicial | `npm run seed` para dados base (se aplicavel) |
 | 59a | **OBRIGATORIO: dev_flags desligadas no projeto Supabase de producao** (QA B0) | `scripts/check-dev-flags.sh <ref-de-producao>` precisa sair com `OK` (exit 0) antes de publicar. Exit 1 = alguma `private.dev_flags` ligada (`simulate_table_scan` abre comanda sem estar na mesa, `simulate_pix_payment` confirma Pix falso): desligue com `update private.dev_flags set enabled=false, updated_at=now();`. Nao ha pipeline de deploy em CI, entao este passo e manual. Nunca rode o update no projeto de QA `eplivpvqemowmbivhfpx`. |
+| 59b | **OBRIGATORIO: ambiente de cada conta de pagamento** (QA RV-18) | Toda `restaurant_payment_accounts` nasce com `environment = 'sandbox'`. No projeto de producao, cada restaurante real com chave Asaas de producao precisa de `environment = 'production'`; senao o `payments-create` recusa a cobranca com `environment_mismatch` e avisa o Dono. |
+| 59c | **Liberar tokenizacao de cartao no Asaas** (decisao 10) | A NOOWE pede ao Asaas a liberacao de tokenizacao em cada subconta (R1–R3 agora e cada restaurante novo no onboarding). Sem isso "Adicionar cartao" falha. |
 
 ---
 

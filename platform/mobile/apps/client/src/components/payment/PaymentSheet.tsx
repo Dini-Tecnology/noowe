@@ -34,6 +34,8 @@ export type PaymentSheetProps = {
   totalCents: number | null;
   paying: boolean;
   disabled: boolean;
+  /** RV-05: abaixo do mínimo online, o botão faz o pedido para pagar no balcão (sem cobrança no app). */
+  payAtCounter?: boolean;
   onPay: (selection: PaymentSelection | null) => void;
   /** Cartão recusado na hora pelo provedor. */
   declined?: { reason: string | null } | null;
@@ -119,8 +121,8 @@ export function PaymentSheet(props: PaymentSheetProps) {
     );
   };
 
-  const payLabel = props.paying ? 'Gerando cobrança…' : zeroTotal ? 'Confirmar pedido' : totalCents != null ? `Pagar ${moneyCents(totalCents)}` : 'Pagar';
-  const payDisabled = props.disabled || props.paying || (!zeroTotal && !selection);
+  const payLabel = props.paying ? 'Gerando cobrança…' : zeroTotal ? 'Confirmar pedido' : props.payAtCounter ? 'Fazer pedido e pagar no balcão' : totalCents != null ? `Pagar ${moneyCents(totalCents)}` : 'Pagar';
+  const payDisabled = props.disabled || props.paying || (!zeroTotal && !props.payAtCounter && !selection);
 
   return (
     <View style={[styles.root, props.style]} onLayout={(e) => { rootY.current = e.nativeEvent.layout.y; }}>
@@ -278,11 +280,11 @@ export function PaymentSheet(props: PaymentSheetProps) {
 }
 
 /** Cobrança criada, esperando o servidor confirmar (webhook). Igual nos dois fluxos. */
-export function PaymentPending({ hint, style }: { hint?: string; style?: StyleProp<ViewStyle> }) {
+export function PaymentPending({ hint, title, style }: { hint?: string; title?: string; style?: StyleProp<ViewStyle> }) {
   const colors = useColors();
   return (
     <View style={[{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 16, gap: 8, marginHorizontal: 16 }, style]}>
-      <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>Aguardando confirmação</Text>
+      <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>{title ?? 'Aguardando confirmação'}</Text>
       <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>{hint ?? 'Esta tela atualiza sozinha quando o pagamento for confirmado.'}</Text>
     </View>
   );

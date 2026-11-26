@@ -43,6 +43,8 @@ import { PrivacyPolicyScreen, TermsOfServiceScreen, ReConsentScreen } from '@/sh
 import { MaintenanceScreen } from '@/shared/screens/MaintenanceScreen';
 import { useMaintenanceCheck } from '@/shared/hooks/useMaintenanceCheck';
 import { onConsentRequired } from '@/shared/services/api';
+import { supabaseAuthAdapter } from '@/shared/services/supabase-auth';
+import { LEGAL_VERSIONS } from '@/shared/config/legal';
 import ApiService from '@okinawa/shared/services/api';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
@@ -679,6 +681,14 @@ export default function Navigation() {
     try {
       const user = await authService.restoreSession();
       setIsAuthenticated(!!user);
+      // LGPD: Termos/Política mudaram de versão desde o último aceite -> reaceite antes de seguir.
+      if (user) {
+        const pending = await supabaseAuthAdapter.pendingLegalVersions(LEGAL_VERSIONS).catch(() => null);
+        if (pending) {
+          setConsentVersions(pending);
+          setRequiresConsent(true);
+        }
+      }
     } catch (error) {
       logger.error('Auth check failed:', error);
       setIsAuthenticated(false);

@@ -229,7 +229,8 @@ begin
   perform pg_temp.act(pg_temp.ctx('owner'));
   j := public.restaurant_get_payment_statement(o.restaurant_id);
   select e into x from jsonb_array_elements(j->'payments') e where e->>'paymentId' = t::text;
-  assert (x->>'netCents')::bigint = (x->>'paidCents')::bigint - v_fee - 200, 'líquido sem a conveniência: ' || x;
+  -- Líquido real (decisão 1): pago − tarifa do Asaas (100) − split da NOOWE sem a conveniência − conveniência.
+  assert (x->>'netCents')::bigint = (x->>'paidCents')::bigint - 100 - private.noowe_pay_split_cents(v_fee, 100) - 200, 'liquido real sem a conveniencia: ' || x::text;
   select noowe_split_cents into v_split from private.noowe_report_payment_margin where payment_id = t;
   assert v_split = private.noowe_pay_split_cents(v_fee, 100), 'margem sem conveniência';
 end $$;

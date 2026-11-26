@@ -1419,7 +1419,7 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
   );
 }
 
-function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+export function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors> }) {
   const { data: approvals, loading, error, refresh } = useApprovals();
   const { serverRole } = useRestaurantRole();
   const [viewerUserId, setViewerUserId] = useState<string | null>(null);
@@ -1463,7 +1463,7 @@ function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors>
             <View key={approval.id} style={[styles.approvalCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
               <View style={styles.approvalTop}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{approval.item_name}</Text>
+                  <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{approval.type === 'courtesy' ? `Cortesia · ${approval.item_name}` : approval.item_name}</Text>
                   <Text style={[styles.approvalMeta, { color: colors.foregroundSecondary }]}>
                     {tableLabel} · {approval.requester_name}
                   </Text>

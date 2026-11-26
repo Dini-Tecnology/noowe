@@ -18,10 +18,10 @@ select ok(exists (select 1 from private.customer_tax_documents where user_id = (
     and consent_at is not null and consent_text = 'Salvar meu CPF v1'),
   'com consentimento guarda e registra quando e o texto aceito');
 
--- Linha antiga, sem consentimento: não aparece para o cliente.
-insert into private.customer_tax_documents(user_id, document, source) values ((select v from _u where k = 'b'), '12345678909', 'payment');
-select pg_temp.act((select v from _u where k = 'b'));
-select ok(public.customer_get_tax_document() is null, 'CPF guardado sem consentimento não é oferecido');
+-- QA 26/11 item 5: linha sem consentimento não pode mais existir.
+select throws_ok($$insert into private.customer_tax_documents(user_id, document, source) values ((select v from _u where k = 'b'), '12345678909', 'payment')$$,
+  '23502', null, 'CPF sem consentimento não é guardado');
+select public.service_customer_save_tax_document((select v from _u where k = 'b'), '12345678909', 'payment', true, 'Salvar meu CPF v1');
 
 select pg_temp.act((select v from _u where k = 'a'));
 select is(public.customer_get_tax_document(), '52998224725', 'o cliente vê o próprio CPF salvo');

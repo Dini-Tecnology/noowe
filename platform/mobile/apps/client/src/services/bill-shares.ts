@@ -362,6 +362,8 @@ export const PAYMENT_ERRORS: Record<string, string> = {
   pix_unavailable: 'Pix indisponível neste restaurante no momento. Pague com cartão ou combine com a equipe.',
   provider_unavailable: 'O provedor de pagamento está indisponível. Tente novamente em instantes.',
   bill_changed: 'A conta mudou. Confira os valores atualizados.',
+  environment_mismatch: 'O pagamento online deste restaurante está em manutenção. Pague no balcão; a equipe já foi avisada.',
+  pix_provider_unsupported: 'Pix indisponível neste restaurante no momento. Pague com cartão ou combine com a equipe.',
   below_minimum: 'O valor mínimo para pagar pelo app é R$ 5,00. Combine com a equipe no salão, ou pague um valor maior.',
 };
 

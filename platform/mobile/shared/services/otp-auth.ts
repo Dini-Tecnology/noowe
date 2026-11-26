@@ -183,10 +183,12 @@ class OTPAuthService {
         full_name: data.fullName,
         email: data.email,
         birth_date: data.birthDate,
-        accepted_terms_version: data.acceptedTermsVersion,
-        accepted_privacy_version: data.acceptedPrivacyVersion,
         marketing_consent: data.marketingConsent,
       });
+      // LGPD: o aceite é gravado no servidor (user_consents, hora do banco). Sem ele o cadastro não conclui.
+      if (data.acceptedTermsVersion && data.acceptedPrivacyVersion) {
+        await supabaseAuthAdapter.acceptLegalTerms(data.acceptedTermsVersion, data.acceptedPrivacyVersion);
+      }
 
       await authService.storeAuthData({ user: profile });
       authService.notifyAuthStateChange(true);

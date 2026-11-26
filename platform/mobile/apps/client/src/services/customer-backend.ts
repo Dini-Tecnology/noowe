@@ -588,6 +588,8 @@ export interface CustomerBackend {
   listOrderStatusEvents(orderId: string): Promise<OrderStatusEvent[]>;
   /** Somente desenvolvimento: confirma o Pix simulado pendente (flag no banco). */
   confirmSimulatedPix(orderId: string): Promise<void>;
+  /** RV-05: Quick abaixo do mínimo online. O servidor confere e o pedido espera o pagamento no balcão. */
+  payAtCounter(orderId: string): Promise<{ orderId: string; orderNumber: string | null }>;
   getMenu(restaurantId: string): Promise<{ categories: CustomerMenuCategory[]; items: CustomerMenuItem[] }>;
   /** ADR-013 §2.9: grupos de opções, ingredientes removíveis e upsell, por item. */
   getMenuCustomizations(restaurantId: string): Promise<MenuCustomizations>;
@@ -1329,6 +1331,12 @@ export const customerBackend: CustomerBackend = {
       reason: optionalString(row.reason),
       createdAt: String(row.created_at),
     }));
+  },
+
+  async payAtCounter(orderId) {
+    const { data, error } = await (getSupabaseClient() as any).rpc('customer_quick_pay_at_counter', { p_order_id: orderId });
+    if (error) throw error;
+    return { orderId: String(data.orderId), orderNumber: data.orderNumber == null ? null : String(data.orderNumber) };
   },
 
   async confirmSimulatedPix(orderId) {

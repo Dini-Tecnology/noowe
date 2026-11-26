@@ -37,7 +37,7 @@ export type QuickCheckoutParams = {
 };
 
 /** Cobrança criada e ainda não confirmada: Pix com `code`; cartão salvo sem código, esperando o webhook. */
-type PendingCharge = { orderId: string; code: string | null; expiresAt: string | null; simulated: boolean; approved?: boolean };
+type PendingCharge = { orderId: string; code: string | null; expiresAt: string | null; simulated: boolean; approved?: boolean; counterNumber?: string | null };
 
 /**
  * Checkout do Skip the Line: cria o pedido e a cobrança no provedor que o servidor indicar.
@@ -145,6 +145,11 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
         const fresh = paidWithCoupon ? null : await customerBackend.getOrder(order.id);
         if (paidWithCoupon || fresh?.paymentStatus === 'confirmed') return { order, payment: { paymentStatus: 'confirmed' } as any, slot: '' };
       }
+      // RV-05: abaixo do mínimo online não há cobrança no app. O pedido espera o caixa confirmar no balcão.
+      if (noMethod) {
+        const counter = await customerBackend.payAtCounter(order.id);
+        return { order, payment: { paymentStatus: 'pending', counter: true, orderNumber: counter.orderNumber } as any, slot: '' };
+      }
       const slot = slotOf(selection);
       if (!chargeKeys.current.has(slot)) chargeKeys.current.set(slot, Crypto.randomUUID());
       const payment = await customerBackend.startPayment({
@@ -171,6 +176,10 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
       }
       setDeclined(null);
       if (payment.paymentStatus === 'confirmed') return finish(order.id);
+      if (payment.counter) {
+        setPix({ orderId: order.id, code: null, expiresAt: null, simulated: false, counterNumber: payment.orderNumber ?? null });
+        return undefined;
+      }
       if (payment.paymentStatus === 'pending' && (payment.pixCode || payment.cardResult)) {
         setPix({ orderId: order.id, code: payment.pixCode, expiresAt: payment.paymentExpiresAt, simulated: payment.simulated, approved: payment.cardResult === 'approved' });
         return undefined;
@@ -339,13 +348,19 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
                 onRegenerate={resetPix}
               />
             </View>
+          ) : pix?.counterNumber !== undefined ? (
+            <PaymentPending
+              title={`Pague no balcão${pix.counterNumber ? ` · Pedido nº ${pix.counterNumber}` : ''}`}
+              hint="Mostre o número do pedido no caixa. Ele vai para a cozinha assim que o pagamento for confirmado. Esta tela atualiza sozinha."
+            />
           ) : pix ? (
             <PaymentPending hint={`${pix.approved ? 'Cartão aprovado. ' : ''}O pedido vai para a cozinha assim que o pagamento for confirmado. Esta tela atualiza sozinha.`} />
           ) : (
             <PaymentSheet
               pixAvailable={quote.data?.pixAvailable}
               cardAvailable={quote.data?.cardAvailable}
-              offlineNotice={paymentUnavailable ? 'Este restaurante ainda não aceita pagamento online.' : noMethod ? 'O valor está abaixo do mínimo para pagar pelo app. Pague no balcão.' : null}
+              offlineNotice={paymentUnavailable ? 'Este restaurante ainda não aceita pagamento online.' : noMethod ? 'O valor está abaixo do mínimo para pagar pelo app. Faça o pedido e pague no balcão.' : null}
+              payAtCounter={noMethod}
               savedCards={cards.data ?? []}
               onAddCard={() => navigation.navigate('AddCard', { restaurantId: cart.restaurantId })}
               tip={tipOffered ? {
@@ -363,7 +378,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
               summary={summary}
               totalCents={quote.data ? quote.data.totalCents : null}
               paying={place.isPending}
-              disabled={!cart.items.length || !policyAccepted || paymentUnavailable || couponPending || noMethod}
+              disabled={!cart.items.length || !policyAccepted || paymentUnavailable || couponPending}
               onPay={confirmAndPlace}
               declined={declined}
               onDismissDecline={() => setDeclined(null)}

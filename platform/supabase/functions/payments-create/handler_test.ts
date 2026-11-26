@@ -10,7 +10,7 @@ const KEY = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const PAY = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const ACCT = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
-function setup(over: { reserved?: any; reserveError?: any; customerId?: string | null; existing?: any; createThrows?: boolean; pixKeyMissing?: boolean; cardToken?: string | null; optionsError?: any; hasTaxDocument?: boolean; getCustomer?: any } = {}) {
+function setup(over: { secrets?: any; reserved?: any; reserveError?: any; customerId?: string | null; existing?: any; createThrows?: boolean; pixKeyMissing?: boolean; cardToken?: string | null; optionsError?: any; hasTaxDocument?: boolean; getCustomer?: any } = {}) {
   const calls: { fn: string; args: any }[] = [];
   const provider: string[] = [];
   const deps: PaymentDeps = {
@@ -24,7 +24,7 @@ function setup(over: { reserved?: any; reserveError?: any; customerId?: string |
       if (fn === "service_payment_set_split") return over.splitError ? { data: null, error: over.splitError } : { data: { splitCents: over.splitCents ?? 250 }, error: null };
       if (fn === "service_payment_set_card_options") return { data: null, error: over.optionsError ?? null };
       if (fn === "service_payment_card_token") return { data: over.cardToken ?? null, error: null };
-      if (fn === "service_payment_account_secrets") return { data: { apiKey: "ak" }, error: null };
+      if (fn === "service_payment_account_secrets") return { data: { apiKey: "$aact_hmlg_ak", environment: "sandbox", pixProvider: "asaas", ...over.secrets }, error: null };
       if (fn === "service_payment_customer") return { data: { providerCustomerId: over.customerId ?? null, name: "Ana", email: "a@x.com", phone: null, hasTaxDocument: over.hasTaxDocument }, error: null };
       return { data: null, error: null };
     },
@@ -371,4 +371,25 @@ test("cartão: reenvio com a mesma chave devolve o mesmo resultado, sem cobrar d
   assert.equal(body.cardResult, "declined");
   assert.equal(body.checkoutUrl, null);
   assert.equal(provider.length, 0);
+});
+
+test("RV-18: chave de outro ambiente não cobra, responde 409 e avisa o Dono", async () => {
+  for (const secrets of [{ environment: "production" }, { apiKey: "$aact_prod_x" }, { apiKey: "sem-prefixo" }, { environment: null }]) {
+    const { deps, calls, provider } = setup({ secrets });
+    const res = await handleCreate(req(valid), deps);
+    assert.equal(res.status, 409);
+    assert.equal((await res.json()).error, "environment_mismatch");
+    assert.deepEqual(provider, []);
+    assert.ok(calls.some((c) => c.fn === "service_payment_environment_mismatch" && c.args.p_account_id === ACCT));
+  }
+  const prod = setup({ secrets: { apiKey: "$aact_prod_x", environment: "production" } });
+  assert.equal((await handleCreate(req(valid), prod.deps)).status, 200);
+});
+
+test("RV-01: Pix só no provedor parametrizado que existe; outro valor é erro claro e nada é cobrado", async () => {
+  const { deps, provider } = setup({ secrets: { pixProvider: "mercadopago" } });
+  const res = await handleCreate(req(valid), deps);
+  assert.equal(res.status, 409);
+  assert.equal((await res.json()).error, "pix_provider_unsupported");
+  assert.deepEqual(provider, []);
 });

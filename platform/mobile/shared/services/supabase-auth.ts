@@ -428,19 +428,9 @@ export const supabaseAuthAdapter = {
     phone?: string;
     avatar_url?: string;
     marketing_consent?: boolean;
-    accepted_terms_version?: string;
-    accepted_privacy_version?: string;
   }) {
     const { user } = await getOptionalSupabaseSessionUser();
     if (!user) throw new Error('No authenticated Supabase user');
-
-    const prefs =
-      patch.accepted_terms_version !== undefined || patch.accepted_privacy_version !== undefined
-        ? {
-            accepted_terms_version: patch.accepted_terms_version,
-            accepted_privacy_version: patch.accepted_privacy_version,
-          }
-        : undefined;
 
     const { data, error } = await getSupabaseClient()
       .from('profiles')
@@ -451,7 +441,6 @@ export const supabaseAuthAdapter = {
         phone: patch.phone,
         avatar_url: patch.avatar_url,
         marketing_consent: patch.marketing_consent,
-        ...(prefs ? { preferences: prefs } : {}),
         ...((patch.phone !== undefined && patch.phone !== '') ? { phone_verified: true } : {}),
         updated_at: new Date().toISOString(),
       })
@@ -461,6 +450,30 @@ export const supabaseAuthAdapter = {
     if (error) throw error;
 
     return data;
+  },
+
+  async acceptLegalTerms(termsVersion: string, privacyVersion: string) {
+    const { error } = await getSupabaseClient().rpc('accept_legal_terms', {
+      p_terms_version: termsVersion,
+      p_privacy_version: privacyVersion,
+    });
+    if (error) throw error;
+  },
+
+  /** Versões vigentes que o usuário logado ainda não aceitou; null quando está em dia. */
+  async pendingLegalVersions(current: { terms: string; privacy: string }) {
+    const { user } = await getOptionalSupabaseSessionUser();
+    if (!user) return null;
+    const { data, error } = await getSupabaseClient()
+      .from('user_consents')
+      .select('consent_type, version')
+      .eq('user_id', user.id)
+      .is('revoked_at', null);
+    if (error) throw error;
+    const has = (type: string, version: string) =>
+      (data ?? []).some((c: { consent_type: string; version: string }) => c.consent_type === type && c.version === version);
+    if (has('terms_of_service', current.terms) && has('privacy_policy', current.privacy)) return null;
+    return { currentTermsVersion: current.terms, currentPrivacyVersion: current.privacy };
   },
 
   async sendEmailOtp(email: string) {

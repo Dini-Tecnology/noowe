@@ -21,6 +21,7 @@ import { ScreenContainer } from '../../components/ScreenContainer';
 import { useI18n } from '@/shared/hooks/useI18n';
 import { LegalConsentSection } from '@okinawa/shared/components/LegalConsentSection';
 import { otpAuthService } from '@/shared/services/otp-auth';
+import { LEGAL_VERSIONS } from '@/shared/config/legal';
 import { validateForm, phoneRegisterSchema } from '@/shared/validation/schemas';
 import { getLocalizedAuthErrorMessage } from '@/shared/utils/auth-errors';
 import Haptic from '@/shared/utils/haptics';
@@ -28,8 +29,6 @@ import { useScreenTracking } from '@/shared/hooks/useAnalytics';
 
 const TERMS_URL = 'https://noowe.com/legal/terms';
 const PRIVACY_URL = 'https://noowe.com/legal/privacy';
-const CURRENT_TERMS_VERSION = '1.0';
-const CURRENT_PRIVACY_VERSION = '1.0';
 
 /**
  * Validates that a DD/MM/YYYY birth date represents a person 18+ years old
@@ -167,8 +166,8 @@ export const PhoneRegisterScreen: React.FC<PhoneRegisterScreenProps> = ({
         fullName,
         email: email || undefined,
         birthDate: toISODate(birthDate),
-        acceptedTermsVersion: CURRENT_TERMS_VERSION,
-        acceptedPrivacyVersion: CURRENT_PRIVACY_VERSION,
+        acceptedTermsVersion: LEGAL_VERSIONS.terms,
+        acceptedPrivacyVersion: LEGAL_VERSIONS.privacy,
         marketingConsent,
       });
 

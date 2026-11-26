@@ -32,6 +32,7 @@ const mockMode = jest.fn();
 const mockPlace = jest.fn();
 const mockStart = jest.fn();
 const mockGetOrder = jest.fn();
+const mockPayAtCounter = jest.fn();
 jest.mock('../services/customer-backend', () => ({ __esModule: true, default: {
   getRestaurant: async () => ({ name: 'Burger' }),
   getOrderPaymentMode: (...a: unknown[]) => mockMode(...a),
@@ -40,6 +41,7 @@ jest.mock('../services/customer-backend', () => ({ __esModule: true, default: {
   refreshQuickService: async () => undefined,
   getOrder: (...a: unknown[]) => mockGetOrder(...a),
   confirmSimulatedPix: jest.fn(),
+  payAtCounter: (...a: unknown[]) => mockPayAtCounter(...a),
 } }));
 jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => undefined);
 
@@ -251,5 +253,19 @@ test('CPF na nota: inválido avisa antes de criar o pedido; válido vai na cobra
   fireEvent.changeText(view.getByTestId('receipt-document-input'), '52998224725');
   fireEvent.press(view.getByTestId('pay-button'));
   await waitFor(() => expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({ receiptDocument: '52998224725' })));
+  client.clear();
+});
+
+test('RV-05: abaixo do mínimo online faz o pedido, não cobra e mostra "Pague no balcão" com o número', async () => {
+  mockTipQuote.mockResolvedValue({ tipCents: 0, totalCents: 300, convenienceCents: 0, pixAvailable: false, cardAvailable: false });
+  mockPayAtCounter.mockResolvedValue({ orderId: 'o1', orderNumber: '42' });
+  const { view, nav, client } = renderScreen();
+  await waitFor(() => expect(view.getByText('Fazer pedido e pagar no balcão')).toBeTruthy());
+  await acceptAndPay(view);
+  await waitFor(() => expect(view.getByText('Pague no balcão · Pedido nº 42')).toBeTruthy());
+  expect(mockPlace).toHaveBeenCalled();
+  expect(mockPayAtCounter).toHaveBeenCalledWith('o1');
+  expect(mockStart).not.toHaveBeenCalled();
+  expect(nav.replace).not.toHaveBeenCalled();
   client.clear();
 });

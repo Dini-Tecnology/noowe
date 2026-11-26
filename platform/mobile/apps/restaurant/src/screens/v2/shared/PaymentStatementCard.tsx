@@ -14,7 +14,7 @@ export function statementLabel(method: string, external: boolean): string {
   return external && method !== 'cash' ? `Maquininha – ${label.toLowerCase()}` : label;
 }
 
-/** Extrato do Dono: valor pago, taxa NOOWE Pay e líquido por pagamento. Só o Dono vê; o servidor recusa os demais. */
+/** Extrato do Dono: valor pago, tarifas reais (Asaas + split NOOWE) e líquido por pagamento (QA PAG-07). Só o Dono vê; o servidor recusa os demais. */
 export function PaymentStatementCard() {
   const colors = useColors();
   const { restaurantId, serverRoles } = useRestaurantRole();
@@ -32,7 +32,7 @@ export function PaymentStatementCard() {
     <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <Text style={[styles.title, { color: colors.foreground }]}>Extrato NOOWE Pay · 30 dias</Text>
       <View style={styles.row}><Text style={{ color: colors.foregroundSecondary }}>Valor pago</Text><Text style={{ color: colors.foreground, fontWeight: '700' }}>{formatCents(statement.paidCents)}</Text></View>
-      <View style={styles.row}><Text style={{ color: colors.foregroundSecondary }}>Taxa NOOWE Pay</Text><Text style={{ color: colors.foreground, fontWeight: '700' }}>{formatCents(statement.feeCents)}</Text></View>
+      <View style={styles.row}><Text style={{ color: colors.foregroundSecondary }}>Tarifas (Asaas + NOOWE Pay)</Text><Text style={{ color: colors.foreground, fontWeight: '700' }}>{formatCents(statement.feeCents)}</Text></View>
       {statement.refundedCents > 0 ? (
         <View style={styles.row}><Text style={{ color: colors.foregroundSecondary }}>Estornado</Text><Text style={{ color: colors.foreground, fontWeight: '700' }}>{formatCents(statement.refundedCents)}</Text></View>
       ) : null}
@@ -44,7 +44,7 @@ export function PaymentStatementCard() {
             <Text style={{ color: colors.foreground, fontWeight: '600' }}>{formatCents(payment.paidCents)}</Text>
           </View>
           <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>
-            Taxa {formatCents(payment.feeCents)} · líquido {formatCents(payment.netCents)}
+            Tarifas {formatCents(payment.feeCents)} · líquido {formatCents(payment.netCents)}
             {payment.feeDestination === 'returned' ? ' · estorno: taxa devolvida' : payment.feeDestination === 'kept' ? ' · estorno: taxa não devolvida' : ''}
           </Text>
         </View>

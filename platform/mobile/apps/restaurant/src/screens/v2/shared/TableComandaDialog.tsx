@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { X } from 'lucide-react-native';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
+import { useRestaurantRole } from '../../../contexts/RestaurantRoleContext';
+import { V2ConfirmDialog } from './V2ConfirmDialog';
+
+/** Decisão 11: Garçom ou Gerente pede cortesia; Gerente ou Dono aprova. */
+export function canRequestCourtesy(roles: readonly string[]): boolean {
+  return roles.includes('waiter') || roles.includes('manager');
+}
 
 interface ComandaItem {
   orderItemId: string;
@@ -57,6 +64,12 @@ export function TableComandaDialog({
   onClose: () => void;
 }) {
   const colors = useColors();
+  const { restaurantId, serverRoles } = useRestaurantRole();
+  const canCourtesy = canRequestCourtesy(serverRoles ?? []);
+  const [courtesyItem, setCourtesyItem] = useState<ComandaItem | null>(null);
+  const [courtesyReason, setCourtesyReason] = useState('');
+  // shortcut: pendência só desta abertura do diálogo (a conta não traz aprovações); ao reabrir, o servidor recusa a duplicata.
+  const [pendingCourtesy, setPendingCourtesy] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [diners, setDiners] = useState<ComandaDiner[]>([]);
@@ -97,6 +110,30 @@ export function TableComandaDialog({
     }, 15000);
     return () => { cancelled = true; clearInterval(timer); };
   }, [visible, tableId]);
+
+  const submitCourtesy = async () => {
+    const item = courtesyItem;
+    if (!item || !restaurantId) return;
+    setCourtesyItem(null);
+    try {
+      // O valor é calculado no servidor a partir do item.
+      const approval = await supabaseApiAdapter.requestApproval({
+        restaurantId,
+        type: 'courtesy',
+        itemName: item.name,
+        reason: courtesyReason.trim(),
+        tableId: tableId ?? undefined,
+        orderItemId: item.orderItemId,
+      });
+      if (approval?.status !== 'approved') setPendingCourtesy((prev) => new Set(prev).add(item.orderItemId));
+      Alert.alert(approval?.status === 'approved' ? 'Cortesia aplicada' : 'Cortesia solicitada',
+        approval?.status === 'approved' ? 'O item foi zerado na conta.' : 'Aguardando aprovação do Gerente ou do Dono.');
+    } catch (err) {
+      Alert.alert('Falha ao pedir cortesia', userErrorMessage(err, 'Tente novamente.'));
+    } finally {
+      setCourtesyReason('');
+    }
+  };
 
   const groups = useMemo(() => {
     const byDiner = new Map<string, { name: string; isKid: boolean; items: ComandaItem[]; subtotal: number }>();
@@ -166,6 +203,19 @@ export function TableComandaDialog({
                       <Text style={[styles.itemPrice, { color: colors.foregroundSecondary }]}>
                         {formatCurrency(item.totalPrice)}
                       </Text>
+                      {pendingCourtesy.has(item.orderItemId) ? (
+                        <Text style={[styles.courtesyTag, { color: colors.foregroundSecondary }]} testID={`comanda-courtesy-pending-${item.orderItemId}`}>
+                          Cortesia pendente
+                        </Text>
+                      ) : canCourtesy && item.totalPrice > 0 && item.status !== 'cancelled' ? (
+                        <TouchableOpacity
+                          onPress={() => setCourtesyItem(item)}
+                          accessibilityLabel={`Pedir cortesia de ${item.name}`}
+                          hitSlop={6}
+                        >
+                          <Text style={[styles.courtesyTag, { color: colors.primary }]}>Pedir cortesia</Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
                   ))}
                 </View>
@@ -174,6 +224,17 @@ export function TableComandaDialog({
           )}
         </View>
       </View>
+      <V2ConfirmDialog
+        visible={courtesyItem !== null}
+        title="Pedir cortesia?"
+        message={`${courtesyItem?.quantity ?? 1}x ${courtesyItem?.name ?? ''} · ${formatCurrency(courtesyItem?.totalPrice ?? 0)}. Vai para aprovação do Gerente ou do Dono.`}
+        confirmLabel="Pedir cortesia"
+        reasonLabel="Motivo da cortesia"
+        reason={courtesyReason}
+        onReasonChange={setCourtesyReason}
+        onCancel={() => { setCourtesyItem(null); setCourtesyReason(''); }}
+        onConfirm={() => void submitCourtesy()}
+      />
     </Modal>
   );
 }
@@ -197,5 +258,6 @@ const styles = StyleSheet.create({
   },
   itemName: { flex: 1, fontSize: 13, marginRight: 8 },
   itemPrice: { fontSize: 13, fontWeight: '600' },
+  courtesyTag: { fontSize: 11, fontWeight: '700', marginLeft: 8, alignSelf: 'center' },
   itemStatus: { fontSize: 11, fontWeight: '700', marginRight: 8, alignSelf: 'center' },
 });

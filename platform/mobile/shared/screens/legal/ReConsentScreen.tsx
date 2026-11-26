@@ -3,7 +3,7 @@
  *
  * Displays the current terms of service and privacy policy text with a
  * scroll-to-bottom requirement before the "Accept" button becomes active.
- * On acceptance, calls POST /users/me/consent for each required consent type.
+ * On acceptance, records both consents server-side (RPC accept_legal_terms).
  * On decline, offers the option to delete the user account.
  *
  * LGPD Sprint 2: Ensures users re-accept whenever document versions change.
@@ -24,6 +24,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '../../components/ScreenContainer';
 import ApiService from '@okinawa/shared/services/api';
+import { supabaseAuthAdapter } from '@okinawa/shared/services/supabase-auth';
+import { LEGAL_VERSIONS } from '@okinawa/shared/config/legal';
 
 const FALLBACK_TERMS: LegalDocument = {
   title: 'Termos de Uso',
@@ -126,18 +128,10 @@ export const ReConsentScreen: React.FC<ReConsentScreenProps> = ({
   // Accept consent mutation
   const acceptConsentMutation = useMutation({
     mutationFn: async () => {
-      const resolvedTermsVersion = termsVersion || termsDoc?.version || '1.0.0';
-      const resolvedPrivacyVersion = privacyVersion || privacyDoc?.version || '1.0.0';
-
-      // Accept both consent types
-      await ApiService.post('/users/me/consent', {
-        consent_type: 'terms_of_service',
-        version: resolvedTermsVersion,
-      });
-      await ApiService.post('/users/me/consent', {
-        consent_type: 'privacy_policy',
-        version: resolvedPrivacyVersion,
-      });
+      await supabaseAuthAdapter.acceptLegalTerms(
+        termsVersion || LEGAL_VERSIONS.terms,
+        privacyVersion || LEGAL_VERSIONS.privacy,
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['legal'] });

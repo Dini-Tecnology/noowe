@@ -1,6 +1,7 @@
 import { AsaasError, asaasMessage } from "../_shared/payments/asaas.ts";
 import { bearer, json, mapRpcError, saoPauloDate, type PaymentDeps } from "../_shared/payments/deps.ts";
 import { onlyDigits, validTaxDocument } from "../_shared/payments/document.ts";
+import { asaasKeyEnvironment, environmentMatches, pixProviderSupported } from "../_shared/payments/environment.ts";
 import { asaasValueToCents } from "../_shared/payments/money.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -97,6 +98,16 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
   if (secrets.error || !apiKey) {
     console.error("payments-create secrets error:", secrets.error);
     return json({ error: "payments_unavailable" }, 409);
+  }
+  // RV-18: chave de um ambiente numa subconta do outro não cobra; o Dono é avisado.
+  if (!environmentMatches(apiKey, secrets.data?.environment)) {
+    const noted = await deps.rpc("service_payment_environment_mismatch", { p_account_id: r.paymentAccountId, p_key_environment: asaasKeyEnvironment(apiKey) });
+    if (noted.error) console.error("payments-create environment notice error:", noted.error);
+    return json({ error: "environment_mismatch", retryable: false }, 409);
+  }
+  if (method === "pix" && !pixProviderSupported(secrets.data?.pixProvider)) {
+    console.error("payments-create: provedor de Pix não implementado:", secrets.data?.pixProvider);
+    return json({ error: "pix_provider_unsupported", retryable: false }, 409);
   }
 
   let chargeAttempted = false;
