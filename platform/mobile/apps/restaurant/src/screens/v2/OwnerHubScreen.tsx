@@ -482,7 +482,7 @@ function formatApprovalCurrency(value: number): string {
   }).format(value);
 }
 
-function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void; colors: ReturnType<typeof useColors> }) {
+export function DashboardTab({ onNavigate, colors }: { onNavigate: (s: string) => void; colors: ReturnType<typeof useColors> }) {
   const { serviceFeatures, capabilities, role } = useRestaurantRole();
   const { data: snapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useDashboardSnapshot();
   const { data: recentOrders, loading: ordersLoading, error: ordersError, refresh: refreshOrders } = useRestaurantOrders();
@@ -1216,7 +1216,7 @@ function MaitreManagementView({ colors }: { colors: ReturnType<typeof useColors>
   );
 }
 
-function ManagerDashboardTab({
+export function ManagerDashboardTab({
   setView,
   onNavigate,
   colors,

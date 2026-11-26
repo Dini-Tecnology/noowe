@@ -608,6 +608,7 @@ export interface SupabaseApiAdapter {
     amount?: number;
     tableId?: string;
     orderId?: string;
+    orderItemId?: string;
   }): Promise<any>;
   // ── Cash Register ──────────────────────────────────────────────────────────────
   getCashRegister(restaurantId?: string): Promise<any>;
@@ -1687,6 +1688,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     amount?: number;
     tableId?: string;
     orderId?: string;
+    orderItemId?: string;
   }) {
     const { data, error } = await getSupabaseClient().rpc('restaurant_request_approval', {
       p_restaurant_id: input.restaurantId,
@@ -1696,6 +1698,7 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
       p_amount: input.amount ?? 0,
       p_table_id: input.tableId ?? null,
       p_order_id: input.orderId ?? null,
+      p_order_item_id: input.orderItemId ?? null,
     });
     if (error) throw error;
     return data;

@@ -21,6 +21,7 @@ import {
 } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ApiService from '@/shared/services/api';
+import { V2ConfirmDialog } from '../v2/shared/V2ConfirmDialog';
 import { useColors } from '@/shared/theme';
 import { t } from '@/shared/i18n';
 
@@ -59,6 +60,8 @@ export default function BarmanKDSScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'preparing' | 'ready'>('all');
   const [loading, setLoading] = useState(true);
+  const [cancelTarget, setCancelTarget] = useState<{ orderId: string; itemId: string } | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   // Memoized styles based on theme colors
   const styles = useMemo(() => StyleSheet.create({
@@ -302,17 +305,17 @@ export default function BarmanKDSScreen() {
    * Shows confirmation dialog and calls API to cancel the item.
    */
   const handleCancelItem = (orderId: string, itemId: string) => {
-    Alert.alert(
-      t('barman.alerts.cancelItemTitle'),
-      t('barman.alerts.cancelItemMsg'),
-      [
-        { text: t('common.no'), style: 'cancel' },
-        {
-          text: t('common.yes'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await ApiService.cancelBarItem(orderId, itemId, 'Item cancelled by bar staff');
+    setCancelReason('');
+    setCancelTarget({ orderId, itemId });
+  };
+
+  // Cancelar item exige motivo digitado pela equipe (invariante 8): o servidor recusa motivo vazio.
+  const confirmCancelItem = async () => {
+    if (!cancelTarget || !cancelReason.trim()) return;
+    const { orderId, itemId } = cancelTarget;
+    setCancelTarget(null);
+    try {
+              await ApiService.cancelBarItem(orderId, itemId, cancelReason.trim());
               setOrders(
                 orders.map((order) =>
                   order.id === orderId
@@ -324,14 +327,10 @@ export default function BarmanKDSScreen() {
                 )
               );
               Alert.alert(t('common.success'), t('barman.alerts.cancelSuccess'));
-            } catch (error) {
+    } catch (error) {
               console.error('Failed to cancel item:', error);
               Alert.alert(t('common.error'), t('barman.alerts.cancelError'));
-            }
-          },
-        },
-      ]
-    );
+    }
   };
 
   const getTimeElapsed = (createdAt: string) => {
@@ -578,6 +577,17 @@ export default function BarmanKDSScreen() {
         )}
       </ScrollView>
     </View>
+      <V2ConfirmDialog
+        visible={!!cancelTarget}
+        title={t('barman.alerts.cancelItemTitle')}
+        message={t('barman.alerts.cancelItemMsg')}
+        destructive
+        reasonLabel="Motivo do cancelamento"
+        reason={cancelReason}
+        onReasonChange={setCancelReason}
+        onConfirm={() => void confirmCancelItem()}
+        onCancel={() => setCancelTarget(null)}
+      />
     </ScreenContainer>
   );
 }

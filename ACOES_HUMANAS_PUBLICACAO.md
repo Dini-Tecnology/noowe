@@ -110,6 +110,7 @@
 | 57 | Executar migrations | `npm run migration:run` no backend com banco de producao |
 | 58 | Configurar CORS_ORIGIN | No .env de producao: `CORS_ORIGIN=https://noowebr.com` |
 | 59 | Executar seed inicial | `npm run seed` para dados base (se aplicavel) |
+| 59a | **OBRIGATORIO: dev_flags desligadas no projeto Supabase de producao** (QA B0) | `scripts/check-dev-flags.sh <ref-de-producao>` precisa sair com `OK` (exit 0) antes de publicar. Exit 1 = alguma `private.dev_flags` ligada (`simulate_table_scan` abre comanda sem estar na mesa, `simulate_pix_payment` confirma Pix falso): desligue com `update private.dev_flags set enabled=false, updated_at=now();`. Nao ha pipeline de deploy em CI, entao este passo e manual. Nunca rode o update no projeto de QA `eplivpvqemowmbivhfpx`. |
 
 ---
 

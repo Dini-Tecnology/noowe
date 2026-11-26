@@ -33,3 +33,12 @@ it('o Dono cria o programa sem configuração prévia', async () => {
   await waitFor(() => expect(mockApi.saveLoyaltyConfig).toHaveBeenCalledWith('r1', expect.objectContaining({ points_enabled: true, points_per_real: 2, points_redemption_rate: 0.1, min_points_for_redemption: 50 })));
   expect(await view.findByText('Programa salvo')).toBeTruthy();
 });
+
+it('faixas: reais na tela, centavos no payload, ordem conferida', () => {
+  const d = rowToLoyaltyDraft({ points_enabled: true, points_per_real: 1, points_redemption_rate: 0.05, min_points_for_redemption: 100,
+    tier_silver_min_cents: 50000, tier_gold_min_cents: 200000, tier_platinum_min_cents: 500000 });
+  expect(d).toMatchObject({ tier_silver_min_cents: '500', tier_gold_min_cents: '2000', tier_platinum_min_cents: '5000' });
+  expect(loyaltyDraftToPayload({ ...d, tier_gold_min_cents: '1500,5' }).payload).toMatchObject({ tier_silver_min_cents: 50000, tier_gold_min_cents: 150050, tier_platinum_min_cents: 500000 });
+  expect(loyaltyDraftToPayload({ ...d, tier_gold_min_cents: '400' }).error).toMatch(/faixas devem crescer/i);
+  expect(loyaltyDraftToPayload({ ...d, tier_silver_min_cents: '' }).payload).not.toHaveProperty('tier_silver_min_cents');
+});

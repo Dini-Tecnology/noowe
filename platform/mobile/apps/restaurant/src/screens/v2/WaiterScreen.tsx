@@ -73,7 +73,8 @@ export default function WaiterScreen() {
             table_number: t.table_number ?? t.number,
             status: t.status,
             guest_name: t.guest_name,
-            guest_count: t.guest_count,
+            // CA-B2: quem está de fato na comanda (headcount), como em mapTable; o número da abertura é só reserva.
+            guest_count: Number(t.active_session?.headcount ?? t.active_session?.guest_count ?? t.guest_count) || undefined,
             notes: t.notes,
             open_calls: callsByTable[t.id] ?? 0,
           }))

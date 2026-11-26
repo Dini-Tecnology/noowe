@@ -7,18 +7,24 @@ import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { V2Shell } from './shared/V2Shell';
 import { useRestaurantRole } from '../../contexts/RestaurantRoleContext';
 
-type Field = 'points_per_real' | 'points_redemption_rate' | 'min_points_for_redemption' | 'cashback_percentage';
+type Field = 'points_per_real' | 'points_redemption_rate' | 'min_points_for_redemption' | 'cashback_percentage'
+  | 'tier_silver_min_cents' | 'tier_gold_min_cents' | 'tier_platinum_min_cents';
 type Toggle = 'points_enabled' | 'cashback_enabled';
 export type LoyaltyDraft = Record<Field, string> & Record<Toggle, boolean>;
 
-const FIELDS: { key: Field; label: string; hint: string; needs: Toggle }[] = [
+// cents: o Dono digita reais; o servidor guarda centavos e confere a ordem das faixas.
+const FIELDS: { key: Field; label: string; hint: string; needs: Toggle; cents?: boolean }[] = [
   { key: 'points_per_real', label: 'Pontos por R$ 1 consumido', hint: 'Creditados depois do pagamento, para quem pagou', needs: 'points_enabled' },
   { key: 'points_redemption_rate', label: 'Valor de cada ponto no resgate (R$)', hint: 'Ex.: 0,05', needs: 'points_enabled' },
   { key: 'min_points_for_redemption', label: 'Mínimo de pontos para resgatar', hint: 'Ex.: 100', needs: 'points_enabled' },
+  { key: 'tier_silver_min_cents', label: 'Gasto para Prata (R$)', hint: 'Ex.: 500', needs: 'points_enabled', cents: true },
+  { key: 'tier_gold_min_cents', label: 'Gasto para Ouro (R$)', hint: 'Ex.: 2000', needs: 'points_enabled', cents: true },
+  { key: 'tier_platinum_min_cents', label: 'Gasto para Platina (R$)', hint: 'Ex.: 5000', needs: 'points_enabled', cents: true },
   { key: 'cashback_percentage', label: 'Cashback (%)', hint: 'De 0 a 100', needs: 'cashback_enabled' },
 ];
 
 const text = (v: unknown) => (v === null || v === undefined ? '' : String(v).replace('.', ','));
+const reais = (v: unknown) => (v === null || v === undefined ? '' : text(Number(v) / 100));
 const num = (v: string) => {
   const n = Number(v.trim().replace(',', '.'));
   return v.trim() === '' || !Number.isFinite(n) || n < 0 ? null : n;
@@ -32,6 +38,9 @@ export function rowToLoyaltyDraft(row: Record<string, unknown> | null | undefine
     points_redemption_rate: text(row?.points_redemption_rate),
     min_points_for_redemption: text(row?.min_points_for_redemption),
     cashback_percentage: text(row?.cashback_percentage),
+    tier_silver_min_cents: reais(row?.tier_silver_min_cents),
+    tier_gold_min_cents: reais(row?.tier_gold_min_cents),
+    tier_platinum_min_cents: reais(row?.tier_platinum_min_cents),
   };
 }
 
@@ -39,9 +48,21 @@ export function rowToLoyaltyDraft(row: Record<string, unknown> | null | undefine
 export function loyaltyDraftToPayload(d: LoyaltyDraft): { payload?: Record<string, unknown>; error?: string } {
   const payload: Record<string, unknown> = { points_enabled: d.points_enabled, cashback_enabled: d.cashback_enabled };
   for (const f of FIELDS) {
+    // Faixa em branco: o servidor mantém a atual.
+    if (f.cents) {
+      if (d[f.key].trim() === '') continue;
+      const r = num(d[f.key]);
+      if (r === null) return { error: `Confira: ${f.label}` };
+      payload[f.key] = Math.round(r * 100);
+      continue;
+    }
     const v = d[f.key].trim() === '' && !d[f.needs] ? 0 : num(d[f.key]);
     if (v === null || (f.key === 'cashback_percentage' && v > 100)) return { error: `Confira: ${f.label}` };
     payload[f.key] = v;
+  }
+  const [s, g, p] = (['tier_silver_min_cents', 'tier_gold_min_cents', 'tier_platinum_min_cents'] as const).map((k) => payload[k] as number | undefined);
+  if (s !== undefined && g !== undefined && p !== undefined && !(s > 0 && s < g && g < p)) {
+    return { error: 'As faixas devem crescer: Prata < Ouro < Platina' };
   }
   return { payload };
 }

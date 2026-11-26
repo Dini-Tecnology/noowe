@@ -36,6 +36,7 @@ import {
 } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ApiService from '@/shared/services/api';
+import { V2ConfirmDialog } from '../v2/shared/V2ConfirmDialog';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { useI18n } from '@/shared/hooks/useI18n';
 
@@ -182,6 +183,8 @@ export default function BarmanStationScreen({ navigation }: { navigation: any })
   const [ordersRefreshing, setOrdersRefreshing] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'ready'>('all');
+  const [cancelTarget, setCancelTarget] = useState<{ orderId: string; itemId: string } | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   // Recipes state
   const [recipes, setRecipes] = useState<DrinkRecipeItem[]>([]);
@@ -630,14 +633,17 @@ export default function BarmanStationScreen({ navigation }: { navigation: any })
   };
 
   const handleCancelItem = (orderId: string, itemId: string) => {
-    Alert.alert(t('barman.action.cancelItem'), t('barman.confirm.cancelItem'), [
-      { text: t('common.no'), style: 'cancel' },
-      {
-        text: t('common.yes'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await ApiService.cancelBarItem(orderId, itemId, 'Cancelled by bar staff');
+    setCancelReason('');
+    setCancelTarget({ orderId, itemId });
+  };
+
+  // Cancelar item exige motivo digitado pela equipe (invariante 8): o servidor recusa motivo vazio.
+  const confirmCancelItem = async () => {
+    if (!cancelTarget || !cancelReason.trim()) return;
+    const { orderId, itemId } = cancelTarget;
+    setCancelTarget(null);
+    try {
+            await ApiService.cancelBarItem(orderId, itemId, cancelReason.trim());
             setOrders(
               orders.map((order) =>
                 order.id === orderId
@@ -645,12 +651,9 @@ export default function BarmanStationScreen({ navigation }: { navigation: any })
                   : order,
               ),
             );
-          } catch (error) {
+    } catch (error) {
             Alert.alert(t('common.error'), t('common.error'));
-          }
-        },
-      },
-    ]);
+    }
   };
 
   // ============================================
@@ -1265,6 +1268,17 @@ export default function BarmanStationScreen({ navigation }: { navigation: any })
       {activeTab === 'recipes' && renderRecipesTab()}
       {activeTab === 'stock' && renderStockTab()}
     </View>
+      <V2ConfirmDialog
+        visible={!!cancelTarget}
+        title={t('barman.action.cancelItem')}
+        message={t('barman.confirm.cancelItem')}
+        destructive
+        reasonLabel="Motivo do cancelamento"
+        reason={cancelReason}
+        onReasonChange={setCancelReason}
+        onConfirm={() => void confirmCancelItem()}
+        onCancel={() => setCancelTarget(null)}
+      />
     </ScreenContainer>
   );
 }
