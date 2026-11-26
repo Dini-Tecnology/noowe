@@ -27,7 +27,7 @@ export default function KitchenDisplayScreen() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [detailOrder, setDetailOrder] = useState<KdsOrder | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { data: orders, loading, error, refresh } = useKdsOrders();
+  const { data: orders, loading, error, refresh } = useKdsOrders('kitchen');
 
   const counts = useMemo(() => ({
     queue: orders.filter((o) => o.status === 'queue').length,

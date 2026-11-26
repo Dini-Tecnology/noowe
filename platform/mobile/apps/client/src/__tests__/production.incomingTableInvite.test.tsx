@@ -113,14 +113,14 @@ describe('Convite recebido · banner na Home', () => {
     answerAlertWith('Cancelar');
     const { view, client } = renderWithClient(<IncomingTableInviteBanner onJoined={jest.fn()} />);
     fireEvent.press(await view.findByLabelText('Aceitar convite de @ana'));
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Trocar de mesa?', expect.stringContaining('você sai da mesa 3'), expect.any(Array), expect.any(Object)));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Você já está em uma mesa', expect.stringContaining('encerre antes a comanda da mesa 3'), expect.any(Array), expect.any(Object)));
     expect(mockJoin).not.toHaveBeenCalled();
     client.clear();
   });
 
   it('switches tables once I confirm', async () => {
     mockSession = { restaurantId: 'r1', tableId: 't1', tableSessionId: 's1', tableNumber: '3' };
-    answerAlertWith('Aceitar');
+    answerAlertWith('Tentar entrar');
     mockJoin.mockResolvedValue({ status: 'accepted', visit: visit9, capacityRequestId: null, invite: null, idempotentReplay: false });
     const onJoined = jest.fn();
     const { view, client } = renderWithClient(<IncomingTableInviteBanner onJoined={onJoined} />);

@@ -34,3 +34,11 @@ export function formatTaxDocument(value: string): string {
   if (d.length === 14) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
   return value;
 }
+
+/** Para exibir um CPF/CNPJ salvo sem mostrá-lo inteiro: "•••.456.789-••". */
+export function maskTaxDocument(value: string): string {
+  const d = taxDocumentDigits(value);
+  if (d.length === 11) return `•••.${d.slice(3, 6)}.${d.slice(6, 9)}-••`;
+  if (d.length === 14) return `••.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-••`;
+  return '•••';
+}

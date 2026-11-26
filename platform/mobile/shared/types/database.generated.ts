@@ -7063,7 +7063,7 @@ export type Database = {
         Returns: Json
       }
       restaurant_get_kds_queue: {
-        Args: { p_restaurant_id: string; p_station_id?: string }
+        Args: { p_restaurant_id: string; p_station_id?: string; p_station_kind?: string }
         Returns: Json
       }
       restaurant_get_low_stock_alerts: {
@@ -7308,7 +7308,7 @@ export type Database = {
         Returns: Json
       }
       restaurant_update_order_item_status: {
-        Args: { p_item_id: string; p_status: string }
+        Args: { p_item_id: string; p_status: string; p_reason?: string }
         Returns: Json
       }
       restaurant_update_order_status: {

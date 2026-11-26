@@ -21,3 +21,9 @@ export function usagePercent(used: number, allowance: number | null): number {
   if (!allowance) return 0;
   return Math.min(100, Math.round((used * 100) / allowance));
 }
+
+/** PL-05: recurso fora do plano aparece com cadeado e upgrade só para o Dono; para os demais papéis, some. */
+export function planGate(locks: string[], feature: string, role: string): 'open' | 'locked' | 'hidden' {
+  if (!locks.includes(feature)) return 'open';
+  return role === 'owner' ? 'locked' : 'hidden';
+}

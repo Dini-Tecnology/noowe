@@ -11,6 +11,7 @@ import { useCart } from '@/shared/contexts/CartContext';
 import { cartOrderItems } from '../../utils/cart-order-items';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
+import { useOrderIdempotencyKey } from '../../hooks/useOrderIdempotencyKey';
 import customerBackend, { type TableBillItem } from '../../services/customer-backend';
 import SessionOrdersSection from '../../components/table/SessionOrdersSection';
 import { openInComanda } from '../../navigation/comanda';
@@ -99,14 +100,17 @@ export default function CasualDiningComandaScreen({ navigation }: any) {
     onError: (error: Error) => Alert.alert('Não foi possível chamar', error.message),
   });
 
+  const orderKey = useOrderIdempotencyKey();
   const send = useMutation({
     mutationFn: () =>
       customerBackend.placeOrder({
         restaurantId: session!.restaurantId,
         tableSessionId: session!.tableSessionId,
         items: cartOrderItems(cart.items),
+        idempotencyKey: orderKey.current(),
       }),
     onSuccess: (order) => {
+      orderKey.rotate();
       cart.clearCart();
       void queryClient.invalidateQueries({ queryKey: ['table-bill'] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });

@@ -37,12 +37,12 @@ export function useRespondToTableInvite() {
   }, [queryClient]);
 
   const accept = useCallback(async (invite: TableUserInvite): Promise<RespondOutcome> => {
-    // Accepting moves me out of the table I'm at (the server refuses while I owe there).
+    // O servidor recusa entrar em outra mesa enquanto a comanda atual estiver aberta (P0016): o texto diz isso.
     if (session?.tableSessionId && session.tableSessionId !== invite.tableSessionId) {
       const proceed = await confirm(
-        'Trocar de mesa?',
-        `Ao aceitar, você sai da mesa ${session.tableNumber || 'atual'} e entra na mesa ${invite.tableNumber} no ${invite.restaurantName}.`,
-        'Aceitar',
+        'Você já está em uma mesa',
+        `Para entrar na mesa ${invite.tableNumber} no ${invite.restaurantName}, encerre antes a comanda da mesa ${session.tableNumber || 'atual'}. Se ela já foi encerrada, toque em Tentar entrar.`,
+        'Tentar entrar',
       );
       if (!proceed) return { kind: 'dismissed' };
     }

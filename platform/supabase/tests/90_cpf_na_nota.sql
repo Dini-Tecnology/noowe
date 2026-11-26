@@ -53,8 +53,8 @@ declare a uuid := pg_temp.ctx('a'); b uuid := pg_temp.ctx('b'); acc uuid;
 begin
   select id into acc from public.restaurant_payment_accounts where restaurant_id = 'c1000000-0000-4000-8000-000000000002';
   assert not (public.service_payment_customer(acc, a)->>'hasTaxDocument')::boolean, 'ainda sem CPF guardado';
-  assert public.service_customer_save_tax_document(a, '529.982.247-25', 'payment'), 'guarda o válido';
-  assert not public.service_customer_save_tax_document(b, '111.111.111-11', 'payment'), 'inválido não é guardado';
+  assert public.service_customer_save_tax_document(a, '529.982.247-25', 'payment', true, 'v1'), 'guarda o válido';
+  assert not public.service_customer_save_tax_document(b, '111.111.111-11', 'payment', true, 'v1'), 'inválido não é guardado';
   assert (select document from private.customer_tax_documents where user_id = a) = '52998224725', 'só os dígitos';
   assert not exists (select 1 from private.customer_tax_documents where user_id = b), 'nada para quem mandou inválido';
   assert (public.service_payment_customer(acc, a)->>'hasTaxDocument')::boolean, 'agora guardado';
@@ -132,7 +132,7 @@ begin
   assert n.taker_document = '52998224725' and n.taker_name = 'Ana Teste', 'tomador com CPF: ' || row_to_json(n)::text;
   select * into n from private.noowe_fee_notes where gateway_transaction_id = g2;
   assert n.taker_document is null and private.fee_note_blocker(n) like 'Cliente sem CPF%' or not private.nfse_ready('convenience'), 'sem CPF guardado, espera';
-  perform public.service_customer_save_tax_document(pg_temp.ctx('b'), '12345678909', 'provider');
+  perform public.service_customer_save_tax_document(pg_temp.ctx('b'), '12345678909', 'provider', true, 'v1');
   perform private.fee_notes_generate(now());
   select * into n from private.noowe_fee_notes where gateway_transaction_id = g2;
   assert n.taker_document = '12345678909' and n.taker_name = 'Bia Teste', 'completou: ' || row_to_json(n)::text;

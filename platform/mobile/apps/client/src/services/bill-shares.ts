@@ -168,10 +168,15 @@ export async function invokePaymentsCreate(body: Record<string, unknown>): Promi
 }
 
 export const billShares = {
-  /** O CPF que a pessoa já informou para pagar online, para sugerir em "CPF na nota". Só o da própria pessoa. */
+  /** O CPF que a pessoa aceitou salvar, para oferecer "Usar meu CPF salvo". Só o da própria pessoa. */
   async myTaxDocument(): Promise<string | null> {
     const data = await rpc('customer_get_tax_document', {});
     return typeof data === 'string' && data ? data : null;
+  },
+
+  /** Exclui o CPF salvo (Perfil). */
+  async deleteMyTaxDocument(): Promise<void> {
+    await rpc('customer_delete_tax_document', {});
   },
 
   async preview(tableSessionId: string, mode: SplitMode, params: SplitParams = {}): Promise<SplitPlan> {
@@ -287,6 +292,8 @@ export const billShares = {
     shareId: string; method: 'pix' | 'credit_card'; tipCents: number | null; idempotencyKey: string; payerCpfCnpj?: string;
     /** "CPF na nota": o documento, ou null quando desmarcado. Ausente não mexe. */
     receiptDocument?: string | null;
+    /** RV-09: consentimento para guardar o CPF (o texto aceito é o registro). */
+    saveTaxDocument?: true; taxDocumentConsentText?: string;
     /** Só com cartão: salvar o cartão digitado no Asaas (consentimento) ou usar um cartão já salvo. */
     saveCard?: boolean; paymentMethodId?: string;
   }): Promise<SharePayment> {
@@ -298,6 +305,7 @@ export const billShares = {
     const data = await invokePaymentsCreate({ purpose: 'bill_share', targetId: input.shareId, method: input.method, tipCents: input.tipCents,
       idempotencyKey: input.idempotencyKey, payerCpfCnpj: input.payerCpfCnpj,
       ...(input.receiptDocument !== undefined ? { receiptDocument: input.receiptDocument } : {}),
+      ...(input.saveTaxDocument ? { saveTaxDocument: true, taxDocumentConsentText: input.taxDocumentConsentText } : {}),
       ...(input.saveCard ? { saveCard: true } : {}), ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId } : {}) });
     const raw = obj(data);
     const pix = obj(raw.pix);
@@ -341,6 +349,7 @@ export const PAYMENT_ERRORS: Record<string, string> = {
   not_found: 'Cobrança não encontrada.',
   card_not_found: 'Cartão salvo não encontrado. Escolha outro cartão.',
   invalid_request: 'Dados de pagamento inválidos.',
+  pix_unavailable: 'Pix indisponível neste restaurante no momento. Pague com cartão ou combine com a equipe.',
   provider_unavailable: 'O provedor de pagamento está indisponível. Tente novamente em instantes.',
   bill_changed: 'A conta mudou. Confira os valores atualizados.',
   below_minimum: 'O valor mínimo para pagar pelo app é R$ 5,00. Combine com a equipe no salão, ou pague um valor maior.',

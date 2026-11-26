@@ -48,7 +48,7 @@ export function DevTableScanButton({ onOpened, onOpenAccount, restaurantId, vari
     try {
       const outcome = await runDevTableScan(
         (id) => customerBackend.devPickTableQr(id),
-        (qrData) => handleQrScanned(qrData, { dev: true }),
+        (qrData) => handleQrScanned(qrData), // mesmo check-in do QR físico: lotação, fila, horário e reserva valem (invariante 7)
         restaurantId,
       );
       showTableQrOutcome(outcome, {

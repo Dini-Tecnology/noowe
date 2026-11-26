@@ -508,9 +508,9 @@ export interface SupabaseApiAdapter {
   /** Encerramento manual da comanda (ADR-021): o motivo é obrigatório e fica no audit_log. */
   closeTableSession(sessionId: string, reason: string): Promise<any>;
   // ── KDS ──────────────────────────────────────────────────────────────────────
-  getKdsQueue(restaurantId?: string, stationId?: string): Promise<any>;
+  getKdsQueue(restaurantId?: string, stationId?: string, stationKind?: 'kitchen' | 'bar'): Promise<any>;
   getBarQueue(restaurantId?: string): Promise<any>;
-  updateOrderItemStatus(itemId: string, status: string): Promise<any>;
+  updateOrderItemStatus(itemId: string, status: string, reason?: string): Promise<any>;
   /** Reprovar com `itemIds` devolve só esses itens à estação (ADR-013, critério Q1 #9). */
   completeQuickQualityCheck(orderId: string, passed: boolean, checklist: Record<string, boolean>, reason?: string, itemIds?: string[]): Promise<any>;
   confirmQuickPickup(orderId: string, pickupCode: string): Promise<any>;
@@ -677,6 +677,7 @@ export interface SupabaseApiAdapter {
   createStockItem(restaurantId: string, data: Record<string, unknown>): Promise<any>;
   // ── Loyalty ────────────────────────────────────────────────────────────────────
   getLoyaltyConfig(restaurantId?: string): Promise<any>;
+  saveLoyaltyConfig(restaurantId: string, config: Record<string, unknown>): Promise<any>;
   getLoyaltyStats(restaurantId?: string): Promise<any>;
   getServiceConfigs(restaurantId?: string): Promise<any>;
   upsertServiceConfigs(
@@ -1183,11 +1184,12 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
-  async getKdsQueue(restaurantId?: string, stationId?: string) {
+  async getKdsQueue(restaurantId?: string, stationId?: string, stationKind?: 'kitchen' | 'bar') {
     const resolvedRestaurantId = await resolveRestaurantId(restaurantId);
     const { data, error } = await getSupabaseClient().rpc('restaurant_get_kds_queue', {
       p_restaurant_id: resolvedRestaurantId,
       p_station_id: stationId || null,
+      p_station_kind: stationKind ?? null,
     });
     if (error) throw error;
     return data;
@@ -1406,10 +1408,11 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data;
   },
 
-  async updateOrderItemStatus(itemId: string, status: string) {
+  async updateOrderItemStatus(itemId: string, status: string, reason?: string) {
     const { data, error } = await getSupabaseClient().rpc('restaurant_update_order_item_status', {
       p_item_id: itemId,
       p_status: status,
+      p_reason: reason ?? null,
     });
     if (error) throw error;
     return data;
@@ -2344,6 +2347,15 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     const resolvedId = await resolveRestaurantId(restaurantId);
     const { data, error } = await getSupabaseClient().rpc('restaurant_get_loyalty_config', {
       p_restaurant_id: resolvedId,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  async saveLoyaltyConfig(restaurantId: string, config: Record<string, unknown>) {
+    const { data, error } = await getSupabaseClient().rpc('restaurant_upsert_loyalty_config', {
+      p_restaurant_id: restaurantId,
+      p_config: config,
     });
     if (error) throw error;
     return data;

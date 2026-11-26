@@ -10,7 +10,7 @@ const KEY = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const PAY = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const ACCT = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
-function setup(over: { reserved?: any; reserveError?: any; customerId?: string | null; existing?: any; createThrows?: boolean; cardToken?: string | null; optionsError?: any; hasTaxDocument?: boolean; getCustomer?: any } = {}) {
+function setup(over: { reserved?: any; reserveError?: any; customerId?: string | null; existing?: any; createThrows?: boolean; pixKeyMissing?: boolean; cardToken?: string | null; optionsError?: any; hasTaxDocument?: boolean; getCustomer?: any } = {}) {
   const calls: { fn: string; args: any }[] = [];
   const provider: string[] = [];
   const deps: PaymentDeps = {
@@ -52,7 +52,9 @@ function setup(over: { reserved?: any; reserveError?: any; customerId?: string |
         if (over.setSplitThrows) throw new AsaasError(500, null, "boom");
         provider.push(`setSplit:${wallet}:${cents}`);
       },
-      getPixQrCode: async () => { provider.push("pix"); return { payload: "000201-copia-e-cola", expirationDate: "2026-10-23 23:59:59" }; },
+      getPixQrCode: async () => {
+        if (over.pixKeyMissing) throw new AsaasError(400, { errors: [{ code: "invalid_action", description: "Não há nenhuma chave Pix cadastrada na conta." }] }, "400");
+        provider.push("pix"); return { payload: "000201-copia-e-cola", expirationDate: "2026-10-23 23:59:59" }; },
     } as any,
     env: (n) => ({ NOOWE_ASAAS_WALLET_ID: "wallet-noowe", PAYMENT_RETURN_URL: "https://noowebr.com/pay/return" } as any)[n],
     now: () => new Date("2026-10-23T15:00:00Z"),
@@ -110,7 +112,7 @@ test("documento do pagador é exigido só na primeira vez", async () => {
   assert.equal((await res.json()).error, "payer_document_required");
 
   const returning = setup({ customerId: "cus_old" });
-  assert.equal((await handleCreate(req({ ...valid, payerCpfCnpj: undefined }), returning.deps)).status, 200);
+  assert.equal((await handleCreate(req({ ...valid, ...consent, payerCpfCnpj: undefined }), returning.deps)).status, 200);
   assert.ok(!returning.provider.some((p) => p.startsWith("createCustomer")));
 });
 
@@ -277,23 +279,61 @@ test("CPF na nota: inválido é recusado antes de reservar; válido é gravado a
   assert.ok(!old.calls.some((c) => c.fn === "service_payment_set_receipt_document"), "app antigo não mexe");
 });
 
-test("CPF da cobrança fica guardado para a nota da conveniência; quem já tinha cadastro tem o CPF lido do Asaas uma vez", async () => {
+const consent = { saveTaxDocument: true, taxDocumentConsentText: "Salvar meu CPF para as próximas compras" };
+
+test("sem o consentimento (RV-09) o CPF serve só a este pagamento e não é guardado", async () => {
+  const off = setup();
+  assert.equal((await handleCreate(req(valid), off.deps)).status, 200);
+  assert.ok(!off.calls.some((c) => c.fn === "service_customer_save_tax_document"));
+  const noText = setup();
+  await handleCreate(req({ ...valid, saveTaxDocument: true }), noText.deps);
+  assert.ok(!noText.calls.some((c) => c.fn === "service_customer_save_tax_document"), "sem o texto aceito não há registro de consentimento");
+  const receipt = setup();
+  await handleCreate(req({ ...valid, ...consent, receiptDocument: "529.982.247-25" }), receipt.deps);
+  assert.equal(receipt.calls.find((c) => c.fn === "service_customer_save_tax_document")?.args.p_document, "52998224725", "guarda o CPF da nota");
+});
+
+test("Pix que falha antes do Asaas (CT-06) libera a parcela na hora; depois da cobrança, retoma", async () => {
+  const early = setup({ getCustomer: new Error("x") });
+  early.deps.provider.createCustomer = async () => { throw new AsaasError(500, null, "boom"); };
+  const res = await handleCreate(req({ ...valid, purpose: "bill_share" }), early.deps);
+  assert.equal(res.status, 502);
+  assert.ok(early.calls.some((c) => c.fn === "service_payment_abort_unsent" && c.args.p_payment_id === PAY));
+  const late = setup({ createThrows: true });
+  await handleCreate(req({ ...valid, purpose: "bill_share" }), late.deps);
+  assert.ok(!late.calls.some((c) => c.fn === "service_payment_abort_unsent"));
+  const order = setup();
+  order.deps.provider.createCustomer = async () => { throw new AsaasError(500, null, "boom"); };
+  await handleCreate(req(valid), order.deps);
+  assert.ok(!order.calls.some((c) => c.fn === "service_payment_abort_unsent"), "pedido segue retomável");
+});
+
+test("CPF da cobrança fica guardado com consentimento; quem já tinha cadastro tem o CPF lido do Asaas uma vez", async () => {
   const first = setup();
-  await handleCreate(req(valid), first.deps);
+  await handleCreate(req({ ...valid, ...consent }), first.deps);
   assert.deepEqual(first.calls.find((c) => c.fn === "service_customer_save_tax_document")?.args,
-    { p_user_id: USER, p_document: "12345678909", p_source: "payment" });
+    { p_user_id: USER, p_document: "12345678909", p_source: "payment", p_consent: true, p_consent_text: consent.taxDocumentConsentText });
 
   const returning = setup({ customerId: "cus_old", hasTaxDocument: false });
-  assert.equal((await handleCreate(req({ ...valid, payerCpfCnpj: undefined }), returning.deps)).status, 200);
+  assert.equal((await handleCreate(req({ ...valid, ...consent, payerCpfCnpj: undefined }), returning.deps)).status, 200);
   assert.ok(returning.provider.includes("getCustomer:cus_old"));
   assert.deepEqual(returning.calls.find((c) => c.fn === "service_customer_save_tax_document")?.args,
-    { p_user_id: USER, p_document: "52998224725", p_source: "provider" });
+    { p_user_id: USER, p_document: "52998224725", p_source: "provider", p_consent: true, p_consent_text: consent.taxDocumentConsentText });
 
   const known = setup({ customerId: "cus_old", hasTaxDocument: true });
-  await handleCreate(req({ ...valid, payerCpfCnpj: undefined }), known.deps);
+  await handleCreate(req({ ...valid, ...consent, payerCpfCnpj: undefined }), known.deps);
   assert.ok(!known.provider.some((p) => p.startsWith("getCustomer")));
   assert.ok(!known.calls.some((c) => c.fn === "service_customer_save_tax_document"));
 
   const down = setup({ customerId: "cus_old", hasTaxDocument: false, getCustomer: new Error("asaas fora") });
-  assert.equal((await handleCreate(req({ ...valid, payerCpfCnpj: undefined }), down.deps)).status, 200, "nunca atrapalha o pagamento");
+  assert.equal((await handleCreate(req({ ...valid, ...consent, payerCpfCnpj: undefined }), down.deps)).status, 200, "nunca atrapalha o pagamento");
+});
+
+test("subconta sem chave Pix: 422 pix_unavailable, não 'provedor indisponível' (PAG-06)", async () => {
+  const { deps } = setup({ pixKeyMissing: true });
+  const res = await handleCreate(req(valid), deps);
+  assert.equal(res.status, 422);
+  const body = await res.json();
+  assert.equal(body.error, "pix_unavailable");
+  assert.equal(body.retryable, false);
 });

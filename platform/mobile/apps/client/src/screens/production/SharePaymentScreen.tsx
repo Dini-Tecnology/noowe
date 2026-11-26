@@ -1,21 +1,21 @@
 /* Hallmark · macrostructure: Form · tone: warm utilitarian · anchor hue: orange */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, Share, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Crypto from 'expo-crypto';
 import * as WebBrowser from 'expo-web-browser';
-import QRCode from 'react-native-qrcode-svg';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { useVisitSession } from '../../contexts/VisitSessionContext';
 import { useBillShares } from '../../hooks/useBillShares';
+import { PixPendingPanel } from '../../components/quick/PixPendingPanel';
 import customerBackend from '../../services/customer-backend';
 import { billShares, type SharePayment } from '../../services/bill-shares';
 import { centsFromDigits, moneyCents, percentFromBps, StateView } from './shared';
-import { INVALID_RECEIPT_DOCUMENT, RECEIPT_DOCUMENT_OFF, ReceiptDocumentField, receiptDocumentForPayment } from '../../components/payment/ReceiptDocumentField';
+import { INVALID_RECEIPT_DOCUMENT, RECEIPT_DOCUMENT_OFF, ReceiptDocumentField, receiptDocumentForPayment, taxDocumentConsentForPayment } from '../../components/payment/ReceiptDocumentField';
 
 const METHODS = [
   { id: 'pix', label: 'PIX', icon: 'qr-code-outline' },
@@ -38,6 +38,14 @@ export default function SharePaymentScreen({ route, navigation }: any) {
   const [method, setMethod] = useState<Method>('pix');
   const [payment, setPayment] = useState<SharePayment | null>(null);
   const [needsDocument, setNeedsDocument] = useState(false);
+  const [pixExpired, setPixExpired] = useState(false);
+  // CPF exigido com o campo fora da tela: rola até ele (QA PAG-06).
+  const scrollRef = useRef<ScrollView>(null);
+  const methodCardY = useRef(0);
+  const documentFieldY = useRef<number | null>(null);
+  const scrollToDocument = useCallback(() => {
+    if (documentFieldY.current != null) scrollRef.current?.scrollTo({ y: Math.max(0, methodCardY.current + documentFieldY.current - 24), animated: true });
+  }, []);
   const [document, setDocument] = useState('');
   const [receiptDoc, setReceiptDoc] = useState(RECEIPT_DOCUMENT_OFF);
   // Cartão (F6): usar um cartão salvo, ou digitar um novo na página do Asaas e, se quiser, salvá-lo.
@@ -137,17 +145,19 @@ export default function SharePaymentScreen({ route, navigation }: any) {
         shareId: myOpen.id, method, tipCents: chosenTipCents, idempotencyKey: keys.current.get(slot)!,
         payerCpfCnpj: document.replace(/\D/g, '') || undefined,
         receiptDocument,
+        ...taxDocumentConsentForPayment(receiptDoc),
         ...(activeSavedCard ? { paymentMethodId: activeSavedCard.id } : method === 'credit_card' && saveCard ? { saveCard: true } : {}),
       });
     },
     onSuccess: async (result) => {
       setPayment(result);
+      setPixExpired(false);
       setNeedsDocument(false);
       void queryClient.invalidateQueries({ queryKey: ['bill-shares', tableSessionId] });
       if (method === 'credit_card' && !result.savedCard && result.checkoutUrl) await WebBrowser.openBrowserAsync(result.checkoutUrl).catch(() => undefined);
     },
     onError: (error) => {
-      if ((error as { code?: string }).code === 'payer_document_required') { setNeedsDocument(true); return; }
+      if ((error as { code?: string }).code === 'payer_document_required') { setNeedsDocument(true); scrollToDocument(); return; }
       // A conta mudou desde a divisão: nunca cobra um valor que a pessoa não viu.
       if (['bill_changed', 'P0011', 'P0012'].includes((error as { code?: string }).code ?? '')) {
         void queryClient.invalidateQueries({ queryKey: ['bill-shares', tableSessionId] });
@@ -193,6 +203,8 @@ export default function SharePaymentScreen({ route, navigation }: any) {
     refetchInterval: (query) => (query.state.data ? false : 3000),
   });
 
+  const onPixExpired = useCallback(() => setPixExpired(true), []);
+
   const paidCount = list.filter((s) => s.status === 'paid').length;
 
   const styles = useMemo(() => StyleSheet.create({
@@ -225,8 +237,6 @@ export default function SharePaymentScreen({ route, navigation }: any) {
     ctaText: { color: colors.primaryForeground, fontSize: 16, fontWeight: '700' },
     link: { alignSelf: 'center', minHeight: 40, justifyContent: 'center' },
     linkText: { fontSize: 13, fontWeight: '600', color: colors.foregroundSecondary },
-    pixBox: { alignItems: 'center', gap: 12 },
-    pixCode: { fontSize: 11, color: colors.foregroundSecondary, textAlign: 'center' },
     hint: { fontSize: 12, color: colors.foregroundSecondary, textAlign: 'center' },
     feeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     tipInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, paddingHorizontal: 14, height: 48, backgroundColor: colors.backgroundTertiary },
@@ -270,7 +280,7 @@ export default function SharePaymentScreen({ route, navigation }: any) {
         <Text style={styles.headerSub}>{restaurantName ?? 'Restaurante'}</Text>
       </LinearGradient>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <StateView loading={bill.isLoading || shares.isLoading} error={bill.error ?? shares.error} onRetry={() => { void bill.refetch(); void shares.refetch(); }} />
 
         {myPaid && (
@@ -345,7 +355,7 @@ export default function SharePaymentScreen({ route, navigation }: any) {
               </View>
             )}
 
-            <View style={styles.card}>
+            <View style={styles.card} onLayout={(e) => { methodCardY.current = e.nativeEvent.layout.y; }}>
               <Text style={styles.cardTitle}>Forma de pagamento</Text>
               {methods.length === 0 ? (
                 <Text style={styles.hint} testID="pay-at-table">O valor está abaixo do mínimo para pagar pelo app. Chame o garçom e pague no salão.</Text>
@@ -403,10 +413,11 @@ export default function SharePaymentScreen({ route, navigation }: any) {
                 </View>
               )}
               {needsDocument && (
-                <>
-                  <Text style={styles.hint}>Informe seu CPF para gerar a cobrança (só na primeira vez).</Text>
+                <View style={{ gap: 8 }} onLayout={(e) => { documentFieldY.current = e.nativeEvent.layout.y; scrollToDocument(); }}>
+                  <Text style={[styles.hint, { color: colors.error, fontWeight: '700' }]}>Informe o CPF do pagador para gerar a cobrança (só na primeira vez).</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { borderWidth: 1.5, borderColor: colors.error }]}
+                    autoFocus
                     placeholder="CPF"
                     placeholderTextColor={colors.foregroundMuted}
                     keyboardType="number-pad"
@@ -415,7 +426,7 @@ export default function SharePaymentScreen({ route, navigation }: any) {
                     onChangeText={setDocument}
                     accessibilityLabel="CPF do pagador"
                   />
-                </>
+                </View>
               )}
               <ReceiptDocumentField value={receiptDoc} onChange={setReceiptDoc} fallback={document} />
             </View>
@@ -498,25 +509,40 @@ export default function SharePaymentScreen({ route, navigation }: any) {
 
         {myOpen && payment && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Aguardando confirmação</Text>
-            {payment.pix ? (
-              <View style={styles.pixBox}>
-                <QRCode value={payment.pix.payload} size={200} />
-                <Text style={styles.pixCode} selectable numberOfLines={3}>{payment.pix.payload}</Text>
+            {!payment.pix && <Text style={styles.cardTitle}>Aguardando confirmação</Text>}
+            {payment.pix && pixExpired ? (
+              <>
+                <Text style={styles.cardTitle}>Pix expirado</Text>
+                <Text style={styles.hint}>O tempo para pagar acabou. Gere um novo Pix para pagar sua parte.</Text>
                 <TouchableOpacity
                   style={styles.cta}
-                  onPress={() => void Share.share({ message: payment.pix!.payload })}
+                  onPress={() => {
+                    // A cobrança expirada não volta: a próxima tentativa precisa de outra chave.
+                    keys.current.clear();
+                    setPixExpired(false);
+                    setPayment(null);
+                  }}
                   accessibilityRole="button"
+                  accessibilityLabel="Gerar novo Pix"
                 >
-                  <Text style={styles.ctaText}>Compartilhar código PIX</Text>
+                  <Text style={styles.ctaText}>Gerar novo Pix</Text>
                 </TouchableOpacity>
-              </View>
+              </>
+            ) : payment.pix ? (
+              <PixPendingPanel
+                code={payment.pix.payload}
+                expiresAt={payment.pix.expiresAt ?? payment.expiresAt}
+                checking={shares.isFetching}
+                onCheck={() => { void shares.refetch(); }}
+                onExpired={onPixExpired}
+                hint="Escaneie o QR ou use o copia-e-cola. Esta tela atualiza sozinha quando o pagamento for confirmado."
+              />
             ) : payment.checkoutUrl ? (
               <TouchableOpacity style={styles.cta} onPress={() => void WebBrowser.openBrowserAsync(payment.checkoutUrl!)} accessibilityRole="button">
                 <Text style={styles.ctaText}>Abrir pagamento</Text>
               </TouchableOpacity>
             ) : null}
-            <Text style={styles.hint}>Esta tela atualiza sozinha quando o pagamento for confirmado.</Text>
+            {!payment.pix && <Text style={styles.hint}>Esta tela atualiza sozinha quando o pagamento for confirmado.</Text>}
           </View>
         )}
 

@@ -289,7 +289,8 @@ export function mapTable(raw: RawTable): V2Table {
   const status = (raw.status || 'available') as V2Table['status'];
   const sessionGuestName = raw.active_session?.guest_name?.trim() || null;
   const reservationName = raw.active_reservation?.customer_name?.trim() || null;
-  const sessionGuests = toNumber(raw.active_session?.guest_count, 0);
+  // CA-B2: quem está de fato na comanda (headcount), não o número digitado na abertura.
+  const sessionGuests = toNumber(raw.active_session?.headcount, toNumber(raw.active_session?.guest_count, 0));
   const reservationGuests = toNumber(raw.active_reservation?.party_size, 0);
   return {
     id: raw.id,
@@ -387,7 +388,8 @@ export function useRestaurantOrders(options?: { includeDelivered?: boolean }): A
   return { data, loading, error, refresh };
 }
 
-export function useKdsOrders(): AsyncState<KdsOrder[]> {
+/** `stationKind` restringe a fila à estação da tela: a cozinha não vê nem avança o item do bar (OP-01). */
+export function useKdsOrders(stationKind?: 'kitchen' | 'bar'): AsyncState<KdsOrder[]> {
   const [data, setData] = useState<KdsOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -396,14 +398,14 @@ export function useKdsOrders(): AsyncState<KdsOrder[]> {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const raw = await ApiService.getKitchenOrders();
+      const raw = await ApiService.getKitchenOrders({ stationKind });
       setData(mapKdsRowsToOrders(Array.isArray(raw) ? raw : []));
     } catch (err) {
       setError(userErrorMessage(err, 'Erro ao carregar KDS'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [stationKind]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   // order_items don't carry restaurant_id directly; subscribe to orders channel
@@ -830,8 +832,9 @@ export function useCashMovements(): AsyncState<CashMovement[]> {
     setError(null);
     try {
       const raw = await supabaseApiAdapter.getCashRegister();
-      const movements = raw?.session?.movements;
-      setData((Array.isArray(movements) ? movements : []).map(mapCashMovement));
+      // VM-06: o dinheiro lançado sem caixa aberto aparece também, rotulado "Lançado antes da abertura".
+      const movements = [raw?.session?.movements, raw?.before_opening].flatMap((list) => (Array.isArray(list) ? list : []));
+      setData(movements.map(mapCashMovement));
     } catch (err) {
       setError(userErrorMessage(err, 'Erro ao carregar movimentações'));
     } finally {

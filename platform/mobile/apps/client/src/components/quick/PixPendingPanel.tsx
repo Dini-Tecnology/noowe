@@ -13,13 +13,15 @@ interface PixPendingPanelProps {
   /** Só em desenvolvimento: confirma o Pix simulado no banco. */
   onSimulatePaid?: () => void;
   onExpired: () => void;
+  /** Texto sob o QR; o padrão fala do pedido que vai para a cozinha. */
+  hint?: string;
 }
 
 /**
  * Pix pendente (ADR-013 §2.6): QR + copia-e-cola com contagem até expirar.
  * O pedido só vai para a cozinha quando o servidor confirmar o pagamento.
  */
-export function PixPendingPanel({ code, expiresAt, checking, onCheck, onSimulatePaid, onExpired }: PixPendingPanelProps) {
+export function PixPendingPanel({ code, expiresAt, checking, onCheck, onSimulatePaid, onExpired, hint }: PixPendingPanelProps) {
   const colors = useColors();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -53,7 +55,7 @@ export function PixPendingPanel({ code, expiresAt, checking, onCheck, onSimulate
           {formatCountdown(seconds)}
         </Text>
       )}
-      <Text style={styles.hint}>Escaneie o QR ou use o copia-e-cola. O pedido vai para a cozinha assim que o pagamento for confirmado.</Text>
+      <Text style={styles.hint}>{hint ?? 'Escaneie o QR ou use o copia-e-cola. O pedido vai para a cozinha assim que o pagamento for confirmado.'}</Text>
       <Text style={styles.code} numberOfLines={2} selectable>{code}</Text>
       <TouchableOpacity
         style={styles.btn}

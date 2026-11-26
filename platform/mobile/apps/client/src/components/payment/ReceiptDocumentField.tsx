@@ -1,16 +1,28 @@
-import React from 'react';
-import { StyleSheet, Switch, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
-import { formatTaxDocument, isValidTaxDocument, taxDocumentDigits } from '../../services/tax-document';
+import { formatTaxDocument, isValidTaxDocument, maskTaxDocument, taxDocumentDigits } from '../../services/tax-document';
 import { billShares } from '../../services/bill-shares';
+import { AuthConsentCheckbox } from '../auth/AuthConsentCheckbox';
 
 export interface ReceiptDocumentState {
   enabled: boolean;
   document: string;
+  /** LGPD: "Salvar meu CPF para as próximas compras", desmarcado por padrão. */
+  save?: boolean;
 }
 
-export const RECEIPT_DOCUMENT_OFF: ReceiptDocumentState = { enabled: false, document: '' };
+export const RECEIPT_DOCUMENT_OFF: ReceiptDocumentState = { enabled: false, document: '', save: false };
+
+/** Texto exato que a pessoa aceita; vai para o servidor como registro do consentimento. */
+export const SAVE_TAX_DOCUMENT_CONSENT = 'Salvar meu CPF para as próximas compras';
+
+/** Campos do consentimento para a cobrança: só quando a pessoa marcou salvar um CPF válido. */
+export function taxDocumentConsentForPayment(state: ReceiptDocumentState): { saveTaxDocument?: true; taxDocumentConsentText?: string } {
+  return state.enabled && state.save && isValidTaxDocument(state.document)
+    ? { saveTaxDocument: true, taxDocumentConsentText: SAVE_TAX_DOCUMENT_CONSENT } : {};
+}
 
 /**
  * O que vai para a cobrança: o CPF marcado, ou null quando desmarcado (a nota sai como consumidor não identificado).
@@ -31,17 +43,20 @@ export function ReceiptDocumentField({ value, onChange, fallback }: {
   fallback?: string;
 }) {
   const colors = useColors();
-  const toggle = async (enabled: boolean) => {
+  // CPF salvo com consentimento: oferecido, nunca preenchido sem a pessoa pedir.
+  const [saved, setSaved] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    // A oferta é conveniência: se falhar, a pessoa digita.
+    Promise.resolve().then(() => billShares.myTaxDocument()).then((d) => { if (alive) setSaved(d ?? null); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+  const toggle = (enabled: boolean) => {
     if (!enabled) return onChange({ ...value, enabled: false });
-    onChange({ ...value, enabled: true });
-    if (value.document) return;
-    let document = fallback && isValidTaxDocument(fallback) ? fallback : '';
-    // A sugestão é conveniência: sem ela, a pessoa digita.
-    if (!document) {
-      try { document = (await billShares.myTaxDocument()) ?? ''; } catch { document = ''; }
-    }
-    if (document) onChange({ enabled: true, document: formatTaxDocument(document) });
+    const document = value.document || (fallback && isValidTaxDocument(fallback) ? formatTaxDocument(fallback) : '');
+    onChange({ ...value, enabled: true, document });
   };
+  const usingSaved = saved !== null && taxDocumentDigits(value.document) === saved;
   const invalid = value.enabled && taxDocumentDigits(value.document).length > 0 && !isValidTaxDocument(value.document)
     && [11, 14].includes(taxDocumentDigits(value.document).length);
   return (
@@ -68,6 +83,16 @@ export function ReceiptDocumentField({ value, onChange, fallback }: {
             testID="receipt-document-input"
           />
           {invalid && <Text style={[styles.hint, { color: colors.error }]}>CPF ou CNPJ inválido.</Text>}
+          {saved !== null && !usingSaved && (
+            <TouchableOpacity onPress={() => onChange({ ...value, document: formatTaxDocument(saved), save: false })}
+              accessibilityRole="button" testID="receipt-document-use-saved">
+              <Text style={[styles.link, { color: colors.primary }]}>Usar meu CPF salvo ({maskTaxDocument(saved)})</Text>
+            </TouchableOpacity>
+          )}
+          {!usingSaved && (
+            <AuthConsentCheckbox checked={!!value.save} onToggle={() => onChange({ ...value, save: !value.save })}
+              label={SAVE_TAX_DOCUMENT_CONSENT} />
+          )}
         </>
       )}
     </View>
@@ -79,5 +104,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   label: { fontSize: 15, fontWeight: '600' },
   hint: { fontSize: 12, lineHeight: 16 },
+  link: { fontSize: 14, fontWeight: '600' },
   input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
 });
