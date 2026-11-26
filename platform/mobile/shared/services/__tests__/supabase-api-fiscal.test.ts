@@ -12,7 +12,7 @@ describe('notas com problema no adapter', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    for (const method of ['select', 'eq', 'in']) query[method] = jest.fn(() => query);
+    for (const method of ['select', 'eq', 'in', 'or']) query[method] = jest.fn(() => query);
     query.order = jest.fn().mockResolvedValue({ data: [], error: null });
     (getSupabaseClient as jest.Mock).mockReturnValue({ from });
   });
@@ -21,7 +21,7 @@ describe('notas com problema no adapter', () => {
     await supabaseApiAdapter.getFiscalIssues('r1');
     expect(from).toHaveBeenCalledWith('fiscal_documents');
     expect(query.eq).toHaveBeenCalledWith('restaurant_id', 'r1');
-    expect(query.in).toHaveBeenCalledWith('status', ['blocked', 'rejected', 'failed']);
+    expect(query.or).toHaveBeenCalledWith('status.in.(blocked,rejected,failed),cancel_status.eq.failed');
   });
 
   it('nomeia a FK da mesa: table_sessions tem duas para tables e o PostgREST recusa sem isso', async () => {
