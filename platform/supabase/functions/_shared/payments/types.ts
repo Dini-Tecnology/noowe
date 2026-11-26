@@ -16,6 +16,12 @@ export interface AsaasPayment {
   split?: { id?: string; walletId: string; totalValue?: number | null; fixedValue?: number | null; status?: string | null }[] | null;
 }
 export interface AsaasRefundedSplit { id?: string; splitId?: string; walletId?: string; value: number; done?: boolean }
+export interface AsaasTokenizeInput {
+  customer: string; remoteIp: string;
+  creditCard: { holderName: string; number: string; expiryMonth: string; expiryYear: string; ccv: string };
+  holderInfo: { name: string; email: string; cpfCnpj: string; postalCode: string; addressNumber: string; phone: string };
+}
+export interface AsaasCardToken { creditCardNumber: string; creditCardBrand: string; creditCardToken: string }
 export interface AsaasSplitRefund { id: string; value: number }
 export interface AsaasPix { payload: string; expirationDate?: string | null }
 export type AsaasCompanyType = "MEI" | "LIMITED" | "INDIVIDUAL" | "ASSOCIATION";
@@ -47,6 +53,7 @@ export interface PaymentProvider {
   setSplit(apiKey: string, id: string, walletId: string, cents: number): Promise<void>;
   // Cartão salvo (F6): o token vem da nossa tabela privada, nunca do app. Paga só depois do split definido.
   payWithToken(apiKey: string, id: string, creditCardToken: string, remoteIp: string | null): Promise<AsaasPayment>;
+  tokenizeCard(apiKey: string, input: AsaasTokenizeInput): Promise<AsaasCardToken>;
   cancelCharge(apiKey: string, id: string): Promise<void>;
   refund(apiKey: string, id: string, valueCents: number, description?: string, splitRefunds?: AsaasSplitRefund[]): Promise<void>;
   createAccount(rootApiKey: string, input: AsaasAccountInput): Promise<AsaasAccount>;

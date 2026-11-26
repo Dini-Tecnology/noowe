@@ -79,7 +79,13 @@ export type SharePayment = {
   alreadyPaid: boolean;
   /** Cobrado no cartão salvo: não há página para abrir; a confirmação chega pelo webhook. */
   savedCard: boolean;
+  /** Cartão salvo: o que o provedor respondeu na hora. Recusado vem com o motivo. */
+  cardResult: CardResult | null;
+  declineReason: string | null;
 };
+
+export type CardResult = 'approved' | 'declined' | 'pending';
+export const cardResultOf = (value: unknown): CardResult | null => (value === 'approved' || value === 'declined' || value === 'pending' ? value : null);
 
 /** Cartão salvo que dá para usar em um toque: o app vê bandeira e final, nunca o token. */
 export type SavedCard = { id: string; brand: string | null; lastFour: string; isDefault: boolean };
@@ -294,19 +300,19 @@ export const billShares = {
     receiptDocument?: string | null;
     /** RV-09: consentimento para guardar o CPF (o texto aceito é o registro). */
     saveTaxDocument?: true; taxDocumentConsentText?: string;
-    /** Só com cartão: salvar o cartão digitado no Asaas (consentimento) ou usar um cartão já salvo. */
-    saveCard?: boolean; paymentMethodId?: string;
+    /** Só com cartão: o cartão salvo a cobrar (o cartão novo é cadastrado antes, em "Adicionar cartão"). */
+    paymentMethodId?: string;
   }): Promise<SharePayment> {
     // Provedor simulado só com a flag de desenvolvimento do servidor; o normal é a cobrança real.
     if (await rpc('customer_share_payment_mode', { p_share_id: input.shareId }) === 'simulated') {
       await rpc('customer_pay_share', { p_share_id: input.shareId, p_method: input.method, p_idempotency_key: input.idempotencyKey, p_tip_cents: input.tipCents });
-      return { paymentId: null, status: 'confirmed', amountCents: 0, expiresAt: null, checkoutUrl: null, pix: null, alreadyPaid: false, savedCard: false };
+      return { paymentId: null, status: 'confirmed', amountCents: 0, expiresAt: null, checkoutUrl: null, pix: null, alreadyPaid: false, savedCard: false, cardResult: null, declineReason: null };
     }
     const data = await invokePaymentsCreate({ purpose: 'bill_share', targetId: input.shareId, method: input.method, tipCents: input.tipCents,
       idempotencyKey: input.idempotencyKey, payerCpfCnpj: input.payerCpfCnpj,
       ...(input.receiptDocument !== undefined ? { receiptDocument: input.receiptDocument } : {}),
       ...(input.saveTaxDocument ? { saveTaxDocument: true, taxDocumentConsentText: input.taxDocumentConsentText } : {}),
-      ...(input.saveCard ? { saveCard: true } : {}), ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId } : {}) });
+      ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId } : {}) });
     const raw = obj(data);
     const pix = obj(raw.pix);
     return {
@@ -318,14 +324,17 @@ export const billShares = {
       pix: typeof pix.payload === 'string' ? { payload: pix.payload, expiresAt: typeof pix.expiresAt === 'string' ? pix.expiresAt : null } : null,
       alreadyPaid: raw.alreadyPaid === true,
       savedCard: raw.savedCard === true,
+      cardResult: cardResultOf(raw.cardResult),
+      declineReason: typeof raw.declineReason === 'string' ? raw.declineReason : null,
     };
   },
 
-  async listSavedCards(): Promise<SavedCard[]> {
-    const data = await rpc('customer_list_saved_cards', {});
+  /** No checkout, sempre com o restaurante: o token vale só na subconta dele. Sem restaurante (Perfil), todos. */
+  async listSavedCards(restaurantId?: string): Promise<SavedCard[]> {
+    const data = await rpc('customer_list_saved_cards', restaurantId ? { p_restaurant_id: restaurantId } : {});
     return (Array.isArray(data) ? data : []).map((value) => {
       const row = obj(value);
-      return { id: String(row.id), brand: typeof row.brand === 'string' ? row.brand : null, lastFour: String(row.lastFour ?? ''), isDefault: row.isDefault === true };
+      return { id: String(row.id), brand: typeof row.brand === 'string' ? row.brand : null, lastFour: String(row.lastFour ?? row.last4 ?? ''), isDefault: row.isDefault === true };
     });
   },
 
@@ -348,6 +357,7 @@ export const PAYMENT_ERRORS: Record<string, string> = {
   payment_not_allowed: 'Este pagamento não pode ser feito agora. Atualize a tela.',
   not_found: 'Cobrança não encontrada.',
   card_not_found: 'Cartão salvo não encontrado. Escolha outro cartão.',
+  card_required_saved: 'Cadastre o cartão para pagar com ele.',
   invalid_request: 'Dados de pagamento inválidos.',
   pix_unavailable: 'Pix indisponível neste restaurante no momento. Pague com cartão ou combine com a equipe.',
   provider_unavailable: 'O provedor de pagamento está indisponível. Tente novamente em instantes.',

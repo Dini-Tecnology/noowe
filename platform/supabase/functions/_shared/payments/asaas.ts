@@ -3,7 +3,7 @@ import type {
   AsaasAccount, AsaasAccountDocument, AsaasAccountInput, AsaasAccountStatus,
   AsaasChargeInput, AsaasCustomerInput, AsaasPayment, AsaasPix, PaymentProvider,
   AsaasInvoiceInput,
-  AsaasSplitRefund,
+  AsaasSplitRefund, AsaasTokenizeInput, AsaasCardToken,
 } from "./types.ts";
 
 // O POST /accounts levou 5,6 s no sandbox, contra 10 s do timeout padrão.
@@ -17,6 +17,12 @@ export class AsaasError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+// Primeira descrição de erro do Asaas (já vem em português).
+export function asaasMessage(err: AsaasError): string | null {
+  const d = (err.body as { errors?: { description?: unknown }[] } | null)?.errors?.[0]?.description;
+  return typeof d === "string" && d.trim() ? d.trim().slice(0, 200) : null;
 }
 
 export interface AsaasClientOptions {
@@ -122,6 +128,13 @@ export class AsaasClient implements PaymentProvider {
 
   payWithToken(apiKey: string, id: string, creditCardToken: string, remoteIp: string | null) {
     return this.request<AsaasPayment>(apiKey, "POST", `/payments/${encodeURIComponent(id)}/payWithCreditCard`, { creditCardToken, remoteIp });
+  }
+
+  // O número e o CVV só passam por aqui a caminho do Asaas; o retorno é token, bandeira e final.
+  tokenizeCard(apiKey: string, input: AsaasTokenizeInput) {
+    return this.request<AsaasCardToken>(apiKey, "POST", "/creditCard/tokenizeCreditCard", {
+      customer: input.customer, creditCard: input.creditCard, creditCardHolderInfo: input.holderInfo, remoteIp: input.remoteIp,
+    });
   }
 
   async cancelCharge(apiKey: string, id: string) {

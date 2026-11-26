@@ -3014,3 +3014,28 @@ export const supabaseApiAdapter: SupabaseApiAdapter = {
     return data as string;
   },
 };
+
+// QA PAG-02: carteira de cartões. Número e CVV vão à Edge Function payments-cards, que só repassa ao Asaas.
+// Erros saem com `code` (card_invalid, holder_invalid, card_not_found, payments_unavailable…) e `providerMessage`.
+export interface SavedCardInput { holderName: string; number: string; expiryMonth: string; expiryYear: string; ccv: string }
+export interface SavedCardHolder { cpf: string; postalCode: string; addressNumber: string; phone: string }
+export interface SavedCard { id: string; brand: string | null; last4: string; expMonth: number | null; expYear: number | null; isDefault: boolean }
+
+export async function addSavedCard(restaurantId: string, card: SavedCardInput, holder: SavedCardHolder): Promise<SavedCard> {
+  const data = await invokeCardsFunction('payments-cards', { action: 'add', restaurantId, card, holder });
+  return data.card as SavedCard;
+}
+export async function removeSavedCard(cardId: string): Promise<void> {
+  await invokeCardsFunction('payments-cards', { action: 'remove', cardId });
+}
+export async function setDefaultSavedCard(cardId: string): Promise<void> {
+  await invokeCardsFunction('payments-cards', { action: 'set_default', cardId });
+}
+async function invokeCardsFunction(fn: string, body: Record<string, unknown>) {
+  const { data, error } = await getSupabaseClient().functions.invoke(fn, { body });
+  if (!error) return data;
+  const context = (error as { context?: unknown }).context;
+  const json = context && typeof context === 'object' && 'json' in context ? (context as { json?: () => Promise<unknown> }).json : undefined;
+  const failure = typeof json === 'function' ? await json.call(context).catch(() => null) as { error?: string; message?: string | null } | null : null;
+  throw Object.assign(new Error(failure?.message ?? failure?.error ?? error.message), { code: failure?.error, providerMessage: failure?.message ?? null });
+}

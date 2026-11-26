@@ -19,6 +19,9 @@ const mockOrderCoupon = jest.fn();
 const mockOrderCouponRemove = jest.fn();
 const mockCouponPreview = jest.fn();
 jest.mock('../services/bill-shares', () => ({ billShares: { checkoutQuote: (...a: unknown[]) => mockTipQuote(...a), applyCouponToOrder: (...a: unknown[]) => mockOrderCoupon(...a), removeCouponFromOrder: (...a: unknown[]) => mockOrderCouponRemove(...a), couponPreview: (...a: unknown[]) => mockCouponPreview(...a) } }));
+const mockCards = jest.fn();
+jest.mock('../services/saved-cards', () => ({ savedCards: { list: (...a: unknown[]) => mockCards(...a) } }));
+jest.mock('react-native-svg', () => ({ SvgXml: 'SvgXml' }));
 jest.mock('../hooks/useDistanceToRestaurant', () => ({ useDistanceToRestaurant: () => null }));
 const mockClearCart = jest.fn();
 jest.mock('@/shared/contexts/CartContext', () => ({ useCart: () => ({
@@ -51,7 +54,7 @@ function renderScreen() {
 async function acceptAndPay(view: ReturnType<typeof render>) {
   await waitFor(() => expect(mockMode).toHaveBeenCalled());
   fireEvent.press(view.getByLabelText('Li e aceito a política de retirada'));
-  fireEvent.press(view.getByLabelText('Confirmar pagamento'));
+  fireEvent.press(view.getByTestId('pay-button'));
 }
 
 beforeEach(() => {
@@ -60,13 +63,14 @@ beforeEach(() => {
   mockPlace.mockResolvedValue({ id: 'o1' });
   mockTipQuote.mockResolvedValue({ tipCents: 0, totalCents: 3000, convenienceCents: 0 });
   mockGetOrder.mockResolvedValue({ id: 'o1', paymentStatus: 'pending', fulfillmentStatus: 'pending' });
+  mockCards.mockResolvedValue([]);
 });
 
 test('oferece só o que o provedor cobra de verdade', async () => {
   const { view, client } = renderScreen();
   await waitFor(() => expect(mockMode).toHaveBeenCalledWith('r1'));
-  expect(view.getByText('PIX')).toBeTruthy();
-  expect(view.getByText('Crédito')).toBeTruthy();
+  expect(view.getByText('Pix')).toBeTruthy();
+  expect(view.getByText('Adicionar novo cartão')).toBeTruthy();
   for (const label of ['Apple Pay', 'Google Pay', 'TAP to Pay', 'Carteira']) expect(view.queryByText(label)).toBeNull();
   client.clear();
 });
@@ -86,16 +90,45 @@ test('PIX real: mostra o código do provedor e só conclui quando o servidor con
   client.clear();
 });
 
-test('cartão: abre a página do Asaas e fica aguardando; voltar do navegador não confirma nada', async () => {
-  mockStart.mockResolvedValue({ ...charge, checkoutUrl: 'https://asaas.test/i/1' });
+test('cartão salvo: cobra pelo id do cartão, sem abrir a página do Asaas, e fica aguardando o servidor', async () => {
+  mockCards.mockResolvedValue([{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }]);
+  mockStart.mockResolvedValue({ ...charge, cardResult: 'pending' });
   const { view, nav, client } = renderScreen();
-  await waitFor(() => expect(view.getByText('Crédito')).toBeTruthy());
-  fireEvent.press(view.getByText('Crédito'));
+  fireEvent.press(await view.findByTestId('saved-card-c1'));
   await acceptAndPay(view);
-  await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith('https://asaas.test/i/1'));
-  expect(view.getByText('Aguardando confirmação')).toBeTruthy();
-  expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({ paymentMethod: 'credit_card' }));
+  await waitFor(() => expect(view.getByText('Aguardando confirmação')).toBeTruthy());
+  expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({ paymentMethod: 'credit_card', paymentMethodId: 'c1' }));
+  expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
   expect(nav.replace).not.toHaveBeenCalled();
+  client.clear();
+});
+
+test('cartão recusado: mostra o motivo e deixa escolher outro, com outra chave', async () => {
+  mockCards.mockResolvedValue([{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }, { id: 'c2', brand: 'mastercard', lastFour: '5555', isDefault: false }]);
+  mockStart.mockResolvedValueOnce({ ...charge, cardResult: 'declined', declineReason: 'Saldo insuficiente' });
+  mockStart.mockResolvedValueOnce({ ...charge, paymentStatus: 'confirmed', cardResult: 'approved' });
+  const { view, nav, client } = renderScreen();
+  fireEvent.press(await view.findByTestId('saved-card-c1'));
+  await acceptAndPay(view);
+  expect(await view.findByText('Cartão recusado')).toBeTruthy();
+  expect(view.getByText('Saldo insuficiente')).toBeTruthy();
+  fireEvent.press(view.getByText('Tentar outro cartão'));
+  expect(view.queryByText('Cartão recusado')).toBeNull();
+  expect(view.getByTestId('saved-card-c2').props.accessibilityState).toEqual({ selected: true });
+  fireEvent.press(view.getByTestId('pay-button'));
+  await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('OrderDetail', { orderId: 'o1' }));
+  expect(mockStart.mock.calls[1][0]).toEqual(expect.objectContaining({ paymentMethodId: 'c2' }));
+  expect(mockStart.mock.calls[1][0].idempotencyKey).not.toBe(mockStart.mock.calls[0][0].idempotencyKey);
+  client.clear();
+});
+
+test('cartão sem cadastro (card_required_saved) leva para "Adicionar cartão"', async () => {
+  mockCards.mockResolvedValue([{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }]);
+  mockStart.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'card_required_saved' }));
+  const { view, nav, client } = renderScreen();
+  fireEvent.press(await view.findByTestId('saved-card-c1'));
+  await acceptAndPay(view);
+  await waitFor(() => expect(nav.navigate).toHaveBeenCalledWith('AddCard', { restaurantId: 'r1' }));
   client.clear();
 });
 
@@ -106,7 +139,7 @@ test('CPF exigido na primeira cobrança é pedido e reenviado com a mesma chave'
   await acceptAndPay(view);
   await waitFor(() => expect(view.getByLabelText('CPF do pagador')).toBeTruthy());
   fireEvent.changeText(view.getByLabelText('CPF do pagador'), '123.456.789-09');
-  fireEvent.press(view.getByLabelText('Confirmar pagamento'));
+  fireEvent.press(view.getByTestId('pay-button'));
   await waitFor(() => expect(mockStart).toHaveBeenCalledTimes(2));
   expect(mockStart.mock.calls[1][0]).toEqual(expect.objectContaining({ payerCpfCnpj: '12345678909', idempotencyKey: mockStart.mock.calls[0][0].idempotencyKey }));
   client.clear();
@@ -118,7 +151,7 @@ test('restaurante sem pagamento online avisa antes e não cria pedido', async ()
   await waitFor(() => expect(view.getByText('Este restaurante ainda não aceita pagamento online.')).toBeTruthy());
   expect(view.queryByTestId('receipt-document-switch')).toBeNull();
   fireEvent.press(view.getByLabelText('Li e aceito a política de retirada'));
-  fireEvent.press(view.getByLabelText('Confirmar pagamento'));
+  fireEvent.press(view.getByTestId('pay-button'));
   expect(mockPlace).not.toHaveBeenCalled();
   client.clear();
 });
@@ -184,7 +217,7 @@ test('cupom no pedido: mostra o desconto antes, aplica antes de cobrar; recusado
   await acceptAndPay(view);
   await waitFor(() => expect(require('react-native').Alert.alert).toHaveBeenCalledWith('Cupom não aplicado', 'Pedido mínimo de R$ 80,00'));
   expect(mockStart).not.toHaveBeenCalled();
-  fireEvent.press(view.getByLabelText('Confirmar pagamento'));
+  fireEvent.press(view.getByTestId('pay-button'));
   await waitFor(() => expect(mockStart).toHaveBeenCalled());
   expect(mockOrderCoupon).toHaveBeenLastCalledWith('o1', 'DEZ');
   client.clear();
@@ -216,7 +249,7 @@ test('CPF na nota: inválido avisa antes de criar o pedido; válido vai na cobra
   expect(mockStart).not.toHaveBeenCalled();
   expect(mockPlace).not.toHaveBeenCalled();
   fireEvent.changeText(view.getByTestId('receipt-document-input'), '52998224725');
-  fireEvent.press(view.getByLabelText('Confirmar pagamento'));
+  fireEvent.press(view.getByTestId('pay-button'));
   await waitFor(() => expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({ receiptDocument: '52998224725' })));
   client.clear();
 });

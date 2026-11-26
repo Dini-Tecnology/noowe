@@ -91,6 +91,10 @@ verify_jwt = true
 [functions.payments-sync]
 verify_jwt = false
 
+[functions.payments-cards]
+# O usuário é validado dentro da função (admin.auth.getUser).
+verify_jwt = false
+
 [functions.payments-account]
 # O usuário é validado dentro da função (admin.auth.getUser).
 verify_jwt = false

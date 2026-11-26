@@ -3,7 +3,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/shared/services/supabase';
 import type { Database } from '@/shared/types/database.generated';
 import type { CustomerExperienceConfig } from '@okinawa/shared/config/service-types';
-import { invokePaymentsCreate, PAYMENT_ERRORS } from './bill-shares';
+import { cardResultOf, invokePaymentsCreate, PAYMENT_ERRORS, type CardResult } from './bill-shares';
 import { parseReceiptFiscal, type ReceiptFiscal } from './receipt-fiscal';
 import { normalizeUsernameInput } from '../utils/username';
 import { parseMenuCustomizations, type MenuCustomizations } from '../utils/item-customization';
@@ -611,7 +611,7 @@ export interface CustomerBackend {
   /** Como este restaurante cobra pedidos agora; quem decide é o servidor. */
   getOrderPaymentMode(restaurantId: string): Promise<OrderPaymentMode>;
   /** Cria a cobrança do pedido (ADR-020). `confirmed` só existe depois do webhook; a tela nunca confirma nada. */
-  startPayment(input: { orderId: string; restaurantId: string; paymentMethod: string; idempotencyKey?: string; payerCpfCnpj?: string; tipBps?: number; tipCents?: number; receiptDocument?: string | null; saveTaxDocument?: true; taxDocumentConsentText?: string }): Promise<{
+  startPayment(input: { orderId: string; restaurantId: string; paymentMethod: string; idempotencyKey?: string; payerCpfCnpj?: string; tipBps?: number; tipCents?: number; receiptDocument?: string | null; saveTaxDocument?: true; taxDocumentConsentText?: string; paymentMethodId?: string }): Promise<{
     transactionId: string; orderId: string; paymentStatus: CustomerPaymentStatus; idempotentReplay: boolean; simulated: boolean;
     fulfillmentStatus: CustomerFulfillmentStatus | null;
     /** Pix pendente: copia-e-cola e prazo (ADR-013). */
@@ -619,6 +619,9 @@ export interface CustomerBackend {
     paymentExpiresAt: string | null;
     /** Cartão: página hospedada do Asaas, onde o cartão é digitado. */
     checkoutUrl: string | null;
+    /** Cartão salvo: resposta do provedor na hora; recusado vem com o motivo. */
+    cardResult?: CardResult | null;
+    declineReason?: string | null;
   }>;
   /** quick_service "Monte seu Combo": places a pickup order for 1 lanche + 1 acompanhamento + 1 bebida at 20% off, computed server-side. */
   orderCustomCombo(input: {
@@ -1493,6 +1496,7 @@ export const customerBackend: CustomerBackend = {
         ...(input.payerCpfCnpj ? { payerCpfCnpj: input.payerCpfCnpj } : {}),
         ...(input.receiptDocument !== undefined ? { receiptDocument: input.receiptDocument } : {}),
         ...(input.saveTaxDocument ? { saveTaxDocument: true, taxDocumentConsentText: input.taxDocumentConsentText } : {}),
+        ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId } : {}),
       }));
       return {
         transactionId: String(charge.paymentId ?? ''),
@@ -1504,6 +1508,8 @@ export const customerBackend: CustomerBackend = {
         pixCode: optionalString(objectValue(charge.pix).payload),
         paymentExpiresAt: optionalString(charge.expiresAt),
         checkoutUrl: optionalString(charge.checkoutUrl),
+        cardResult: cardResultOf(charge.cardResult),
+        declineReason: optionalString(charge.declineReason),
       };
     }
     const { data, error } = await (getSupabaseClient() as any).rpc('customer_start_payment', {

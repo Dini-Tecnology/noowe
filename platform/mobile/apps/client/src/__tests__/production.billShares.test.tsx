@@ -53,6 +53,8 @@ jest.mock('../services/bill-shares', () => ({
     myTaxDocument: (...a: unknown[]) => mockMyTaxDocument(...a),
   },
 }));
+jest.mock('../services/saved-cards', () => ({ savedCards: { list: (...a: unknown[]) => mockSavedCards(...a) } }));
+jest.mock('react-native-svg', () => ({ SvgXml: 'SvgXml' }));
 jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => undefined);
 
 const baseSummary = {
@@ -172,7 +174,7 @@ test('modo taxa: sem gorjeta; a taxa é opcional e retirar vai para o servidor (
   fireEvent(screen.getByTestId('service-fee-switch'), 'valueChange', false);
   await waitFor(() => expect(mockWaive.mock.calls[0]).toEqual(['sh1', true]));
   await waitFor(() => expect(screen.getAllByText(/R\$\s48,58/).length).toBeGreaterThan(0));
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ tipCents: 0 })));
 });
 
@@ -184,7 +186,7 @@ test('modo gorjeta: gorjeta em valor livre, com total vindo do servidor (G5, 12)
   fireEvent.changeText(await screen.findByLabelText('Gorjeta em valor'), '300');
   await waitFor(() => expect(mockQuote).toHaveBeenCalledWith(4858, { tipCents: 300 }));
   await waitFor(() => expect(screen.getAllByText(/R\$\s51,58/).length).toBeGreaterThan(0));
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ tipCents: 300 })));
 });
 
@@ -196,7 +198,7 @@ test('valor fixo: a gorjeta já escolhida não é refeita na tela de pagamento',
   expect(screen.queryByText('Gorjeta (opcional)')).toBeNull();
   await waitFor(() => expect(mockQuote).toHaveBeenCalledWith(4858, { tipCents: 455 }));
   await waitFor(() => expect(screen.getAllByText(/R\$\s53,13/).length).toBeGreaterThan(0));
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ tipCents: 455 })));
 });
 
@@ -206,7 +208,7 @@ test('pagamento: conta que mudou não cobra e volta para escolher de novo', asyn
   mockPay.mockRejectedValue(Object.assign(new Error('x'), { code: 'bill_changed' }));
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await waitFor(() => expect(screen.getAllByText(/R\$\s53,00/).length).toBeGreaterThan(0));
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(require('react-native').Alert.alert).toHaveBeenCalledWith('A conta mudou', expect.any(String), expect.anything()));
 });
 
@@ -226,7 +228,7 @@ test('cupom digitado e não aplicado trava o pagamento, para o desconto não sum
   mockTips.mockResolvedValue([{ percent: 10, cents: 442, totalCents: 5300 }]);
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   fireEvent.changeText(await screen.findByLabelText('Cupom'), 'dez');
-  fireEvent.press(screen.getByText(/Gerar PIX|Pagar/));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(mockPay).not.toHaveBeenCalled();
 });
@@ -235,8 +237,8 @@ test('cupom aplicado aparece no resumo, com o valor do servidor', async () => {
   mockList.mockResolvedValue([{ ...myShare, couponDiscountCents: 500 }]);
   mockTips.mockResolvedValue([]);
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
-  expect(await screen.findByText('Cupom')).toBeTruthy();
-  expect(screen.getByText(/5,00/)).toBeTruthy();
+  expect((await screen.findAllByText('Cupom')).length).toBe(2);
+  expect(screen.getByText(/− R\$\s5,00/)).toBeTruthy();
   expect(screen.getByText('Remover')).toBeTruthy();
 });
 
@@ -252,7 +254,7 @@ test('pagamento: total e gorjeta vêm do servidor; PIX é criado em centavos com
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1', restaurantName: 'Casa' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await screen.findByText('Total a pagar');
   await waitFor(() => expect(screen.getAllByText(/R\$\s53,44/).length).toBeGreaterThan(0));
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ shareId: 'sh1', method: 'pix', tipCents: 486, idempotencyKey: 'key-1' })));
   expect(await screen.findByText('Pague com Pix')).toBeTruthy();
   expect(screen.getByText('000201-pix')).toBeTruthy();
@@ -277,9 +279,9 @@ test('pagamento: CPF exigido na primeira cobrança é pedido e reenviado', async
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await screen.findByText('Total a pagar');
   await waitFor(() => expect(screen.getAllByText(/R\$\s53,44/).length).toBeGreaterThan(0));
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   fireEvent.changeText(await screen.findByLabelText('CPF do pagador'), '12345678909');
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(mockPay).toHaveBeenLastCalledWith(expect.objectContaining({ payerCpfCnpj: '12345678909' })));
 });
 
@@ -289,7 +291,7 @@ test('CPF exigido: o campo aparece destacado, com o aviso, e recebe o foco (PAG-
   mockPay.mockRejectedValueOnce(Object.assign(new Error('cpf'), { code: 'payer_document_required' }));
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await waitFor(() => expect(screen.getAllByText(/R\$\s53,44/).length).toBeGreaterThan(0));
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   const field = await screen.findByLabelText('CPF do pagador');
   expect(field.props.autoFocus).toBe(true);
   expect(screen.getByText(/Informe o CPF do pagador/)).toBeTruthy();
@@ -301,89 +303,61 @@ test('Pix expirado: troca o QR por "Gerar novo Pix", que gera outra cobrança co
   mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 5344, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix-velho', expiresAt: '2000-01-01T00:00:00Z' }, alreadyPaid: false });
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await waitFor(() => expect(screen.getAllByText(/R\$\s53,44/).length).toBeGreaterThan(0));
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   expect(await screen.findByText('Pix expirado')).toBeTruthy();
   expect(screen.queryByText('pix-velho')).toBeNull();
   fireEvent.press(screen.getByLabelText('Gerar novo Pix'));
-  fireEvent.press(await screen.findByText('Gerar PIX'));
+  fireEvent.press(await screen.findByTestId('pay-button'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledTimes(2));
 });
 
-// ---- F6: cartão salvo (checkout hospedado do Asaas) ----------------------------------------
-const cardPaid = { paymentId: 'pay1', status: 'pending', amountCents: 5344, expiresAt: null, checkoutUrl: null, pix: null, alreadyPaid: false };
+// ---- Cartão salvo (PAG-01/02): cobrança pelo id, sem página do Asaas ----------------------------
+const cardPaid = { paymentId: 'pay1', status: 'pending', amountCents: 5344, expiresAt: null, checkoutUrl: null, pix: null, alreadyPaid: false, savedCard: true, cardResult: 'pending', declineReason: null };
+const twoCards = [{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }, { id: 'c2', brand: 'mastercard', lastFour: '1111', isDefault: false }];
 
-test('cartão salvo: o padrão já vem escolhido e a cobrança vai com o id do cartão, sem abrir a página do Asaas', async () => {
+test('cartão salvo: lista com o restaurante, cobra pelo id escolhido e nunca abre a página do Asaas', async () => {
   const openBrowser = require('expo-web-browser').openBrowserAsync as jest.Mock;
   mockList.mockResolvedValue([myShare]);
   mockTips.mockResolvedValue(tips);
-  mockSavedCards.mockResolvedValue([{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }, { id: 'c2', brand: 'mastercard', lastFour: '1111', isDefault: false }]);
-  mockPay.mockResolvedValue({ ...cardPaid, savedCard: true });
+  mockSavedCards.mockResolvedValue(twoCards);
+  mockPay.mockResolvedValue(cardPaid);
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await screen.findByText('Total a pagar');
-  fireEvent.press(screen.getByText('Cartão de crédito'));
-  expect(await screen.findByText(/VISA •••• 4242/)).toBeTruthy();
-  expect(screen.queryByTestId('save-card-switch')).toBeNull();
-  fireEvent.press(screen.getByText('Pagar com cartão'));
-  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ method: 'credit_card', paymentMethodId: 'c1' })));
-  expect(mockPay.mock.calls[0][0].saveCard).toBeUndefined();
+  expect(mockSavedCards).toHaveBeenCalledWith('r1');
+  fireEvent.press(await screen.findByTestId('saved-card-c2'));
+  fireEvent.press(screen.getByTestId('pay-button'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ method: 'credit_card', paymentMethodId: 'c2' })));
+  expect(await screen.findByText('Aguardando confirmação')).toBeTruthy();
   expect(openBrowser).not.toHaveBeenCalled();
 });
 
-test('cartão salvo: escolher outro cartão salvo troca o id enviado', async () => {
+test('cartão recusado: mostra o motivo, "Tentar outro cartão" troca o cartão e usa outra chave', async () => {
   mockList.mockResolvedValue([myShare]);
   mockTips.mockResolvedValue(tips);
-  mockSavedCards.mockResolvedValue([{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }, { id: 'c2', brand: 'mastercard', lastFour: '1111', isDefault: false }]);
-  mockPay.mockResolvedValue({ ...cardPaid, savedCard: true });
+  mockSavedCards.mockResolvedValue(twoCards);
+  mockPay.mockResolvedValueOnce({ ...cardPaid, cardResult: 'declined', declineReason: 'Cartão sem limite' }).mockResolvedValueOnce(cardPaid);
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await screen.findByText('Total a pagar');
-  fireEvent.press(screen.getByText('Cartão de crédito'));
-  fireEvent.press(await screen.findByTestId('saved-card-c2'));
-  fireEvent.press(screen.getByText('Pagar com cartão'));
-  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ paymentMethodId: 'c2' })));
+  fireEvent.press(await screen.findByTestId('saved-card-c1'));
+  fireEvent.press(screen.getByTestId('pay-button'));
+  expect(await screen.findByText('Cartão recusado')).toBeTruthy();
+  expect(screen.getByText('Cartão sem limite')).toBeTruthy();
+  fireEvent.press(screen.getByText('Tentar outro cartão'));
+  fireEvent.press(screen.getByTestId('pay-button'));
+  await waitFor(() => expect(mockPay).toHaveBeenCalledTimes(2));
+  expect(mockPay.mock.calls[1][0].paymentMethodId).toBe('c2');
 });
 
-test('cartão novo: sem consentimento não salva; com o interruptor ligado pede para salvar; abre a página do Asaas', async () => {
-  const openBrowser = require('expo-web-browser').openBrowserAsync as jest.Mock;
+test('cartão salvo que sumiu (404): recarrega a lista', async () => {
   mockList.mockResolvedValue([myShare]);
   mockTips.mockResolvedValue(tips);
-  mockSavedCards.mockResolvedValue([]);
-  mockPay.mockResolvedValue({ ...cardPaid, checkoutUrl: 'https://asaas/i/1', savedCard: false });
-  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
-  await screen.findByText('Total a pagar');
-  fireEvent.press(screen.getByText('Cartão de crédito'));
-  await screen.findByText('Salvar este cartão');
-  fireEvent.press(screen.getByText('Pagar com cartão'));
-  await waitFor(() => expect(mockPay).toHaveBeenCalledTimes(1));
-  expect(mockPay.mock.calls[0][0].saveCard).toBeUndefined();
-  expect(mockPay.mock.calls[0][0].paymentMethodId).toBeUndefined();
-  await waitFor(() => expect(openBrowser).toHaveBeenCalledWith('https://asaas/i/1'));
-});
-
-test('cartão novo: com o interruptor "Salvar este cartão" ligado, a cobrança pede para salvar', async () => {
-  mockList.mockResolvedValue([myShare]);
-  mockTips.mockResolvedValue(tips);
-  mockSavedCards.mockResolvedValue([]);
-  mockPay.mockResolvedValue({ ...cardPaid, checkoutUrl: 'https://asaas/i/1', savedCard: false });
-  const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
-  await screen.findByText('Total a pagar');
-  fireEvent.press(screen.getByText('Cartão de crédito'));
-  fireEvent(await screen.findByTestId('save-card-switch'), 'valueChange', true);
-  fireEvent.press(screen.getByText('Pagar com cartão'));
-  await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ method: 'credit_card', saveCard: true })));
-  expect(mockPay.mock.calls[0][0].paymentMethodId).toBeUndefined();
-});
-
-test('cartão salvo que sumiu (404): volta para a escolha e recarrega a lista', async () => {
-  mockList.mockResolvedValue([myShare]);
-  mockTips.mockResolvedValue(tips);
-  mockSavedCards.mockResolvedValue([{ id: 'c1', brand: 'visa', lastFour: '4242', isDefault: true }]);
+  mockSavedCards.mockResolvedValue([twoCards[0]]);
   mockPay.mockRejectedValue(Object.assign(new Error('Cartão salvo não encontrado. Escolha outro cartão.'), { code: 'card_not_found' }));
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await screen.findByText('Total a pagar');
-  fireEvent.press(screen.getByText('Cartão de crédito'));
-  await screen.findByText(/VISA •••• 4242/);
+  fireEvent.press(await screen.findByTestId('saved-card-c1'));
   const before = mockSavedCards.mock.calls.length;
-  fireEvent.press(screen.getByText('Pagar com cartão'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(mockSavedCards.mock.calls.length).toBeGreaterThan(before));
 });
 
@@ -415,8 +389,8 @@ test('gorjeta alta pede confirmação antes de cobrar (resposta 55)', async () =
   const alertSpy = require('react-native').Alert.alert as jest.Mock;
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1', restaurantName: 'Casa' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await screen.findByText('Total a pagar');
-  await waitFor(() => expect(screen.getByText('Gerar PIX')).toBeTruthy());
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  await waitFor(() => expect(screen.getByTestId('pay-button')).toBeTruthy());
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Confirma a gorjeta?', expect.stringMatching(/^Confirma gorjeta de R\$/), expect.anything()));
   expect(mockPay).not.toHaveBeenCalled();
   (alertSpy.mock.calls[alertSpy.mock.calls.length - 1][2] as any[]).find((b) => b.text === 'Confirmar').onPress();
@@ -429,11 +403,11 @@ test('abaixo do mínimo do cartão, o cartão some; sem nenhum meio, paga no sal
   mockQuote.mockImplementation(async (amountCents: number, tip: { tipCents: number }) => ({ tipCents: tip.tipCents, totalCents: amountCents + tip.tipCents, confirmTip: false, cardAvailable: false, pixAvailable: true }));
   const screen = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1', restaurantName: 'Casa' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
   await screen.findByText('Total a pagar');
-  await waitFor(() => expect(screen.queryByText('Cartão de crédito')).toBeNull());
-  expect(screen.getByText('PIX')).toBeTruthy();
+  await waitFor(() => expect(screen.queryByText('Adicionar novo cartão')).toBeNull());
+  expect(screen.getByText('Pix')).toBeTruthy();
   mockQuote.mockImplementation(async (amountCents: number, tip: { tipCents: number }) => ({ tipCents: tip.tipCents, totalCents: amountCents + tip.tipCents, confirmTip: false, cardAvailable: false, pixAvailable: false }));
   const none = renderWithClient(<SharePaymentScreen route={{ params: { tableSessionId: 's1', restaurantName: 'Casa' } }} navigation={{ goBack: jest.fn(), reset: jest.fn() }} />);
-  expect(await none.findByTestId('pay-at-table')).toBeTruthy();
+  expect(await none.findByTestId('pay-offline')).toBeTruthy();
 });
 
 test('CPF na nota: opcional, sugere o CPF já informado e vai na cobrança; desmarcado vai nulo', async () => {
@@ -451,7 +425,7 @@ test('CPF na nota: opcional, sugere o CPF já informado e vai na cobrança; desm
   expect(screen.getByTestId('receipt-document-input').props.value).toBe('529.982.247-25');
   fireEvent(screen.getByTestId('receipt-document-switch'), 'valueChange', false);
   expect(screen.queryByTestId('receipt-document-input')).toBeNull();
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ receiptDocument: null })));
 });
 
@@ -464,13 +438,13 @@ test('CPF na nota inválido não gera cobrança', async () => {
   fireEvent(screen.getByTestId('receipt-document-switch'), 'valueChange', true);
   fireEvent.changeText(await screen.findByTestId('receipt-document-input'), '123.456.789-00');
   expect(screen.getByText('CPF ou CNPJ inválido.')).toBeTruthy();
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(alert).toHaveBeenCalledWith('Pagamento não iniciado', expect.stringContaining('CPF da nota')));
   expect(mockPay).not.toHaveBeenCalled();
 
   fireEvent.changeText(screen.getByTestId('receipt-document-input'), '123.456.789-09');
   mockPay.mockResolvedValue({ paymentId: 'pay1', status: 'pending', amountCents: 4858, expiresAt: null, checkoutUrl: null, pix: { payload: 'pix', expiresAt: null }, alreadyPaid: false });
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({ receiptDocument: '12345678909' })));
   expect(mockPay.mock.calls[0][0].saveTaxDocument).toBeUndefined();
 });
@@ -486,7 +460,7 @@ test('Salvar meu CPF (RV-09): desmarcado por padrão; marcado, o consentimento v
   const box = screen.getByLabelText('Salvar meu CPF para as próximas compras');
   expect(box.props.accessibilityState.checked).toBe(false);
   fireEvent.press(box);
-  fireEvent.press(screen.getByText('Gerar PIX'));
+  fireEvent.press(screen.getByTestId('pay-button'));
   await waitFor(() => expect(mockPay).toHaveBeenCalledWith(expect.objectContaining({
     receiptDocument: '12345678909', saveTaxDocument: true, taxDocumentConsentText: 'Salvar meu CPF para as próximas compras' })));
 });

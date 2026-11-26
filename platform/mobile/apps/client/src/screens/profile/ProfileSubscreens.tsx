@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { SavedTaxDocumentCard } from '../../components/payment/SavedTaxDocumentCard';
+import { SavedCardsSection } from '../../components/payment/SavedCardsSection';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -351,29 +352,13 @@ export function LoyaltyProgramScreen() {
 export function ProfilePaymentMethodsScreen() {
   const colors = useColors();
   const styles = useMemo(() => createSharedStyles(colors), [colors]);
-
-  const methods = [
-    { id: '1', icon: 'card-outline' as IconName, title: 'Mastercard final 4821', subtitle: 'Padrão para pagamentos' },
-    { id: '2', icon: 'logo-apple' as IconName, title: 'Apple Pay', subtitle: 'Pagamento rápido no app' },
-    { id: '3', icon: 'qr-code-outline' as IconName, title: 'Pix', subtitle: 'Aprovação instantânea' },
-  ];
-
   return (
     <ScreenContainer edges={['top']}>
       <View style={styles.screen}>
-        <Header title="Métodos de Pagamento" rightLabel="Adicionar" />
+        <Header title="Métodos de Pagamento" />
         <ScrollView contentContainerStyle={styles.pagePadding} showsVerticalScrollIndicator={false}>
+          <SavedCardsSection />
           <SavedTaxDocumentCard />
-          {methods.map((method) => (
-            <View key={method.id} style={styles.listCard}>
-              <IconBubble icon={method.icon} />
-              <View style={styles.flex}>
-                <Text style={styles.cardTitle}>{method.title}</Text>
-                <Text style={styles.cardSub}>{method.subtitle}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.foregroundMuted} />
-            </View>
-          ))}
         </ScrollView>
       </View>
     </ScreenContainer>

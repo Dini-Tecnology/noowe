@@ -15,13 +15,17 @@ interface PixPendingPanelProps {
   onExpired: () => void;
   /** Texto sob o QR; o padrão fala do pedido que vai para a cozinha. */
   hint?: string;
+  /** Prazo acabou: troca o QR por "Gerar novo Pix". */
+  expired?: boolean;
+  expiredHint?: string;
+  onRegenerate?: () => void;
 }
 
 /**
  * Pix pendente (ADR-013 §2.6): QR + copia-e-cola com contagem até expirar.
  * O pedido só vai para a cozinha quando o servidor confirmar o pagamento.
  */
-export function PixPendingPanel({ code, expiresAt, checking, onCheck, onSimulatePaid, onExpired, hint }: PixPendingPanelProps) {
+export function PixPendingPanel({ code, expiresAt, checking, onCheck, onSimulatePaid, onExpired, hint, expired, expiredHint, onRegenerate }: PixPendingPanelProps) {
   const colors = useColors();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -45,6 +49,18 @@ export function PixPendingPanel({ code, expiresAt, checking, onCheck, onSimulate
     btnPrimary: { backgroundColor: colors.primary },
     btnPrimaryText: { color: colors.primaryForeground },
   }), [colors]);
+
+  if (expired) {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.title}>Pix expirado</Text>
+        <Text style={styles.hint}>{expiredHint ?? 'O tempo para pagar acabou. Gere um novo Pix para pagar.'}</Text>
+        <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onRegenerate} accessibilityRole="button" accessibilityLabel="Gerar novo Pix">
+          <Text style={[styles.btnText, styles.btnPrimaryText]}>Gerar novo Pix</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.card} accessibilityLabel="Pagamento por Pix pendente">

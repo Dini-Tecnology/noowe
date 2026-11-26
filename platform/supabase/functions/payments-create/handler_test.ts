@@ -46,12 +46,14 @@ function setup(over: { reserved?: any; reserveError?: any; customerId?: string |
       payWithToken: async (_k: string, id: string, token: string, ip: string | null) => {
         provider.push(`pay:${id}`);
         (provider as any).paid = { token, ip };
-        return { id, status: "CONFIRMED", value: 50 };
+        if (over.payThrows) throw over.payThrows;
+        return { id, status: over.payStatus ?? "CONFIRMED", value: 50 };
       },
       setSplit: async (_k: string, _id: string, wallet: string, cents: number) => {
         if (over.setSplitThrows) throw new AsaasError(500, null, "boom");
         provider.push(`setSplit:${wallet}:${cents}`);
       },
+      cancelCharge: async (_k: string, id: string) => { provider.push(`cancel:${id}`); },
       getPixQrCode: async () => {
         if (over.pixKeyMissing) throw new AsaasError(400, { errors: [{ code: "invalid_action", description: "Não há nenhuma chave Pix cadastrada na conta." }] }, "400");
         provider.push("pix"); return { payload: "000201-copia-e-cola", expirationDate: "2026-10-23 23:59:59" }; },
@@ -94,15 +96,6 @@ test("PIX: cria cliente, cobrança com split NOOWE e QR; devolve pendente (nunca
   assert.equal(input.externalReference, PAY);
   assert.ok(calls.some((c) => c.fn === "service_payment_attach_provider" && c.args.p_provider_ref === "pay_asaas"));
   assert.ok(!calls.some((c) => c.fn === "service_payment_apply_event"));
-});
-
-test("cartão: devolve a página hospedada e não pede QR", async () => {
-  const { deps, provider } = setup({ reserved: { paymentId: PAY, orderId: ORDER, status: "creating", method: "credit_card", amountCents: 5000, platformFeeCents: 0, paymentAccountId: ACCT, providerRef: null, alreadyPaid: false } });
-  const res = await handleCreate(req({ ...valid, method: "credit_card" }), deps);
-  const body = await res.json();
-  assert.equal(body.checkoutUrl, "https://asaas/i/1");
-  assert.equal(body.pix, null);
-  assert.ok(!provider.includes("pix"));
 });
 
 test("documento do pagador é exigido só na primeira vez", async () => {
@@ -179,26 +172,6 @@ test("cartão: salvar/usar cartão só vale com método cartão e nunca os dois 
   assert.equal((await handleCreate(reqIp({ ...card, saveCard: true, paymentMethodId: SAVED }), deps)).status, 400);
   assert.equal((await handleCreate(reqIp({ ...card, paymentMethodId: "nao-e-uuid" }), deps)).status, 400);
   assert.equal((await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }, null), deps)).status, 400);
-});
-
-test("cartão novo com consentimento: marca a cobrança para salvar e segue pela página do Asaas", async () => {
-  const { deps, calls, provider } = setup();
-  const res = await handleCreate(reqIp({ ...card, saveCard: true }), deps);
-  assert.equal(res.status, 200);
-  const body = await res.json();
-  assert.equal(body.status, "pending");
-  assert.equal(body.checkoutUrl, "https://asaas/i/1");
-  assert.equal(body.savedCard, undefined);
-  const options = calls.find((c) => c.fn === "service_payment_set_card_options")!;
-  assert.deepEqual(options.args, { p_payment_id: PAY, p_user_id: USER, p_save_card: true, p_payment_method_id: null });
-  assert.equal((provider as any).paid, undefined);
-  assert.equal(calls.filter((c) => c.fn === "service_payment_card_token").length, 0);
-});
-
-test("cartão novo sem consentimento: não marca para salvar", async () => {
-  const { deps, calls } = setup();
-  await handleCreate(reqIp(card), deps);
-  assert.equal(calls.find((c) => c.fn === "service_payment_set_card_options")!.args.p_save_card, false);
 });
 
 test("cartão salvo: cobra com o token do servidor, depois do split e da referência gravada, sem página do Asaas", async () => {
@@ -336,4 +309,66 @@ test("subconta sem chave Pix: 422 pix_unavailable, não 'provedor indisponível'
   const body = await res.json();
   assert.equal(body.error, "pix_unavailable");
   assert.equal(body.retryable, false);
+});
+
+// ---- QA PAG-02: cartão só salvo, resultado síncrono ------------------------------------------
+test("cartão sem cartão salvo: 422 card_required_saved, sem reservar nem ir ao Asaas", async () => {
+  for (const body of [card, { ...card, saveCard: true }]) {
+    const { deps, calls, provider } = setup();
+    const res = await handleCreate(reqIp(body), deps);
+    assert.equal(res.status, 422);
+    const out = await res.json();
+    assert.equal(out.error, "card_required_saved");
+    assert.equal(out.checkoutUrl, undefined);
+    assert.equal(calls.length, 0);
+    assert.equal(provider.length, 0);
+  }
+});
+
+test("cartão salvo aprovado: cardResult approved, sem checkoutUrl e sem confirmar fora do webhook", async () => {
+  const { deps, calls } = setup({ cardToken: "tok_secreto_1", customerId: "cus_1" });
+  const body = await (await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }), deps)).json();
+  assert.equal(body.cardResult, "approved");
+  assert.equal(body.checkoutUrl, null);
+  assert.equal(body.declineReason, undefined);
+  assert.ok(!calls.some((c) => c.fn === "service_payment_apply_event" || c.fn === "service_payment_card_declined"));
+});
+
+test("cartão salvo em análise: cardResult pending", async () => {
+  const { deps } = setup({ cardToken: "tok_secreto_1", customerId: "cus_1", payStatus: "AWAITING_RISK_ANALYSIS" });
+  assert.equal((await (await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }), deps)).json()).cardResult, "pending");
+});
+
+test("cartão salvo recusado: declined com motivo, reserva liberada na hora e cobrança cancelada", async () => {
+  const refusal = new AsaasError(400, { errors: [{ code: "invalid_creditCard", description: "Transação não autorizada. Verifique os dados do cartão." }] }, "400");
+  for (const purpose of ["order", "bill_share"]) {
+    const { deps, calls, provider } = setup({ cardToken: "tok_secreto_1", customerId: "cus_1", payThrows: refusal });
+    const res = await handleCreate(reqIp({ ...card, purpose, paymentMethodId: SAVED }), deps);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.cardResult, "declined");
+    assert.equal(body.status, "failed");
+    assert.equal(body.declineReason, "Transação não autorizada. Verifique os dados do cartão.");
+    assert.equal(body.checkoutUrl, null);
+    assert.deepEqual(calls.find((c) => c.fn === "service_payment_card_declined")!.args,
+      { p_payment_id: PAY, p_user_id: USER, p_reason: body.declineReason });
+    assert.ok(provider.includes("cancel:pay_asaas"));
+    assert.ok(!calls.some((c) => c.fn === "service_payment_mark_failed"));
+  }
+});
+
+test("cartão salvo sem resposta do Asaas (rede/5xx): pending, nada é liberado", async () => {
+  const { deps, calls } = setup({ cardToken: "tok_secreto_1", customerId: "cus_1", payThrows: new AsaasError(0, null, "timeout") });
+  const body = await (await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }), deps)).json();
+  assert.equal(body.cardResult, "pending");
+  assert.ok(!calls.some((c) => c.fn === "service_payment_card_declined"));
+});
+
+test("cartão: reenvio com a mesma chave devolve o mesmo resultado, sem cobrar de novo", async () => {
+  const { deps, provider } = setup({ reserved: { paymentId: PAY, orderId: ORDER, status: "failed", method: "credit_card", amountCents: 5000,
+    paymentAccountId: ACCT, providerRef: "pay_asaas", alreadyPaid: false } });
+  const body = await (await handleCreate(reqIp({ ...card, paymentMethodId: SAVED }), deps)).json();
+  assert.equal(body.cardResult, "declined");
+  assert.equal(body.checkoutUrl, null);
+  assert.equal(provider.length, 0);
 });

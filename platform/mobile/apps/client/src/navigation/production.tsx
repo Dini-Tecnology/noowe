@@ -29,10 +29,12 @@ import {
   BirthdayScreen, CallWaiterScreen, CartScreen, ComboBuilderScreen, CreateReservationScreen, DigitalReceiptScreen, EditProfileScreen, EntryOptionsScreen, FavoritesScreen, FecharContaScreen, HarmonizacaoScreen,
   HomeScreen, KidsActivitiesScreen, LoyaltyScreen,
   MenuScreen, ModoFamiliaScreen, NotificationsScreen, OrderDetailScreen, OrderReadyScreen, OrdersScreen, PaymentSuccessScreen, PrivacyScreen,
-  PaymentMethodsScreen, ProfileScreen, PromotionsScreen, QrScannerScreen, QuickServiceCheckoutScreen, ReservationConfirmationScreen, ReservationRestaurantScreen,
+  ProfileScreen, PromotionsScreen, QrScannerScreen, QuickServiceCheckoutScreen, ReservationConfirmationScreen, ReservationRestaurantScreen,
   ReservationsScreen, RestaurantScreen, ReviewScreen, ReviewsScreen, SplitBillScreen, SupportScreen, TableCodeScreen, TableWelcomeScreen, InviteExpiredScreen, TipPaymentScreen, SharePaymentScreen,
   WaitlistScreen,
 } from '../screens/production';
+import AddCardScreen from '../screens/payment/AddCardScreen';
+import { ProfilePaymentMethodsScreen } from '../screens/profile/ProfileSubscreens';
 
 const Stack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
@@ -360,6 +362,7 @@ export default function ProductionNavigation() {
     <Stack.Screen name="SplitBill" component={SplitBillScreen} options={{ headerShown: false }} />
     <Stack.Screen name="TipPayment" component={TipPaymentScreen} options={{ headerShown: false }} />
     <Stack.Screen name="SharePayment" component={SharePaymentScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="AddCard" component={AddCardScreen} options={{ headerShown: false }} />
     <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ headerShown: false, gestureEnabled: false }} />
     <Stack.Screen name="Review" component={ReviewScreen} options={{ headerShown: false }} />
     <Stack.Screen name="DigitalReceipt" component={DigitalReceiptScreen} options={{ headerShown: false }} />
@@ -368,7 +371,7 @@ export default function ProductionNavigation() {
     <Stack.Screen name="FecharConta" component={FecharContaScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Favorites" component={FavoritesScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Loyalty" component={LoyaltyScreen} options={{ headerShown: false }} />
-    <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} options={{ headerShown: false }} />
+    <Stack.Screen name="PaymentMethods" component={ProfilePaymentMethodsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Promotions" component={PromotionsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Reviews" component={ReviewsScreen} options={{ headerShown: false }} />
     <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: false }} />

@@ -1,4 +1,4 @@
-import { AsaasError } from "../_shared/payments/asaas.ts";
+import { AsaasError, asaasMessage } from "../_shared/payments/asaas.ts";
 import { bearer, json, mapRpcError, saoPauloDate, type PaymentDeps } from "../_shared/payments/deps.ts";
 import { onlyDigits, validTaxDocument } from "../_shared/payments/document.ts";
 import { asaasValueToCents } from "../_shared/payments/money.ts";
@@ -25,6 +25,8 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
   const paymentMethodId: string | null = body?.paymentMethodId == null ? null : String(body.paymentMethodId);
   if ((saveCard || paymentMethodId !== null) && method !== "credit_card") return json({ error: "invalid_request" }, 400);
   if (paymentMethodId !== null && (!UUID.test(paymentMethodId) || saveCard)) return json({ error: "invalid_request" }, 400);
+  // QA PAG-02: cartão só com cartão salvo, cobrado aqui. O app nunca mais vai para a página do Asaas.
+  if (method === "credit_card" && paymentMethodId === null) return json({ error: "card_required_saved" }, 422);
   const remoteIp = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("cf-connecting-ip") || "";
   if (paymentMethodId !== null && !remoteIp) return json({ error: "invalid_request" }, 400);
   const document = typeof body?.payerCpfCnpj === "string" ? body.payerCpfCnpj.replace(/\D/g, "") : "";
@@ -69,7 +71,15 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
     expiresAt: r.expiresAt, checkoutUrl: r.checkoutUrl ?? null,
     pix: r.pixPayload ? { payload: r.pixPayload, expiresAt: r.expiresAt } : null, ...extra,
   });
-  if (r.providerRef) return view({ idempotentReplay: true });
+  if (r.providerRef) {
+    const replay: Record<string, unknown> = { idempotentReplay: true };
+    if (r.method === "credit_card") {
+      replay.checkoutUrl = null;
+      replay.cardResult = r.status === "failed" ? "declined" : r.status === "completed" ? "approved" : "pending";
+      if (replay.cardResult === "declined") replay.declineReason = DECLINED_DEFAULT;
+    }
+    return view(replay);
+  }
 
   if (method === "credit_card") {
     const options = await deps.rpc("service_payment_set_card_options", {
@@ -155,12 +165,36 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
     });
     if (attached.error) throw new Error(`attach: ${attached.error.message}`);
     // Cartão salvo só é cobrado com o split definido e a referência gravada: o aviso do provedor já encontra tudo pronto.
-    if (creditCardToken && charge.status === "PENDING") await deps.provider.payWithToken(apiKey, charge.id, creditCardToken, remoteIp);
+    // O resultado volta na hora; a confirmação do pedido continua vindo só do webhook (invariante 6).
+    let cardResult: "approved" | "declined" | "pending" | null = null;
+    if (creditCardToken) {
+      cardResult = cardOutcome(charge.status);
+      if (charge.status === "PENDING") {
+        try {
+          cardResult = cardOutcome((await deps.provider.payWithToken(apiKey, charge.id, creditCardToken, remoteIp)).status);
+        } catch (err) {
+          if (!(err instanceof AsaasError && err.status === 400)) {
+            // Sem resposta clara (rede, 5xx): o webhook decide; nada é liberado às cegas.
+            console.error("payments-create payWithToken error:", err instanceof AsaasError ? { status: err.status } : (err as Error).message);
+            cardResult = "pending";
+          } else {
+            const declineReason = asaasMessage(err) ?? DECLINED_DEFAULT;
+            const released = await deps.rpc("service_payment_card_declined", { p_payment_id: r.paymentId, p_user_id: user.id, p_reason: declineReason });
+            if (released.error) console.error("payments-create card declined error:", released.error.message);
+            await deps.provider.cancelCharge(apiKey, charge.id).catch((e: unknown) => console.error("payments-create cancel declined:", (e as Error).message));
+            return json({
+              paymentId: r.paymentId, status: "failed", method, amountCents: r.amountCents, expiresAt: pixExpires,
+              checkoutUrl: null, pix: null, savedCard: true, cardResult: "declined", declineReason,
+            });
+          }
+        }
+      }
+    }
     return json({
       paymentId: r.paymentId, status: "pending", method, amountCents: r.amountCents, expiresAt: pixExpires,
       checkoutUrl: creditCardToken ? null : charge.invoiceUrl ?? null,
       pix: pixPayload ? { payload: pixPayload, expiresAt: pixExpires } : null,
-      ...(creditCardToken ? { savedCard: true } : {}),
+      ...(creditCardToken ? { savedCard: true, cardResult } : {}),
     });
   } catch (err) {
     console.error("payments-create provider error:", err instanceof AsaasError ? { status: err.status, body: err.body } : err);
@@ -194,4 +228,10 @@ async function rememberPayerDocument(deps: PaymentDeps, apiKey: string, userId: 
 // O Asaas recusa a cobrança/QR Pix com uma descrição citando a chave Pix ausente da conta.
 function isMissingPixKey(err: unknown): boolean {
   return err instanceof AsaasError && err.status >= 400 && err.status < 500 && /chave\s+pix/i.test(JSON.stringify(err.body ?? ""));
+}
+
+const DECLINED_DEFAULT = "O cartão foi recusado. Tente outro cartão ou pague com Pix.";
+
+function cardOutcome(status: string): "approved" | "declined" | "pending" {
+  return status === "CONFIRMED" || status === "RECEIVED" ? "approved" : "pending";
 }

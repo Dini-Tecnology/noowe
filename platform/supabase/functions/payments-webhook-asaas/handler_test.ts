@@ -228,3 +228,14 @@ test("estorno total: registra o split devolvido antes de aplicar; sem reconsulta
   await handleWebhook(req("PAYMENT_REFUNDED"), down.deps);
   assert.equal(down.applied().length, 0);
 });
+
+test("QA PAG-05: cartão recusado depois (captura recusada / reprovado na análise) marca a transação como falha", async () => {
+  for (const event of ["PAYMENT_CREDIT_CARD_CAPTURE_REFUSED", "PAYMENT_REPROVED_BY_RISK_ANALYSIS"]) {
+    const { deps, applied } = await setup();
+    const res = await handleWebhook(req(event), deps);
+    assert.equal(res.status, 200);
+    assert.equal(applied().length, 1);
+    assert.equal(applied()[0].args.p_outcome, "failed");
+    assert.equal(applied()[0].args.p_gateway_status, "failed");
+  }
+});
