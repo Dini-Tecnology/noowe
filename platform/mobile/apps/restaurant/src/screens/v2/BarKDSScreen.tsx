@@ -7,17 +7,10 @@ import { supabaseApiAdapter } from '@okinawa/shared/services/supabase-api';
 import { V2Shell } from './shared/V2Shell';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { itemStatusLabel } from '@okinawa/shared/utils/status-label';
+import { mapBarQueueRow, type BarQueueItem, type RawBarQueueRow } from './shared/kdsItems';
 
-interface BarQueueItem {
-  id: string;
-  order_id: string;
-  table_label?: string;
-  item_name: string;
-  quantity: number;
-  status: string;
-  elapsed_minutes?: number;
-  special_instructions?: string;
-}
+// A RPC devolve name/table_number; o mapeamento é o mesmo da visão do barman.
+type BarKdsItem = BarQueueItem & { notes: string | null };
 
 function statusColor(status: string, primary: string): string {
   if (status === 'ready') return '#22C55E';
@@ -28,7 +21,7 @@ function statusColor(status: string, primary: string): string {
 
 export default function BarKDSScreen() {
   const colors = useColors();
-  const [items, setItems] = useState<BarQueueItem[]>([]);
+  const [items, setItems] = useState<BarKdsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,7 +30,7 @@ export default function BarKDSScreen() {
     try {
       setError(null);
       const data = await supabaseApiAdapter.getBarQueue();
-      setItems(Array.isArray(data) ? data : []);
+      setItems((Array.isArray(data) ? data : []).map((row: RawBarQueueRow & { special_instructions?: string | null }) => ({ ...mapBarQueueRow(row), notes: row.special_instructions ?? null })));
     } catch (err) {
       setError(userErrorMessage(err, 'Erro ao carregar fila do bar'));
     } finally {
@@ -96,17 +89,15 @@ export default function BarKDSScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontWeight: '700', color: colors.foreground }}>
-                  {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.item_name}
+                  {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.name}
                 </Text>
-                {item.table_label && (
-                  <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>
-                    {item.table_label}
-                    {item.elapsed_minutes != null ? ` · ${item.elapsed_minutes}min` : ''}
-                  </Text>
-                )}
-                {item.special_instructions ? (
+                <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>
+                  {item.tableLabel}
+                  {item.elapsedMinutes != null ? ` · ${item.elapsedMinutes}min` : ''}
+                </Text>
+                {item.notes ? (
                   <Text style={{ fontSize: 12, color: colors.foregroundSecondary, fontStyle: 'italic' }}>
-                    {item.special_instructions}
+                    {item.notes}
                   </Text>
                 ) : null}
               </View>
