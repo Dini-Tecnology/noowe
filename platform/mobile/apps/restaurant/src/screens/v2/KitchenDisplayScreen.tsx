@@ -12,6 +12,7 @@ import { V2ConfirmDialog } from './shared/V2ConfirmDialog';
 import { V2DetailDialog } from './shared/V2DetailDialog';
 import { useKdsOrders } from './shared/useRestaurantOperations';
 import { advanceItems } from './shared/kdsItems';
+import { CancelItemLink, useCancelKdsItem } from './shared/cancelKdsItem';
 import { kdsStatusLabel, kdsStatusTone } from './shared/v2Types';
 import type { KdsFilter, KdsOrder } from './shared/v2Types';
 
@@ -28,6 +29,7 @@ export default function KitchenDisplayScreen() {
   const [detailOrder, setDetailOrder] = useState<KdsOrder | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { data: orders, loading, error, refresh } = useKdsOrders('kitchen');
+  const cancelItem = useCancelKdsItem(refresh);
 
   const counts = useMemo(() => ({
     queue: orders.filter((o) => o.status === 'queue').length,
@@ -110,10 +112,13 @@ export default function KitchenDisplayScreen() {
               <V2StatusBadge label={kdsStatusLabel(order.status)} tone={kdsStatusTone(order.status)} />
             </View>
           </View>
-          {order.items.map(([name, time]) => (
-            <View key={name} style={styles.itemRow}>
-              <Text style={{ color: colors.foreground, fontSize: 13 }}>{name}</Text>
-              <Text style={{ color: colors.foregroundSecondary, fontSize: 12 }}>{time}</Text>
+          {order.items.map(([name, time], i) => (
+            <View key={order.itemIds[i] ?? name} style={styles.itemRow}>
+              <Text style={{ color: colors.foreground, fontSize: 13, flex: 1 }}>{name}</Text>
+              <View style={styles.itemSide}>
+                <Text style={{ color: colors.foregroundSecondary, fontSize: 12 }}>{time}</Text>
+                <CancelItemLink name={name} status={order.itemStates[i]?.status ?? ''} onPress={() => cancelItem.request(order.itemIds[i], name)} />
+              </View>
             </View>
           ))}
           {order.status !== 'ready' && (
@@ -135,6 +140,8 @@ export default function KitchenDisplayScreen() {
         onConfirm={() => void handleConfirm()}
         onCancel={() => setPendingAction(null)}
       />
+
+      {cancelItem.dialog}
 
       <V2DetailDialog
         visible={!!detailOrder}
@@ -167,7 +174,8 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
   headerActions: { alignItems: 'flex-end', gap: 8 },
   detailBtn: { padding: 6, borderRadius: 8 },
-  itemRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  itemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, gap: 8 },
+  itemSide: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   action: { marginTop: 12, backgroundColor: '#F59E0B', borderRadius: 14, paddingVertical: 12, alignItems: 'center' },
   stateCard: { borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 12, alignItems: 'center', gap: 10 },
   retryBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },

@@ -8,6 +8,7 @@ import { V2Shell } from './shared/V2Shell';
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { itemStatusLabel } from '@okinawa/shared/utils/status-label';
 import { mapBarQueueRow, type BarQueueItem, type RawBarQueueRow } from './shared/kdsItems';
+import { CancelItemLink, useCancelKdsItem } from './shared/cancelKdsItem';
 
 // A RPC devolve name/table_number; o mapeamento é o mesmo da visão do barman.
 type BarKdsItem = BarQueueItem & { notes: string | null };
@@ -38,6 +39,8 @@ export default function BarKDSScreen() {
       setRefreshing(false);
     }
   }, []);
+
+  const cancelItem = useCancelKdsItem(load);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount: the async loader sets state after its request resolves, not synchronously
   useEffect(() => { void load(); }, [load]);
@@ -113,11 +116,13 @@ export default function BarKDSScreen() {
                     <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>Pronto</Text>
                   </TouchableOpacity>
                 ) : null}
+                <CancelItemLink name={item.name} status={item.status} onPress={() => cancelItem.request(item.id, item.name)} />
               </View>
             </View>
           );
         })}
       </ScrollView>
+      {cancelItem.dialog}
     </V2Shell>
   );
 }

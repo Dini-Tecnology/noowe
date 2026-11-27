@@ -86,6 +86,7 @@ import { formatTableLabel } from './shared/tableLabel';
 import { waiterTableA11yLabel } from './shared/tableBill';
 import { cashRegisterStatus, isOpenCall, isTableInService } from './shared/liveStatus';
 import { advanceItems, mapBarQueueRow, type BarQueueItem, type KdsItemState } from './shared/kdsItems';
+import { CancelItemLink, useCancelKdsItem } from './shared/cancelKdsItem';
 import {
   elapsedLabel,
   customerDisplayName,
@@ -755,6 +756,7 @@ function CookQueueView({
   mode: 'station' | 'kds';
 }) {
   const { data: orders, loading, refresh } = useKdsOrders('kitchen');
+  const cancelItem = useCancelKdsItem(refresh);
   const queueCount = orders.filter((o) => o.status === 'queue').length;
   const preparingCount = orders.filter((o) => o.status === 'preparing').length;
   const readyCount = orders.filter((o) => o.status === 'ready').length;
@@ -781,10 +783,13 @@ function CookQueueView({
               <StatusChip label={itemStatusLabel(isReady ? 'ready' : isPreparing ? 'preparing' : 'pending')} tone={tone} />
             </View>
             <View style={{ marginTop: 10, gap: 6 }}>
-              {order.items.map(([name, time]) => (
-                <View key={name} style={styles.chefItemRow}>
-                  <Text style={[styles.staffRole, { color: colors.foreground }]}>{name}</Text>
-                  <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{time}</Text>
+              {order.items.map(([name, time], i) => (
+                <View key={order.itemIds[i] ?? name} style={styles.chefItemRow}>
+                  <Text style={[styles.staffRole, { color: colors.foreground, flex: 1 }]}>{name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{time}</Text>
+                    <CancelItemLink name={name} status={order.itemStates[i]?.status ?? ''} onPress={() => cancelItem.request(order.itemIds[i], name)} />
+                  </View>
                 </View>
               ))}
             </View>
@@ -799,6 +804,7 @@ function CookQueueView({
           </View>
         );
       })}
+      {cancelItem.dialog}
     </View>
   );
 }
@@ -830,6 +836,8 @@ function BarmanQueueView({
   }, [loadBar]);
   // Pedido novo chega ao bar sem precisar sair da tela.
   useRealtimeRefresh('kds_signals', useRestaurantRole().restaurantId ?? null, loadBar);
+
+  const cancelItem = useCancelKdsItem(loadBar);
 
   const advanceBarItem = async (item: BarQueueItem) => {
     await advanceKdsOrder([{ id: item.id, status: item.status }], loadBar);
@@ -870,7 +878,10 @@ function BarmanQueueView({
                 <Text style={[styles.reservationTitle, { color: colors.foreground }]}>{tableLabel}</Text>
                 <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{meta}</Text>
               </View>
-              <StatusChip label={itemStatusLabel(isReady ? 'ready' : isPreparing ? 'preparing' : 'pending')} tone={tone} />
+              <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                <StatusChip label={itemStatusLabel(isReady ? 'ready' : isPreparing ? 'preparing' : 'pending')} tone={tone} />
+                <CancelItemLink name={item.name} status={item.status} onPress={() => cancelItem.request(item.id, item.name)} />
+              </View>
             </View>
             {!isReady && (
               <TouchableOpacity
@@ -883,6 +894,7 @@ function BarmanQueueView({
           </View>
         );
       })}
+      {cancelItem.dialog}
     </View>
   );
 }
@@ -904,6 +916,7 @@ function BarmanStockView({ colors }: { colors: ReturnType<typeof useColors> }) {
 
 function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
   const { data: orders, loading, refresh } = useKdsOrders('kitchen');
+  const cancelItem = useCancelKdsItem(refresh);
   const queueCount = orders.filter((o) => o.status === 'queue').length;
   const preparingCount = orders.filter((o) => o.status === 'preparing').length;
   const readyCount = orders.filter((o) => o.status === 'ready').length;
@@ -930,10 +943,13 @@ function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
               <StatusChip label={itemStatusLabel(isReady ? 'ready' : isPreparing ? 'preparing' : 'pending')} tone={tone} />
             </View>
             <View style={{ marginTop: 10, gap: 6 }}>
-              {order.items.map(([name, time]) => (
-                <View key={name} style={styles.chefItemRow}>
-                  <Text style={[styles.staffRole, { color: colors.foreground }]}>{name}</Text>
-                  <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{time}</Text>
+              {order.items.map(([name, time], i) => (
+                <View key={order.itemIds[i] ?? name} style={styles.chefItemRow}>
+                  <Text style={[styles.staffRole, { color: colors.foreground, flex: 1 }]}>{name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <Text style={[styles.staffRole, { color: colors.foregroundSecondary }]}>{time}</Text>
+                    <CancelItemLink name={name} status={order.itemStates[i]?.status ?? ''} onPress={() => cancelItem.request(order.itemIds[i], name)} />
+                  </View>
                 </View>
               ))}
             </View>
@@ -948,6 +964,7 @@ function ChefKdsView({ colors }: { colors: ReturnType<typeof useColors> }) {
           </View>
         );
       })}
+      {cancelItem.dialog}
     </View>
   );
 }
