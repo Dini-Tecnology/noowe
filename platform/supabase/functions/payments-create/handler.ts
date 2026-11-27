@@ -115,9 +115,11 @@ export async function handleCreate(req: Request, deps: PaymentDeps): Promise<Res
     const customerRow = await deps.rpc("service_payment_customer", { p_account_id: r.paymentAccountId, p_user_id: user.id });
     let customerId: string | undefined = customerRow.data?.providerCustomerId;
     if (!customerId) {
-      if (!DOCUMENT.test(document)) return json({ error: "payer_document_required" }, 422);
+      // O "CPF na nota" já validado serve de documento do pagador: o cliente não digita duas vezes.
+      const payerDocument = DOCUMENT.test(document) ? document : receiptDocument ?? "";
+      if (!DOCUMENT.test(payerDocument)) return json({ error: "payer_document_required" }, 422);
       const created = await deps.provider.createCustomer(apiKey, {
-        name: customerRow.data?.name ?? "Cliente NOOWE", cpfCnpj: document,
+        name: customerRow.data?.name ?? "Cliente NOOWE", cpfCnpj: payerDocument,
         email: customerRow.data?.email, mobilePhone: customerRow.data?.phone, externalReference: user.id,
       });
       customerId = created.id;

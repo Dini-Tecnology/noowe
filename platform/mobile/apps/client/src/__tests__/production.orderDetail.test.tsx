@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import OrderDetailScreen from '../screens/production/OrderDetailScreen';
 import { tableLabel } from '../screens/production/shared';
@@ -38,6 +38,10 @@ jest.mock('../services/customer-backend', () => ({ __esModule: true, default: {
   listOrderStatusEvents: () => Promise.resolve([]),
   startPayment: jest.fn(),
   cancelOrder: jest.fn(),
+} }));
+
+jest.mock('../services/saved-cards', () => ({ savedCards: {
+  list: () => Promise.resolve([{ id: 'card-9', brand: 'visa', lastFour: '2220', isDefault: true }]),
 } }));
 
 function navigation() { return { navigate: jest.fn(), replace: jest.fn(), goBack: jest.fn() }; }
@@ -113,6 +117,17 @@ describe('OrderDetail — acompanhamento do Quick Service (ADR-013)', () => {
     const { view, client } = await renderQuick(quickOrder({ paymentStatus: 'pending', fulfillmentStatus: 'received', status: 'pending' }));
     expect(view.getByText('Aguardando pagamento')).toBeTruthy();
     expect(view.getByLabelText('Retomar pagamento')).toBeTruthy();
+    client.clear();
+  });
+
+  it('pedido esperando pagamento aceita o cartão salvo, no mesmo pedido', async () => {
+    const backend = require('../services/customer-backend').default;
+    backend.startPayment.mockResolvedValueOnce({ paymentStatus: 'pending', cardResult: 'approved' });
+    const { view, client } = await renderQuick(quickOrder({ paymentStatus: 'pending', fulfillmentStatus: 'received', status: 'pending' }));
+    const button = await view.findByTestId('pay-with-saved-card');
+    expect(view.getByText('Pagar com cartão •••• 2220')).toBeTruthy();
+    fireEvent.press(button);
+    await waitFor(() => expect(backend.startPayment).toHaveBeenCalledWith({ orderId: 'q1', restaurantId: 'r1', paymentMethod: 'credit_card', paymentMethodId: 'card-9' }));
     client.clear();
   });
 

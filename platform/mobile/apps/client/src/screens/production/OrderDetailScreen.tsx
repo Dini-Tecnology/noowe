@@ -15,6 +15,7 @@ import { useServiceTypeFor } from '../../hooks/useServiceTypeFeatures';
 import { DevSkipPrepButton } from '../../components/dev/DevSkipPrepButton';
 import customerBackend, { type CustomerOrderStatus } from '../../services/customer-backend';
 import { PixPendingPanel } from '../../components/quick/PixPendingPanel';
+import { savedCards as savedCardsApi } from '../../services/saved-cards';
 import { loadPickupFromCache } from '../../services/pickup-code-cache';
 import { money, rootNavigate, StateView, useQueryRefreshControl, tableLabel, translateOrderError } from './shared';
 import { QUICK_TRACKING_STEPS, canCustomerCancelQuickOrder, describeQuickEvent, pickupPolicyText, quickTrackingStep } from './quick-service-ui';
@@ -103,6 +104,22 @@ export default function OrderDetailScreen({ route, navigation }: any) {
     },
     onError: (error: unknown) => Alert.alert('Pagamento', translateOrderError(error)),
   });
+  // Pedido esperando pagamento também aceita o cartão salvo, sem refazer o pedido (QA 26/11).
+  const cards = useQuery({
+    queryKey: ['saved-cards', query.data?.restaurantId],
+    queryFn: () => savedCardsApi.list(query.data!.restaurantId),
+    enabled: !!query.data?.restaurantId && query.data?.paymentStatus === 'pending',
+  });
+  const defaultCard = cards.data?.find((c) => c.isDefault) ?? cards.data?.[0];
+  const payWithCard = useMutation({
+    mutationFn: () => customerBackend.startPayment({ orderId, restaurantId: query.data!.restaurantId, paymentMethod: 'credit_card', paymentMethodId: defaultCard!.id }),
+    onSuccess: (payment) => {
+      if (payment.cardResult === 'declined') Alert.alert('Cartão recusado', payment.declineReason ?? 'Tente outro cartão ou pague com Pix.');
+      setResumedPix(null);
+      void queryClient.invalidateQueries({ queryKey: ['orders', orderId] });
+    },
+    onError: (error: unknown) => Alert.alert('Pagamento', translateOrderError(error)),
+  });
 
   // Skip the Line has no "Entregue" step of its own — once the kitchen marks
   // it ready, the customer moves on to the "Pedido Pronto" close-out screen.
@@ -137,7 +154,9 @@ export default function OrderDetailScreen({ route, navigation }: any) {
     Alert.alert(
       'Cancelar pedido?',
       pickupSteps
-        ? 'O pedido será cancelado e o valor estornado integralmente. Só é possível cancelar antes de a cozinha iniciar o preparo.'
+        ? query.data?.paymentStatus === 'confirmed'
+          ? 'O pedido será cancelado e o valor estornado integralmente. Só é possível cancelar antes de a cozinha iniciar o preparo.'
+          : 'O pedido será cancelado. Nada foi cobrado: o Pix ou o cartão pendente deixa de valer.'
         : 'Esta ação não pode ser desfeita. O pedido só pode ser cancelado enquanto a cozinha ainda não iniciou o preparo.',
       [
         { text: 'Manter pedido', style: 'cancel' },
@@ -387,6 +406,21 @@ export default function OrderDetailScreen({ route, navigation }: any) {
                 <Text style={styles.payCtaText}>{resumePix.isPending ? 'Gerando Pix...' : 'Retomar pagamento com Pix'}</Text>
               </TouchableOpacity>
             ))}
+            {quick?.awaitingPayment && defaultCard && (
+              <TouchableOpacity
+                testID="pay-with-saved-card"
+                style={[styles.payCta, { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.primary }]}
+                onPress={() => payWithCard.mutate()}
+                disabled={payWithCard.isPending}
+                accessibilityRole="button"
+                accessibilityLabel={`Pagar com cartão final ${defaultCard.lastFour}`}
+              >
+                <Ionicons name="card-outline" size={20} color={colors.primary} />
+                <Text style={[styles.payCtaText, { color: colors.primary }]}>
+                  {payWithCard.isPending ? 'Cobrando...' : `Pagar com cartão •••• ${defaultCard.lastFour}`}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Quick passa por aceite, preparo e conferência no KDS: o atalho de teste não vale. */}
             {!quick && PREP_SKIPPABLE.has(order.status) && (

@@ -39,14 +39,37 @@ test('mesma folha, mesma ordem e textos para Quick (gorjeta) e mesa (taxa)', () 
   expect(casual.getByText('Taxa de serviço (opcional)')).toBeTruthy();
 });
 
-test('uma escolha só: Pix por padrão, tocar um cartão troca e vai no onPay', () => {
+test('uma escolha só: cartão salvo padrão vem escolhido, tocar outra forma troca e vai no onPay', () => {
   const onPay = jest.fn();
   const view = render(<PaymentSheet {...base} onPay={onPay} />);
-  expect(view.getByTestId('method-pix').props.accessibilityState).toEqual({ selected: true });
-  fireEvent.press(view.getByTestId('saved-card-c2'));
+  expect(view.getByTestId('saved-card-c1').props.accessibilityState).toEqual({ selected: true });
   expect(view.getByTestId('method-pix').props.accessibilityState).toEqual({ selected: false });
+  fireEvent.press(view.getByTestId('saved-card-c2'));
   fireEvent.press(view.getByTestId('pay-button'));
   expect(onPay).toHaveBeenCalledWith({ kind: 'card', cardId: 'c2' });
+  fireEvent.press(view.getByTestId('method-pix'));
+  fireEvent.press(view.getByTestId('pay-button'));
+  expect(onPay).toHaveBeenLastCalledWith({ kind: 'pix' });
+});
+
+test('sem cartão salvo, Pix vem escolhido', () => {
+  const view = render(<PaymentSheet {...base} savedCards={[]} />);
+  expect(view.getByTestId('method-pix').props.accessibilityState).toEqual({ selected: true });
+});
+
+test('adicionar cartão: CPF, CEP e celular com máscara; editar apaga o aviso antigo', async () => {
+  const client = new QueryClient();
+  const view = render(<QueryClientProvider client={client}><AddCardScreen route={{ params: { restaurantId: 'r1' } }} navigation={{ goBack: jest.fn() }} /></QueryClientProvider>);
+  fireEvent.changeText(view.getByLabelText('CPF do titular'), '52998224725');
+  fireEvent.changeText(view.getByLabelText('CEP'), '01310100');
+  fireEvent.changeText(view.getByLabelText('Celular'), '11999998888');
+  expect(view.getByLabelText('CPF do titular').props.value).toBe('529.982.247-25');
+  expect(view.getByLabelText('CEP').props.value).toBe('01310-100');
+  expect(view.getByLabelText('Celular').props.value).toBe('(11) 99999-8888');
+  fireEvent.press(view.getByTestId('save-card'));
+  expect(await view.findByText('Confira o número do cartão.')).toBeTruthy();
+  fireEvent.changeText(view.getByLabelText('Número do cartão'), '4111');
+  expect(view.queryByText('Confira o número do cartão.')).toBeNull();
 });
 
 test('sem Pix (abaixo do mínimo), o cartão padrão vem escolhido', () => {

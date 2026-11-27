@@ -499,7 +499,8 @@ export default function RestaurantDetailView({
           </TouchableOpacity>
         ))}
 
-        {showQuickInfo && (
+        {/* Sem nenhuma das três linhas o cartão aparecia vazio, como um botão sem texto (QA 26/11). */}
+        {showQuickInfo && (!!quickState?.label || (quickStatus?.estimatedPrepMinutes ?? 0) > 0 || !!quickStatus?.pickupLocation) && (
           <View style={styles.quickCard} accessibilityLabel="Pedido pelo app">
             {quickState && (
               <View style={styles.quickRow}>

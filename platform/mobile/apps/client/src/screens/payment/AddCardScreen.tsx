@@ -7,7 +7,8 @@ import { useColors } from '@okinawa/shared/contexts/ThemeContext';
 import { ScreenContainer } from '@okinawa/shared/components/ScreenContainer';
 import { CardBrandIcon } from '../../components/payment/CardBrandIcon';
 import { savedCards } from '../../services/saved-cards';
-import { isValidTaxDocument, taxDocumentDigits } from '../../services/tax-document';
+import { formatTaxDocument, isValidTaxDocument, taxDocumentDigits } from '../../services/tax-document';
+import { formatBrazilianPhone, formatBrazilianPostalCode } from '@okinawa/shared/utils/phone-validation';
 import { detectCardBrand, formatCardNumber, formatExpiry, isExpired, isValidLuhn, onlyDigits, parseExpiry } from '../../utils/card';
 
 export type NewCardForm = { number: string; expiry: string; ccv: string; holderName: string; cpf: string; postalCode: string; addressNumber: string; phone: string };
@@ -37,7 +38,8 @@ export default function AddCardScreen({ route, navigation }: any) {
   const [form, setForm] = useState<NewCardForm>(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const set = (key: keyof NewCardForm) => (value: string) => setForm((f) => ({ ...f, [key]: value }));
+  // Editar qualquer campo tira o aviso antigo: ele só volta no próximo envio.
+  const set = (key: keyof NewCardForm) => (value: string) => { setError(null); setForm((f) => ({ ...f, [key]: value })); };
   const brand = detectCardBrand(form.number);
 
   const submit = async () => {
@@ -105,12 +107,12 @@ export default function AddCardScreen({ route, navigation }: any) {
           {field('CVV', 'ccv', { keyboardType: 'number-pad', placeholder: '123', maxLength: 4, secureTextEntry: true, onChangeText: (t) => set('ccv')(onlyDigits(t)) })}
         </View>
         {field('Nome impresso no cartão', 'holderName', { autoCapitalize: 'characters', autoComplete: 'cc-name' })}
-        {field('CPF do titular', 'cpf', { keyboardType: 'number-pad', placeholder: '000.000.000-00', maxLength: 14 })}
+        {field('CPF do titular', 'cpf', { keyboardType: 'number-pad', placeholder: '000.000.000-00', maxLength: 14, onChangeText: (t) => set('cpf')(formatTaxDocument(onlyDigits(t).slice(0, 11))) })}
         <View style={styles.row}>
-          {field('CEP', 'postalCode', { keyboardType: 'number-pad', placeholder: '00000-000', maxLength: 9 })}
+          {field('CEP', 'postalCode', { keyboardType: 'number-pad', placeholder: '00000-000', maxLength: 9, onChangeText: (t) => set('postalCode')(formatBrazilianPostalCode(t)) })}
           {field('Número', 'addressNumber', { placeholder: '123' })}
         </View>
-        {field('Celular', 'phone', { keyboardType: 'phone-pad', placeholder: '(11) 99999-9999', maxLength: 15 })}
+        {field('Celular', 'phone', { keyboardType: 'phone-pad', placeholder: '(11) 99999-9999', maxLength: 15, onChangeText: (t) => set('phone')(formatBrazilianPhone(t)) })}
         <Text style={styles.hint}>Os dados vão direto para o provedor de pagamento. Guardamos só a bandeira e o final do cartão.</Text>
         {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
         <TouchableOpacity style={styles.cta} onPress={submit} disabled={busy} accessibilityRole="button" testID="save-card">

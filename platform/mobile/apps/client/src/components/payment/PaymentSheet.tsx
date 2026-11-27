@@ -63,7 +63,8 @@ export function PaymentSheet(props: PaymentSheetProps) {
   const valid = (s: PaymentSelection | null) =>
     !!s && (s.kind === 'pix' ? pixOk : cardOk && savedCards.some((c) => c.id === s.cardId));
   const defaultCard = savedCards.find((c) => c.isDefault) ?? savedCards[0];
-  const fallback: PaymentSelection | null = pixOk ? { kind: 'pix' } : cardOk && defaultCard ? { kind: 'card', cardId: defaultCard.id } : null;
+  // Cartão salvo é a forma padrão; Pix só quando não há cartão (relatório QA PAG-02).
+  const fallback: PaymentSelection | null = cardOk && defaultCard ? { kind: 'card', cardId: defaultCard.id } : pixOk ? { kind: 'pix' } : null;
   const selection = zeroTotal || offline ? null : valid(picked) ? picked : fallback;
   const isSelected = (s: PaymentSelection) => selection?.kind === s.kind && (s.kind === 'pix' || (selection as { cardId: string }).cardId === s.cardId);
 

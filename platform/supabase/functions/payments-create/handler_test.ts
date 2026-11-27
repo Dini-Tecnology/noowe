@@ -104,6 +104,11 @@ test("documento do pagador é exigido só na primeira vez", async () => {
   assert.equal(res.status, 422);
   assert.equal((await res.json()).error, "payer_document_required");
 
+  // QA 26/11: o "CPF na nota" serve de documento do pagador, sem pedir de novo.
+  const viaReceipt = setup();
+  assert.equal((await handleCreate(req({ ...valid, payerCpfCnpj: undefined, receiptDocument: "529.982.247-25" }), viaReceipt.deps)).status, 200);
+  assert.ok(viaReceipt.provider.includes("createCustomer:52998224725"));
+
   const returning = setup({ customerId: "cus_old" });
   assert.equal((await handleCreate(req({ ...valid, ...consent, payerCpfCnpj: undefined }), returning.deps)).status, 200);
   assert.ok(!returning.provider.some((p) => p.startsWith("createCustomer")));
