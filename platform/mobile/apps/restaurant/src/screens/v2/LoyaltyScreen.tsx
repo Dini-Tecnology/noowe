@@ -13,8 +13,9 @@ type Toggle = 'points_enabled' | 'cashback_enabled';
 export type LoyaltyDraft = Record<Field, string> & Record<Toggle, boolean>;
 
 // cents: o Dono digita reais; o servidor guarda centavos e confere a ordem das faixas.
-const FIELDS: { key: Field; label: string; hint: string; needs: Toggle; cents?: boolean }[] = [
-  { key: 'points_per_real', label: 'Pontos por R$ 1 consumido', hint: 'Creditados depois do pagamento, para quem pagou', needs: 'points_enabled' },
+// note: explicação longa fica abaixo do rótulo; o placeholder só cabe um exemplo curto.
+const FIELDS: { key: Field; label: string; hint: string; note?: string; needs: Toggle; cents?: boolean }[] = [
+  { key: 'points_per_real', label: 'Pontos por R$ 1 consumido', hint: 'Ex.: 1', note: 'Creditados depois do pagamento, para quem pagou', needs: 'points_enabled' },
   { key: 'points_redemption_rate', label: 'Valor de cada ponto no resgate (R$)', hint: 'Ex.: 0,05', needs: 'points_enabled' },
   { key: 'min_points_for_redemption', label: 'Mínimo de pontos para resgatar', hint: 'Ex.: 100', needs: 'points_enabled' },
   { key: 'tier_silver_min_cents', label: 'Gasto para Prata (R$)', hint: 'Ex.: 500', needs: 'points_enabled', cents: true },
@@ -131,6 +132,7 @@ export default function LoyaltyScreen() {
             {FIELDS.filter((f) => draft[f.needs]).map((f) => (
               <View key={f.key} style={[styles.row, { borderBottomColor: colors.border, flexDirection: 'column', alignItems: 'stretch' }]}>
                 <Text style={{ fontWeight: '600', color: colors.foreground }}>{f.label}</Text>
+                {f.note ? <Text style={{ fontSize: 12, color: colors.foregroundSecondary }}>{f.note}</Text> : null}
                 <TextInput
                   accessibilityLabel={f.label}
                   value={draft[f.key]}

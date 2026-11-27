@@ -42,3 +42,14 @@ it('faixas: reais na tela, centavos no payload, ordem conferida', () => {
   expect(loyaltyDraftToPayload({ ...d, tier_gold_min_cents: '400' }).error).toMatch(/faixas devem crescer/i);
   expect(loyaltyDraftToPayload({ ...d, tier_silver_min_cents: '' }).payload).not.toHaveProperty('tier_silver_min_cents');
 });
+
+// QA 26/11: na primeira configuração as faixas vinham vazias; o servidor agora manda as padrão.
+it('primeira configuração mostra as faixas padrão e a explicação dos pontos fora do campo', async () => {
+  mockApi.getLoyaltyConfig.mockResolvedValue({ points_enabled: false, cashback_enabled: false, tier_silver_min_cents: 50000, tier_gold_min_cents: 200000, tier_platinum_min_cents: 500000 });
+  const view = render(<LoyaltyScreen />);
+  fireEvent(await view.findByLabelText('Programa de pontos'), 'valueChange', true);
+  expect(view.getByLabelText('Gasto para Prata (R$)').props.value).toBe('500');
+  expect(view.getByLabelText('Gasto para Platina (R$)').props.value).toBe('5000');
+  expect(view.getByText('Creditados depois do pagamento, para quem pagou')).toBeTruthy();
+  expect(view.getByLabelText('Pontos por R$ 1 consumido').props.placeholder).toBe('Ex.: 1');
+});

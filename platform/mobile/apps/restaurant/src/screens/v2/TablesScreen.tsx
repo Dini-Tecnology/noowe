@@ -19,6 +19,7 @@ import { useRestaurantTables, type V2Table } from './shared/useRestaurantOperati
 import { userErrorMessage } from '@okinawa/shared/utils/user-error-message';
 import { tableStatusLabel } from '@okinawa/shared/utils/status-label';
 import { formatTableLabel } from './shared/tableLabel';
+import { formatIdle } from './shared/idleTime';
 
 type StatusKey = 'available' | 'occupied' | 'reserved' | 'cleaning' | 'blocked' | 'payment' | 'partial_payment';
 type SeatingMode = 'seat' | 'checkin';
@@ -809,11 +810,6 @@ const TableCell = React.memo(function TableCell({
   );
 });
 
-function formatIdle(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours} h ${minutes % 60} min`;
-}
 
 const styles = StyleSheet.create({
   originChip: { fontSize: 10, fontWeight: '700', marginTop: 1 },
