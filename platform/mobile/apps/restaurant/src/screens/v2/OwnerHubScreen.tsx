@@ -332,7 +332,12 @@ export default function OwnerHubScreen() {
         <PlanGateBanner />
 
         {isOwner ? (
-          <DashboardTab onNavigate={openScreen} colors={colors} />
+          <>
+            {/* O Dono aprova e cobra no balcão mesmo sem Gerente ou Barman na equipe (decisão 11, RV-05). */}
+            <CounterChargePanel />
+            <ManagerApprovalsView colors={colors} hideWhenEmpty />
+            <DashboardTab onNavigate={openScreen} colors={colors} />
+          </>
         ) : role === 'manager' ? (
           <ManagerContent
             view={managerView}
@@ -673,6 +678,7 @@ function ManagerContent({
   return (
     <>
       <ManagerSummaryCard />
+      <CounterChargePanel />
       <ManagerDashboardTab setView={setView} onNavigate={onNavigate} colors={colors} />
     </>
   );
@@ -1436,7 +1442,7 @@ function ManagerOrdersView({ colors }: { colors: ReturnType<typeof useColors> })
   );
 }
 
-export function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+export function ManagerApprovalsView({ colors, hideWhenEmpty = false }: { colors: ReturnType<typeof useColors>; hideWhenEmpty?: boolean }) {
   const { data: approvals, loading, error, refresh } = useApprovals();
   const { serverRole } = useRestaurantRole();
   const [viewerUserId, setViewerUserId] = useState<string | null>(null);
@@ -1460,8 +1466,12 @@ export function ManagerApprovalsView({ colors }: { colors: ReturnType<typeof use
     }
   };
 
+  // No painel do Dono a seção só aparece quando há o que aprovar.
+  if (hideWhenEmpty && !error && approvals.length === 0) return null;
+
   return (
     <View style={styles.managerApprovalList}>
+      {hideWhenEmpty ? <SectionTitle title="Central de Aprovações" colors={colors} /> : null}
       <View style={[styles.approvalsSummary, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
         <ShieldAlert size={17} color="#16A66A" />
         <Text style={[styles.approvalsSummaryText, { color: colors.foreground }]}>

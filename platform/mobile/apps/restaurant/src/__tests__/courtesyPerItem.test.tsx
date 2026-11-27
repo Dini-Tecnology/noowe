@@ -82,4 +82,16 @@ describe('Central de Aprovações mostra a cortesia', () => {
     await waitFor(() => expect(ui.queryByLabelText('Aprovar Risoto')).toBeNull());
     expect(ui.getByLabelText('Recusar Risoto')).toBeTruthy();
   });
+
+  // QA 27/11: o Dono não tinha como abrir a Central de Aprovações; agora ela aparece no painel dele quando há pendência.
+  const renderOwnerSection = () => { const { ManagerApprovalsView } = require('../screens/v2/OwnerHubScreen'); return render(<ManagerApprovalsView colors={new Proxy({}, { get: () => '#333' })} hideWhenEmpty />); };
+
+  it('no painel do Dono: some sem pendência e aparece com Aprovar quando há', async () => {
+    mockRoles.serverRoles = ['owner']; mockRoles.serverRole = 'owner';
+    expect(renderOwnerSection().queryByText('Central de Aprovações')).toBeNull();
+    mockApprovals.push(courtesy('other'));
+    const ui = renderOwnerSection();
+    expect(ui.getByText('Central de Aprovações')).toBeTruthy();
+    await waitFor(() => expect(ui.getByLabelText('Aprovar Risoto')).toBeTruthy());
+  });
 });
