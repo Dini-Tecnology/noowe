@@ -359,7 +359,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
             <PaymentSheet
               pixAvailable={quote.data?.pixAvailable}
               cardAvailable={quote.data?.cardAvailable}
-              offlineNotice={paymentUnavailable ? 'Este restaurante ainda não aceita pagamento online.' : noMethod ? 'O valor está abaixo do mínimo para pagar pelo app. Faça o pedido e pague no balcão.' : null}
+              offlineNotice={noMethod ? 'O valor está abaixo do mínimo para pagar pelo app. Faça o pedido e pague no balcão.' : paymentUnavailable ? 'Este restaurante ainda não aceita pagamento online.' : null}
               payAtCounter={noMethod}
               savedCards={cards.data ?? []}
               onAddCard={() => navigation.navigate('AddCard', { restaurantId: cart.restaurantId })}
@@ -379,7 +379,8 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
               summary={summary}
               totalCents={quote.data ? quote.data.totalCents : null}
               paying={place.isPending}
-              disabled={!cart.items.length || !policyAccepted || paymentUnavailable || couponPending}
+              // Sem pagamento online, só o pedido abaixo do mínimo segue: ele é pago no balcão (decisão de 27/11).
+              disabled={!cart.items.length || !policyAccepted || (paymentUnavailable && !noMethod) || couponPending}
               onPay={confirmAndPlace}
               declined={declined}
               onDismissDecline={() => setDeclined(null)}

@@ -256,6 +256,21 @@ test('CPF na nota: inválido avisa antes de criar o pedido; válido vai na cobra
   client.clear();
 });
 
+// Decisão de 27/11: sem pagamento online, o pedido abaixo do mínimo ainda pode ser feito para pagar no balcão.
+test('restaurante sem pagamento online: abaixo do mínimo faz o pedido para pagar no balcão', async () => {
+  mockMode.mockResolvedValue('unavailable');
+  mockTipQuote.mockResolvedValue({ tipCents: 0, totalCents: 300, convenienceCents: 0, pixAvailable: false, cardAvailable: false });
+  mockPayAtCounter.mockResolvedValue({ orderId: 'o1', orderNumber: '7' });
+  const { view, client } = renderScreen();
+  await waitFor(() => expect(view.getByText('Fazer pedido e pagar no balcão')).toBeTruthy());
+  expect(view.getByText('O valor está abaixo do mínimo para pagar pelo app. Faça o pedido e pague no balcão.')).toBeTruthy();
+  await acceptAndPay(view);
+  await waitFor(() => expect(view.getByText('Pague no balcão · Pedido nº 7')).toBeTruthy());
+  expect(mockPayAtCounter).toHaveBeenCalledWith('o1');
+  expect(mockStart).not.toHaveBeenCalled();
+  client.clear();
+});
+
 test('RV-05: abaixo do mínimo online faz o pedido, não cobra e mostra "Pague no balcão" com o número', async () => {
   mockTipQuote.mockResolvedValue({ tipCents: 0, totalCents: 300, convenienceCents: 0, pixAvailable: false, cardAvailable: false });
   mockPayAtCounter.mockResolvedValue({ orderId: 'o1', orderNumber: '42' });
