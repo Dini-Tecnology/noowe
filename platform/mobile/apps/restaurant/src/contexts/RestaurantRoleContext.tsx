@@ -139,6 +139,11 @@ const RestaurantRoleContext = createContext<RestaurantRoleContextValue | undefin
 
 const SUPERVISORY_ROLES: RestaurantRole[] = ['owner', 'manager'];
 
+/** Modelo de serviço ativo só se foi escolhido para este restaurante (QA 26/11: troca de restaurante). */
+export function activeModelFor<M>(state: { restaurantId: string | null; model: M } | null, restaurantId: string | null): M | null {
+  return state && state.restaurantId === restaurantId ? state.model : null;
+}
+
 export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
   const [serverRole, setServerRole] = useState<RestaurantRole | null>(null);
   const [serverRoles, setServerRoles] = useState<RestaurantRole[]>([]);
@@ -149,7 +154,15 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<RestaurantRole>('owner');
   const [restaurants, setRestaurants] = useState<RestaurantOption[]>([]);
   const [restaurantsLoading, setRestaurantsLoading] = useState(true);
-  const [activeServiceModel, setActiveServiceModel] = useState<ServiceModel | null>(null);
+  // O modelo ativo vale só para o restaurante em que foi escolhido: ao trocar de restaurante, uma resposta atrasada do
+  // anterior (ex.: fine_dining) não pode ser usada no novo, que talvez não tenha esse modelo (QA 26/11).
+  const [activeModelState, setActiveModelState] = useState<{ restaurantId: string | null; model: ServiceModel } | null>(null);
+  const activeServiceModel = activeModelFor(activeModelState, restaurantId);
+  const setActiveServiceModel = useCallback(
+    (model: ServiceModel | null, forRestaurantId: string | null = restaurantId) =>
+      setActiveModelState(model ? { restaurantId: forRestaurantId, model } : null),
+    [restaurantId],
+  );
   const [capabilities, setCapabilities] = useState<RestaurantCapabilityContract | null>(null);
   const [managerView, setManagerView] = useState<ManagerRoleView>('manager-ops');
   const [maitreView, setMaitreView] = useState<MaitreRoleView>('maitre-reservations');
@@ -261,7 +274,7 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     setRoleLoading(true);
     setCapabilities(null);
-    setActiveServiceModel(null);
+    setActiveModelState(null);
     try {
       const switched = await loadRoleForRestaurant(user.id, targetRestaurantId);
       if (switched) await saveStoredActiveRestaurantId(user.id, targetRestaurantId);
@@ -352,10 +365,10 @@ export function RestaurantRoleProvider({ children }: { children: ReactNode }) {
       }
       const parsed = parseRestaurantCapabilityContract(data);
       setCapabilities(parsed);
-      if (parsed && parsed.serviceModel !== activeServiceModel) setActiveServiceModel(parsed.serviceModel);
+      if (parsed && parsed.serviceModel !== activeServiceModel) setActiveServiceModel(parsed.serviceModel, restaurantId);
     })();
     return () => { cancelled = true; };
-  }, [restaurantId, restaurants, activeServiceModel]);
+  }, [restaurantId, restaurants, activeServiceModel, setActiveServiceModel]);
 
   const setRole = (newRole: RestaurantRole) => {
     // Only supervisory roles can impersonate another role view; anyone can move between their own roles.

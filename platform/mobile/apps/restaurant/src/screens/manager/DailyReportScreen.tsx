@@ -16,6 +16,7 @@ import { BarChart } from 'react-native-chart-kit';
 import ApiService from '@/shared/services/api';
 import { useI18n } from '@/shared/hooks/useI18n';
 import { useColors, useOkinawaTheme } from '@okinawa/shared/contexts/ThemeContext';
+import { saoPauloDateKey } from '../v2/shared/calendarDate';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -55,8 +56,7 @@ export default function DailyReportScreen() {
   const [exporting, setExporting] = useState(false);
 
   const today = useMemo(() => {
-    const d = new Date();
-    return d.toISOString().split('T')[0];
+    return saoPauloDateKey();
   }, []);
 
   const loadData = useCallback(async () => {

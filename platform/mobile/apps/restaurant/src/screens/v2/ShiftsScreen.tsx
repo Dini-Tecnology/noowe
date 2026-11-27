@@ -52,8 +52,10 @@ function addDays(date: Date, days: number): Date {
   return d;
 }
 
-function isoDate(date: Date): string {
-  return date.toISOString().split('T')[0];
+/** Data do calendário local (não UTC): depois das 21h em São Paulo o UTC já é o dia seguinte (QA 26/11, EQ-07). */
+export function isoDate(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {

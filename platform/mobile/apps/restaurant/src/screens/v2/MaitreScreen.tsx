@@ -6,6 +6,7 @@ import { MaitreRoleView, useRestaurantRole } from '../../contexts/RestaurantRole
 import { V2ListScreen } from './shared/V2ListScreen';
 import { useRestaurantTables, useWaitlist } from './shared/useRestaurantOperations';
 import { useCapacityRequests } from './shared/useCapacityRequests';
+import { saoPauloDateKey } from './shared/calendarDate';
 
 export default function MaitreScreen() {
   const navigation = useNavigation<any>();
@@ -17,7 +18,7 @@ export default function MaitreScreen() {
 
   const loadReservations = useCallback(async () => {
     if (!restaurantId) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = saoPauloDateKey();
     try {
       const rows = await supabaseApiAdapter.getRestaurantReservations(restaurantId, today);
       setReservationsToday(Array.isArray(rows) ? rows.length : 0);

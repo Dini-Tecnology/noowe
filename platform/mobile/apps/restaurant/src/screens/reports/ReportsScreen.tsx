@@ -33,6 +33,7 @@ import { getLanguage } from '@okinawa/shared/i18n';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useColors, useOkinawaTheme } from '@okinawa/shared/contexts/ThemeContext';
 import ApiService from '@/shared/services/api';
+import { saoPauloDateKey } from '../v2/shared/calendarDate';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -91,7 +92,7 @@ interface ReportData {
 
 function getDateRange(range: DateRange): { start: string; end: string } {
   const now = new Date();
-  const end = now.toISOString().split('T')[0];
+  const end = saoPauloDateKey(now);
 
   switch (range) {
     case 'today':
@@ -99,12 +100,12 @@ function getDateRange(range: DateRange): { start: string; end: string } {
     case 'week': {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
-      return { start: weekAgo.toISOString().split('T')[0], end };
+      return { start: saoPauloDateKey(weekAgo), end };
     }
     case 'month': {
       const monthAgo = new Date(now);
       monthAgo.setMonth(monthAgo.getMonth() - 1);
-      return { start: monthAgo.toISOString().split('T')[0], end };
+      return { start: saoPauloDateKey(monthAgo), end };
     }
     case 'custom':
     default:
