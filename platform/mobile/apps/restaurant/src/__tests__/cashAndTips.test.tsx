@@ -346,6 +346,13 @@ describe('Cobrança de balcão do Barman (pendência 77)', () => {
     expect(view.queryByText('Cobrar no balcão')).toBeNull();
   });
 
+  // QA 27/11: o caixa acha o pedido pelo código curto que o cliente mostra no app.
+  it('mostra o código curto do balcão', async () => {
+    api.getCounterOrders.mockResolvedValue([{ ...order, counterCode: 'UEWWXG' }]);
+    const view = render(<CounterChargePanel />);
+    expect(await view.findByText('Nº UEWWXG')).toBeTruthy();
+  });
+
   it('cobra o pedido inteiro, no valor que veio do servidor, e recarrega', async () => {
     api.getCounterOrders.mockResolvedValue([order]);
     api.recordPayment.mockResolvedValue({});

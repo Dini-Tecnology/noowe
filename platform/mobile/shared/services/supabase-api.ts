@@ -64,7 +64,7 @@ export type RefundablePayment = {
 
 /** Valor em `cents` só chega para o Dono: para o Gerente o acerto é cego. */
 export type TeamCashInHand = { userId: string; name: string; cents: number | null };
-export type CounterOrder = { orderId: string; orderNumber: string | null; callName: string | null; totalCents: number; createdAt: string; items: string[] };
+export type CounterOrder = { orderId: string; orderNumber: string | null; counterCode?: string | null; callName: string | null; totalCents: number; createdAt: string; items: string[] };
 export type ManagerSummary = {
   plan: { name: string | null; status: string | null };
   /** Líquido por forma de pagamento no dia aberto. Dinheiro vem nulo com o caixa aberto (fechamento cego). */

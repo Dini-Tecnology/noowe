@@ -63,6 +63,8 @@ export function CounterChargePanel() {
         <View key={order.orderId} style={styles.row}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontWeight: '700', color: colors.foreground }}>{order.callName || order.orderNumber || 'Pedido'}</Text>
+            {/* O mesmo código curto que o cliente vê no app: é por ele que o caixa acha o pedido. */}
+            {order.counterCode ? <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primary }}>Nº {order.counterCode}</Text> : null}
             <Text numberOfLines={2} style={{ fontSize: 12, color: colors.foregroundSecondary }}>{order.items.join(', ')}</Text>
           </View>
           <Text style={{ fontWeight: '700', color: colors.foreground }}>{formatCents(order.totalCents)}</Text>
