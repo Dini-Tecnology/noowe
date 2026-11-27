@@ -20,7 +20,7 @@ begin
     insert into _ctx values (k, u);
   end loop;
   update public.cash_register_sessions set status = 'closed', closed_at = now() where restaurant_id = r and status = 'open';
-  delete from public.shifts where restaurant_id = r and (date at time zone 'America/Sao_Paulo')::date = (now() at time zone 'America/Sao_Paulo')::date;
+  delete from public.shifts where restaurant_id = r and private.shift_day(date) = (now() at time zone 'America/Sao_Paulo')::date;
 end $$;
 
 do $$
@@ -48,7 +48,7 @@ begin
   perform pg_temp.act(pg_temp.ctx('dono'));
   assert pg_temp.state_of(format($q$select public.restaurant_create_shift(%L, %L, timestamptz '2026-01-10 12:00-03', '10:00', '18:00', 'waiter')$q$,
     r, pg_temp.ctx('waiter'))) = 'P0001', 'dia fechado não muda';
-  assert pg_temp.state_of(format($q$select public.restaurant_create_shift(%L, %L, now(), '10:00', '18:00', 'waiter')$q$,
+  assert pg_temp.state_of(format($q$select public.restaurant_create_shift(%L, %L, ((now() at time zone 'America/Sao_Paulo')::date::timestamp at time zone 'UTC'), '10:00', '18:00', 'waiter')$q$,
     r, pg_temp.ctx('waiter'))) = 'ok', 'hoje, antes de fechar, inclui';
 end $$;
 select pass('até o fechamento, o Gerente inclui quem trabalhou na escala do dia; dia fechado não muda');
@@ -57,9 +57,9 @@ do $$
 declare r uuid := pg_temp.ctx('r'); j jsonb;
 begin
   perform pg_temp.act(pg_temp.ctx('dono'));
-  perform public.restaurant_create_shift(r, pg_temp.ctx('maitre'), now(), '10:00', '18:00', 'maitre');
-  perform public.restaurant_create_shift(r, pg_temp.ctx('cook'), now(), '10:00', '18:00', 'cook');
-  perform public.restaurant_create_shift(r, pg_temp.ctx('chef'), now(), '09:00', '17:00', 'chef');
+  perform public.restaurant_create_shift(r, pg_temp.ctx('maitre'), ((now() at time zone 'America/Sao_Paulo')::date::timestamp at time zone 'UTC'), '10:00', '18:00', 'maitre');
+  perform public.restaurant_create_shift(r, pg_temp.ctx('cook'), ((now() at time zone 'America/Sao_Paulo')::date::timestamp at time zone 'UTC'), '10:00', '18:00', 'cook');
+  perform public.restaurant_create_shift(r, pg_temp.ctx('chef'), ((now() at time zone 'America/Sao_Paulo')::date::timestamp at time zone 'UTC'), '09:00', '17:00', 'chef');
   perform pg_temp.act(pg_temp.ctx('waiter'));
   j := public.restaurant_get_my_shifts(r);
   assert jsonb_array_length(j) = 1 and (j->0->>'staff_id')::uuid = pg_temp.ctx('waiter'), 'só a própria: ' || j::text;
@@ -75,7 +75,7 @@ begin
   j := public.restaurant_get_day_team_shifts(r, 'floor');
   assert (select array_agg(x->>'role' order by x->>'role') from jsonb_array_elements(j) x) = array['maitre', 'waiter'], 'salão do dia: ' || j::text;
   assert pg_temp.state_of(format($q$select public.restaurant_get_day_team_shifts(%L, 'kitchen')$q$, r)) = '42501', 'Maître não vê a cozinha';
-  assert pg_temp.state_of(format($q$select public.restaurant_create_shift(%L, %L, now(), '10:00', '18:00', 'waiter')$q$, r, pg_temp.ctx('maitre'))) = '42501', 'nem edita';
+  assert pg_temp.state_of(format($q$select public.restaurant_create_shift(%L, %L, ((now() at time zone 'America/Sao_Paulo')::date::timestamp at time zone 'UTC'), '10:00', '18:00', 'waiter')$q$, r, pg_temp.ctx('maitre'))) = '42501', 'nem edita';
   perform pg_temp.act(pg_temp.ctx('chef'));
   j := public.restaurant_get_day_team_shifts(r, 'kitchen');
   assert (select array_agg(x->>'role' order by x->>'role') from jsonb_array_elements(j) x) = array['chef', 'cook'], 'cozinha do dia: ' || j::text;

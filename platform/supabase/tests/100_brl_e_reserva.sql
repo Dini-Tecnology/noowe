@@ -7,7 +7,7 @@ select is(private.format_brl(3520) || ' ' || private.format_brl(-4600) || ' ' ||
   'R$ 35,20 -R$ 46,00 R$ 500,00 R$ 1.234.567,89 R$ 0,05', 'formato brasileiro, com sinal');
 
 select is((select count(*)::int from pg_proc p join pg_namespace s on s.oid = p.pronamespace
-  where s.nspname in ('public', 'private') and pg_get_functiondef(p.oid) like '%FM999G990D00%'), 0, 'nenhum texto usa o formato do locale "C"');
+  where s.nspname in ('public', 'private') and p.prokind = 'f' and pg_get_functiondef(p.oid) like '%FM999G990D00%'), 0, 'nenhum texto usa o formato do locale "C"');
 
 select ok(private.refund_review_reason(true, false) = 'Estorno parcial'
   and private.refund_review_reason(true, true) = 'Estorno total de um dos pagamentos da conta'

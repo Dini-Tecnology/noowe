@@ -365,6 +365,7 @@ export default function QuickServiceCheckoutScreen({ navigation, route }: any) {
               onAddCard={() => navigation.navigate('AddCard', { restaurantId: cart.restaurantId })}
               tip={tipOffered ? {
                 options: [0, ...tipOptions].map((bps) => ({
+                  // eslint-disable-next-line react-hooks/refs -- chooseTip só mexe no ref quando o botão é tocado, não no render
                   key: String(bps), label: bps ? `${percentFromBps(bps)}%` : 'Sem', selected: tipBps === bps && tipCents === 0, onPress: () => chooseTip(bps, ''),
                 })),
                 customCents: tipCents,
